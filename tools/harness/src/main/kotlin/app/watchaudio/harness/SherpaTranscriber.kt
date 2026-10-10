@@ -1,7 +1,10 @@
 package app.watchaudio.harness
 
+import app.watchaudio.core.pipeline.AsrSettings
+import app.watchaudio.core.pipeline.SpeechSpan
 import app.watchaudio.core.pipeline.TimedText
 import app.watchaudio.core.pipeline.Transcriber
+import app.watchaudio.core.pipeline.padSpeechSpans
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
@@ -16,18 +19,17 @@ import kotlinx.io.files.Path
 
 /**
  * sherpa-onnx on the JVM: Silero VAD splits the chunk into utterances, then the Japanese
- * ReazonSpeech Zipformer (int8) transcribes each one. Same models and parameters as the
+ * ReazonSpeech Zipformer (int8) transcribes each one. Same models and [AsrSettings] as the
  * Android app, so results here predict on-device accuracy (not speed).
  */
 class SherpaTranscriber(modelsDir: File, numThreads: Int = 2) : Transcriber, AutoCloseable {
-    override val engineId = "sherpa-zipformer-ja-reazonspeech-int8"
+    override val engineId = AsrSettings.JA_ENGINE_ID
 
     private val vadModel = File(modelsDir, "silero_vad.onnx").path
-    private val numThreads = numThreads
     private val recognizer: OfflineRecognizer
 
     init {
-        val dir = File(modelsDir, MODEL_NAME)
+        val dir = File(modelsDir, AsrSettings.JA_MODEL_NAME)
         require(File(dir, "tokens.txt").exists()) { "ASR model not found in $dir (run tools/harness/download-models.sh)" }
         val model = OfflineModelConfig.builder()
             .setTransducer(
@@ -47,59 +49,48 @@ class SherpaTranscriber(modelsDir: File, numThreads: Int = 2) : Transcriber, Aut
 
     override suspend fun transcribe(audioFile: Path): List<TimedText> = withContext(Dispatchers.Default) {
         val samples = Ffmpeg.decode(File(audioFile.toString()))
-        speechSegments(samples).mapNotNull { (start, segment) ->
+        speechSpans(samples).mapNotNull { span ->
             val stream = recognizer.createStream()
             try {
-                stream.acceptWaveform(segment, Ffmpeg.SAMPLE_RATE)
+                stream.acceptWaveform(span.samples, AsrSettings.SAMPLE_RATE)
                 recognizer.decode(stream)
                 val text = recognizer.getResult(stream).text.trim()
-                if (text.isEmpty()) {
-                    null
-                } else {
-                    TimedText(
-                        startMs = start * 1000L / Ffmpeg.SAMPLE_RATE,
-                        endMs = (start + segment.size) * 1000L / Ffmpeg.SAMPLE_RATE,
-                        text = text,
-                        lang = "ja",
-                    )
-                }
+                if (text.isEmpty()) null else TimedText(span.startMs, span.endMs, text, lang = "ja")
             } finally {
                 stream.release()
             }
         }
     }
 
-    /** Runs Silero VAD over the whole chunk; returns (start sample, samples) per utterance. */
-    private fun speechSegments(samples: FloatArray): List<Pair<Int, FloatArray>> {
+    /** Runs Silero VAD over the whole chunk and pads the detected utterances. */
+    private fun speechSpans(samples: FloatArray): List<SpeechSpan> {
         val config = VadModelConfig.builder()
             .setSileroVadModelConfig(
                 SileroVadModelConfig.builder()
                     .setModel(vadModel)
-                    // Tuned in the M0-5 spike: 0.3 + 0.3 s padding detected 23/23 utterances (0.5: 22/23)
-                    // and lowered CER; onsets are otherwise clipped.
-                    .setThreshold(VAD_THRESHOLD)
-                    .setMinSilenceDuration(0.5f)
-                    .setMinSpeechDuration(0.25f)
-                    .setMaxSpeechDuration(20f)
+                    .setThreshold(AsrSettings.VAD_THRESHOLD)
+                    .setMinSilenceDuration(AsrSettings.VAD_MIN_SILENCE_SECONDS)
+                    .setMinSpeechDuration(AsrSettings.VAD_MIN_SPEECH_SECONDS)
+                    .setMaxSpeechDuration(AsrSettings.VAD_MAX_SPEECH_SECONDS)
+                    .setWindowSize(AsrSettings.VAD_WINDOW_SIZE)
                     .build(),
             )
-            .setSampleRate(Ffmpeg.SAMPLE_RATE)
+            .setSampleRate(AsrSettings.SAMPLE_RATE)
             .setNumThreads(1)
             .build()
         val vad = Vad(config)
-        val segments = mutableListOf<Pair<Int, FloatArray>>()
+        val segments = mutableListOf<Pair<Int, Int>>()
         fun drain() {
             while (!vad.empty()) {
                 val front = vad.front()
-                segments += front.start to front.samples
+                segments += front.start to front.samples.size
                 vad.pop()
             }
         }
         try {
-            val window = 512
             var offset = 0
             while (offset < samples.size) {
-                val end = minOf(offset + window, samples.size)
+                val end = minOf(offset + AsrSettings.VAD_WINDOW_SIZE, samples.size)
                 vad.acceptWaveform(samples.copyOfRange(offset, end))
                 drain()
                 offset = end
@@ -109,27 +100,8 @@ class SherpaTranscriber(modelsDir: File, numThreads: Int = 2) : Transcriber, Aut
         } finally {
             vad.release()
         }
-        return pad(segments, samples)
-    }
-
-    /** Re-cuts each segment from the input with [PAD_SECONDS] of context, merging overlaps. */
-    private fun pad(segments: List<Pair<Int, FloatArray>>, samples: FloatArray): List<Pair<Int, FloatArray>> {
-        val pad = (PAD_SECONDS * Ffmpeg.SAMPLE_RATE).toInt()
-        val ranges = mutableListOf<IntRange>()
-        for ((start, segment) in segments) {
-            val from = maxOf(0, start - pad)
-            val to = minOf(samples.size, start + segment.size + pad)
-            val last = ranges.lastOrNull()
-            if (last != null && from <= last.last) ranges[ranges.lastIndex] = last.first..maxOf(last.last, to) else ranges += from..to
-        }
-        return ranges.map { it.first to samples.copyOfRange(it.first, it.last) }
+        return padSpeechSpans(segments, samples)
     }
 
     override fun close() = recognizer.release()
-
-    companion object {
-        const val MODEL_NAME = "sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01"
-        const val VAD_THRESHOLD = 0.3f
-        const val PAD_SECONDS = 0.3f
-    }
 }

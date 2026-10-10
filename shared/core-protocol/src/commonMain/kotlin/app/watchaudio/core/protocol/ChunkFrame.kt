@@ -29,4 +29,16 @@ object ChunkFrame {
         require(size in 1..MAX_MANIFEST_BYTES) { "invalid manifest length: $size" }
         return size
     }
+
+    /**
+     * Reads a frame header and returns its manifest; the audio bytes follow in the stream.
+     * [readFully] must fill the whole array or throw (e.g. `DataInputStream::readFully`).
+     *
+     * @throws IllegalArgumentException if the length prefix or the manifest is malformed.
+     */
+    fun readManifest(readFully: (ByteArray) -> Unit): ChunkManifest {
+        val prefix = ByteArray(4).also(readFully)
+        val json = ByteArray(manifestLength(prefix)).also(readFully)
+        return decodeManifest(json.decodeToString())
+    }
 }

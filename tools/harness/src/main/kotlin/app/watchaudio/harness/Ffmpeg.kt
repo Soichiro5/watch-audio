@@ -1,5 +1,6 @@
 package app.watchaudio.harness
 
+import app.watchaudio.core.pipeline.AsrSettings
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
@@ -7,7 +8,7 @@ import java.nio.ByteOrder
 
 /** Thin wrapper around the `ffmpeg` CLI, which stands in for the platform codecs on Linux. */
 object Ffmpeg {
-    const val SAMPLE_RATE = 16_000
+    const val SAMPLE_RATE = AsrSettings.SAMPLE_RATE
 
     /** Decodes any audio file to 16 kHz mono float PCM. */
     fun decode(file: File): FloatArray {

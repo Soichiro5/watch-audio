@@ -15,7 +15,7 @@
 | [docs/03-roadmap.md](docs/03-roadmap.md) | 実装手順（マイルストーンと Issue 一覧） |
 | [docs/04-dev-environment.md](docs/04-dev-environment.md) | 開発・検証環境、ビルド手順、実機なしでの通し検証 |
 | [docs/spikes/](docs/spikes/) | 技術検証の結果（ASR・埋め込み・電池計測手順） |
-| docs/impl/ | 実装の詳細（Android / Wear OS / iOS・watchOS / UI） |
+| [docs/impl/android-phone.md](docs/impl/android-phone.md) | Android スマホ側の実装（受信・ACK・オンデバイス文字起こし・モデル配信） |
 
 ## 技術スタック（予定）
 

@@ -2,6 +2,7 @@ package app.watchaudio.harness
 
 import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.AsrSettings
 import app.watchaudio.core.pipeline.Ingestor
 import app.watchaudio.core.pipeline.TranscriptionPipeline
 import app.watchaudio.core.protocol.AckStatus
@@ -20,7 +21,7 @@ import kotlinx.io.files.Path
  */
 class EndToEndTest {
     private val models = File(System.getProperty("watchaudio.models") ?: "models")
-    private val testWavs = File(models, "${SherpaTranscriber.MODEL_NAME}/test_wavs")
+    private val testWavs = File(models, "${AsrSettings.JA_MODEL_NAME}/test_wavs")
 
     @Test
     fun watchChunksBecomeSearchableJapaneseTranscripts() = runBlocking {

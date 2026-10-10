@@ -73,4 +73,53 @@ class ProtocolTest {
         assertEquals(header.size - 4, length)
         assertEquals(manifest, decodeManifest(header.copyOfRange(4, 4 + length).decodeToString()))
     }
+
+    /** Serves [bytes] like `DataInputStream.readFully`: throws if fewer bytes remain than requested. */
+    private class ByteReader(private val bytes: ByteArray) {
+        var position = 0
+            private set
+
+        fun readFully(target: ByteArray) {
+            check(position + target.size <= bytes.size) { "end of stream" }
+            bytes.copyInto(target, 0, position, position + target.size)
+            position += target.size
+        }
+    }
+
+    private fun frame(json: ByteArray) = byteArrayOf(
+        (json.size ushr 24).toByte(),
+        (json.size ushr 16).toByte(),
+        (json.size ushr 8).toByte(),
+        json.size.toByte(),
+    ) + json
+
+    @Test
+    fun readsManifestAndLeavesAudioInStream() {
+        val header = ChunkFrame.header(manifest)
+        val reader = ByteReader(header + byteArrayOf(1, 2, 3))
+        assertEquals(manifest, ChunkFrame.readManifest(reader::readFully))
+        assertEquals(header.size, reader.position)
+    }
+
+    @Test
+    fun rejectsMalformedFrames() {
+        // Length prefix of zero, and one beyond the limit.
+        assertFailsWith<IllegalArgumentException> { ChunkFrame.readManifest(ByteReader(byteArrayOf(0, 0, 0, 0))::readFully) }
+        assertFailsWith<IllegalArgumentException> { ChunkFrame.readManifest(ByteReader(byteArrayOf(0x7f, 0, 0, 0))::readFully) }
+        // A payload that is not a manifest.
+        assertFailsWith<IllegalArgumentException> {
+            ChunkFrame.readManifest(ByteReader(frame("not json".encodeToByteArray()))::readFully)
+        }
+        // Manifest JSON that violates the model's invariants.
+        val invalid = TestVectors.MANIFEST_V1.replace("\"durationMs\": 300000", "\"durationMs\": -1")
+        assertFailsWith<IllegalArgumentException> {
+            ChunkFrame.readManifest(ByteReader(frame(invalid.encodeToByteArray()))::readFully)
+        }
+    }
+
+    @Test
+    fun truncatedHeaderSurfacesTheReaderError() {
+        val header = ChunkFrame.header(manifest)
+        assertFailsWith<IllegalStateException> { ChunkFrame.readManifest(ByteReader(header.copyOf(header.size - 1))::readFully) }
+    }
 }
