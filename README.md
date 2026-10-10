@@ -14,6 +14,7 @@ Watch で一日中録音し、スマホ上で文字起こし・検索・AI に�
 | [docs/02-architecture.md](docs/02-architecture.md) | 技術スタック・全体構成・データモデル・主要フロー |
 | [docs/03-roadmap.md](docs/03-roadmap.md) | 実装手順（マイルストーンと Issue 一覧） |
 | [docs/04-dev-environment.md](docs/04-dev-environment.md) | 開発・検証環境、ビルド手順 |
+| [docs/impl/phone-ui.md](docs/impl/phone-ui.md) | スマホ UI（タイムライン・検索・状態画面）の実装メモ |
 
 ## 技術スタック（予定）
 
