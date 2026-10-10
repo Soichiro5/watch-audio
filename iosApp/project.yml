@@ -60,7 +60,7 @@ targets:
   WatchApp:
     type: application
     platform: watchOS
-    sources: [WatchApp]
+    sources: [WatchApp, Shared]
     settings:
       base:
         PRODUCT_NAME: WatchAudio
