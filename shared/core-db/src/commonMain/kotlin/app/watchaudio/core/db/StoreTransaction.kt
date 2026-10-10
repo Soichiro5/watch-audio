@@ -210,22 +210,22 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
     }
 
     /** A value from the key-value settings table, or null if unset. */
-    fun setting(key: String): String? = db.prepare("SELECT value FROM setting WHERE key = ?").use { st ->
+    fun setting(key: String): String? = db.prepare("SELECT value FROM app_setting WHERE key = ?").use { st ->
         st.bindText(1, key)
-        if (st.step()) st.getText(0) else null
+        if (st.step() && !st.isNull(0)) st.getText(0) else null
     }
 
-    /** All stored settings. */
-    fun settings(): Map<String, String> = db.prepare("SELECT key, value FROM setting").use { st ->
+    /** All stored (non-null) settings. */
+    fun settings(): Map<String, String> = db.prepare("SELECT key, value FROM app_setting WHERE value IS NOT NULL").use { st ->
         buildMap { while (st.step()) put(st.getText(0), st.getText(1)) }
     }
 
     /** Stores [value] under [key]; null removes the key. */
     fun putSetting(key: String, value: String?) {
         if (value == null) {
-            update("DELETE FROM setting WHERE key = ?", key)
+            update("DELETE FROM app_setting WHERE key = ?", key)
         } else {
-            update("INSERT INTO setting (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value)
+            update("INSERT INTO app_setting (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value)
         }
     }
 

@@ -5,7 +5,7 @@ import app.watchaudio.app.logic.QuietHours
 import app.watchaudio.core.db.LocalStore
 
 /**
- * Phone app preferences, stored in the local database's key-value `setting` table so they stay
+ * Phone app preferences, stored in the local database's key-value `app_setting` table so they stay
  * on the device like everything else (no platform backup).
  */
 data class AppSettings(
