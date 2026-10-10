@@ -44,6 +44,7 @@ internal fun OnboardingScreen(
     onFinish: () -> Unit,
     onConsentChange: (Boolean) -> Unit,
     onRequestPermission: (AppPermission) -> Unit,
+    onOpenAppSettings: () -> Unit,
     onDownloadModel: (allowMetered: Boolean) -> Unit,
 ) {
     Scaffold(
@@ -74,7 +75,7 @@ internal fun OnboardingScreen(
             when (state.step) {
                 OnboardingStep.WELCOME -> WelcomePage()
                 OnboardingStep.CONSENT -> ConsentPage(state.consentAccepted, onConsentChange)
-                OnboardingStep.PERMISSIONS -> PermissionsPage(state.permissions, onRequestPermission)
+                OnboardingStep.PERMISSIONS -> PermissionsPage(state.permissions, onRequestPermission, onOpenAppSettings)
                 OnboardingStep.MODEL -> ModelPage(state.modelSetup, state.model, onDownloadModel)
                 OnboardingStep.WATCH -> WatchPage()
             }
@@ -148,7 +149,11 @@ private fun ConsentPage(accepted: Boolean, onConsentChange: (Boolean) -> Unit) {
 }
 
 @Composable
-private fun PermissionsPage(permissions: Map<AppPermission, PermissionStatus?>, onRequest: (AppPermission) -> Unit) {
+private fun PermissionsPage(
+    permissions: Map<AppPermission, PermissionStatus?>,
+    onRequest: (AppPermission) -> Unit,
+    onOpenAppSettings: () -> Unit,
+) {
     Title(Strings.PERMISSIONS_TITLE)
     permissions.forEach { (permission, status) ->
         Card(Modifier.fillMaxWidth()) {
@@ -163,11 +168,14 @@ private fun PermissionsPage(permissions: Map<AppPermission, PermissionStatus?>, 
                         color = MaterialTheme.colorScheme.primary,
                     )
                     PermissionStatus.NOT_REQUESTED -> Button(onClick = { onRequest(permission) }) { Text(Strings.PERMISSION_ALLOW) }
-                    PermissionStatus.DENIED -> Text(
-                        Strings.PERMISSION_DENIED,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
+                    PermissionStatus.DENIED -> {
+                        Text(
+                            Strings.PERMISSION_DENIED,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        OutlinedButton(onClick = onOpenAppSettings) { Text(Strings.OPEN_SETTINGS) }
+                    }
                 }
             }
         }
