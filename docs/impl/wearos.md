@@ -13,7 +13,9 @@
 | `WearApp` / `AppGraph` | `WearApp.kt` | `Application` と手書き DI。プロセス起動時に、前のプロセスが残した録音途中のチャンクを `TERMINATED` で確定し、アップロードを予約。録音 ON のまま止まっていたら「タップで再開」通知を出す |
 | `WearPrefs` | `WearPrefs.kt` | `deviceId`（インストールごとに固定の UUID）、`armed`（ユーザーが録音 ON にしているか）、送信 ON/OFF、最終 ACK 時刻 |
 | `RecordingService` | `recording/` | `microphone` 前景サービス + Ongoing Activity。イベントを `RecorderPolicy` に渡し、結果（録音 / 一時停止 / 停止）を適用する |
-| `ChunkRecorder` | `recording/` | `MediaRecorder` ラッパ。AAC-LC 16 kHz mono 24 kbps、`setNextOutputFile` による無音ギャップなしのローテーション |
+| `RecorderInput` | `recording/` | 録音入力のインターフェース（ファイル開始・ローテーション通知・ピーク値・時計）。本番は常に `ChunkRecorder`（マイク）。debug ビルドだけ音声ファイルに差し替えられる（§11） |
+| `ChunkRecorder` | `recording/` | `MediaRecorder` ラッパ（`RecorderInput` の本番実装）。AAC-LC 16 kHz mono 24 kbps、`setNextOutputFile` による無音ギャップなしのローテーション |
+| **`ChunkTracker`** | `recording/` | 録音中チャンクの記帳（Mark・無音統計・ローテーション時の次チャンクへの引き継ぎと開始時刻の連結） |
 | **`RecorderPolicy` / `InterruptionBackoff`** | `recording/RecorderPolicy.kt` | 状態機械（§3）。優先順位・猶予・ヒステリシス・アラート判定・リトライ間隔 |
 | **`SilenceDetector`** | `recording/` | `getMaxAmplitude()` の 1 秒ごとのピーク値から「チャンク全体が確実に無音か」を判定 |
 | **`ChunkJournal` / `RecordingDir`** | `recording/` | 録音中チャンクのジャーナル（`files/recording/<id>.journal.json`） |
@@ -161,7 +163,7 @@ sequenceDiagram
 
 ## 8. 実機なしで検証できること / できないこと
 
-**Linux（CI 含む）で検証済み**: `./gradlew :wearApp:testDebugUnitTest :wearApp:assembleDebug :wearApp:lintDebug`
+**Linux（CI 含む）で検証済み**: `./gradlew :wearApp:testDebugUnitTest :wearApp:assembleDebug :wearApp:assembleRelease :wearApp:lintDebug`（既知の音声をチャンク化して outbox まで流すテストは §11.4）
 
 | 検証できる（単体テスト） | 実機が必要 |
 | --- | --- |
@@ -204,3 +206,84 @@ sequenceDiagram
 15. **タイル / コンプリケーション**: 状態に応じて表示が変わる。タップでアプリが開き、停止中なら開始する。
 16. **停止**: Stop → 前景通知が消え、最後のチャンクが `user_stop` で閉じて送られる。以後は自動再開しない。
 17. **プライバシー**: スマホの Bluetooth だけを OFF（Wi-Fi は別ネットワークで ON）にし、Watch とスマホが Data Layer のクラウド経由でしかつながらない状態にする → Watch は送らない（`isNearby == false` → `To send` が溜まるだけ）。
+
+## 11. 音声ファイル入力（開発用）
+
+対象 Issue: [#57](https://github.com/Soichiro5/watch-audio/issues/57)。エミュレータや CI にはマイク入力がないため、**debug ビルドに限り**マイクの代わりに音声ファイルを録音処理へ流せる。エンコード（AAC-LC 16 kHz mono 24 kbps）・約 5 分ごとのチャンク分割・無音判定・ジャーナル・manifest 作成・outbox・送信は本番と同じコードを通る。
+
+### 11.1 仕組み
+
+- `RecordingService` は録音入力を `AppGraph.recorderInputFactory`（`RecorderInput.Factory`）から作る。既定値はマイク（`ChunkRecorder`）で、release ビルドではこれ以外にならない。
+- debug 用のコードはすべて `wearApp/src/debug`（パッケージ `app.watchaudio.wear.debug`）にあり、release ビルドには含まれない:
+
+| クラス | 役割 |
+| --- | --- |
+| `DebugAudioInputActivity` | adb またはメイン画面の「Debug: audio file input」ボタン（debug ビルドにだけ出る）から開く画面。ファイルを選ぶ / Intent extra で指定すると、入力をファイルに切り替えて録音サービスを（再）起動する |
+| `DebugAudioInput` | 入力の切り替え（`recorderInputFactory` をファイル入力 ⇔ マイク）、入力ファイルの置き場所 |
+| `FileRecorderInput` / `FilePlayback` | `RecorderInput` のファイル版。書き込みスレッドで読み込み → 指定速度でペース配分 → エンコード。一時停止（充電・非装着など）からの再開は前回の続きから再生する |
+| `WavPcmSource` / `MediaPcmSource` / `PcmConverter` | 16-bit WAV を直接読む / それ以外（m4a, mp3, ogg, flac など）は `MediaExtractor` + `MediaCodec` でデコード。チャンネル平均と線形補間で 16 kHz mono に変換 |
+| `PcmChunker` / `AacChunkSink` | 音声 5 分（`AudioFormat.CHUNK_DURATION_MS`）ごとにファイルを切り替え、`MediaCodec`（AAC-LC）+ `MediaMuxer` で本番と同じ形式の `.m4a` を書く。前回のポーリング以降のピーク値（`getMaxAmplitude()` 相当）を返す |
+
+- **時計**: ファイル入力の時計は「再生した音声の長さ」。チャンクの長さ・Mark のオフセットは倍速でも音声上の正確な値になる。レベルのポーリングも音声 1 秒ごと（実時間では `1 秒 ÷ 速度`）に行うので、無音判定の条件（カバレッジ 80 % 以上）は本番と同じ。
+- **時刻**: 最初のチャンクの `startedAtEpochMs` は開始時の壁時計、以降は本番と同じく「前チャンクの開始 + 長さ」。倍速では実際の時刻より先に進む（1 時間分の音声を 10 倍速 = 実時間 6 分で流すと、終わりの時刻は実際より約 54 分先になる）。
+- **ファイルの終わり**: 録音サービスを停止し、最後のチャンクを `user_stop` で閉じる（`loop` 指定時は先頭に戻って続ける）。その後の入力はマイクに戻る。
+- **リリースへの混入防止**: `assembleDebug` / `assembleRelease` は `verify<Variant>DebugInput` タスクに依存する。APK の dex を `app/watchaudio/wear/debug/` で、merged manifest を `app.watchaudio.wear.debug.` で検索し、debug では「ある」（検索が機能していることの確認）、release では「ない」ことを確認して、混入していればビルドを失敗させる。結果は `wearApp/build/reports/debug-input/<variant>.txt`。
+
+### 11.2 エミュレータでの使い方
+
+```bash
+# 1. debug ビルドを入れ、マイク権限を付与（ファイル入力でも microphone 前景サービスとして動くため必要）
+./gradlew :wearApp:installDebug
+adb -s <watch> shell pm grant app.watchaudio android.permission.RECORD_AUDIO
+
+# 2. エミュレータは「AC 充電中」を報告するので、そのままだと Paused · charging になる
+adb -s <watch> shell dumpsys battery unplug
+
+# 3. 入力ファイルを置く（どちらか）
+#    a) アプリ専用の外部ストレージ（adb push できる）
+adb -s <watch> shell mkdir -p /sdcard/Android/data/app.watchaudio/files/debug-input
+adb -s <watch> push test.wav /sdcard/Android/data/app.watchaudio/files/debug-input/
+#    b) アプリ内部の files/debug-input（run-as。バイナリを壊さないよう exec-in を使う）
+adb -s <watch> shell run-as app.watchaudio mkdir -p files/debug-input
+adb -s <watch> exec-in run-as app.watchaudio sh -c 'cat > files/debug-input/test.wav' < test.wav
+
+# 4. 開始（file: ファイル名 = 上の 2 か所を内部 → 外部の順に探す、または絶対パス。
+#    speed: 1〜120 倍、省略時 1。loop: 終わったら先頭から繰り返す）
+adb -s <watch> shell am start -n app.watchaudio/app.watchaudio.wear.debug.DebugAudioInputActivity \
+    --es file test.wav --ef speed 10
+adb -s <watch> shell am start -n app.watchaudio/app.watchaudio.wear.debug.DebugAudioInputActivity \
+    --es file test.wav --ef speed 30 --ez loop true
+
+# 5. 途中で止めてマイクに戻す（最後のチャンクは user_stop で閉じる）
+adb -s <watch> shell am start -n app.watchaudio/app.watchaudio.wear.debug.DebugAudioInputActivity --ez stop true
+
+# 6. 結果を見る
+adb -s <watch> shell run-as app.watchaudio ls -l files/recording files/outbox
+adb -s <watch> shell run-as app.watchaudio sh -c 'cat files/outbox/*.json'
+adb -s <watch> pull /sdcard/Android/data/app.watchaudio/files/diagnostics   # debug_input / chunk_closed など
+
+# 後片付け
+adb -s <watch> shell dumpsys battery reset
+```
+
+- 画面からも操作できる: メイン画面の一番下の「Debug: audio file input」→ 速度（×1 / ×10 / ×30 / ×60 を順に切り替え）・Loop を選び、ファイル名をタップ。「Stop · back to mic」で停止してマイクに戻す。
+- 録音が動いている最中に開始すると、いったん停止（`user_stop`）してからファイル入力で開始し直す。
+- スマホとペアになっていれば、できたチャンクは通常どおり送られる（outbox に残して見たいときはメイン画面の「Send to phone」を OFF）。
+- 検証用の音声: 16 kHz mono 16-bit WAV が最も確実（例: `ffmpeg -i in.m4a -ac 1 -ar 16000 -c:a pcm_s16le test.wav`）。他のレート・チャンネル数の WAV や、端末がデコードできる形式も受け付ける。無音判定を確かめるときは、無音区間の手前 1 秒程度も静かにしておく（ローテーション直後の最初のポーリングは前チャンク末尾のピークも含むため。マイクでも同じ）。
+- 期待される結果の例: 12 分 30 秒のファイル → 5 分・5 分・2 分 30 秒の 3 チャンク（`rotation`, `rotation`, `user_stop`）。5 分間ほぼ無音のチャンクは `audio` なしの manifest。
+
+### 11.3 制約
+
+- 入力デバイスのエミュレーションではないので、`isClientSilenced`（通話・他アプリの録音による割り込み）は起きない。充電・非装着・電池・容量の判定は本番と同じに働く（エミュレータに装着センサーがなければ「装着中」扱い）。
+- 倍速時はローテーションの実時間間隔が短い（60 倍速で 5 秒）。エンコードがペースに追いつかない場合は、実際の再生速度が指定より遅くなるだけで、チャンクの長さ・内容は変わらない。
+- エンコードはチャンクごとに `MediaCodec` を作り直すため、チャンクの先頭に AAC のプライミング分（数十 ms）が入る。`MediaRecorder` の `setNextOutputFile` による切り替えとは境界の細部が異なる。
+
+### 11.4 開発環境でのテスト（エミュレータ不要）
+
+`./gradlew :wearApp:testDebugUnitTest` に含まれる（`src/testDebug`）。`MediaCodec` は JVM で動かないため、AAC エンコーダだけを PCM をそのまま書くスタブに置き換え、それ以外は本番・debug と同じクラスを通す。
+
+| テスト | 内容 |
+| --- | --- |
+| `FileInputPipelineTest` | 合成した 12 分 30 秒の WAV（音 → 静かな部屋 → 音）を `WavPcmSource` → `PcmChunker` → `ChunkTracker`（音声 1 秒ごとのポーリング・Mark）→ `ChunkFinalizer` → `Outbox` に流し、outbox に 3 チャンク（300 s / 300 s / 150 s、`rotation` / `rotation` / `user_stop`）、開始時刻の連結、2 つ目が `audio == null`（無音）、Mark の位置、音声がサンプル単位で元の区間と一致（SHA-256）することを確認。48 kHz ステレオの変換、短すぎて無音と判定しないケースも |
+| `PcmChunkerTest` | ブロック境界に依らない正確なローテーション位置、次ファイルが無いときの停止、ピーク値、`PcmConverter` のストリーミング一致とチャンネル平均、WAV の読み込み・再開位置へのスキップ・非対応形式の拒否 |
+| `ChunkTrackerTest`（`src/test`） | Mark のオフセット、ローテーションでの開始時刻の連結・統計のリセット、終了時の長さ |
