@@ -25,13 +25,15 @@
 | 技術検証（#9〜#12） | 🟡 実機待ち（needs-device） | デスクトップ比較は完了（[ASR](spikes/m0-5-asr-desktop.md)・[埋め込み](spikes/m0-6-embedding-desktop.md)）。電池計測は実機待ち |
 | 転送プロトコル（#13） | ✅ | ChunkManifest / ChunkAck / フレーミング / テストベクタ |
 | ローカル DB・取り込み（#14） | ✅ | bundled SQLite + FTS5（日本語部分一致）、冪等な Ingestor |
-| 文字起こしパイプライン（#20） | ✅ 共通部分 | 再開可能なパイプライン。OS ごとのスケジューラは実装中 |
+| 文字起こしパイプライン（#20） | ✅ クローズ | 再開可能なパイプライン + WorkManager / BGProcessingTask |
 | 実機なし検証基盤（#44） | 🟡 | JVM 上の E2E（Watch シミュレータ → 取り込み → 日本語 ASR → SQLite → 検索）を CI に組み込み済み。エミュレータテストは未着手 |
 | Android スマホ（#18, #22） | ✅ 実装済み（実機未確認） | 受信と ACK、sherpa-onnx 文字起こし、モデル取得、WorkManager。詳細: [impl/android-phone.md](impl/android-phone.md)。モデル配布サイズの削減は #46 |
-| Wear OS 録音（#16, #41, #43） | 🔧 実装中 | 常時録音、装着検出・充電で自動停止/再開、送信キュー、Tile |
+| Wear OS 録音（#16, #41, #43） | ✅ 実装済み（実機未確認） | 常時録音、装着検出・充電で自動停止/再開、送信キュー + ACK、Tile・コンプリケーション。詳細: [impl/wearos.md](impl/wearos.md) |
 | iOS / watchOS（#15, #17, #21） | ✅ 実装済み（実機未確認） | 録音、WatchConnectivity + ACK、SpeechAnalyzer、BGProcessingTask。詳細: [impl/ios-watchos.md](impl/ios-watchos.md) |
 | スマホ UI（#19, #23, #25） | ✅ クローズ | 日別タイムライン（欠損理由・カバー率）・文字起こし・検索・状態表示。詳細: [impl/phone-ui.md](impl/phone-ui.md) |
-| チャンク境界の発話分断（#45） | 📝 起票 | 境界をまたぐ発話の扱い |
+| チャンク境界の発話分断（#45） | 🔧 実装中 | 境界をまたぐ発話を 1 文として文字起こし |
+| 録音途絶の通知・オンボーディング（#43, #32） | 🔧 実装中 | 10 分以上届かないときの通知、初回の説明・同意・権限 |
+| ストレージ管理（#33） | 🔧 実装中 | 音声の保持期間（既定は無期限）、容量表示、削除 |
 
 ## 全体の流れ
 
