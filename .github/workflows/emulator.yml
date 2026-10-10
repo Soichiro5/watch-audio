@@ -39,17 +39,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Must run before setup-java: the tool cache it clears is where the JDK is installed.
+      - name: Free disk space for the emulator image
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android/sdk/ndk "$AGENT_TOOLSDIRECTORY"
+          df -h /
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
 
       - uses: gradle/actions/setup-gradle@v4
-
-      - name: Free disk space for the emulator image
-        run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android/sdk/ndk "$AGENT_TOOLSDIRECTORY"
-          df -h /
 
       - name: Enable KVM
         run: |
