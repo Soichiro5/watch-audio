@@ -80,6 +80,7 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 ## 5. 実機検証の手順
 
 - M0-3 / M0-4 電池計測: [docs/spikes/m0-3-m0-4-battery-protocol.md](spikes/m0-3-m0-4-battery-protocol.md)
+- Wear OS 録音アプリ（常時録音・転送）の手動テスト: [docs/impl/wearos.md §10](impl/wearos.md#10-実機での手動テスト-チェックリスト)
 
 ## 6. 検証データの扱い
 

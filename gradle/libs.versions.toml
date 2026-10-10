@@ -21,6 +21,12 @@ koin = "4.2.2"
 ktor = "3.6.0"
 kotlinx-io = "0.9.1"
 androidx-sqlite = "2.7.1"
+# Wear OS recorder (wearApp)
+wear-tiles = "1.6.2"
+wear-protolayout = "1.4.2"
+wear-complications = "1.3.0"
+androidx-concurrent = "1.3.0"
+androidx-fragment = "1.8.9"
 sherpa-onnx = "v1.13.8"
 play-services-wearable = "20.0.1"
 wear-compose = "1.7.1"
@@ -67,6 +73,9 @@ compose-lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifec
 
 # AndroidX
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
+androidx-concurrent-futures = { module = "androidx.concurrent:concurrent-futures-ktx", version.ref = "androidx-concurrent" }
+# play-services-wearable pulls fragment 1.1.0; the ActivityResult API needs >= 1.3 (lint).
+androidx-fragment = { module = "androidx.fragment:fragment", version.ref = "androidx-fragment" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
 androidx-lifecycle-service = { module = "androidx.lifecycle:lifecycle-service", version.ref = "androidx-lifecycle" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
@@ -81,6 +90,10 @@ wear-compose-material3 = { module = "androidx.wear.compose:compose-material3", v
 wear-compose-foundation = { module = "androidx.wear.compose:compose-foundation", version.ref = "wear-compose" }
 wear-ongoing = { module = "androidx.wear:wear-ongoing", version.ref = "wear-ongoing" }
 wear-tooling-preview = { module = "androidx.wear:wear-tooling-preview", version.ref = "wear-tooling-preview" }
+wear-tiles = { module = "androidx.wear.tiles:tiles", version.ref = "wear-tiles" }
+wear-protolayout = { module = "androidx.wear.protolayout:protolayout", version.ref = "wear-protolayout" }
+wear-protolayout-expression = { module = "androidx.wear.protolayout:protolayout-expression", version.ref = "wear-protolayout" }
+wear-complications-data-source = { module = "androidx.wear.watchface:watchface-complications-data-source-ktx", version.ref = "wear-complications" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

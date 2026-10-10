@@ -2,6 +2,8 @@
 
 Guidance for Claude Code in this repository. Keep it short; details live in `docs/`.
 
+> **IMPORTANT: Every message to the user — reports, progress updates, proposals, questions and answers — must be written in Japanese.** This includes one-line status notes between tool calls. Only code, code comments, commit messages and tool inputs may be in English.
+
 ## Product in one line
 
 A smartwatch records continuously while worn → chunks go to the paired phone over a direct link → the phone transcribes **on-device** → data accumulates **locally**. Current goal and priorities: `docs/03-roadmap.md` and the v0.1 milestone (P0 issues).
@@ -57,4 +59,4 @@ iOS/watchOS apps only build on macOS (CI `ios.yml`, Xcode 26.x): `cd iosApp && x
 - Branch: `main`. Commit small, logical units and **push regularly**; keep CI green (fix red CI before new work).
 - With every change, **update the docs** it affects (`docs/impl/*`, `docs/02`, `docs/03` progress table, README) and the **GitHub issues**: progress comment, labels (`P0/P1/P2`, `in-progress`, `needs-device`), close with a summary when done, file new issues for problems found. Regenerate the dashboard afterwards.
 - Parallelize: hand independent work to sub-agents (git worktrees) and keep working while they and long commands run in the background — don't sit idle waiting.
-- Talk to the user in **Japanese**.
+- Talk to the user in **Japanese** (see the rule at the top).

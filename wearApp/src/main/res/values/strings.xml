@@ -1,5 +1,40 @@
 <resources>
     <string name="app_name">watch-audio</string>
+
     <string name="recording_channel">Recording</string>
-    <string name="recording_title">Recording</string>
+    <string name="alerts_channel">Recording alerts</string>
+
+    <string name="status_recording">Recording</string>
+    <string name="status_paused_off_body">Paused · not worn</string>
+    <string name="status_paused_charging">Paused · charging</string>
+    <string name="status_paused_low_battery">Paused · low battery</string>
+    <string name="status_paused_low_storage">Paused · storage full</string>
+    <string name="status_paused_interrupted">Paused · mic busy</string>
+    <string name="status_stopped">Stopped</string>
+    <string name="status_stopped_tap_to_resume">Stopped · tap to resume</string>
+
+    <string name="alert_low_battery_title">Recording paused</string>
+    <string name="alert_low_battery_text">Battery is low. Recording resumes after charging.</string>
+    <string name="alert_low_storage_title">Recording paused</string>
+    <string name="alert_low_storage_text">Watch storage is full. Connect the phone so chunks can be transferred.</string>
+    <string name="alert_interrupted_title">Recording interrupted</string>
+    <string name="alert_interrupted_text">The microphone is unavailable. Retrying; tap to open.</string>
+    <string name="alert_terminated_title">Recording stopped</string>
+    <string name="alert_terminated_text">The recorder was closed by the system. Tap to resume.</string>
+
+    <string name="action_start">Start</string>
+    <string name="action_stop">Stop</string>
+    <string name="action_resume">Resume</string>
+    <string name="action_mark">Mark</string>
+    <string name="action_open">Open</string>
+    <string name="send_to_phone">Send to phone</string>
+    <string name="pending_uploads">To send: %1$d</string>
+    <string name="last_ack">Last ACK: %1$s</string>
+    <string name="last_ack_never">Last ACK: —</string>
+    <string name="battery">Battery %1$d%%</string>
+    <string name="mic_permission_needed">Microphone permission is required</string>
+
+    <string name="tile_label">watch-audio</string>
+    <string name="tile_description">Recording status</string>
+    <string name="complication_label">Recording status</string>
 </resources>
