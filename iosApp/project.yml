@@ -77,6 +77,21 @@ targets:
         # Keeps the recorder running with the screen off (verified in M0-3).
         UIBackgroundModes: [audio]
 
+  # Logic tests (no host app, no Kotlin framework) for the Swift wire-protocol code shared by
+  # the watch and the phone, against the Kotlin test vectors in shared/core-protocol/testdata.
+  ProtocolTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Shared
+      - ProtocolTests
+      - path: ../shared/core-protocol/testdata
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).protocoltests
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   # The watch app is built and embedded through iosApp's target dependency; listing it
   # here as well would restrict the scheme to watchOS destinations.
@@ -88,3 +103,9 @@ schemes:
     build:
       targets:
         WatchApp: all
+  ProtocolTests:
+    build:
+      targets:
+        ProtocolTests: [test]
+    test:
+      targets: [ProtocolTests]

@@ -74,6 +74,18 @@ jobs:
             -configuration Debug -destination 'generic/platform=watchOS Simulator' \
             CODE_SIGNING_ALLOWED=NO build -quiet 2>&1 | tee xcodebuild-watch.log; exit ${PIPESTATUS[0]}
 
+      # Hostless logic tests: Swift wire protocol vs. shared/core-protocol/testdata (no Kotlin build).
+      - name: Swift protocol tests (iOS Simulator)
+        if: success() || failure()
+        run: |
+          UDID=$(xcrun simctl list devices available --json \
+            | jq -r '[.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name | startswith("iPhone"))][0].udid')
+          if [ -z "$UDID" ] || [ "$UDID" = "null" ]; then xcrun simctl list devices available; exit 1; fi
+          echo "Simulator: $UDID"
+          xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme ProtocolTests \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            CODE_SIGNING_ALLOWED=NO test -quiet 2>&1 | tee xcodebuild-tests.log; exit ${PIPESTATUS[0]}
+
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
