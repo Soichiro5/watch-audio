@@ -53,6 +53,14 @@ xcodegen generate
 open WatchAudio.xcodeproj   # iosApp スキームを実機に Run（Watch アプリも一緒に入る）
 ```
 
+Linux でも Kotlin の iOS 向けコード（`iosMain`）の**コンパイルまで**は確認できる（klib クロスコンパイル。リンクとフレームワーク生成は Mac のみ）:
+
+```bash
+./gradlew :composeApp:compileKotlinIosSimulatorArm64 -Pkotlin.native.enableKlibsCrossCompilation=true
+```
+
+iOS / watchOS 側の構成は [docs/impl/ios-watchos.md](impl/ios-watchos.md) を参照。
+
 Wear OS 実機への接続は「開発者向けオプション → ワイヤレスデバッグ」→ `adb pair` / `adb connect`。
 
 ## 4. 実機なしでの通し検証（Linux）

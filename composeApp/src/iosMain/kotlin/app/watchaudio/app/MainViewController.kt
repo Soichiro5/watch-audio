@@ -3,6 +3,9 @@ package app.watchaudio.app
 import androidx.compose.ui.window.ComposeUIViewController
 import platform.UIKit.UIViewController
 
-/** Hosts the shared UI; the iOS app passes its `IosAppServices`. */
+/**
+ * Entry point for the Compose UI, called from Swift (`MainViewControllerKt.MainViewController()`)
+ * after `IosAppGraph.shared.start(...)`.
+ */
 @Suppress("FunctionName", "unused") // Called from Swift
-fun MainViewController(services: AppServices): UIViewController = ComposeUIViewController { App(services) }
+fun MainViewController(): UIViewController = ComposeUIViewController { App(IosAppGraph.services) }

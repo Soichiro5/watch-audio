@@ -3,14 +3,26 @@ import SwiftUI
 
 @main
 struct iOSApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
     init() {
-        WatchInboxReceiver.shared.activate()
+        // Order matters: the Kotlin graph (database, BGTask registration) must exist before
+        // WatchConnectivity can deliver chunks, and BGTask registration must happen during launch.
+        IosAppGraph.shared.start(transcriber: SpeechAnalyzerTranscriber())
+        WatchReceiver.shared.activate()
     }
 
     var body: some Scene {
         WindowGroup {
             ComposeView()
                 .ignoresSafeArea()
+                .onChange(of: scenePhase, initial: true) { _, phase in
+                    switch phase {
+                    case .active: IosAppGraph.shared.setAppActive(active: true)
+                    case .background: IosAppGraph.shared.setAppActive(active: false)
+                    default: break // .inactive (e.g. Control Center): keep going
+                    }
+                }
         }
     }
 }
