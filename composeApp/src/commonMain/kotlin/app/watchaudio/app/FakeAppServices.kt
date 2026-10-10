@@ -14,6 +14,8 @@ class FakeAppServices(
     override val store: LocalStore,
     override val audioRoot: String = "",
     initialStatus: ProcessingStatus = ProcessingStatus(),
+    override val permissions: List<AppPermission> = emptyList(),
+    override val modelSetup: ModelSetup = ModelSetup.DOWNLOAD,
 ) : AppServices {
     val mutableStatus = MutableStateFlow(initialStatus)
     override val status: StateFlow<ProcessingStatus> = mutableStatus.asStateFlow()
@@ -24,6 +26,13 @@ class FakeAppServices(
     var transcriptionRequests = 0
         private set
     val downloadRequests = mutableListOf<Boolean>()
+
+    /** Current permission states; [requestPermission] grants unless [deniesOnRequest]. */
+    val permissionStates = permissions.associateWith { PermissionStatus.NOT_REQUESTED }.toMutableMap()
+    val permissionRequests = mutableListOf<AppPermission>()
+    var deniesOnRequest = false
+    var gapAlertSettingsChanges = 0
+        private set
 
     override fun requestTranscription() {
         transcriptionRequests++
@@ -39,6 +48,21 @@ class FakeAppServices(
 
     override fun downloadModels(allowMetered: Boolean) {
         downloadRequests += allowMetered
+    }
+
+    override suspend fun permissionStatus(permission: AppPermission): PermissionStatus =
+        permissionStates[permission] ?: PermissionStatus.GRANTED
+
+    override suspend fun requestPermission(permission: AppPermission): PermissionStatus {
+        permissionRequests += permission
+        if (permissionStates[permission] == PermissionStatus.NOT_REQUESTED) {
+            permissionStates[permission] = if (deniesOnRequest) PermissionStatus.DENIED else PermissionStatus.GRANTED
+        }
+        return permissionStatus(permission)
+    }
+
+    override fun gapAlertSettingsChanged() {
+        gapAlertSettingsChanges++
     }
 
     companion object {

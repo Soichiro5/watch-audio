@@ -3,6 +3,7 @@ package app.watchaudio.app.state
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.watchaudio.app.AppServices
+import app.watchaudio.app.ModelSetup
 import app.watchaudio.app.ProcessingStatus
 import app.watchaudio.app.logic.ArrivalState
 import app.watchaudio.app.logic.arrivalState
@@ -23,6 +24,7 @@ data class StatusUiState(
     val stats: StoreStats? = null,
     val arrival: ArrivalState = ArrivalState.NoData,
     val now: Long = 0,
+    val modelSetup: ModelSetup = ModelSetup.DOWNLOAD,
 )
 
 private data class StoreSnapshot(val stats: StoreStats, val lastChunk: ChunkRecord?, val now: Long)
@@ -48,8 +50,13 @@ class StatusViewModel(
             stats = snapshot.stats,
             arrival = arrivalState(snapshot.lastChunk, lastReceived, snapshot.now),
             now = snapshot.now,
+            modelSetup = services.modelSetup,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StatusUiState(services.status.value))
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        StatusUiState(services.status.value, modelSetup = services.modelSetup),
+    )
 
     fun downloadModels(allowMetered: Boolean) = services.downloadModels(allowMetered)
 

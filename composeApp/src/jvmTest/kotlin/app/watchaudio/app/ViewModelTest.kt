@@ -6,7 +6,14 @@ import app.watchaudio.app.logic.SnippetPart
 import app.watchaudio.app.logic.TimelineSpan
 import app.watchaudio.app.logic.TranscriptEntry
 import app.watchaudio.app.logic.dayWindow
+import app.watchaudio.app.logic.GapAlertSettings
+import app.watchaudio.app.logic.QuietHours
+import app.watchaudio.app.settings.AppSettings
+import app.watchaudio.app.settings.loadSettings
 import app.watchaudio.app.state.DayViewModel
+import app.watchaudio.app.state.OnboardingStep
+import app.watchaudio.app.state.OnboardingViewModel
+import app.watchaudio.app.state.SettingsViewModel
 import app.watchaudio.app.state.NowProvider
 import app.watchaudio.app.state.SearchViewModel
 import app.watchaudio.app.state.StatusViewModel
@@ -275,5 +282,83 @@ class ViewModelTest {
         backgroundScope.launch { vm.state.collect {} }
         runCurrent()
         assertEquals(ArrivalState.Stopped(at(9, 6), ChunkEndReason.OFF_BODY), vm.state.value.arrival)
+    }
+
+    @Test
+    fun settingsLoadAndPersist() = runVmTest {
+        val vm = SettingsViewModel(services, scope = backgroundScope)
+        backgroundScope.launch { vm.settings.collect {} }
+        runCurrent()
+        assertEquals(AppSettings(), vm.settings.value)
+
+        vm.setQuietHours(QuietHours(enabled = true, startMinute = 22 * 60, endMinute = 6 * 60))
+        vm.completeOnboarding()
+        runCurrent()
+        val expected = AppSettings(
+            onboardingCompleted = true,
+            gapAlert = GapAlertSettings(quietHours = QuietHours(true, 22 * 60, 6 * 60)),
+        )
+        assertEquals(expected, vm.settings.value)
+        assertEquals(expected, store.loadSettings())
+        assertEquals(1, services.gapAlertSettingsChanges)
+
+        vm.setGapAlertsEnabled(false)
+        runCurrent()
+        assertEquals(false, vm.settings.value!!.gapAlert.enabled)
+        assertEquals(2, services.gapAlertSettingsChanges)
+    }
+
+    @Test
+    fun onboardingRequiresConsentAndSkipsPermissionsWhenNoneAreNeeded() = runVmTest {
+        val vm = OnboardingViewModel(services, scope = backgroundScope)
+        backgroundScope.launch { vm.state.collect {} }
+        runCurrent()
+        assertEquals(
+            listOf(OnboardingStep.WELCOME, OnboardingStep.CONSENT, OnboardingStep.MODEL, OnboardingStep.WATCH),
+            vm.state.value.steps,
+        )
+        vm.next()
+        vm.next() // blocked: no consent yet
+        runCurrent()
+        assertEquals(OnboardingStep.CONSENT, vm.state.value.step)
+        vm.setConsent(true)
+        vm.next()
+        vm.next()
+        vm.next() // already last
+        runCurrent()
+        assertEquals(OnboardingStep.WATCH, vm.state.value.step)
+        assertTrue(vm.state.value.isLast)
+        vm.back()
+        runCurrent()
+        assertEquals(OnboardingStep.MODEL, vm.state.value.step)
+        vm.restart()
+        runCurrent()
+        assertEquals(OnboardingStep.WELCOME, vm.state.value.step)
+    }
+
+    @Test
+    fun onboardingRequestsPermissionsAndReflectsTheModel() = runVmTest {
+        val platform = FakeAppServices(store, permissions = listOf(AppPermission.NOTIFICATIONS, AppPermission.SPEECH_RECOGNITION))
+        platform.deniesOnRequest = true
+        val vm = OnboardingViewModel(platform, scope = backgroundScope)
+        backgroundScope.launch { vm.state.collect {} }
+        runCurrent()
+        assertTrue(OnboardingStep.PERMISSIONS in vm.state.value.steps)
+        assertEquals(mapOf(AppPermission.NOTIFICATIONS to null, AppPermission.SPEECH_RECOGNITION to null), vm.state.value.permissions)
+
+        vm.refreshPermissions()
+        runCurrent()
+        assertEquals(PermissionStatus.NOT_REQUESTED, vm.state.value.permissions[AppPermission.NOTIFICATIONS])
+
+        vm.requestPermission(AppPermission.NOTIFICATIONS)
+        runCurrent()
+        assertEquals(PermissionStatus.DENIED, vm.state.value.permissions[AppPermission.NOTIFICATIONS])
+        assertEquals(PermissionStatus.NOT_REQUESTED, vm.state.value.permissions[AppPermission.SPEECH_RECOGNITION])
+
+        platform.mutableStatus.value = ProcessingStatus(asrModel = ModelState.Downloading(0.5f))
+        runCurrent()
+        assertEquals(ModelState.Downloading(0.5f), vm.state.value.model)
+        vm.downloadModels(allowMetered = false)
+        assertEquals(listOf(false), platform.downloadRequests)
     }
 }

@@ -25,16 +25,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.watchaudio.app.logic.formatClock
 import app.watchaudio.app.state.DayViewModel
 import app.watchaudio.app.state.NowPlaying
 import app.watchaudio.app.state.NowProvider
+import app.watchaudio.app.state.OnboardingViewModel
 import app.watchaudio.app.state.SearchViewModel
+import app.watchaudio.app.state.SettingsViewModel
 import app.watchaudio.app.state.StatusViewModel
 import app.watchaudio.app.ui.AppIcons
 import app.watchaudio.app.ui.DayScreen
+import app.watchaudio.app.ui.OnboardingScreen
 import app.watchaudio.app.ui.SearchScreen
 import app.watchaudio.app.ui.StatusScreen
 import kotlinx.datetime.TimeZone
@@ -58,68 +62,115 @@ fun App(
     val dayViewModel = viewModel { DayViewModel(services, timeZone, clock) }
     val searchViewModel = viewModel { SearchViewModel(services, timeZone) }
     val statusViewModel = viewModel { StatusViewModel(services, clock) }
+    val settingsViewModel = viewModel { SettingsViewModel(services) }
+    val onboardingViewModel = viewModel { OnboardingViewModel(services) }
 
     MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
-        var tabIndex by rememberSaveable { mutableIntStateOf(Tab.TIMELINE.ordinal) }
-        val tab = Tab.entries[tabIndex]
-        val dayState by dayViewModel.state.collectAsStateWithLifecycle()
+        val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
+        when (settings?.onboardingCompleted) {
+            // Loading: show an empty surface rather than flashing the wrong screen.
+            null -> Surface(Modifier.fillMaxSize()) {}
+            false -> Onboarding(onboardingViewModel, onFinish = settingsViewModel::completeOnboarding)
+            true -> MainTabs(timeZone, dayViewModel, searchViewModel, statusViewModel, settingsViewModel) {
+                onboardingViewModel.restart()
+                settingsViewModel.showOnboardingAgain()
+            }
+        }
+    }
+}
 
-        Scaffold(
-            bottomBar = {
-                Column {
-                    dayState.nowPlaying?.let { PlaybackBar(it, timeZone, onStop = dayViewModel::stopPlayback) }
-                    NavigationBar {
-                        Tab.entries.forEach { item ->
-                            NavigationBarItem(
-                                selected = item == tab,
-                                onClick = { tabIndex = item.ordinal },
-                                icon = { Icon(item.icon, contentDescription = null) },
-                                label = { Text(item.label) },
-                            )
-                        }
+@Composable
+private fun Onboarding(viewModel: OnboardingViewModel, onFinish: () -> Unit) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    // Permission states can change outside the app (system settings); re-read them on resume.
+    LifecycleResumeEffect(viewModel) {
+        viewModel.refreshPermissions()
+        onPauseOrDispose {}
+    }
+    OnboardingScreen(
+        state = state,
+        onBack = viewModel::back,
+        onNext = viewModel::next,
+        onFinish = onFinish,
+        onConsentChange = viewModel::setConsent,
+        onRequestPermission = viewModel::requestPermission,
+        onDownloadModel = viewModel::downloadModels,
+    )
+}
+
+@Composable
+private fun MainTabs(
+    timeZone: TimeZone,
+    dayViewModel: DayViewModel,
+    searchViewModel: SearchViewModel,
+    statusViewModel: StatusViewModel,
+    settingsViewModel: SettingsViewModel,
+    onShowOnboarding: () -> Unit,
+) {
+    var tabIndex by rememberSaveable { mutableIntStateOf(Tab.TIMELINE.ordinal) }
+    val tab = Tab.entries[tabIndex]
+    val dayState by dayViewModel.state.collectAsStateWithLifecycle()
+
+    Scaffold(
+        bottomBar = {
+            Column {
+                dayState.nowPlaying?.let { PlaybackBar(it, timeZone, onStop = dayViewModel::stopPlayback) }
+                NavigationBar {
+                    Tab.entries.forEach { item ->
+                        NavigationBarItem(
+                            selected = item == tab,
+                            onClick = { tabIndex = item.ordinal },
+                            icon = { Icon(item.icon, contentDescription = null) },
+                            label = { Text(item.label) },
+                        )
                     }
                 }
-            },
-        ) { padding ->
-            val modifier = Modifier.fillMaxSize().padding(padding)
-            when (tab) {
-                Tab.TIMELINE -> DayScreen(
-                    state = dayState,
-                    timeZone = timeZone,
-                    onPreviousDay = dayViewModel::previousDay,
-                    onNextDay = dayViewModel::nextDay,
-                    onToday = dayViewModel::goToToday,
-                    onPlay = dayViewModel::play,
-                    onTranscribe = dayViewModel::transcribe,
-                    onFocusHandled = dayViewModel::focusHandled,
+            }
+        },
+    ) { padding ->
+        val modifier = Modifier.fillMaxSize().padding(padding)
+        when (tab) {
+            Tab.TIMELINE -> DayScreen(
+                state = dayState,
+                timeZone = timeZone,
+                onPreviousDay = dayViewModel::previousDay,
+                onNextDay = dayViewModel::nextDay,
+                onToday = dayViewModel::goToToday,
+                onPlay = dayViewModel::play,
+                onTranscribe = dayViewModel::transcribe,
+                onFocusHandled = dayViewModel::focusHandled,
+                modifier = modifier,
+            )
+            Tab.SEARCH -> {
+                val query by searchViewModel.query.collectAsStateWithLifecycle()
+                val results by searchViewModel.results.collectAsStateWithLifecycle()
+                val searching by searchViewModel.searching.collectAsStateWithLifecycle()
+                SearchScreen(
+                    query = query,
+                    results = results,
+                    searching = searching,
+                    onQueryChange = searchViewModel::setQuery,
+                    onOpen = { result ->
+                        dayViewModel.openSegment(result.chunkId, result.segmentId, result.startAt)
+                        tabIndex = Tab.TIMELINE.ordinal
+                    },
                     modifier = modifier,
                 )
-                Tab.SEARCH -> {
-                    val query by searchViewModel.query.collectAsStateWithLifecycle()
-                    val results by searchViewModel.results.collectAsStateWithLifecycle()
-                    val searching by searchViewModel.searching.collectAsStateWithLifecycle()
-                    SearchScreen(
-                        query = query,
-                        results = results,
-                        searching = searching,
-                        onQueryChange = searchViewModel::setQuery,
-                        onOpen = { result ->
-                            dayViewModel.openSegment(result.chunkId, result.segmentId, result.startAt)
-                            tabIndex = Tab.TIMELINE.ordinal
-                        },
-                        modifier = modifier,
-                    )
-                }
-                Tab.STATUS -> {
-                    val statusState by statusViewModel.state.collectAsStateWithLifecycle()
-                    StatusScreen(
-                        state = statusState,
-                        timeZone = timeZone,
-                        onDownloadModel = statusViewModel::downloadModels,
-                        onTranscribeNow = statusViewModel::requestTranscription,
-                        modifier = modifier,
-                    )
-                }
+            }
+            Tab.STATUS -> {
+                val statusState by statusViewModel.state.collectAsStateWithLifecycle()
+                val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
+                StatusScreen(
+                    state = statusState,
+                    timeZone = timeZone,
+                    onDownloadModel = statusViewModel::downloadModels,
+                    onTranscribeNow = statusViewModel::requestTranscription,
+                    settings = settings,
+                    onGapAlertsEnabledChange = settingsViewModel::setGapAlertsEnabled,
+                    onQuietHoursChange = settingsViewModel::setQuietHours,
+                    onShowOnboarding = onShowOnboarding,
+                    modifier = modifier,
+                )
             }
         }
     }

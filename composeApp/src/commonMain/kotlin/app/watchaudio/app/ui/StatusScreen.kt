@@ -1,6 +1,7 @@
 package app.watchaudio.app.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
@@ -9,23 +10,38 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import app.watchaudio.app.ModelSetup
 import app.watchaudio.app.ModelState
 import app.watchaudio.app.Strings
 import app.watchaudio.app.logic.ArrivalState
 import app.watchaudio.app.logic.Thresholds
+import app.watchaudio.app.logic.GapAlertSettings
+import app.watchaudio.app.logic.QuietHours
 import app.watchaudio.app.logic.formatAgo
+import app.watchaudio.app.logic.formatMinuteOfDay
+import app.watchaudio.app.settings.AppSettings
 import app.watchaudio.app.logic.formatClock
 import app.watchaudio.app.logic.formatHours
 import app.watchaudio.app.logic.formatMegabytes
@@ -39,6 +55,10 @@ internal fun StatusScreen(
     timeZone: TimeZone,
     onDownloadModel: (allowMetered: Boolean) -> Unit,
     onTranscribeNow: () -> Unit,
+    settings: AppSettings?,
+    onGapAlertsEnabledChange: (Boolean) -> Unit,
+    onQuietHoursChange: (QuietHours) -> Unit,
+    onShowOnboarding: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -47,9 +67,76 @@ internal fun StatusScreen(
     ) {
         ArrivalCard(state, timeZone)
         ModelCard(state, onDownloadModel, onTranscribeNow)
+        settings?.let { AlertSettingsCard(it.gapAlert, onGapAlertsEnabledChange, onQuietHoursChange) }
         state.stats?.let { StatsCard(it) }
         Section(Strings.PRIVACY_TITLE) {
             Text(Strings.PRIVACY_NOTE, style = MaterialTheme.typography.bodyMedium)
+        }
+        Section(Strings.GUIDE_TITLE) {
+            OutlinedButton(onClick = onShowOnboarding) { Text(Strings.SHOW_ONBOARDING_AGAIN) }
+        }
+    }
+}
+
+@Composable
+private fun AlertSettingsCard(
+    settings: GapAlertSettings,
+    onEnabledChange: (Boolean) -> Unit,
+    onQuietHoursChange: (QuietHours) -> Unit,
+) {
+    Section(Strings.ALERTS_TITLE) {
+        SwitchRow(
+            Strings.GAP_ALERT_SWITCH,
+            Strings.gapAlertSwitchDetail(Thresholds.ARRIVAL_WARNING_MS / 60_000),
+            settings.enabled,
+            onEnabledChange,
+        )
+        if (settings.enabled) {
+            val quiet = settings.quietHours
+            SwitchRow(Strings.QUIET_HOURS_SWITCH, Strings.QUIET_HOURS_DETAIL, quiet.enabled) {
+                onQuietHoursChange(quiet.copy(enabled = it))
+            }
+            if (quiet.enabled) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HourPicker(Strings.QUIET_HOURS_FROM, quiet.startMinute) { onQuietHoursChange(quiet.copy(startMinute = it)) }
+                    Text("–")
+                    HourPicker(Strings.QUIET_HOURS_TO, quiet.endMinute) { onQuietHoursChange(quiet.copy(endMinute = it)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, detail: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(end = 8.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = null)
+    }
+}
+
+/** A button showing `HH:00` that opens a menu of whole hours. */
+@Composable
+private fun HourPicker(label: String, minuteOfDay: Int, onSelect: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { open = true }) { Text("$label ${formatMinuteOfDay(minuteOfDay)}") }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            (0 until 24).forEach { hour ->
+                DropdownMenuItem(
+                    text = { Text(formatMinuteOfDay(hour * 60)) },
+                    onClick = {
+                        open = false
+                        onSelect(hour * 60)
+                    },
+                )
+            }
         }
     }
 }
@@ -96,23 +183,17 @@ private fun ArrivalCard(state: StatusUiState, timeZone: TimeZone) {
 private fun ModelCard(state: StatusUiState, onDownloadModel: (Boolean) -> Unit, onTranscribeNow: () -> Unit) {
     val model = state.status.asrModel
     Section(Strings.ASR_MODEL) {
-        Text(
-            when (model) {
-                ModelState.Unknown -> Strings.MODEL_UNKNOWN
-                ModelState.Missing -> Strings.MODEL_MISSING
-                is ModelState.Downloading -> Strings.modelDownloading((model.progress * 100).toInt().coerceIn(0, 100))
-                ModelState.Ready -> Strings.MODEL_READY
-                is ModelState.Failed -> Strings.modelFailed(model.reason)
-            },
-            style = MaterialTheme.typography.bodyMedium,
-        )
+        Text(modelStateText(model), style = MaterialTheme.typography.bodyMedium)
         if (model is ModelState.Downloading) {
             LinearProgressIndicator(progress = { model.progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
         }
         if (model == ModelState.Missing || model is ModelState.Failed) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { onDownloadModel(false) }) { Text(Strings.DOWNLOAD_WIFI) }
-                OutlinedButton(onClick = { onDownloadModel(true) }) { Text(Strings.DOWNLOAD_ANY) }
+            when (state.modelSetup) {
+                ModelSetup.DOWNLOAD -> FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { onDownloadModel(false) }) { Text(Strings.DOWNLOAD_WIFI) }
+                    OutlinedButton(onClick = { onDownloadModel(true) }) { Text(Strings.DOWNLOAD_ANY) }
+                }
+                ModelSetup.OS_MANAGED -> Button(onClick = { onDownloadModel(false) }) { Text(Strings.MODEL_PREPARE) }
             }
         }
         if (state.status.transcribing) {

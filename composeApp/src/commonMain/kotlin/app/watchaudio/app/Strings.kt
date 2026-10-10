@@ -98,6 +98,73 @@ object Strings {
     const val PRIVACY_TITLE = "プライバシー"
     const val PRIVACY_NOTE = "データはこの端末内にのみ保存され、外部に送信されません"
 
+    // Status screen: alert settings (#43)
+    const val ALERTS_TITLE = "通知"
+    const val GAP_ALERT_SWITCH = "録音が届かないときに通知"
+    fun gapAlertSwitchDetail(minutes: Long) = "Watch で録音中のはずなのに${minutes}分以上データが届かないとき"
+    const val QUIET_HOURS_SWITCH = "おやすみ時間は通知しない"
+    const val QUIET_HOURS_DETAIL = "おやすみ時間中に途絶えた場合は、終了時刻に通知します"
+    const val QUIET_HOURS_FROM = "開始"
+    const val QUIET_HOURS_TO = "終了"
+    const val GUIDE_TITLE = "はじめに"
+    const val SHOW_ONBOARDING_AGAIN = "初回の説明をもう一度見る"
+
+    // Onboarding (#32)
+    fun onboardingProgress(current: Int, total: Int) = "$current / $total"
+    const val ONBOARDING_BACK = "戻る"
+    const val ONBOARDING_NEXT = "次へ"
+    const val ONBOARDING_SKIP = "後で設定する"
+    const val ONBOARDING_START = "はじめる"
+
+    const val WELCOME_TITLE = "watch-audio へようこそ"
+    val WELCOME_POINTS = listOf(
+        "Watch を着けている間、周りの会話を録音し続けます。",
+        "録音は数分ごとにこのスマホへ届き、スマホの中で文字起こしされます。",
+        "あとからタイムラインで一日を振り返ったり、キーワードで発言を探したりできます。",
+    )
+    const val WELCOME_PRIVACY_DETAIL =
+        "録音・文字起こしはどこにもアップロードせず、バックアップにも含めません。ネットワークは文字起こしモデルのダウンロードにだけ使います。"
+
+    const val CONSENT_TITLE = "録音する前に"
+    val CONSENT_POINTS = listOf(
+        "このアプリは常に録音します。あなたの声だけでなく、周りの人の声も録音されます。",
+        "国・地域によっては、会話を録音するときに相手の同意が必要な場合があります。録音していることを周りの人に伝え、必要に応じて同意を得てください。",
+        "会議・医療機関・職場など、録音が禁止・制限されている場所や場面では、Watch で録音を止めてください。",
+    )
+    const val CONSENT_DISCLAIMER = "この説明は一般的な注意であり、法的助言ではありません。お住まいの地域の法令や所属先のルールを確認してください。"
+    const val CONSENT_CHECKBOX = "内容を理解し、周りの人に配慮して録音します"
+
+    const val PERMISSIONS_TITLE = "許可の設定"
+    const val PERMISSIONS_INTRO = "あとから端末の設定アプリでも変更できます。"
+    fun permissionName(permission: AppPermission) = when (permission) {
+        AppPermission.NOTIFICATIONS -> "通知"
+        AppPermission.SPEECH_RECOGNITION -> "音声認識"
+    }
+    fun permissionReason(permission: AppPermission) = when (permission) {
+        AppPermission.NOTIFICATIONS -> "録音データが届かなくなったときや、モデルのダウンロード状況をお知らせします。"
+        AppPermission.SPEECH_RECOGNITION -> "録音をこの端末の中で文字起こしするために使います。音声は外部に送信されません。"
+    }
+    const val PERMISSION_ALLOW = "許可する"
+    const val PERMISSION_GRANTED = "許可済み"
+    const val PERMISSION_DENIED = "許可されていません。端末の設定アプリから変更できます。"
+    const val PERMISSION_CHECKING = "確認中…"
+
+    const val MODEL_SETUP_TITLE = "文字起こしの準備"
+    const val MODEL_SETUP_DOWNLOAD =
+        "日本語の音声認識モデル（数百 MB）をダウンロードします。一度ダウンロードすれば、文字起こしはオフラインで端末内だけで行います。"
+    const val MODEL_SETUP_DOWNLOAD_HINT = "Wi-Fi を選ぶと、Wi-Fi に接続されたときに自動でダウンロードします。"
+    const val MODEL_SETUP_OS =
+        "iPhone の日本語音声認識モデルを使います。入っていない場合は iOS がダウンロードします（文字起こしは端末内で行います）。"
+    const val MODEL_PREPARE = "モデルを準備"
+
+    const val WATCH_TITLE = "Watch で録音を開始"
+    const val WATCH_INSTRUCTION = "Watch アプリを開いて録音を開始してください"
+    val WATCH_POINTS = listOf(
+        "録音データは自動でこのスマホに届きます。「状態」タブで受信状況を確認できます。",
+        "充電中・Watch を外している間・通話中などは録音が止まります。止まった時間と理由はタイムラインに表示されます。",
+        "録音中のはずなのにデータが届かないときは、スマホに通知します。",
+    )
+
     // Units and formats
     val WEEKDAYS = listOf("月", "火", "水", "木", "金", "土", "日") // ISO order, Monday first
     fun date(year: Int, month: Int, day: Int, weekday: String) = "${year}年${month}月${day}日($weekday)"
