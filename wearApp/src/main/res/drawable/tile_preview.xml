@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simplified preview of the recorder tile for the tile picker. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#FF000000" />
+            <size
+                android:width="192dp"
+                android:height="192dp" />
+        </shape>
+    </item>
+    <item
+        android:width="64dp"
+        android:height="64dp"
+        android:drawable="@drawable/ic_mic"
+        android:gravity="center" />
+</layer-list>

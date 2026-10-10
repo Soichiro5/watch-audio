@@ -1,238 +1,502 @@
 package app.watchaudio.wear.recording
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.media.AudioManager
 import android.media.AudioRecordingConfiguration
-import android.media.MediaRecorder
-import android.os.BatteryManager
 import android.os.Handler
 import android.os.Looper
-import androidx.core.app.NotificationCompat
+import android.os.SystemClock
+import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
-import androidx.wear.ongoing.OngoingActivity
-import androidx.wear.ongoing.Status
-import app.watchaudio.wear.MainActivity
-import app.watchaudio.wear.R
+import app.watchaudio.core.protocol.ChunkEndReason
+import app.watchaudio.wear.AppGraph
+import app.watchaudio.wear.outbox.UploadScheduler
+import app.watchaudio.wear.tile.StatusSurfaces
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.util.TimeZone
+import java.util.UUID
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Foreground recorder for the M0-4 spike (#10): records 16 kHz mono AAC in ~5 minute
- * chunks, logs battery every 5 minutes and optionally sends closed chunks to the phone.
+ * Always-on recorder (#16). Started by the wearer from the foreground (app or tile tap → app),
+ * then keeps running as a `microphone` foreground service until the wearer taps Stop:
  *
- * Must be started while the activity is in the foreground: since Android 14 a
- * `microphone` foreground service cannot be started from the background.
+ * - records ~5 minute AAC chunks gaplessly ([ChunkRecorder]) and journals the current chunk so a
+ *   process death loses at most the chunk in progress;
+ * - pauses (closing the chunk with the matching [ChunkEndReason]) when the watch is taken off,
+ *   put on the charger, low on battery or storage, or the microphone is taken, and resumes on its
+ *   own when the condition clears. Resuming happens inside the still-running foreground service,
+ *   which Android 14+ allows; starting a new one from the background is not allowed;
+ * - hands finalized chunks to the outbox and triggers an upload.
+ *
+ * The decisions themselves live in [RecorderPolicy] (pure, unit-tested); this class only wires
+ * Android events to it and applies the result.
  */
-class RecordingService : LifecycleService() {
-    private var recorder: MediaRecorder? = null
-    private var currentFile: File? = null
-    private var chunkIndex = 0
-    private var batteryJob: Job? = null
-    private lateinit var log: SpikeLog
-    private lateinit var sessionDir: File
-    private lateinit var sender: ChunkSender
-    private var sendChunks = true
+class RecordingService : LifecycleService(), ChunkRecorder.Listener {
+    private val graph by lazy { AppGraph.of(this) }
+    private val handler = Handler(Looper.getMainLooper())
+
+    private val policy = RecorderPolicy()
+    private val backoff = InterruptionBackoff()
+    private var conditions = RecorderConditions()
+    private var mode: RecorderMode = RecorderMode.Stopped
+    private var shownAlert: RecorderAlert? = null
+    private var inForeground = false
+    private var reconcileQueued = false
+
+    private var recorder: ChunkRecorder? = null
+    private var current: ActiveChunk? = null
+    private var pendingNextChunkId: String? = null
+    private var sessionId: String? = null
+    private var sessionStartedAtEpochMs: Long? = null
+    private var recorderStartedAtElapsed = 0L
+
+    private var tickerJob: Job? = null
+    private var statusJob: Job? = null
+    private var reevaluateJob: Job? = null
+
+    private lateinit var batteryMonitor: BatteryMonitor
+    private lateinit var offBodyMonitor: OffBodyMonitor
     private val audioManager by lazy { getSystemService(AudioManager::class.java) }
+    private var recordingCallbackRegistered = false
+
+    /** The chunk being recorded: its journal plus in-memory state. */
+    private class ActiveChunk(var journal: ChunkJournal, val startElapsedMs: Long) {
+        val silence = journal.silenceDetector()
+        val durationMs get() = SystemClock.elapsedRealtime() - startElapsedMs
+    }
+
     private val recordingCallback = object : AudioManager.AudioRecordingCallback() {
         override fun onRecordingConfigChanged(configs: MutableList<AudioRecordingConfiguration>) {
-            // Another client taking the mic silences us (Android 10+ concurrent capture rules).
-            val silenced = configs.any { it.clientAudioSessionId == recorder?.activeRecordingConfiguration?.clientAudioSessionId && it.isClientSilenced }
-            if (silenced) logEvent("silenced", "another app is using the microphone")
+            val sessionId = recorder?.audioSessionId ?: return
+            // Android 10+ concurrent capture: a call, the Assistant or another recorder silences us.
+            if (configs.any { it.clientAudioSessionId == sessionId && it.isClientSilenced }) {
+                onInterrupted(hardFailure = false, ChunkEndReason.INTERRUPTION, "silenced by another client")
+            }
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        batteryMonitor = BatteryMonitor(this) { status ->
+            val chargingChanged = status.charging != conditions.charging
+            conditions = conditions.copy(batteryPercent = status.percent, charging = status.charging)
+            RecorderStore.update { it.copy(batteryPercent = status.percent, charging = status.charging) }
+            if (chargingChanged) graph.log(if (status.charging) "power_connected" else "power_disconnected")
+            requestReconcile()
+        }
+        offBodyMonitor = OffBodyMonitor(this) { onBody, atElapsed ->
+            val wasOnBody = conditions.offBodySinceMs == null
+            conditions = conditions.copy(offBodySinceMs = if (onBody) null else conditions.offBodySinceMs ?: atElapsed)
+            RecorderStore.update { it.copy(onBody = onBody) }
+            if (wasOnBody != onBody) graph.log(if (onBody) "on_body" else "off_body")
+            requestReconcile()
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
-            ACTION_START -> start(intent.getBooleanExtra(EXTRA_SEND_CHUNKS, true))
+            ACTION_START -> arm()
+            ACTION_STOP -> disarm()
             ACTION_MARK -> mark()
-            ACTION_STOP -> stop("user")
+            // Restarted by the system after the process died (START_STICKY).
+            null -> restartAfterProcessDeath()
         }
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
-    private fun start(sendChunks: Boolean) {
-        if (RecorderStore.state.value.isRecording) return
-        this.sendChunks = sendChunks
-        val sessionId = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-        sessionDir = File(getExternalFilesDir(null), "spike/$sessionId").apply { mkdirs() }
-        log = SpikeLog(sessionDir, sessionId)
-        sender = ChunkSender(this)
-        chunkIndex = 0
-
-        startForeground(NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-
-        val battery = batteryPercent()
-        RecorderStore.update {
-            RecorderState(isRecording = true, startedAtMillis = System.currentTimeMillis(), batteryAtStart = battery, batteryNow = battery)
+    private fun arm() {
+        graph.prefs.armed = true
+        if (!enterForeground()) {
+            // From the UI this means a missing permission; after a process death WearApp posts
+            // the "tap to resume" reminder.
+            stopSelf()
+            return
         }
-        audioManager.registerAudioRecordingCallback(recordingCallback, Handler(Looper.getMainLooper()))
-        startRecorder()
-        logEvent("start", "sendChunks=$sendChunks bitrate=$BITRATE")
-
-        batteryJob = lifecycleScope.launch {
-            while (isActive) {
-                delay(BATTERY_LOG_INTERVAL_MS)
-                RecorderStore.update { it.copy(batteryNow = batteryPercent()) }
-                logEvent("battery")
-            }
-        }
+        startMonitors()
+        graph.log("armed")
+        // Read the charger state now: starting on the charger must not produce a tiny chunk
+        // before the (asynchronous) first battery broadcast arrives.
+        val battery = currentBattery()
+        conditions = conditions.copy(
+            armed = true,
+            batteryPercent = battery.percent,
+            charging = battery.charging,
+            freeStorageBytes = freeStorage(),
+        )
+        requestReconcile()
     }
 
-    private fun startRecorder() {
-        val file = nextFile()
-        currentFile = file
-        recorder = MediaRecorder(this).apply {
-            setAudioSource(MediaRecorder.AudioSource.MIC)
-            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            setAudioSamplingRate(SAMPLE_RATE)
-            setAudioChannels(1)
-            setAudioEncodingBitRate(BITRATE)
-            // Rotate by size (~5 min at BITRATE); setNextOutputFile keeps the split gapless.
-            setMaxFileSize(CHUNK_BYTES)
-            setOutputFile(file)
-            setOnInfoListener { _, what, _ -> onRecorderInfo(what) }
-            setOnErrorListener { _, what, extra -> logEvent("error", "what=$what extra=$extra") }
-            prepare()
-            start()
+    private fun restartAfterProcessDeath() {
+        if (!graph.prefs.armed) {
+            stopSelf()
+            return
         }
+        // Android 14+ usually refuses a microphone foreground service started from the
+        // background; then the wearer has to tap (WearApp posts the reminder).
+        graph.log("sticky_restart")
+        arm()
     }
 
-    private fun onRecorderInfo(what: Int) {
-        when (what) {
-            MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_APPROACHING -> {
-                val next = nextFile()
-                recorder?.setNextOutputFile(next)
-                pendingNext = next
-            }
-            MediaRecorder.MEDIA_RECORDER_INFO_NEXT_OUTPUT_FILE_STARTED -> {
-                currentFile?.let(::onChunkClosed)
-                currentFile = pendingNext
-            }
-            MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED -> logEvent("max_size_reached", "next file was not ready")
-        }
-    }
-
-    private var pendingNext: File? = null
-
-    private fun nextFile() = File(sessionDir, "chunk-%04d.m4a".format(chunkIndex++))
-
-    private fun onChunkClosed(file: File) {
-        RecorderStore.update { it.copy(chunksClosed = it.chunksClosed + 1, bytesRecorded = it.bytesRecorded + file.length()) }
-        logEvent("chunk_closed", file.name)
-        if (!sendChunks) return
-        lifecycleScope.launch {
-            val sent = runCatching { sender.send(file) }
-                .onFailure { logEvent("send_failed", it.message.orEmpty()) }
-                .getOrDefault(false)
-            if (sent) {
-                RecorderStore.update { it.copy(chunksSent = it.chunksSent + 1) }
-                logEvent("chunk_sent", file.name)
-            }
-        }
+    private fun disarm() {
+        graph.prefs.armed = false
+        conditions = conditions.copy(armed = false)
+        graph.log("user_stop")
+        reconcile()
     }
 
     private fun mark() {
-        if (!RecorderStore.state.value.isRecording) return
-        RecorderStore.update { it.copy(marks = it.marks + 1) }
-        logEvent("mark")
+        val chunk = current
+        if (chunk == null) {
+            if (!inForeground) stopSelf()
+            return
+        }
+        val offset = chunk.durationMs
+        chunk.journal = chunk.journal.copy(markOffsetsMs = chunk.journal.markOffsetsMs + offset)
+        writeJournal(chunk)
+        RecorderStore.update { it.copy(marksInSession = it.marksInSession + 1) }
+        graph.log("mark", "${chunk.journal.chunkId} +${offset}ms")
     }
 
-    private fun stop(reason: String) {
-        if (!RecorderStore.state.value.isRecording) return
-        runCatching { recorder?.stop() }.onFailure { logEvent("stop_failed", it.message.orEmpty()) }
-        recorder?.release()
+    private fun enterForeground(): Boolean {
+        if (inForeground) return true
+        return try {
+            ServiceCompat.startForeground(
+                this,
+                RecorderAlerts.NOTIFICATION_ONGOING,
+                graph.alerts.ongoingNotification(mode, sessionStartedAtEpochMs),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
+            )
+            inForeground = true
+            RecorderStore.update { it.copy(serviceRunning = true) }
+            true
+        } catch (e: Exception) {
+            // SecurityException / ForegroundServiceStartNotAllowedException: not started from the foreground.
+            graph.log("fgs_start_failed", e.toString())
+            false
+        }
+    }
+
+    private fun startMonitors() {
+        batteryMonitor.start()
+        if (!offBodyMonitor.start()) graph.log("off_body_unavailable", "sensor missing or not permitted; assuming worn")
+        if (!recordingCallbackRegistered) {
+            audioManager.registerAudioRecordingCallback(recordingCallback, handler)
+            recordingCallbackRegistered = true
+        }
+        if (statusJob == null) {
+            statusJob = lifecycleScope.launch {
+                while (isActive) {
+                    delay(STATUS_INTERVAL_MS)
+                    conditions = conditions.copy(freeStorageBytes = freeStorage())
+                    graph.log("battery")
+                    reconcile()
+                }
+            }
+        }
+    }
+
+    private fun stopMonitors() {
+        batteryMonitor.stop()
+        offBodyMonitor.stop()
+        if (recordingCallbackRegistered) {
+            audioManager.unregisterAudioRecordingCallback(recordingCallback)
+            recordingCallbackRegistered = false
+        }
+        statusJob?.cancel()
+        statusJob = null
+        reevaluateJob?.cancel()
+        reevaluateJob = null
+    }
+
+    /** Coalesces bursts of events (sensor + battery + callbacks) into one decision. */
+    private fun requestReconcile() {
+        if (reconcileQueued) return
+        reconcileQueued = true
+        handler.post {
+            reconcileQueued = false
+            reconcile()
+        }
+    }
+
+    private fun reconcile() {
+        val now = SystemClock.elapsedRealtime()
+        conditions = backoff.applyTo(conditions)
+        val decision = policy.decide(conditions, now)
+        val target = decision.mode
+
+        if (target == RecorderMode.Recording) {
+            if (recorder == null && !startRecording()) return // failure queued another reconcile
+        } else if (recorder != null) {
+            stopRecording(endReasonFor(target))
+        }
+        applyMode(target)
+        applyAlert(decision.alert)
+        scheduleReevaluation(decision.reevaluateAtMs, now)
+        if (target == RecorderMode.Stopped) shutdown()
+    }
+
+    private fun endReasonFor(mode: RecorderMode): ChunkEndReason = when (mode) {
+        is RecorderMode.Paused -> mode.reason.endReason
+        RecorderMode.Stopped -> ChunkEndReason.USER_STOP
+        RecorderMode.Recording -> error("not a stop")
+    }
+
+    private fun applyMode(target: RecorderMode) {
+        if (target == mode) return
+        mode = target
+        RecorderStore.update { it.copy(mode = target, sessionStartedAtEpochMs = sessionStartedAtEpochMs) }
+        graph.prefs.lastStatus = target.statusKey()
+        if (inForeground) graph.alerts.updateOngoing(target, sessionStartedAtEpochMs)
+        StatusSurfaces.refresh(this)
+        graph.log("mode", target.statusKey())
+    }
+
+    private fun applyAlert(alert: RecorderAlert?) {
+        if (alert != null && alert != shownAlert) {
+            graph.alerts.show(alert)
+            graph.log("alert", alert.name)
+        } else if (alert == null && shownAlert != null && mode == RecorderMode.Recording) {
+            graph.alerts.cancelAlert()
+        }
+        if (alert != null || mode == RecorderMode.Recording) shownAlert = alert
+        RecorderStore.update { it.copy(alert = alert) }
+    }
+
+    private fun scheduleReevaluation(atMs: Long?, now: Long) {
+        reevaluateJob?.cancel()
+        reevaluateJob = atMs?.let {
+            lifecycleScope.launch {
+                delay((it - now).coerceAtLeast(0))
+                reconcile()
+            }
+        }
+    }
+
+    // --- Recording -----------------------------------------------------------------------------
+
+    private fun startRecording(): Boolean {
+        val chunkId = UUID.randomUUID().toString()
+        val file = graph.recordingDir.audioFile(chunkId)
+        val rec = ChunkRecorder(this, this)
+        val startElapsed = try {
+            rec.start(file)
+        } catch (e: Exception) {
+            file.delete()
+            onInterrupted(hardFailure = true, ChunkEndReason.ERROR, "start failed: $e")
+            return false
+        }
+        recorder = rec
+        recorderStartedAtElapsed = startElapsed
+        val startedAt = System.currentTimeMillis()
+        // One session per continuous recording: every pause/resume starts a new one.
+        val session = UUID.randomUUID().toString()
+        sessionId = session
+        sessionStartedAtEpochMs = startedAt
+        RecorderStore.update { it.copy(sessionStartedAtEpochMs = startedAt, marksInSession = 0) }
+        val chunk = ActiveChunk(
+            ChunkJournal(
+                chunkId = chunkId,
+                sessionId = session,
+                deviceId = graph.prefs.deviceId,
+                startedAtEpochMs = startedAt,
+                timeZone = TimeZone.getDefault().id,
+                retryProbe = backoff.sinceMs != null,
+            ),
+            startElapsed,
+        )
+        current = chunk
+        writeJournal(chunk)
+        startTicker()
+        graph.log("recording_started", "session=$session chunk=$chunkId")
+        return true
+    }
+
+    private fun stopRecording(endReason: ChunkEndReason) {
+        val rec = recorder ?: return
         recorder = null
-        currentFile?.let(::onChunkClosed)
-        currentFile = null
-        batteryJob?.cancel()
-        audioManager.unregisterAudioRecordingCallback(recordingCallback)
-        RecorderStore.update { it.copy(isRecording = false, batteryNow = batteryPercent()) }
-        logEvent("stop", reason)
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        val stoppedAt = SystemClock.elapsedRealtime()
+        val clean = rec.stop()
+        tickerJob?.cancel()
+        tickerJob = null
+        pendingNextChunkId?.let { graph.recordingDir.audioFile(it).delete() }
+        pendingNextChunkId = null
+        sessionId = null
+        sessionStartedAtEpochMs = null
+
+        val chunk = current ?: return
+        current = null
+        val duration = stoppedAt - chunk.startElapsedMs
+        val journal = chunk.journal.withSilence(chunk.silence).copy(lastAliveAtEpochMs = chunk.journal.startedAtEpochMs + duration)
+        if (endReason == ChunkEndReason.INTERRUPTION && journal.retryProbe && duration < InterruptionBackoff.PROBE_DISCARD_MS) {
+            // A retry silenced right away: the gap that started with the previous chunk continues.
+            graph.scope.launch(graph.chunkIo) { graph.recordingDir.delete(journal.chunkId) }
+            graph.log("probe_discarded", journal.chunkId)
+            return
+        }
+        finalizeChunk(journal, duration, endReason, clean)
+    }
+
+    override fun onNextFileNeeded(): File? {
+        if (recorder == null) return null
+        val id = UUID.randomUUID().toString()
+        pendingNextChunkId = id
+        return graph.recordingDir.audioFile(id)
+    }
+
+    override fun onRotated(atElapsedMs: Long) {
+        val closed = current ?: return
+        val nextId = pendingNextChunkId ?: return
+        val session = sessionId ?: return
+        pendingNextChunkId = null
+        val duration = atElapsedMs - closed.startElapsedMs
+        val next = ActiveChunk(
+            ChunkJournal(
+                chunkId = nextId,
+                sessionId = session,
+                deviceId = closed.journal.deviceId,
+                // Derived from the previous chunk so consecutive chunks tile the timeline exactly.
+                startedAtEpochMs = closed.journal.startedAtEpochMs + duration,
+                timeZone = TimeZone.getDefault().id,
+            ),
+            atElapsedMs,
+        )
+        current = next
+        writeJournal(next)
+        val journal = closed.journal.withSilence(closed.silence).copy(lastAliveAtEpochMs = closed.journal.startedAtEpochMs + duration)
+        finalizeChunk(journal, duration, ChunkEndReason.ROTATION, audioUsable = true)
+    }
+
+    override fun onRecorderFailed(detail: String) {
+        handler.post { onInterrupted(hardFailure = true, ChunkEndReason.ERROR, detail) }
+    }
+
+    /** Closes the chunk (if recording) and schedules a retry with backoff. */
+    private fun onInterrupted(hardFailure: Boolean, endReason: ChunkEndReason, detail: String) {
+        graph.log("interrupted", detail)
+        if (recorder != null) stopRecording(endReason)
+        backoff.onInterrupted(SystemClock.elapsedRealtime(), hardFailure)
+        requestReconcile()
+    }
+
+    private fun startTicker() {
+        tickerJob?.cancel()
+        tickerJob = lifecycleScope.launch {
+            var lastHeartbeat = SystemClock.elapsedRealtime()
+            while (isActive) {
+                delay(SilenceDetector.POLL_INTERVAL_MS)
+                val rec = recorder ?: break
+                val chunk = current ?: continue
+                chunk.silence.add(rec.pollMaxAmplitude())
+                val now = SystemClock.elapsedRealtime()
+                if (rec.isSilenced) {
+                    onInterrupted(hardFailure = false, ChunkEndReason.INTERRUPTION, "silenced (poll)")
+                    break
+                }
+                if (backoff.sinceMs != null && now - recorderStartedAtElapsed >= InterruptionBackoff.HEALTHY_AFTER_MS) {
+                    backoff.onHealthy()
+                    graph.log("recovered")
+                    requestReconcile()
+                }
+                if (now - lastHeartbeat >= HEARTBEAT_INTERVAL_MS) {
+                    lastHeartbeat = now
+                    chunk.journal = chunk.journal.withSilence(chunk.silence).copy(lastAliveAtEpochMs = System.currentTimeMillis())
+                    writeJournal(chunk)
+                    val free = freeStorage()
+                    if (free < RecorderPolicy.LOW_STORAGE_BYTES) {
+                        conditions = conditions.copy(freeStorageBytes = free)
+                        requestReconcile()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun writeJournal(chunk: ActiveChunk) {
+        val journal = chunk.journal.withSilence(chunk.silence)
+        runCatching { graph.recordingDir.write(journal) }.onFailure { graph.log("journal_failed", it.toString()) }
+    }
+
+    private fun finalizeChunk(journal: ChunkJournal, durationMs: Long, endReason: ChunkEndReason, audioUsable: Boolean) {
+        val app = applicationContext
+        graph.scope.launch(graph.chunkIo) {
+            val file = graph.recordingDir.audioFile(journal.chunkId)
+            // The previous file of a rotation is finalized by the encoder thread; give it a moment.
+            val usable = audioUsable && awaitFinalized(file)
+            val result = runCatching { graph.finalizer.finalize(journal, durationMs, endReason, usable) }
+                .onFailure { graph.log("finalize_failed", "${journal.chunkId} $it") }
+                .getOrNull() ?: return@launch
+            val m = result.manifest
+            graph.log(
+                "chunk_closed",
+                "${m.chunkId} ${m.endReason.name.lowercase()} ${m.durationMs}ms bytes=${m.audio?.sizeBytes ?: 0} " +
+                    "silent=${result.silent} dropped=${result.audioDropped} marks=${m.markOffsetsMs.size}",
+            )
+            graph.refreshPendingCount()
+            UploadScheduler.uploadNow(app)
+        }
+    }
+
+    private suspend fun awaitFinalized(file: File): Boolean {
+        repeat(FINALIZE_WAIT_STEPS) {
+            if (Mp4Probe.isFinalized(file)) return true
+            delay(FINALIZE_WAIT_STEP_MS)
+        }
+        return Mp4Probe.isFinalized(file)
+    }
+
+    private fun freeStorage(): Long = graph.outbox.dir.usableSpace
+
+    private fun shutdown() {
+        stopMonitors()
+        if (inForeground) {
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            inForeground = false
+        }
+        RecorderStore.update { it.copy(serviceRunning = false, mode = RecorderMode.Stopped, alert = null) }
+        StatusSurfaces.refresh(this)
         stopSelf()
     }
 
     override fun onDestroy() {
-        stop("service_destroyed")
+        if (recorder != null) {
+            // Destroyed while recording without a Stop (system shutdown of the service).
+            stopRecording(ChunkEndReason.TERMINATED)
+            if (graph.prefs.armed) graph.alerts.showTerminated()
+        }
+        stopMonitors()
+        handler.removeCallbacksAndMessages(null)
+        RecorderStore.update { it.copy(serviceRunning = false, mode = RecorderMode.Stopped) }
+        graph.prefs.lastStatus = RecorderMode.Stopped.statusKey()
+        StatusSurfaces.refresh(this)
         super.onDestroy()
     }
 
-    private fun logEvent(event: String, detail: String = "") {
-        RecorderStore.update { it.copy(lastEvent = event) }
-        if (::log.isInitialized) log.append(RecorderStore.state.value, isCharging(), event, detail)
-    }
-
-    private fun batteryPercent(): Int =
-        getSystemService(BatteryManager::class.java).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-
-    private fun isCharging(): Boolean {
-        val status = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-            ?.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
-        return status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
-    }
-
-    private fun buildNotification(): Notification {
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, getString(R.string.recording_channel), NotificationManager.IMPORTANCE_LOW),
-        )
-        val openApp = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
-        )
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle(getString(R.string.recording_title))
-            .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
-            .setOngoing(true)
-            .setContentIntent(openApp)
-
-        // Shows the recording state on the watch face / launcher while the app is not visible.
-        OngoingActivity.Builder(this, NOTIFICATION_ID, builder)
-            .setStaticIcon(android.R.drawable.ic_btn_speak_now)
-            .setTouchIntent(openApp)
-            .setStatus(
-                Status.Builder()
-                    .addTemplate("#elapsed#")
-                    .addPart("elapsed", Status.StopwatchPart(System.currentTimeMillis()))
-                    .build(),
-            )
-            .build()
-            .apply(this)
-        return builder.build()
-    }
-
     companion object {
-        private const val ACTION_START = "start"
-        private const val ACTION_MARK = "mark"
-        private const val ACTION_STOP = "stop"
-        private const val EXTRA_SEND_CHUNKS = "send_chunks"
-        private const val CHANNEL_ID = "recording"
-        private const val NOTIFICATION_ID = 1
-        private const val SAMPLE_RATE = 16_000
-        private const val BITRATE = 32_000
-        private const val CHUNK_BYTES = BITRATE / 8L * 300 // ~5 minutes
-        private const val BATTERY_LOG_INTERVAL_MS = 5 * 60_000L
+        private const val ACTION_START = "app.watchaudio.wear.action.START"
+        private const val ACTION_MARK = "app.watchaudio.wear.action.MARK"
+        private const val ACTION_STOP = "app.watchaudio.wear.action.STOP"
 
-        fun start(context: Context, sendChunks: Boolean) = ContextCompat.startForegroundService(
+        private const val HEARTBEAT_INTERVAL_MS = 30_000L
+        private const val STATUS_INTERVAL_MS = 5 * 60_000L
+        private const val FINALIZE_WAIT_STEPS = 40
+        private const val FINALIZE_WAIT_STEP_MS = 250L
+
+        /**
+         * Must be called while the app is in the foreground (activity visible): since Android 14
+         * a `microphone` foreground service cannot be started from the background.
+         */
+        fun start(context: Context) = ContextCompat.startForegroundService(
             context,
-            Intent(context, RecordingService::class.java).setAction(ACTION_START).putExtra(EXTRA_SEND_CHUNKS, sendChunks),
+            Intent(context, RecordingService::class.java).setAction(ACTION_START),
         )
 
         fun mark(context: Context) = context.startService(Intent(context, RecordingService::class.java).setAction(ACTION_MARK))
