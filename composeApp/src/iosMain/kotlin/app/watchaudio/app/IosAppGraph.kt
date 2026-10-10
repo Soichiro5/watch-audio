@@ -1,5 +1,6 @@
 package app.watchaudio.app
 
+import app.watchaudio.app.alert.GapAlertEvaluator
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.Ingestor
 import app.watchaudio.core.pipeline.TranscriptionPipeline
@@ -11,6 +12,7 @@ import kotlin.concurrent.Volatile
 import kotlin.coroutines.resume
 import kotlin.time.Clock
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -69,6 +71,7 @@ object IosAppGraph {
     private lateinit var ingestor: Ingestor
     private lateinit var pipeline: TranscriptionPipeline
     private lateinit var appServices: IosAppServices
+    private lateinit var gapAlerts: IosGapAlerts
 
     /** For the shared Compose UI; valid after [start]. */
     val services: AppServices get() = appServices
@@ -105,7 +108,15 @@ object IosAppGraph {
         store = LocalStore.open("$rootDirectory/${LocalStore.FILE_NAME}")
         ingestor = Ingestor(store, Path(audioRoot))
         pipeline = TranscriptionPipeline(store, Path(audioRoot), IosTranscriberAdapter(transcriber))
-        appServices = IosAppServices(store, audioRoot, status, ::requestTranscription)
+        gapAlerts = IosGapAlerts(GapAlertEvaluator(store))
+        appServices = IosAppServices(
+            store,
+            audioRoot,
+            status,
+            onRequestTranscription = ::requestTranscription,
+            onPrepareModel = ::prepareModel,
+            onGapAlertSettingsChanged = { scope.launch { runCatching { gapAlerts.reschedule(chunkArrived = false) } } },
+        )
         BGTaskScheduler.sharedScheduler.registerForTaskWithIdentifier(PROCESSING_TASK_ID, null) { task ->
             if (task != null) scope.launch { runBackgroundTask(task) }
         }
@@ -175,6 +186,14 @@ object IosAppGraph {
         if (ack.status == AckStatus.STORED) {
             status.update { it.copy(lastChunkReceivedAt = Clock.System.now().toEpochMilliseconds()) }
             requestTranscription()
+            // The gap (if any) is over; arm the alert for the next one (#43). Never block the ACK.
+            try {
+                gapAlerts.reschedule(chunkArrived = true)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                status.update { it.copy(message = "通知の予約に失敗: ${e.message}") }
+            }
         }
         return ack.toJson()
     }
@@ -225,6 +244,15 @@ object IosAppGraph {
             }
         } finally {
             status.update { it.copy(transcribing = false) }
+        }
+    }
+
+    /** Installs the Speech model on request (onboarding / status tab), then transcribes what waits. */
+    private fun prepareModel() {
+        if (!started) return
+        scope.launch {
+            val ready = runLock.withLock { ensureModel() }
+            if (ready) requestTranscription()
         }
     }
 
