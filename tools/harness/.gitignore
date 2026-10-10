@@ -1,1 +1,2 @@
-models/
+# Downloaded ASR models (may also be a symlink to a shared copy)
+/models
