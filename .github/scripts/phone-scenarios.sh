@@ -69,7 +69,7 @@ save_logcat
 # 3. Resume after a force-stop in the middle of a transcription run.
 instrument resume-seed -e class app.watchaudio.android.ResumeAfterKillTest#seed -e scenario resume-seed -e requireModels true
 save_logcat
-adb shell am start -W -n "$PKG/.MainActivity"
+adb shell am start -W -n "$PKG/app.watchaudio.android.MainActivity"
 transcribed=0
 for _ in $(seq 1 600); do
   transcribed=$(adb logcat -d -s TranscriptionWorker:I | grep -c "transcribed chunk" || true)

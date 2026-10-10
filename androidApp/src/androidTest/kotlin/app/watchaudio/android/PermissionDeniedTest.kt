@@ -16,6 +16,7 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import app.watchaudio.app.Strings
 import app.watchaudio.app.settings.updateSettings
+import java.util.regex.Pattern
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import org.junit.Assume.assumeTrue
@@ -58,7 +59,9 @@ class PermissionDeniedTest {
             compose.onNodeWithText(Strings.PERMISSION_ALLOW).performClick()
 
             // The system permission dialog: refuse.
-            val deny = device.wait(Until.findObject(By.res("com.android.permissioncontroller", "permission_deny_button")), 15_000)
+            // The permission controller is com.android.… or com.google.android.… depending on the image.
+            val deny = device.wait(Until.findObject(By.res(Pattern.compile(".*:id/permission_deny_button"))), 15_000)
+                ?: device.findObject(By.text(Pattern.compile("Don.t allow", Pattern.CASE_INSENSITIVE)))
             Evidence.screenshot("permission-system-dialog")
             checkNotNull(deny) { "the system permission dialog did not appear" }.click()
 
