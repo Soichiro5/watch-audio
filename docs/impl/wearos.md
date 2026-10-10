@@ -161,7 +161,7 @@ sequenceDiagram
 
 ## 8. 実機なしで検証できること / できないこと
 
-**Linux（CI 含む）で検証済み**: `./gradlew :wearApp:testDebugUnitTest :wearApp:assembleDebug :wearApp:lintDebug`
+**Linux で検証済み**: `./gradlew :wearApp:testDebugUnitTest :wearApp:assembleDebug :wearApp:lintDebug`。CI（`android.yml`）でも、単体テスト（`:wearApp:testDebugUnitTest`、36 件）・lint・ビルドを毎回実行する。
 
 | 検証できる（単体テスト） | 実機が必要 |
 | --- | --- |
