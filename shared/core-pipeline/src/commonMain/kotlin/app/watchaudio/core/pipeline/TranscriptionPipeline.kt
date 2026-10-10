@@ -1,8 +1,10 @@
 package app.watchaudio.core.pipeline
 
 import app.watchaudio.core.db.ChunkRecord
+import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.db.NewSegment
+import app.watchaudio.core.db.StoreTransaction
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -12,6 +14,9 @@ import kotlinx.io.files.Path
  * Transcribes stored chunks in order, oldest first. Safe to run from any background
  * scheduler: progress lives in the database, so a run can stop at any point (OS time
  * limit, app killed) and the next run continues where it left off.
+ *
+ * An utterance crossing the boundary to a seamless, already transcribed neighbour is
+ * transcribed in one piece together with that neighbour's adjoining audio (see [BoundaryJoin]).
  */
 class TranscriptionPipeline(
     private val store: LocalStore,
@@ -40,19 +45,20 @@ class TranscriptionPipeline(
     }
 
     private suspend fun process(chunk: ChunkRecord): Boolean {
-        val relative = chunk.audioPath ?: return true // silent chunks are never queued
+        if (chunk.audioPath == null) return true // silent chunks are never queued
         store.transaction { markTranscribing(chunk.id) }
         return try {
-            val utterances = transcriber.transcribe(Path(audioRoot, relative))
-            val segments = utterances.map {
-                NewSegment(
-                    startAt = chunk.startedAt + it.startMs,
-                    endAt = chunk.startedAt + it.endMs,
-                    text = it.text,
-                    lang = it.lang,
-                )
+            val joined = store.read { planJoin(chunk) }
+            val segments = try {
+                transcribe(joined)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // A neighbour's audio may be unreadable or gone; the chunk alone may still work.
+                if (joined.previous == null && joined.next == null) throw e
+                transcribe(JoinedTranscription(chunk))
             }
-            store.transaction { saveTranscript(chunk.id, segments, transcriber.engineId) }
+            store.transaction { save(segments) }
             true
         } catch (e: CancellationException) {
             // The coroutine is already cancelled; the requeue must still run.
@@ -62,6 +68,31 @@ class TranscriptionPipeline(
             store.transaction { markFailed(chunk.id, e.message ?: e::class.simpleName.orEmpty()) }
             false
         }
+    }
+
+    private class Transcribed(val joined: JoinedTranscription, val byChunk: Map<String, List<NewSegment>>)
+
+    private suspend fun transcribe(joined: JoinedTranscription) =
+        Transcribed(joined, joined.assign(transcriber.transcribe(joined.parts(audioRoot))))
+
+    /** Joins [chunk] with the boundary audio of its seamless, transcribed neighbours. */
+    private fun StoreTransaction.planJoin(chunk: ChunkRecord): JoinedTranscription {
+        val previous = previousInSession(chunk)
+            ?.takeIf { it.state == ChunkState.TRANSCRIBED && BoundaryJoin.isSeamless(it, chunk) }
+            ?.let { BoundaryJoin.tail(it, segmentsBetween(it.startedAt, it.endedAt)) }
+        val next = nextInSession(chunk)
+            ?.takeIf { it.state == ChunkState.TRANSCRIBED && BoundaryJoin.isSeamless(chunk, it) }
+            ?.let { BoundaryJoin.head(it, segmentsBetween(it.startedAt, it.endedAt)) }
+        return JoinedTranscription(chunk, previous, next)
+    }
+
+    private fun StoreTransaction.save(result: Transcribed) {
+        val joined = result.joined
+        val engine = transcriber.engineId
+        // The neighbours' segments that start inside the re-transcribed audio are superseded.
+        joined.previous?.let { replaceSegments(it.chunk.id, it.from, Long.MAX_VALUE, result.byChunk.getValue(it.chunk.id), engine) }
+        joined.next?.let { replaceSegments(it.chunk.id, Long.MIN_VALUE, it.to, result.byChunk.getValue(it.chunk.id), engine) }
+        saveTranscript(joined.chunk.id, result.byChunk.getValue(joined.chunk.id), engine)
     }
 
     data class RunResult(val transcribed: Int, val failed: Int)

@@ -1,9 +1,11 @@
 package app.watchaudio.android.asr
 
 import app.watchaudio.core.pipeline.AsrSettings
+import app.watchaudio.core.pipeline.AudioPart
 import app.watchaudio.core.pipeline.SpeechSpan
 import app.watchaudio.core.pipeline.TimedText
 import app.watchaudio.core.pipeline.Transcriber
+import app.watchaudio.core.pipeline.concatenateParts
 import app.watchaudio.core.pipeline.padSpeechSpans
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
@@ -19,15 +21,16 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.io.files.Path
 
 /** The speech models are not on the device yet; see [ModelManager]. */
 class ModelNotReadyException : IllegalStateException("speech model is not downloaded")
 
 /**
  * On-device transcription with sherpa-onnx: Silero VAD splits the chunk into utterances and the
- * Japanese ReazonSpeech Zipformer (int8) transcribes each one. Mirrors the JVM harness's
- * `SherpaTranscriber` (same models and [AsrSettings]), so harness results predict this one.
+ * Japanese ReazonSpeech Zipformer (int8) transcribes each one. Multi-part input (a chunk joined
+ * with its neighbours' boundary audio) is decoded file by file and concatenated. Mirrors the
+ * JVM harness's `SherpaTranscriber` (same models and [AsrSettings]), so harness results predict
+ * this one.
  *
  * The recognizer is loaded on first use and reused across chunks until [release].
  */
@@ -37,11 +40,11 @@ class AndroidSherpaTranscriber(private val models: ModelFiles, private val numTh
     private val mutex = Mutex()
     private var recognizer: OfflineRecognizer? = null
 
-    override suspend fun transcribe(audioFile: Path): List<TimedText> = mutex.withLock {
+    override suspend fun transcribe(parts: List<AudioPart>): List<TimedText> = mutex.withLock {
         withContext(Dispatchers.Default) {
             if (!models.isComplete()) throw ModelNotReadyException()
             val context = coroutineContext
-            val samples = AudioDecoder.decode(File(audioFile.toString())) { context.ensureActive() }
+            val samples = concatenateParts(parts) { AudioDecoder.decode(File(it.file.toString())) { context.ensureActive() } }
             val recognizer = recognizer ?: createRecognizer().also { recognizer = it }
             speechSpans(samples).mapNotNull { span ->
                 ensureActive()
@@ -84,7 +87,7 @@ class AndroidSherpaTranscriber(private val models: ModelFiles, private val numTh
         ),
     )
 
-    /** Runs Silero VAD over the whole chunk and pads the detected utterances. */
+    /** Runs Silero VAD over the whole input and pads the detected utterances. */
     private suspend fun speechSpans(samples: FloatArray): List<SpeechSpan> {
         val vad = Vad(
             assetManager = null,
