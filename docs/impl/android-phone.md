@@ -22,7 +22,7 @@
 
 共通コードの追加:
 
-- `core-pipeline/SpeechSegmentation.kt`: `AsrSettings`（VAD しきい値 0.3、パディング 0.3 s など）と `padSpeechSpans`。**JVM ハーネスと Android で同一の分割**を使うため。
+- `core-pipeline/SpeechSegmentation.kt`: `AsrSettings`（VAD しきい値 0.3、パディング 0.3 s、入力の上限 20 s、間の分割 0.22 s / 30 dB など）と `padSpeechSpans`（VAD 区間 → 余白付け・結合・話者交代の間での分割・上限での分割。[02 §6.3](../02-architecture.md#発話区間の切り出しandroid--jvm-ハーネス68)）。**JVM ハーネスと Android で同一の分割**を使うため。
 - `core-pipeline/Pcm.kt`: `downmixToMono` / `pcm16ToFloat` / `LinearResampler`（ストリーミング）/ `concatenateParts`（パーツの範囲を切り出して連結。足りない分は無音）。
 - `core-pipeline/BoundaryJoin.kt`: チャンク境界をまたぐ発話を 1 つとして認識するための連結範囲の決定と、結果のチャンクへの振り分け（#45）。
 - `core-db/StoreTransaction.previousInSession` / `nextInSession` / `replaceSegments`: 同じセッションの隣のチャンクと、範囲内のセグメントの置き換え（境界の再認識用）。
@@ -137,7 +137,7 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 ### 6.1 実機なし（Linux / CI）
 
 ```bash
-./gradlew --max-workers=2 jvmTest testAndroidHostTest   # 共通コード（フレーム読み取り・Pcm・VAD パディングなど）
+./gradlew --max-workers=2 jvmTest testAndroidHostTest   # 共通コード（フレーム読み取り・Pcm・VAD 区間の分割など）
 ./gradlew --max-workers=2 :androidApp:testDebugUnitTest  # FrameReader / ModelArchive（JVM）
 ./gradlew --max-workers=2 :tools:harness:test            # 実モデルでの E2E（Android と同じ AsrSettings）
 ./gradlew --max-workers=2 :androidApp:assembleDebug :androidApp:lintDebug
