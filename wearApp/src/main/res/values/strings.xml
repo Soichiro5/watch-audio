@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">watch-audio</string>
+    <string name="recording_channel">Recording</string>
+    <string name="recording_title">Recording</string>
 </resources>

@@ -3,6 +3,10 @@ import SwiftUI
 
 @main
 struct iOSApp: App {
+    init() {
+        WatchInboxReceiver.shared.activate()
+    }
+
     var body: some Scene {
         WindowGroup {
             ComposeView()

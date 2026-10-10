@@ -36,6 +36,9 @@ targets:
         CFBundleDisplayName: watch-audio
         UILaunchScreen: {}
         CADisableMinimumFrameDurationOnPhone: true
+        # Spike: expose Documents/WatchInbox in the Files app.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
         NSMicrophoneUsageDescription: Apple Watch で会話を録音し、iPhone 上で文字起こしするために使用します。
     preBuildScripts:
       - name: Compile Kotlin Framework
@@ -72,11 +75,12 @@ targets:
         UIBackgroundModes: [audio]
 
 schemes:
+  # The watch app is built and embedded through iosApp's target dependency; listing it
+  # here as well would restrict the scheme to watchOS destinations.
   iosApp:
     build:
       targets:
         iosApp: all
-        WatchApp: all
   WatchApp:
     build:
       targets:
