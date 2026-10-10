@@ -1,5 +1,6 @@
 package app.watchaudio.app
 
+import app.watchaudio.core.pipeline.AudioRetention
 import app.watchaudio.core.protocol.ChunkEndReason
 
 /**
@@ -27,6 +28,14 @@ object Strings {
     const val NO_RECORDING_THIS_DAY = "この日の録音はありません"
     const val NO_TRANSCRIPT_YET = "文字起こしされた発話はまだありません"
     const val RETRY = "再試行"
+    const val PLAY = "再生"
+    const val AUDIO_PURGED_NOTE = "保持期間を過ぎた音声は削除済みです（文字起こしは残っています）"
+    const val DELETE_DAY = "この日のデータを削除"
+    fun confirmDeleteDay(date: String, count: Int) =
+        "$date に始まった録音 ${count}件の音声と文字起こしを、この端末から削除します。元に戻せません。"
+    const val DELETE = "削除する"
+    const val CANCEL = "キャンセル"
+    const val DELETING = "削除中…"
 
     fun coverageDetail(covered: String, day: String) = "$covered / $day"
     fun audioAndSilent(audio: String, silent: String) = "音声 $audio ・ 無音 $silent"
@@ -90,10 +99,43 @@ object Strings {
     const val STORAGE = "保存データ"
     const val STAT_CHUNKS = "チャンク"
     const val STAT_SEGMENTS = "発話"
-    const val STAT_AUDIO = "音声データ"
     const val STAT_RECORDED = "録音時間"
     const val STAT_PENDING = "文字起こし待ち"
     const val STAT_FAILED = "失敗"
+
+    // Storage (#33)
+    const val STORAGE_USAGE = "ストレージ"
+    const val USAGE_AUDIO = "音声"
+    const val USAGE_DATABASE = "文字起こし・索引"
+    const val USAGE_MODELS = "文字起こしモデル"
+    const val USAGE_MODELS_BY_OS = "OS が管理"
+    const val USAGE_TOTAL = "合計"
+    const val USAGE_FREE = "端末の空き容量"
+    fun lowFreeSpace(free: String) =
+        "端末の空き容量が残り $free です。録音を保存できなくなる前に、音声の保持期間を短くするか、不要な日のデータを削除してください。"
+    fun audioPurgedChunks(count: Int) = "保持期間を過ぎて音声を削除したチャンク ${count}件（文字起こしは残っています）"
+    const val RETENTION = "音声の保持期間"
+    const val RETENTION_NOTE =
+        "文字起こしは常に無期限で保存します。保持期間を過ぎた音声は、文字起こしが終わったものだけ自動で削除します。"
+    fun retention(retention: AudioRetention): String = when (retention) {
+        AudioRetention.DAYS_7 -> "7日"
+        AudioRetention.DAYS_30 -> "30日"
+        AudioRetention.DAYS_90 -> "90日"
+        AudioRetention.UNLIMITED -> "無期限"
+    }
+    fun confirmRetention(label: String, count: Int, size: String) =
+        "保持期間を「$label」にすると、文字起こし済みの音声 ${count}件（$size）を今すぐ削除し、" +
+            "以後も $label を過ぎた音声を自動で削除します。文字起こしは残ります。削除した音声は元に戻せません。"
+    const val CHANGE = "変更する"
+    fun audioPurged(count: Int, size: String) = "音声 ${count}件（$size）を削除しました"
+    const val DELETE_ALL = "すべてのデータを削除"
+    const val DELETE_ALL_WORD = "削除"
+    const val DELETE_ALL_NOTE =
+        "すべての録音・音声・文字起こしをこの端末から削除します（設定は残ります）。元に戻せません。続けるには「削除」と入力してください。"
+    const val DELETE_ALL_INPUT = "確認のため「削除」と入力"
+    const val DELETE_ALL_CONFIRM = "すべて削除する"
+    const val DELETED_ALL = "すべてのデータを削除しました"
+    fun storageActionFailed(reason: String) = "削除できませんでした: $reason"
 
     const val PRIVACY_TITLE = "プライバシー"
     const val PRIVACY_NOTE = "データはこの端末内にのみ保存され、外部に送信されません"

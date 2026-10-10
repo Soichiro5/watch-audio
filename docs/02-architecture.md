@@ -104,7 +104,7 @@ erDiagram
 | テーブル | 主なカラム |
 | --- | --- |
 | `recording_session` | id, device, started_at, ended_at, end_reason(user/interrupt/battery) |
-| `audio_chunk` | id(UUID, Watch 採番), session_id, start_at, duration_ms, file_path, codec, silent_ranges, state(received/transcribed/purged) |
+| `audio_chunk` | id(UUID, Watch 採番), session_id, start_at, duration_ms, file_path, codec, silent_ranges, state(received/transcribing/transcribed/failed/no_audio), audio_purged_at（保持期間で音声を削除した時刻。文字起こしは残る） |
 | `transcript_segment` | id, chunk_id, start_at, end_at, text, lang, confidence |
 | `segment_fts` | FTS5(trigram) 仮想テーブル |
 | `segment_embedding` | segment_id, model_id, vector(int8 BLOB), scale |
@@ -115,6 +115,7 @@ erDiagram
 | `memory_fact` | id, kind(person/preference/plan/…), text, active, source_segment_ids |
 | `chat_thread` / `chat_message` | role, content, cited_segment_ids |
 | `context_label`（Phase 2） | kind(body/place/activity), start_at, end_at, label, confidence |
+| `app_setting` | key, value（音声の保持期間など。`CREATE TABLE IF NOT EXISTS` で冪等に作成） |
 
 ## 6. 主要フロー
 
@@ -143,7 +144,7 @@ received → vad → transcribed → embedded → (hour closed) reviewed → (da
 - ジョブはべき等・再開可能（各チャンクの `state` で進捗管理）。
 - iOS: 前景時は即時処理、バックグラウンドは `BGProcessingTask`（充電中に大量処理）+ `BGAppRefreshTask`（少量）。
 - Android: WorkManager。チャンク受信ごとに unique な 1 回限りジョブ（実行中なら後続を 1 つだけ追加）、保険として充電中に 6 時間ごとの定期ジョブ。プロセス起動時に中断チャンクを再キュー（詳細は [docs/impl/android-phone.md](impl/android-phone.md)）。
-- 音声の保持期間ポリシー: 文字起こし完了済みのチャンクのみ削除対象。
+- 音声の保持期間ポリシー（#33）: 文字起こし完了済みのチャンクのみ削除対象。文字起こしの後に同じバックグラウンド処理（Android `TranscriptionWorker`、iOS `BGProcessingTask` / 前面実行）で `StorageManager.applyRetention()` を実行する。詳細は §9.3。
 
 ### 6.4 検索・Chat（RAG）
 
@@ -171,11 +172,12 @@ interface LlmProvider {
 
 | 項目 | 方針 |
 | --- | --- |
-| 保存 | アプリサンドボックス内。iOS は `NSFileProtectionCompleteUntilFirstUserAuthentication`、Android は内部ストレージ |
+| 保存 | アプリサンドボックス内。iOS は `Application Support/WatchAudio`（ファイル保護は既定の `CompleteUntilFirstUserAuthentication`。ロック中の BGTask からも読める）、Android は内部ストレージ（`files/`） |
 | バックアップ | MVP では OS バックアップ対象外（Auday と同方針）。Phase 2 で E2E 暗号化バックアップを提供 |
 | API キー | Keychain（`ThisDeviceOnly`）/ Android Keystore |
 | 外部送信 | AI プロバイダ（テキストのみ）、OS ジオコーダ（Phase 2）。解析 SDK・広告 SDK は入れない |
 | 同意 | 初回オンボーディングで「録音対象者への告知」の注意喚起。Watch に録音中インジケータを常時表示 |
+| 削除 | 「この日のデータを削除」（その日に始まったチャンクの音声・文字起こし・マーク）と「すべてのデータを削除」（全録音・文字起こし・音声ファイル。DB は `VACUUM` で縮める）。どちらもアプリ内の確認ステップ必須（全削除は「削除」と入力）。システムダイアログは使わない。AI 設定・API キーは実装時に全削除の対象に加える |
 
 ## 8. 非機能目標（MVP）
 
@@ -225,6 +227,14 @@ stateDiagram-v2
 | 文字起こし + 索引（ベクトル int8 256 次元を含む） | 約 2〜4MB | 約 1〜1.5GB |
 
 → 文字起こしは無期限に保存しても問題ない。音声は「無音を捨てる + 低ビットレート」と、保持期間・バックアップ先へのオフロードで管理する。
+
+**ストレージ管理（#33、実装済み）**
+
+- 音声の保持期間: 7 日 / 30 日 / 90 日 / **無期限（既定。テーマ「すべて残す」）**。設定は `app_setting.audio_retention`。
+- 削除対象は**文字起こし完了済み**（`TRANSCRIBED`）かつ終了時刻が「今 − 保持日数」以前のチャンクの音声ファイルだけ。未処理・処理中・失敗のチャンクの音声は消さない。文字起こしは常に残り、UI ではそのチャンクの発話を再生ボタンなしで表示する。
+- 削除は「ファイル削除 → `audio_purged_at` を記録」の順（中断しても次回で整合する）。DB の `audio_path` は残す（タイムライン上は録音できていた時間として表示）。
+- 容量の内訳（音声 / 文字起こし・索引 = DB ファイル / モデル / 空き容量）を状態画面に表示し、空き容量が 1 GB 未満なら警告する。モデルサイズと空き容量はプラットフォーム実装（`StorageEnvironment`）から取得する（iOS の Speech モデルは OS 管理のため不明扱い）。
+- 未対応: バックアップ（#40）済みの音声だけを消す「オフロード」、コーデック比較（AAC 32kbps vs Opus）による上表の更新。
 
 ### 9.4 OS の制約（要実機検証）
 

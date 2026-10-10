@@ -1,6 +1,7 @@
 package app.watchaudio.app
 
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.StorageManager
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.flow.StateFlow
 import platform.AVFAudio.AVAudioPlayer
@@ -17,6 +18,7 @@ import platform.Foundation.NSURL
 class IosAppServices internal constructor(
     override val store: LocalStore,
     override val audioRoot: String,
+    override val storage: StorageManager,
     override val status: StateFlow<ProcessingStatus>,
     private val onRequestTranscription: () -> Unit,
     private val onPrepareModel: () -> Unit,

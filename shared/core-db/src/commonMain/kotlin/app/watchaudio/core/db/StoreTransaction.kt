@@ -186,9 +186,10 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
             (SELECT COUNT(*) FROM audio_chunk WHERE state = 'TRANSCRIBED'),
             (SELECT COUNT(*) FROM audio_chunk WHERE state = 'FAILED'),
             (SELECT COUNT(*) FROM transcript_segment),
-            (SELECT COALESCE(SUM(size_bytes), 0) FROM audio_chunk),
+            (SELECT COALESCE(SUM(size_bytes), 0) FROM audio_chunk WHERE audio_path IS NOT NULL AND audio_purged_at IS NULL),
             (SELECT COALESCE(SUM(ended_at - started_at), 0) FROM audio_chunk WHERE audio_path IS NOT NULL),
-            (SELECT MAX(received_at) FROM audio_chunk)
+            (SELECT MAX(received_at) FROM audio_chunk),
+            (SELECT COUNT(*) FROM audio_chunk WHERE audio_purged_at IS NOT NULL)
         """.trimIndent(),
     ).use { st ->
         st.step()
@@ -201,6 +202,7 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
             audioBytes = st.getLong(5),
             recordedMs = st.getLong(6),
             lastReceivedAt = if (st.isNull(7)) null else st.getLong(7),
+            audioPurgedChunks = st.getInt(8),
         )
     }
 
@@ -209,23 +211,94 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
         if (st.step() && !st.isNull(0)) st.getLong(0) else null
     }
 
-    /** A value from the key-value settings table, or null if unset. */
-    fun setting(key: String): String? = db.prepare("SELECT value FROM app_setting WHERE key = ?").use { st ->
-        st.bindText(1, key)
-        if (st.step() && !st.isNull(0)) st.getText(0) else null
+    /**
+     * Transcribed chunks whose audio file still exists and that ended at or before [endedBefore],
+     * oldest first: the candidates for deleting audio under a retention setting. Untranscribed
+     * chunks are never returned.
+     */
+    fun purgeableChunks(endedBefore: Long, limit: Int): List<ChunkRecord> =
+        db.prepare("SELECT $CHUNK_COLUMNS FROM audio_chunk WHERE $PURGEABLE ORDER BY ended_at LIMIT ?").use { st ->
+            st.bindLong(1, endedBefore)
+            st.bindLong(2, limit.toLong())
+            buildList { while (st.step()) add(st.toChunk()) }
+        }
+
+    /** Count and size of all [purgeableChunks]. */
+    fun purgeableUsage(endedBefore: Long): AudioUsage =
+        db.prepare("SELECT COUNT(*), COALESCE(SUM(size_bytes), 0) FROM audio_chunk WHERE $PURGEABLE").use { st ->
+            st.bindLong(1, endedBefore)
+            st.step()
+            AudioUsage(chunks = st.getInt(0), bytes = st.getLong(1))
+        }
+
+    /**
+     * Records that the audio files of [ids] were deleted at [at]. Only transcribed chunks are
+     * marked, so a chunk can never lose its audio before it has a transcript.
+     * @return number of chunks marked.
+     */
+    fun markAudioPurged(ids: List<String>, at: Long): Int = ids.sumOf { id ->
+        db.prepare(
+            "UPDATE audio_chunk SET audio_purged_at = ? WHERE id = ? AND state = 'TRANSCRIBED' AND audio_purged_at IS NULL",
+        ).use { st ->
+            st.bindLong(1, at)
+            st.bindText(2, id)
+            st.step()
+        }
+        changes()
     }
 
-    /** All stored (non-null) settings. */
+    /** Chunks that started in `[from, to)` (so each chunk belongs to exactly one day), oldest first. */
+    fun chunksStartedBetween(from: Long, to: Long): List<ChunkRecord> =
+        db.prepare("SELECT $CHUNK_COLUMNS FROM audio_chunk WHERE started_at >= ? AND started_at < ? ORDER BY started_at").use { st ->
+            st.bindLong(1, from)
+            st.bindLong(2, to)
+            buildList { while (st.step()) add(st.toChunk()) }
+        }
+
+    /**
+     * Deletes chunks with their transcripts and marks (the search index follows through the
+     * triggers). Deleting the audio files is the caller's job.
+     * @return number of chunks deleted.
+     */
+    fun deleteChunks(ids: List<String>): Int = ids.sumOf { id ->
+        update("DELETE FROM audio_chunk WHERE id = ?", id)
+        changes()
+    }
+
+    /** Deletes every chunk, transcript and mark; settings are kept. @return number of chunks deleted. */
+    fun deleteAllChunks(): Int {
+        update("DELETE FROM audio_chunk")
+        return changes()
+    }
+
+    /** Relative paths of all audio files that should exist (not purged). */
+    fun audioPaths(): Set<String> =
+        db.prepare("SELECT audio_path FROM audio_chunk WHERE audio_path IS NOT NULL AND audio_purged_at IS NULL").use { st ->
+            buildSet { while (st.step()) add(st.getText(0)) }
+        }
+
+    /** Value of an app setting, or null if it was never set. */
+    fun setting(key: String): String? =
+        db.prepare("SELECT value FROM app_setting WHERE key = ?").use { st ->
+            st.bindText(1, key)
+            if (st.step() && !st.isNull(0)) st.getText(0) else null
+        }
+
+    /** All stored (non-null) app settings. */
     fun settings(): Map<String, String> = db.prepare("SELECT key, value FROM app_setting WHERE value IS NOT NULL").use { st ->
         buildMap { while (st.step()) put(st.getText(0), st.getText(1)) }
     }
 
-    /** Stores [value] under [key]; null removes the key. */
+    /** Stores an app setting; null removes it. */
     fun putSetting(key: String, value: String?) {
         if (value == null) {
             update("DELETE FROM app_setting WHERE key = ?", key)
         } else {
-            update("INSERT INTO app_setting (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value)
+            update(
+                "INSERT INTO app_setting (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                key,
+                value,
+            )
         }
     }
 
@@ -254,6 +327,8 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
         state = ChunkState.valueOf(getText(9)),
         attempts = getInt(10),
         lastError = if (isNull(11)) null else getText(11),
+        sizeBytes = if (isNull(12)) null else getLong(12),
+        audioPurgedAt = if (isNull(13)) null else getLong(13),
     )
 
     private fun SQLiteStatement.toSegment() = SegmentRecord(
@@ -268,8 +343,13 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
 
     private companion object {
         const val CHUNK_COLUMNS =
-            "id, session_id, device_id, source, started_at, ended_at, time_zone, audio_path, end_reason, state, attempts, last_error"
+            "id, session_id, device_id, source, started_at, ended_at, time_zone, audio_path, end_reason, state, attempts, " +
+                "last_error, size_bytes, audio_purged_at"
         const val SEGMENT_COLUMNS = "id, chunk_id, start_at, end_at, text, lang, engine"
+
+        /** Transcribed, audio still present, ended at or before the bound parameter. */
+        const val PURGEABLE =
+            "audio_path IS NOT NULL AND audio_purged_at IS NULL AND ended_at <= ? AND state = 'TRANSCRIBED'"
 
         fun String.prefixed(alias: String) = split(", ").joinToString(", ") { "$alias.$it" }
     }

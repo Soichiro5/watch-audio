@@ -67,8 +67,16 @@ internal val MIGRATIONS: List<List<String>> = listOf(
         END
         """,
     ),
-    // 2: small key-value settings (onboarding, alert preferences, storage management)
+    // 2: app settings (key-value). Idempotent so that parallel branches adding the same table merge cleanly.
     listOf(
         "CREATE TABLE IF NOT EXISTS app_setting (key TEXT PRIMARY KEY, value TEXT)",
+    ),
+    // 3: audio retention. The transcript stays; only the audio file of a transcribed chunk is deleted.
+    listOf(
+        "ALTER TABLE audio_chunk ADD COLUMN audio_purged_at INTEGER",
+        """
+        CREATE INDEX idx_chunk_purgeable ON audio_chunk(ended_at)
+        WHERE audio_path IS NOT NULL AND audio_purged_at IS NULL
+        """,
     ),
 )

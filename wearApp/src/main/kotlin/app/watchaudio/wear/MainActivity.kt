@@ -1,110 +1,139 @@
 package app.watchaudio.wear
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.wear.compose.material3.AppScaffold
-import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.MaterialTheme
-import androidx.wear.compose.material3.ScreenScaffold
-import androidx.wear.compose.material3.SwitchButton
-import androidx.wear.compose.material3.Text
+import app.watchaudio.wear.outbox.UploadScheduler
 import app.watchaudio.wear.recording.RecorderStore
 import app.watchaudio.wear.recording.RecordingService
-import kotlinx.coroutines.delay
+import app.watchaudio.wear.ui.RecorderScreen
 
+/**
+ * Start/stop, Mark and status. Also the entry point for "resume" taps (tile, complication, alert
+ * notification): the microphone foreground service can only be started from here.
+ */
 class MainActivity : ComponentActivity() {
+    private val graph by lazy { AppGraph.of(this) }
+    private var armed by mutableStateOf(false)
+    private var uploadEnabled by mutableStateOf(true)
+
+    private var askedOptional = false
+
+    private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        if (hasMicPermission()) {
+            if (!RecorderStore.state.value.serviceRunning) startRecording()
+        } else {
+            Toast.makeText(this, R.string.mic_permission_needed, Toast.LENGTH_LONG).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        refreshPrefs()
+        handleLaunchIntent(intent)
         setContent {
+            val state by RecorderStore.state.collectAsStateWithLifecycle()
             MaterialTheme {
                 AppScaffold {
-                    ScreenScaffold { SpikeRecorderScreen() }
+                    RecorderScreen(
+                        state = state,
+                        armed = armed,
+                        uploadEnabled = uploadEnabled,
+                        onStart = ::requestStart,
+                        onStop = ::stopRecording,
+                        onMark = { RecordingService.mark(this@MainActivity) },
+                        onUploadEnabledChange = ::changeUploadEnabled,
+                    )
                 }
             }
         }
     }
-}
 
-/** Minimal controls + live stats for the M0-4 battery spike (#10). */
-@Composable
-private fun SpikeRecorderScreen() {
-    val context = LocalContext.current
-    val state by RecorderStore.state.collectAsStateWithLifecycle()
-    var sendChunks by remember { mutableStateOf(true) }
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(state.isRecording) {
-        while (state.isRecording) {
-            now = System.currentTimeMillis()
-            delay(1_000)
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleLaunchIntent(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshPrefs()
+        graph.refreshPendingCount()
+        // Armed but not running (process died, reboot): opening the app is the foreground start
+        // Android 14+ requires, so resume right away.
+        if (graph.prefs.armed && !RecorderStore.state.value.serviceRunning && hasMicPermission()) startRecording()
+    }
+
+    private fun handleLaunchIntent(intent: Intent?) {
+        intent ?: return
+        val fromTile = intent.getBooleanExtra(EXTRA_FROM_TILE, false)
+        if ((fromTile || intent.action == ACTION_RESUME) && !RecorderStore.state.value.serviceRunning) requestStart()
+    }
+
+    private fun requestStart() {
+        if (hasMicPermission()) {
+            startRecording()
+            // Optional permissions are asked once in passing; recording works without them.
+            val optional = optionalPermissions().filter { !isGranted(it) }
+            if (optional.isNotEmpty() && !askedOptional) {
+                askedOptional = true
+                permissionLauncher.launch(optional.toTypedArray())
+            }
+        } else {
+            permissionLauncher.launch((listOf(Manifest.permission.RECORD_AUDIO) + optionalPermissions()).toTypedArray())
         }
     }
 
-    val permissions = buildList {
-        add(Manifest.permission.RECORD_AUDIO)
+    private fun startRecording() {
+        RecordingService.start(this)
+        armed = true
+    }
+
+    private fun stopRecording() {
+        RecordingService.stop(this)
+        armed = false
+    }
+
+    private fun changeUploadEnabled(enabled: Boolean) {
+        graph.prefs.uploadEnabled = enabled
+        uploadEnabled = enabled
+        if (enabled) UploadScheduler.uploadNow(this)
+    }
+
+    private fun refreshPrefs() {
+        armed = graph.prefs.armed
+        uploadEnabled = graph.prefs.uploadEnabled
+    }
+
+    private fun hasMicPermission() = isGranted(Manifest.permission.RECORD_AUDIO)
+
+    private fun isGranted(permission: String) =
+        ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * Notifications (stop alerts) and, up to Wear OS 5, BODY_SENSORS for the off-body sensor. Newer
+     * releases replaced BODY_SENSORS with granular health permissions; off-body detection works
+     * without them (to be confirmed on devices, see docs/impl/wearos.md).
+     */
+    private fun optionalPermissions() = buildList {
         add(Manifest.permission.POST_NOTIFICATIONS)
-    }.toTypedArray()
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
-        if (granted[Manifest.permission.RECORD_AUDIO] == true) RecordingService.start(context, sendChunks)
-    }
-    fun startRecording() {
-        val hasMic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        if (hasMic) RecordingService.start(context, sendChunks) else launcher.launch(permissions)
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.VANILLA_ICE_CREAM) add(Manifest.permission.BODY_SENSORS)
     }
 
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        item {
-            if (state.isRecording) {
-                val elapsedMin = (now - state.startedAtMillis) / 60_000
-                Text("● REC  ${elapsedMin / 60}h ${elapsedMin % 60}m")
-            } else {
-                Text("watch-audio spike")
-            }
-        }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (state.isRecording) {
-                    Button(onClick = { RecordingService.mark(context) }) { Text("Mark") }
-                    Button(onClick = { RecordingService.stop(context) }) { Text("Stop") }
-                } else {
-                    Button(onClick = ::startRecording) { Text("Start") }
-                }
-            }
-        }
-        if (!state.isRecording) {
-            item {
-                SwitchButton(
-                    checked = sendChunks,
-                    onCheckedChange = { sendChunks = it },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Send to phone") }
-            }
-        }
-        item {
-            val drain = state.drainPerHour(now)?.let { "%.1f%%/h".format(it) } ?: "-"
-            Text("Battery ${state.batteryAtStart ?: "-"}% → ${state.batteryNow ?: "-"}% ($drain)")
-        }
-        item { Text("Chunks ${state.chunksClosed} / sent ${state.chunksSent} / marks ${state.marks}") }
-        item { Text("${state.bytesRecorded / 1024} KB  ${state.lastEvent}") }
+    companion object {
+        const val ACTION_RESUME = "app.watchaudio.wear.action.RESUME"
+        const val EXTRA_FROM_TILE = "from_tile"
     }
 }
