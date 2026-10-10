@@ -1,6 +1,7 @@
 package app.watchaudio.app
 
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.StorageManager
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -13,6 +14,9 @@ interface AppServices {
 
     /** Absolute path of the audio archive root; chunk `audioPath`s are relative to it. */
     val audioRoot: String
+
+    /** Retention setting, usage breakdown and deletion (#33), over [store] and [audioRoot]. */
+    val storage: StorageManager
 
     val status: StateFlow<ProcessingStatus>
 
@@ -30,6 +34,49 @@ interface AppServices {
      * @param allowMetered also download over mobile data, not only Wi-Fi.
      */
     fun downloadModels(allowMetered: Boolean) {}
+
+    /** How the platform obtains its speech model (decides what the onboarding offers). */
+    val modelSetup: ModelSetup get() = ModelSetup.DOWNLOAD
+
+    /** Runtime permissions the onboarding asks for, in order; empty when none are needed. */
+    val permissions: List<AppPermission> get() = emptyList()
+
+    suspend fun permissionStatus(permission: AppPermission): PermissionStatus = PermissionStatus.GRANTED
+
+    /** Shows the system prompt if the platform still can, and returns the resulting status. */
+    suspend fun requestPermission(permission: AppPermission): PermissionStatus = permissionStatus(permission)
+
+    /**
+     * The gap alert preferences (`AppSettings.gapAlert`) were changed in the UI; re-evaluate any
+     * scheduled alert.
+     */
+    fun gapAlertSettingsChanged() {}
+}
+
+enum class ModelSetup {
+    /** The app downloads the model itself; the user picks Wi-Fi only or mobile data too. */
+    DOWNLOAD,
+
+    /** The OS installs and updates the model ([AppServices.downloadModels] asks it to). */
+    OS_MANAGED,
+}
+
+enum class AppPermission {
+    /** Local notifications, e.g. the "recording is not arriving" alert. */
+    NOTIFICATIONS,
+
+    /** On-device speech recognition (iOS Speech framework). */
+    SPEECH_RECOGNITION,
+}
+
+enum class PermissionStatus {
+    GRANTED,
+
+    /** Not granted yet; [AppServices.requestPermission] can still show the system prompt. */
+    NOT_REQUESTED,
+
+    /** Refused; it can only be changed in the system settings. */
+    DENIED,
 }
 
 data class ProcessingStatus(

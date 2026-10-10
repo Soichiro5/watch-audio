@@ -1,13 +1,25 @@
 name: Emulator smoke test
 
 # Device-free check (#44): boot a phone and a Wear OS emulator, install the debug
-# builds, launch them and fail on crashes. Runs on Linux runners (KVM), 1x minutes.
+# builds, launch them and fail on crashes of our own process (system apps such as the
+# Wear setup wizard sometimes crash on CI images and must not fail the check). Runs on Linux runners (KVM), 1x minutes.
 # On the phone emulator it also runs the instrumented tests: real MediaPlayer playback and
 # the search -> one tap -> play flow (#19, #25), and the shared SQLite tests of core-db and
 # core-pipeline on Android (#14).
 on:
   push:
-    branches: [main, "claude/**"]
+    branches: [main]
+    paths:
+      - "androidApp/**"
+      - "wearApp/**"
+      - "composeApp/**"
+      - "shared/**"
+      - "gradle/**"
+      - "*.gradle.kts"
+      - ".github/workflows/emulator.yml"
+      - ".github/scripts/**"
+  pull_request:
+    branches: [main]
     paths:
       - "androidApp/**"
       - "wearApp/**"
@@ -84,10 +96,10 @@ jobs:
             adb logcat -c
             adb shell monkey -p app.watchaudio -c android.intent.category.LAUNCHER 1
             sleep 15
-            adb logcat -d > logcat.txt
+            adb logcat -d > logcat.txt || (sleep 5 && adb wait-for-device && adb logcat -d > logcat.txt)
             adb shell pidof app.watchaudio || (echo "app is not running"; exit 1)
-            if grep -E "FATAL EXCEPTION|AndroidRuntime: Process: app.watchaudio" logcat.txt; then exit 1; fi
-            if [ -n "${{ matrix.device-tests }}" ]; then adb logcat -c; ./gradlew ${{ matrix.device-tests }} || touch device-tests-failed; adb logcat -d > logcat-device-tests.txt; fi
+            if grep -q "AndroidRuntime: Process: app.watchaudio" logcat.txt; then grep -B2 -A25 "AndroidRuntime: Process: app.watchaudio" logcat.txt; exit 1; fi
+            if [ -n "${{ matrix.device-tests }}" ]; then adb logcat -c; ./gradlew ${{ matrix.device-tests }} || touch device-tests-failed; adb logcat -d > logcat-device-tests.txt || true; fi
             if [ -f device-tests-failed ]; then echo "instrumented tests failed"; exit 1; fi
 
       - name: Instrumented test evidence

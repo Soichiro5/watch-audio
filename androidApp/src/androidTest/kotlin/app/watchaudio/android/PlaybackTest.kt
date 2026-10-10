@@ -11,7 +11,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.watchaudio.app.Strings
 import app.watchaudio.app.logic.formatClock
+import app.watchaudio.app.settings.updateSettings
 import kotlin.random.Random
+import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone
 import org.junit.After
 import org.junit.Rule
@@ -49,6 +51,9 @@ class PlaybackTest {
             durationMs = 120_000,
             segments = listOf(10_000L to "冒頭の雑談です", 60_000L to "これは${word}の発話です"),
         )
+
+        // Skip the first-run onboarding so the app opens on the main screen.
+        runBlocking { PlaybackFixtures.graph.store.updateSettings { it.copy(onboardingCompleted = true) } }
 
         ActivityScenario.launch(MainActivity::class.java).use {
             compose.onNodeWithText(Strings.TAB_SEARCH).performClick()

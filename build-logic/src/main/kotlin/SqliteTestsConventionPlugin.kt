@@ -20,17 +20,24 @@ import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
  * They are deliberately not part of `commonTest`: Android host tests run on the JVM with the
  * Android variant of `sqlite-bundled`, whose native library is built for Android ABIs only and
  * cannot be loaded on the host.
+ *
+ * [SqliteTestsJvmIosConventionPlugin] leaves out the Android device tests.
  */
-class SqliteTestsConventionPlugin : Plugin<Project> {
+open class SqliteTestsConventionPlugin : Plugin<Project> {
+    /** Also set up `androidDeviceTest`. */
+    protected open val onAndroidDevices: Boolean = true
+
     override fun apply(target: Project) = with(target) {
         pluginManager.apply("watchaudio.kmp.library")
         val libs = extensions.getByType<VersionCatalogsExtension>().named("libs")
         fun library(alias: String) = libs.findLibrary(alias).get()
 
         extensions.configure<KotlinMultiplatformExtension> {
-            (this as ExtensionAware).extensions.configure<KotlinMultiplatformAndroidLibraryTarget>("android") {
-                withDeviceTestBuilder { sourceSetTreeName = "test" }.configure {
-                    instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+            if (onAndroidDevices) {
+                (this as ExtensionAware).extensions.configure<KotlinMultiplatformAndroidLibraryTarget>("android") {
+                    withDeviceTestBuilder { sourceSetTreeName = "test" }.configure {
+                        instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+                    }
                 }
             }
 
@@ -49,9 +56,11 @@ class SqliteTestsConventionPlugin : Plugin<Project> {
                 }
             }
 
-            sourceSets.getByName("androidDeviceTest").dependencies {
-                implementation(library("kotlin-test-junit"))
-                implementation(library("androidx-test-runner"))
+            if (onAndroidDevices) {
+                sourceSets.getByName("androidDeviceTest").dependencies {
+                    implementation(library("kotlin-test-junit"))
+                    implementation(library("androidx-test-runner"))
+                }
             }
         }
     }
@@ -59,4 +68,13 @@ class SqliteTestsConventionPlugin : Plugin<Project> {
     private companion object {
         const val DEVICE_TEST_COMPILATION = "deviceTest"
     }
+}
+
+/**
+ * `src/sqliteTest` on JVM and the iOS simulator only. For composeApp: the Compose resources
+ * plugin cannot configure an Android device-test variant of a KMP library
+ * (`copyAndroidDeviceTestComposeResourcesToAndroidAssets` has no output directory).
+ */
+class SqliteTestsJvmIosConventionPlugin : SqliteTestsConventionPlugin() {
+    override val onAndroidDevices = false
 }

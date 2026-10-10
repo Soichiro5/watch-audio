@@ -67,7 +67,19 @@ internal val MIGRATIONS: List<List<String>> = listOf(
         END
         """,
     ),
-    // 2: search speed (#23). The LIKE fallback for 1-2 character queries scans this index
+    // 2: app settings (key-value). Idempotent so that parallel branches adding the same table merge cleanly.
+    listOf(
+        "CREATE TABLE IF NOT EXISTS app_setting (key TEXT PRIMARY KEY, value TEXT)",
+    ),
+    // 3: audio retention. The transcript stays; only the audio file of a transcribed chunk is deleted.
+    listOf(
+        "ALTER TABLE audio_chunk ADD COLUMN audio_purged_at INTEGER",
+        """
+        CREATE INDEX idx_chunk_purgeable ON audio_chunk(ended_at)
+        WHERE audio_path IS NOT NULL AND audio_purged_at IS NULL
+        """,
+    ),
+    // 4: search speed (#23). The LIKE fallback for 1-2 character queries scans this index
     // newest-first and filters on text without reading the table; it also serves every
     // start_at range query the old index did.
     listOf(

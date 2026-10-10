@@ -1,9 +1,11 @@
 package app.watchaudio.harness
 
 import app.watchaudio.core.pipeline.AsrSettings
+import app.watchaudio.core.pipeline.AudioPart
 import app.watchaudio.core.pipeline.SpeechSpan
 import app.watchaudio.core.pipeline.TimedText
 import app.watchaudio.core.pipeline.Transcriber
+import app.watchaudio.core.pipeline.concatenateParts
 import app.watchaudio.core.pipeline.padSpeechSpans
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
@@ -15,7 +17,6 @@ import com.k2fsa.sherpa.onnx.VadModelConfig
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.io.files.Path
 
 /**
  * sherpa-onnx on the JVM: Silero VAD splits the chunk into utterances, then the Japanese
@@ -47,8 +48,8 @@ class SherpaTranscriber(modelsDir: File, numThreads: Int = 2) : Transcriber, Aut
         )
     }
 
-    override suspend fun transcribe(audioFile: Path): List<TimedText> = withContext(Dispatchers.Default) {
-        val samples = Ffmpeg.decode(File(audioFile.toString()))
+    override suspend fun transcribe(parts: List<AudioPart>): List<TimedText> = withContext(Dispatchers.Default) {
+        val samples = concatenateParts(parts) { Ffmpeg.decode(File(it.file.toString())) }
         speechSpans(samples).mapNotNull { span ->
             val stream = recognizer.createStream()
             try {
@@ -62,7 +63,7 @@ class SherpaTranscriber(modelsDir: File, numThreads: Int = 2) : Transcriber, Aut
         }
     }
 
-    /** Runs Silero VAD over the whole chunk and pads the detected utterances. */
+    /** Runs Silero VAD over the whole input and pads the detected utterances. */
     private fun speechSpans(samples: FloatArray): List<SpeechSpan> {
         val config = VadModelConfig.builder()
             .setSileroVadModelConfig(

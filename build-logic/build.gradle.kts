@@ -17,5 +17,9 @@ gradlePlugin {
             id = "watchaudio.kmp.sqlite-tests"
             implementationClass = "SqliteTestsConventionPlugin"
         }
+        register("sqliteTestsJvmIos") {
+            id = "watchaudio.kmp.sqlite-tests-jvm-ios"
+            implementationClass = "SqliteTestsJvmIosConventionPlugin"
+        }
     }
 }

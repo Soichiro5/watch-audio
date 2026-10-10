@@ -3,12 +3,14 @@ package app.watchaudio.android
 import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
+import app.watchaudio.android.alert.GapAlertMonitor
 import app.watchaudio.android.asr.AndroidSherpaTranscriber
 import app.watchaudio.android.asr.ModelManager
 import app.watchaudio.android.transfer.ChunkReceiver
 import app.watchaudio.android.work.TranscriptionScheduler
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.Ingestor
+import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.pipeline.TranscriptionPipeline
 import java.io.File
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -46,6 +48,7 @@ class AppGraph private constructor(context: Context) {
     val models = ModelManager(app, scope, onReady = scheduler::requestNow)
     val transcriber = AndroidSherpaTranscriber(models.files)
     val pipeline = TranscriptionPipeline(store, Path(audioRoot.path), transcriber, maxAttempts = MAX_ATTEMPTS)
+    val storage = StorageManager(store, Path(audioRoot.path), AndroidStorageEnvironment(models.files.root, app.filesDir))
 
     /** Serializes pipeline runs between overlapping workers. */
     val transcriptionLock = Mutex()
@@ -53,12 +56,25 @@ class AppGraph private constructor(context: Context) {
     private val _lastChunkReceivedAt = MutableStateFlow<Long?>(null)
     val lastChunkReceivedAt: StateFlow<Long?> = _lastChunkReceivedAt.asStateFlow()
 
+    val gapAlerts = GapAlertMonitor(app, store, scope)
+
     val chunkReceiver = ChunkReceiver(app, ingestor, scope) {
         _lastChunkReceivedAt.value = System.currentTimeMillis()
         scheduler.requestNow()
+        gapAlerts.onChunkStored()
     }
 
-    val services = AndroidAppServices(app, store, audioRoot, models, scheduler, lastChunkReceivedAt, scope)
+    val services = AndroidAppServices(
+        app,
+        store,
+        storage,
+        audioRoot,
+        models,
+        scheduler,
+        lastChunkReceivedAt,
+        scope,
+        onGapAlertSettingsChanged = gapAlerts::onSettingsChanged,
+    )
 
     /**
      * Start-up recovery: re-queues chunks a killed process left mid-transcription and publishes

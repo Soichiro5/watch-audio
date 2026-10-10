@@ -99,6 +99,40 @@ class LocalStoreTest {
     }
 
     @Test
+    fun neighboursStayWithinSessionAndDevice() = runTest {
+        store.transaction {
+            insertChunk(manifest("a", 0), "a.m4a", 0)
+            insertChunk(manifest("other-session", 150_000).copy(sessionId = "s2"), "o.m4a", 0)
+            insertChunk(manifest("other-device", 200_000).copy(deviceId = "phone"), "d.m4a", 0)
+            insertChunk(manifest("b", 300_000), "b.m4a", 0)
+            insertChunk(manifest("c", 600_000), "c.m4a", 0)
+        }
+        val b = store.read { chunk("b") }!!
+        assertEquals("a", store.read { previousInSession(b) }?.id)
+        assertEquals("c", store.read { nextInSession(b) }?.id)
+        assertNull(store.read { previousInSession(chunk("a")!!) })
+        assertNull(store.read { nextInSession(chunk("c")!!) })
+    }
+
+    @Test
+    fun replaceSegmentsOnlyTouchesTheRange() = runTest {
+        store.transaction {
+            insertChunk(manifest("a", 0), "a.m4a", 0)
+            saveTranscript(
+                "a",
+                listOf(NewSegment(1_000, 2_000, "一つ目", "ja"), NewSegment(298_000, 300_000, "途中で切れ", "ja")),
+                "test",
+            )
+            replaceSegments("a", 297_000, Long.MAX_VALUE, listOf(NewSegment(298_000, 302_000, "途中で切れない発話", "ja")), "test2")
+        }
+        val texts = store.read { segmentsBetween(0, Long.MAX_VALUE) }.map { it.text }
+        assertEquals(listOf("一つ目", "途中で切れない発話"), texts)
+        assertEquals(1, store.read { search("切れない") }.size)
+        assertTrue(store.read { search("途中で切れ") }.all { it.segment.text == "途中で切れない発話" })
+        assertEquals(ChunkState.TRANSCRIBED, store.read { chunk("a") }!!.state)
+    }
+
+    @Test
     fun japaneseSubstringSearch() = runTest {
         store.transaction {
             insertChunk(manifest("a", 0), "a.m4a", 0)
@@ -193,13 +227,12 @@ class LocalStoreTest {
         assertEquals(1, store.changes.value)
     }
 
-    @Test
-    fun upgradesAVersion1Database() = runTest {
-        store.close()
-        val path = dir.resolve("v1.db").toString()
+    /** Creates a database at schema [version] (the first [version] migrations) with one transcribed segment. */
+    private fun databaseAtVersion(version: Int): String {
+        val path = dir.resolve("v$version.db").toString()
         BundledSQLiteDriver().open(path).use { db ->
-            MIGRATIONS[0].forEach { db.execSQL(it.trimIndent()) }
-            db.execSQL("PRAGMA user_version = 1")
+            MIGRATIONS.take(version).flatten().forEach { db.execSQL(it.trimIndent()) }
+            db.execSQL("PRAGMA user_version = $version")
             db.execSQL(
                 "INSERT INTO audio_chunk (id, session_id, device_id, source, started_at, ended_at, time_zone, end_reason, " +
                     "state, received_at, manifest_json) VALUES ('a', 's', 'w', 'WEAROS', 0, 300000, 'UTC', 'ROTATION', 'TRANSCRIBED', 0, '{}')",
@@ -208,9 +241,30 @@ class LocalStoreTest {
                 "INSERT INTO transcript_segment (chunk_id, start_at, end_at, text, engine) VALUES ('a', 1000, 2000, '歯医者の予約', 'v1')",
             )
         }
-        LocalStore.open(path).use { upgraded ->
-            assertEquals("歯医者の[予約]", upgraded.read { search("予約") }.single().snippet)
-            assertEquals("[歯医者]の予約", upgraded.read { search("歯医者") }.single().snippet)
+        return path
+    }
+
+    /** user_version and the start_at indexes of transcript_segment. */
+    private fun schemaOf(path: String): Pair<Int, List<String>> = BundledSQLiteDriver().open(path).use { db ->
+        val version = db.prepare("PRAGMA user_version").use { it.step(); it.getInt(0) }
+        val indexes = db.prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'transcript_segment' " +
+                "AND name LIKE 'idx_segment_start%' ORDER BY name",
+        ).use { st -> buildList { while (st.step()) add(st.getText(0)) } }
+        version to indexes
+    }
+
+    @Test
+    fun upgradesVersion1And3DatabasesToTheSearchIndex() = runTest {
+        store.close()
+        assertEquals(4, MIGRATIONS.size)
+        for (version in listOf(1, 3)) {
+            val path = databaseAtVersion(version)
+            LocalStore.open(path).use { upgraded ->
+                assertEquals("歯医者の[予約]", upgraded.read { search("予約") }.single().snippet)
+                assertEquals("[歯医者]の予約", upgraded.read { search("歯医者") }.single().snippet)
+            }
+            assertEquals(4 to listOf("idx_segment_start_text"), schemaOf(path), "from version $version")
         }
     }
 
@@ -220,6 +274,22 @@ class LocalStoreTest {
         store.close()
         LocalStore.open(dbPath).use { reopened ->
             assertEquals("a", reopened.read { chunk("a") }!!.id)
+        }
+    }
+
+    @Test
+    fun settingsAreStoredReplacedAndRemoved() = runTest {
+        assertNull(store.read { setting("k") })
+        store.transaction { putSetting("k", "1") }
+        store.transaction { putSetting("k", "2") }
+        store.transaction { putSetting("other", "x") }
+        assertEquals("2", store.read { setting("k") })
+        assertEquals(mapOf("k" to "2", "other" to "x"), store.read { settings() })
+        store.transaction { putSetting("k", null) }
+        assertNull(store.read { setting("k") })
+        store.close()
+        LocalStore.open(dbPath).use { reopened ->
+            assertEquals("x", reopened.read { setting("other") })
         }
     }
 }

@@ -14,6 +14,7 @@ class WatchAudioApp : Application() {
         super.onCreate()
         val graph = graph
         graph.scheduler.schedulePeriodic()
+        graph.gapAlerts.schedulePeriodic()
         graph.scope.launch {
             graph.startup.join()
             // Pick up chunks left over from an earlier process, and fetch the model on Wi-Fi.

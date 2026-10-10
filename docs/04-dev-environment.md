@@ -30,7 +30,7 @@
 | Apple Developer Program | M0-3（Watch 実機に長期インストール）、M4（TestFlight） | 年 $99（無料アカウントでも実機インストールは可能だが 7 日で失効） |
 | Google Play Console | M4（内部テスト配信） | 初回 $25 |
 | AI プロバイダの API キー（OpenAI / Anthropic / Gemini のいずれか） | M3 | 従量課金 |
-| GitHub Actions | 常時 | 非公開リポジトリは無料枠 2,000 分/月。**macOS は 10 倍消費**（iOS CI 1 回 ≈ 3〜6 分 → 30〜60 分相当。Apple 側・共通コードの変更時のみ実行） |
+| GitHub Actions | 常時（PR と main） | 非公開リポジトリは無料枠 2,000 分/月。**macOS は 10 倍消費**（iOS CI 1 回 ≈ 3〜6 分 → 30〜60 分相当。Apple 側・共通コードの変更時のみ実行） |
 
 ### ソフトウェア
 
@@ -69,7 +69,7 @@ Watch の役割をシミュレートし、「チャンク化 → 取り込み �
 
 ```bash
 tools/harness/download-models.sh          # モデルを tools/harness/models/ に取得（受信のみ）
-./gradlew :tools:harness:test             # E2E テスト（日本語の参照音声 5 文）
+./gradlew :tools:harness:test             # E2E テスト（日本語の参照音声 5 文、チャンク境界をまたぐ発話）
 
 # 任意の音声ファイルで試す（mp3/wav/m4a など。ffmpeg が必要）
 ./gradlew :tools:harness:run --args="record /tmp/wa-data path/to/audio.mp3"
@@ -98,7 +98,7 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 | 改善前 | 139 / 260 ms | 0.8 / 212 ms | 327 ms（2 文字・ヒットなし）、301 ms（「ミーティング」） |
 | 改善後 | 30 / 48 ms | 0.8 / 128 ms | 148 ms（2 文字・ヒットなし） |
 
-改善内容（`StoreTransaction.search`、マイグレーション 2）:
+改善内容（`StoreTransaction.search`、マイグレーション 4）:
 
 - FTS5 の `snippet()` は ORDER BY / LIMIT の前に**全ヒット行**で計算されるため、頻出語で検索時間の大半を占めていた。FTS ではセグメント ID だけを新しい順に並べて上位 50 件に絞り、スニペット（一致箇所の `[` `]` と前後の切り詰め）は返す行だけ Kotlin で作る（`highlightSnippet`）。
 - LIKE フォールバックは `(start_at, text)` の索引を新しい順に走査し、表本体を読まずに絞り込む（旧 `idx_segment_start_at` を置き換え。DB は 1 年分で約 60 MB 増える）。2 文字のヒットなし検索は全件走査になるため、これが最悪ケース。
@@ -117,6 +117,10 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 | `ios.yml` | Launch iOS app / Launch watchOS app | ビルドした iOS・watchOS アプリをシミュレータに入れて起動し、15 秒後もプロセスが生きていてクラッシュレポートがない | ジョブサマリー、成果物 `simulator-smoke`（スクリーンショット・ログ） |
 
 SQLite（bundled ドライバ）を開くテストは `src/sqliteTest` に置く（`watchaudio.kmp.sqlite-tests` プラグイン）。`jvmTest`・`iosTest`・`androidDeviceTest` から共有され、JVM・iOS シミュレータ・Android 端末/エミュレータで実行される。Android のホストテスト（`testAndroidHostTest`）では実行しない: Android 版の `sqlite-bundled` は Android の ABI 向けネイティブライブラリしか含まず、ホストの JVM では読み込めないため。
+
+- core-db（`LocalStoreTest`・`StorageQueriesTest`）と core-pipeline（`IngestorTest`・`TranscriptionPipelineTest`・`StorageManagerTest`）: JVM・iOS シミュレータ・Android 端末/エミュレータ。
+- composeApp（`GapAlertEvaluatorTest`）: JVM・iOS シミュレータ（`watchaudio.kmp.sqlite-tests-jvm-ios`）。Compose Multiplatform のリソースプラグインが KMP ライブラリの Android デバイステスト用バリアントを構成できないため、Android 端末では実行しない。
+- composeApp の `ViewModelTest`・`AppUiTest` は JVM のみ（`Dispatchers.Main` に Swing、描画にデスクトップの Skia を使うため）。
 
 手元での実行:
 
