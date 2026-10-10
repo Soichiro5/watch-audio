@@ -15,6 +15,22 @@
 各タスクは GitHub Issue として起票済み。タイトル先頭のコード（例: `[M1-3]`）で依存関係を表す。
 マイルストーンごとに Epic Issue があり、各タスクはその sub-issue になっている。
 
+## 進捗（2026-10-10 時点）
+
+| 領域 | 状態 | 内容 |
+| --- | --- | --- |
+| 基盤・CI（#7, #8） | ✅ | KMP モノレポ、Android/Wear OS/iOS/watchOS のビルド、GitHub Actions |
+| 技術検証（#9〜#12） | 🟡 | デスクトップ比較は完了（[ASR](spikes/m0-5-asr-desktop.md)・[埋め込み](spikes/m0-6-embedding-desktop.md)）。電池計測は実機待ち |
+| 転送プロトコル（#13） | ✅ | ChunkManifest / ChunkAck / フレーミング / テストベクタ |
+| ローカル DB・取り込み（#14） | ✅ | bundled SQLite + FTS5（日本語部分一致）、冪等な Ingestor |
+| 文字起こしパイプライン（#20） | ✅ 共通部分 | 再開可能なパイプライン。OS ごとのスケジューラは実装中 |
+| 実機なし検証基盤（#44） | 🟡 | JVM 上の E2E（Watch シミュレータ → 取り込み → 日本語 ASR → SQLite → 検索）を CI に組み込み済み。エミュレータテストは未着手 |
+| Android スマホ（#18, #22） | 🔧 実装中 | 受信と ACK、sherpa-onnx 文字起こし、モデル取得、WorkManager |
+| Wear OS 録音（#16, #41, #43） | 🔧 実装中 | 常時録音、装着検出・充電で自動停止/再開、送信キュー、Tile |
+| iOS / watchOS（#15, #17, #21） | 🔧 実装中 | 録音、WatchConnectivity、SpeechAnalyzer、BGProcessingTask |
+| スマホ UI（#19, #23, #25） | 🔧 実装中 | 日別タイムライン・文字起こし・検索・状態表示 |
+| チャンク境界の発話分断（#45） | 📝 起票 | 境界をまたぐ発話の扱い |
+
 ## 全体の流れ
 
 ```mermaid
