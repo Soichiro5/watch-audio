@@ -101,6 +101,9 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 | `commonTest/…/DayTimelineTest` ほか | タイムライン・カバー率・欠損理由、文字起こしリストのグループ化、スニペット解析、日付/時刻の書式、受信状況 |
 | `jvmTest/…/ViewModelTest` | 一時ファイルの実 `LocalStore` + テストディスパッチャで、日付移動・変更時の再読み込み・周期更新・再試行・検索→該当日へ移動・受信途絶の警告 |
 | `jvmTest/…/AppUiTest` | Skia でヘッドレス描画し、タイムライン→再生→検索→結果を開く→状態 を操作。スクリーンショットを `composeApp/build/screenshots/` に出力 |
+| `androidApp/src/androidTest/…/PlaybackTest` | エミュレータ上の実アプリで、実際の AAC を MediaPlayer が指定位置から再生すること、検索 → 結果を 1 タップ → 発話の位置から再生されることを確認（CI `emulator.yml`、[android-phone.md §6.1](android-phone.md#61-実機なしlinux--ci)） |
+
+検索のスニペット（一致箇所を `[` `]` で囲んだ文字列）は core-db の `highlightSnippet` が作る。40 文字を超える発話は最初の一致の前後で切り詰め、切った側に `…` を付ける。検索速度は [04-dev-environment.md §5](../04-dev-environment.md#5-検索の性能ベンチマーク23) のベンチマークで確認する。
 
 ## 5. 未対応・今後
 
