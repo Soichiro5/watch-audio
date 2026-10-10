@@ -71,6 +71,11 @@ object Strings {
     const val ARRIVAL_OK = "録音データを受信中です"
     fun recordingStopped(reason: String) = "Watch の録音は停止しています（理由: $reason）"
 
+    // Gap alert notification (#43)
+    const val GAP_ALERT_TITLE = "録音の途絶"
+    fun gapAlert(lastReceived: String) = "録音が届いていません（最後の受信: $lastReceived）。Watch を確認してください"
+    const val GAP_ALERT_CHANNEL = "録音の途絶アラート"
+
     const val ASR_MODEL = "文字起こしモデル"
     const val MODEL_UNKNOWN = "確認中…"
     const val MODEL_MISSING = "モデルが未ダウンロードです。文字起こしにはダウンロードが必要です。"
