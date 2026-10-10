@@ -1,7 +1,8 @@
 name: Emulator smoke test
 
 # Device-free check (#44): boot a phone and a Wear OS emulator, install the debug
-# builds, launch them and fail on crashes. Runs on Linux runners (KVM), 1x minutes.
+# builds, launch them and fail on crashes of our own process (system apps such as the
+# Wear setup wizard sometimes crash on CI images and must not fail the check). Runs on Linux runners (KVM), 1x minutes.
 on:
   push:
     branches: [main]
@@ -85,9 +86,9 @@ jobs:
             adb logcat -c
             adb shell monkey -p app.watchaudio -c android.intent.category.LAUNCHER 1
             sleep 15
-            adb logcat -d > logcat.txt
+            adb logcat -d > logcat.txt || (sleep 5 && adb wait-for-device && adb logcat -d > logcat.txt)
             adb shell pidof app.watchaudio || (echo "app is not running"; exit 1)
-            if grep -E "FATAL EXCEPTION|AndroidRuntime: Process: app.watchaudio" logcat.txt; then exit 1; fi
+            if grep -q "AndroidRuntime: Process: app.watchaudio" logcat.txt; then grep -B2 -A25 "AndroidRuntime: Process: app.watchaudio" logcat.txt; exit 1; fi
 
       - uses: actions/upload-artifact@v4
         if: always()
