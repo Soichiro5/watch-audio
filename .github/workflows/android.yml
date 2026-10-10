@@ -1,9 +1,11 @@
 name: Android & shared
 
+# Runs on every PR into main and on main itself (the official branch).
 on:
   push:
-    branches: [main, "claude/**"]
+    branches: [main]
   pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:

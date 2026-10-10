@@ -17,10 +17,11 @@
 
 ## 進め方
 
-- **ブランチと PR**: `main` に直接 push しない。Issue ごとに作業ブランチ（`feat/<Issue番号>-<内容>` など）を切り、**Issue と紐づけた PR**（本文に `Closes #番号`、一部対応なら `Refs #番号`）を作って、CI が緑になってから `main` にマージする。マージで Issue は自動でクローズされる。
+- **`main` は正式ブランチ**: CI と CD（ビルド成果物の作成）は `main` で動く。`main` には直接コミット・push しない。
+- **必ず別ブランチで開発して PR を出す**: Issue ごとに作業ブランチ（`feat/<Issue番号>-<内容>` など）を切り、**Issue と紐づけた PR**（本文に `Closes #番号`、一部対応なら `Refs #番号`）を作る。PR でも CI が動き、緑になってから `main` にマージする。マージで Issue は自動でクローズされる。
 - **Issue**: 優先度ラベル `P0`（今やる）/ `P1`（次）/ `P2`（後回し）、状態ラベル `in-progress` / `needs-device`、Issue 間の依存は GitHub の「Blocked by」で管理。現在のゴールはマイルストーン「v0.1 コア」。
 - **ダッシュボード**: Issue を優先度・状態・依存関係で一覧できるページを `tools/roadmap-view/build.py` で生成している（[ロードマップ](https://claude.ai/artifact/W2TAExeoMUzXQKTo6h4QPE)、オーナーのみ閲覧可）。
-- **CI**: GitHub Actions（`android.yml` / `ios.yml` / `emulator.yml`）。
+- **CI/CD**: GitHub Actions。PR と `main` で `android.yml`（テスト・実機なし E2E・ビルド）/ `ios.yml`（iOS・watchOS、関連変更時のみ）/ `emulator.yml`（起動スモークテスト）、`main` へのマージで `deliver.yml`（スマホ・Wear OS の APK を成果物として保存。将来は TestFlight / Play 内部テストへ自動配信）。
 - **AI エージェント向けの作業ルール**: [CLAUDE.md](CLAUDE.md)
 
 ## ドキュメント
