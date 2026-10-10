@@ -77,6 +77,8 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 ./gradlew :tools:harness:run --args="show /tmp/wa-data"
 ```
 
+正解テキスト付きの日本語会話（オフライン TTS）を Watch 録音を模して加工した検証用音声セットと、それをハーネスに流して条件ごとの CER・検出漏れ・処理時間を出す `evaluate` コマンドがある（#56）。生成手順・条件・ライセンス・結果は [docs/test-audio.md](test-audio.md)。
+
 ## 5. 実機検証の手順
 
 - M0-3 / M0-4 電池計測: [docs/spikes/m0-3-m0-4-battery-protocol.md](spikes/m0-3-m0-4-battery-protocol.md)
