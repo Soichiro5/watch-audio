@@ -4,7 +4,7 @@ name: iOS & watchOS
 # Apple-side or shared code changes (or on demand).
 on:
   push:
-    branches: [main, "claude/**"]
+    branches: [main]
     paths:
       - "iosApp/**"
       - "shared/**"
@@ -15,6 +15,7 @@ on:
       - "gradle.properties"
       - ".github/workflows/ios.yml"
   pull_request:
+    branches: [main]
     paths:
       - "iosApp/**"
       - "shared/**"

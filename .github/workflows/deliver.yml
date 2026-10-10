@@ -1,0 +1,51 @@
+name: Deliver (main)
+
+# CD: every merge into main produces installable builds, kept as artifacts.
+# Store distribution (TestFlight / Play internal testing) is added once signing
+# credentials are configured as repository secrets.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build phone and Wear OS apps
+        run: ./gradlew :androidApp:assembleDebug :wearApp:assembleDebug
+
+      - name: Collect builds
+        run: |
+          mkdir -p dist
+          cp androidApp/build/outputs/apk/debug/*.apk "dist/watch-audio-phone-${GITHUB_SHA::7}.apk"
+          cp wearApp/build/outputs/apk/debug/*.apk "dist/watch-audio-wear-${GITHUB_SHA::7}.apk"
+          {
+            echo "### Builds for ${GITHUB_SHA::7}"
+            echo
+            echo "| File | Size |"
+            echo "| --- | --- |"
+            for f in dist/*.apk; do echo "| $(basename "$f") | $(du -h "$f" | cut -f1) |"; done
+            echo
+            echo "Install: \`adb install -r <file>\` (phone and watch need the same build)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: watch-audio-android-${{ github.sha }}
+          path: dist/*.apk
+          retention-days: 30

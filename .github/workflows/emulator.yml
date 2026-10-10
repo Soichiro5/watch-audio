@@ -4,7 +4,17 @@ name: Emulator smoke test
 # builds, launch them and fail on crashes. Runs on Linux runners (KVM), 1x minutes.
 on:
   push:
-    branches: [main, "claude/**"]
+    branches: [main]
+    paths:
+      - "androidApp/**"
+      - "wearApp/**"
+      - "composeApp/**"
+      - "shared/**"
+      - "gradle/**"
+      - "*.gradle.kts"
+      - ".github/workflows/emulator.yml"
+  pull_request:
+    branches: [main]
     paths:
       - "androidApp/**"
       - "wearApp/**"
