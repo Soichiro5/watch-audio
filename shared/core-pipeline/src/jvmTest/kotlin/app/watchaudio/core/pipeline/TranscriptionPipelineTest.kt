@@ -12,6 +12,7 @@ import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.files.Path
 
@@ -92,5 +93,22 @@ class TranscriptionPipelineTest {
         assertEquals(listOf("a"), fake.calls)
         pipeline.processPending()
         assertEquals(listOf("a", "b"), fake.calls)
+    }
+
+    @Test
+    fun cancellationPutsTheChunkBackInTheQueue() = runTest {
+        addChunk("a", 0)
+        val blocking = object : Transcriber {
+            override val engineId = "blocking"
+            override suspend fun transcribe(audioFile: Path): List<TimedText> = kotlinx.coroutines.awaitCancellation()
+        }
+        val job = launch { TranscriptionPipeline(store, Path(dir.path), blocking).processPending() }
+        testScheduler.advanceUntilIdle()
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            while (store.read { chunk("a") }!!.state != ChunkState.TRANSCRIBING) kotlinx.coroutines.delay(10)
+        }
+        job.cancel()
+        job.join()
+        assertEquals(ChunkState.RECEIVED, store.read { chunk("a") }!!.state)
     }
 }

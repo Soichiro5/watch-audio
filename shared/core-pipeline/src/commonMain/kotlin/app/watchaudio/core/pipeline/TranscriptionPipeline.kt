@@ -4,6 +4,8 @@ import app.watchaudio.core.db.ChunkRecord
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.db.NewSegment
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.io.files.Path
 
 /**
@@ -53,7 +55,8 @@ class TranscriptionPipeline(
             store.transaction { saveTranscript(chunk.id, segments, transcriber.engineId) }
             true
         } catch (e: CancellationException) {
-            store.transaction { resetInterrupted() }
+            // The coroutine is already cancelled; the requeue must still run.
+            withContext(NonCancellable) { store.transaction { resetInterrupted() } }
             throw e
         } catch (e: Exception) {
             store.transaction { markFailed(chunk.id, e.message ?: e::class.simpleName.orEmpty()) }
