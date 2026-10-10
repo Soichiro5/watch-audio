@@ -39,6 +39,8 @@ fun RecorderScreen(
     onStop: () -> Unit,
     onMark: () -> Unit,
     onUploadEnabledChange: (Boolean) -> Unit,
+    debugInputLabel: String? = null,
+    onDebugInput: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val listState = rememberScalingLazyListState()
@@ -113,6 +115,16 @@ fun RecorderScreen(
                     onCheckedChange = onUploadEnabledChange,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text(stringResource(R.string.send_to_phone)) }
+            }
+            // Debug builds only: the screen that feeds an audio file instead of the microphone.
+            if (debugInputLabel != null) {
+                item {
+                    Button(
+                        onClick = onDebugInput,
+                        colors = ButtonDefaults.filledTonalButtonColors(),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(debugInputLabel) }
+                }
             }
         }
     }
