@@ -19,7 +19,9 @@ Apple Watch で装着中ずっと録音 → WatchConnectivity で iPhone へ（�
 | 〃 | `iosApp/iosApp/WatchReceiver.swift` | WCSession 受信 → Kotlin `Ingestor` → ACK 返信 |
 | 〃 | `iosApp/iosApp/SpeechAnalyzerTranscriber.swift` | SpeechAnalyzer + SpeechTranscriber による文字起こし（Kotlin の `IosSpeechTranscriber` を実装） |
 | iOS (Kotlin) | `composeApp/src/iosMain/.../IosAppGraph.kt` | iOS の composition root（DB・音声置き場・Ingestor・パイプライン・BGTask） |
-| 〃 | `IosAppServices.kt` | 共有 UI 向け `AppServices` 実装（状態 Flow、AVAudioPlayer 再生） |
+| 〃 | `IosAppServices.kt` | 共有 UI 向け `AppServices` 実装（状態 Flow、AVAudioPlayer 再生、権限、モデル準備、通知設定の変更通知） |
+| 〃 | `IosPermissions.kt` | オンボーディングで求める権限（通知 `UNUserNotificationCenter`、音声認識 `SFSpeechRecognizer`）の状態取得と要求 |
+| 〃 | `IosGapAlerts.kt` | 録音の途絶アラート（#43）のローカル通知の予約・取り消し |
 | 〃 | `IosSpeechTranscriber.kt` | Swift 実装を受けるコールバック型インターフェースと共通 `Transcriber` へのアダプタ |
 | 〃 | `MainViewController.kt` | Compose UI のエントリ（Swift から引数なしで呼ぶ） |
 | テスト | `iosApp/ProtocolTests/ChunkProtocolTests.swift` | Swift プロトコル実装を Kotlin のテストベクタ（`shared/core-protocol/testdata/*.json`）で検証 |
@@ -112,7 +114,7 @@ MainViewControllerKt.MainViewController()                             // Compose
 
 - Swift の `async` は Kotlin から呼べないため、文字起こしはコールバック型の Kotlin インターフェース `IosSpeechTranscriber`（`engineId`, `language`, `prepareModel(callback:)`, `transcribe(path:callback:)`, `cancel()`）を Swift で実装し、Kotlin 側 `IosTranscriberAdapter` が `suspendCancellableCoroutine` で共通 `Transcriber` に変換する。コルーチンのキャンセルは `cancel()` → Swift の `Task.cancel()` → `SpeechAnalyzer.cancelAndFinishNow()` に伝わる。
 - Swift 6 の厳格な並行性チェック対策として、Kotlin のコールバック（非 Sendable）は `UncheckedSendableBox` に入れて Task に渡す。コールバックはどのスレッドから呼んでもよく、必ず 1 回だけ呼ぶ。
-- `MainViewController()` は引数なしのまま `IosAppGraph.services` を取得する。共有 UI の `App()` が `AppServices` を受け取るようになったら、Kotlin 側の 1 行を `App(services)` に変えるだけで Swift 側は変更不要。
+- `MainViewController()` は引数なしのまま `IosAppGraph.services` を取得し `App(services)` を表示する。オンボーディング・権限・途絶アラートはすべて Kotlin（iosMain）側で実装しており、Swift 側の変更はない。
 - Kotlin 内部状態はメインディスパッチャ上でのみ変更する（`ingest` はどのスレッドから呼んでもよい）。
 
 ## 7. 文字起こし（iOS）
@@ -126,6 +128,17 @@ MainViewControllerKt.MainViewController()                             // Compose
   - バックグラウンドへ移るとき: 前面の実行をキャンセルし、`BGProcessingTaskRequest(app.watchaudio.transcribe)` を `requiresExternalPower = true`, `requiresNetworkConnectivity = false` で予約。
   - BGProcessingTask: `processPending { !expired }` でチャンク単位に進め、期限切れハンドラでは実行中のチャンクもキャンセルして速やかに `setTaskCompleted` する。期限切れなら再予約。
   - 実行は Mutex で直列化し、毎回 `recoverInterrupted()` で前回中断分（TRANSCRIBING）をキューに戻す。
+- オンボーディング / 状態タブの「モデルを準備」（`AppServices.modelSetup = OS_MANAGED`、`downloadModels()`）は、同じ Mutex の中で `ensureModel()`（= Swift の `prepareModel`）を呼んでモデルのインストールを OS に依頼し、準備できたら文字起こしを要求する。
+
+### 7.1 録音の途絶アラート（#43）
+
+アプリがサスペンドされていても届くよう、定期チェックではなく**予約通知**にしている（判定は共通コード、`phone-ui.md` §1.4）。
+
+- チャンクを `STORED` で取り込むたびに `IosGapAlerts.reschedule(chunkArrived = true)`: 識別子 `app.watchaudio.gap-alert` の未配信の通知（と表示済みの古い通知）を取り消し、`GapAlertEvaluator.alertAt()` の時刻に `UNTimeIntervalNotificationTrigger` で 1 件だけ予約し直す。
+- そのチャンクが停止理由付き（`user_stop` / `charging` / `off_body` など）で終わっていれば予約しない（取り消しのみ）。通常は最終受信 + 10 分。おやすみ時間（既定 23:00–7:00）にかかる場合は終了時刻に予約する。
+- 状態タブで通知設定を変えると `gapAlertSettingsChanged()` → 予約し直し（すでに過ぎた時刻なら予約しない）。
+- 本文「録音が届いていません（最後の受信: HH:mm）。Watch を確認してください」。予約の失敗は ACK を妨げない（`status.message` に出すだけ）。
+- `UNUserNotificationCenterDelegate` を設定していないので、アプリが前面にある間は通知バナーは出ない（その間は状態タブの警告で分かる）。
 
 ## 8. 保存場所とプライバシー
 
@@ -138,14 +151,14 @@ MainViewControllerKt.MainViewController()                             // Compose
 | ターゲット | キー | 値・目的 |
 | --- | --- | --- |
 | iosApp | `NSMicrophoneUsageDescription` | 将来のスマホ側録音用（現状はマイク未使用） |
-| 〃 | `NSSpeechRecognitionUsageDescription` | 音声認識の用途説明（SpeechTranscriber が認可を要求する場合に備えて記載。アプリからは要求していない） |
+| 〃 | `NSSpeechRecognitionUsageDescription` | 音声認識の用途説明。オンボーディングで `SFSpeechRecognizer.requestAuthorization` を念のため要求する（SpeechTranscriber に必要かは未確認） |
 | 〃 | `UIBackgroundModes: [processing]` | BGProcessingTask |
 | 〃 | `BGTaskSchedulerPermittedIdentifiers: [app.watchaudio.transcribe]` | `IosAppGraph.PROCESSING_TASK_ID` と一致させること |
 | WatchApp | `NSMicrophoneUsageDescription` | 録音 |
 | 〃 | `UIBackgroundModes: [audio]` | 画面消灯中の録音継続 |
 | 〃 | `WKApplication`, `WKCompanionAppBundleIdentifier` | iPhone アプリの付属 watch アプリ |
 
-実行時の許可: Watch でマイク（初回開始時）と通知（初回録音開始時）。スパイク用の `UIFileSharingEnabled` / `LSSupportsOpeningDocumentsInPlace` は削除した。
+実行時の許可: Watch でマイク（初回開始時）と通知（初回録音開始時）。iPhone ではオンボーディングの「許可の設定」で通知（alert + sound、途絶アラート用）と音声認識を要求する（`IosPermissions`。拒否済みなら設定アプリへの案内を表示）。スパイク用の `UIFileSharingEnabled` / `LSSupportsOpeningDocumentsInPlace` は削除した。
 
 ## 10. 検証状況
 
@@ -169,7 +182,8 @@ MainViewControllerKt.MainViewController()                             // Compose
 7. 充電器に置く → `charging` で停止 → 外してアプリを開くと自動再開。
 8. 録音中に電話を受ける / Siri を使う → `interruption` で区切られ、終了後に再開する。再開できない場合は通知が来る。
 9. 録音中に Watch アプリを強制終了 → 再起動で直前チャンクが `terminated` として届く（音声が読めるかも確認）。
-10. iPhone を初回起動 → 日本語モデルのダウンロード → 前面で文字起こしが進む。
+10. iPhone を初回起動 → オンボーディング（同意 → 通知・音声認識の許可ダイアログ → 「モデルを準備」で日本語モデルのダウンロード → Watch の案内）→ 前面で文字起こしが進む。
+   - 途絶アラート: 録音中に Watch アプリを強制終了（`terminated` チャンクが届かない状態）→ iPhone をロックして 10 分後に「録音が届いていません（最後の受信: HH:mm）…」の通知が来る。次のチャンクが届くと予約が取り消される。Watch を充電器に置いた（`charging`）場合は通知が来ない。おやすみ時間中は終了時刻に来る。
 11. iPhone を充電しながらロック → BGProcessingTask で文字起こしが進む（Xcode の `e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"app.watchaudio.transcribe"]` で強制起動も可）。
 12. Watch の `diagnostics.csv` で電池消費（%/時）を確認（M0-3 と比較）。
 
@@ -177,7 +191,7 @@ MainViewControllerKt.MainViewController()                             // Compose
 
 - **CI でしか分からないこと**: ComposeApp 静的フレームワークのリンク（androidx.sqlite の bundled SQLite を含む初めてのリンク）、Kotlin が生成する ObjC ヘッダの Swift 名（`ingest(manifestJson:filePath:completion:)`、`IosSpeechTranscriber` の各メソッド）、SwiftUI の `.backgroundTask(.watchConnectivity)` などのビルド。
 - **SpeechAnalyzer とファイル形式**: `analyzeSequence(from: AVAudioFile)` が 16 kHz AAC をそのまま受け付ける前提。もしフォーマット不一致エラーになる場合は `SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith:)` + `AVAudioConverter` で変換してから `AnalyzerInput` を流す実装に切り替える。
-- **音声認識の認可**: SpeechTranscriber が `SFSpeechRecognizer` の認可を必要とするかは未確認。必要なら前面時に `SFSpeechRecognizer.requestAuthorization` を追加する（Info.plist の説明文は記載済み）。
+- **音声認識の認可**: SpeechTranscriber が `SFSpeechRecognizer` の認可を必要とするかは未確認。念のためオンボーディングで要求している。不要と確認できたら `IosPermissions.all` から外す。
 - **充電後の自動再開**はアプリが前面に来たときのみ（上記 4 章）。バックグラウンドで録音を開始できるかは watchOS の制約次第。
 - **割り込み後の再開**: watchOS が中断後にバックグラウンドでの録音再開を許すかは M0-3 の検証課題。失敗時は通知でユーザーに促す。
 - **無音判定の閾値**（−50 / −35 dBFS）は仮の値。実機で誤判定（会話を捨てる）が無いことを最優先で確認する。
