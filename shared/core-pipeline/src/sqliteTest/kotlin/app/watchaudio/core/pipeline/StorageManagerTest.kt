@@ -10,8 +10,6 @@ import app.watchaudio.core.protocol.AudioFile
 import app.watchaudio.core.protocol.ChunkEndReason
 import app.watchaudio.core.protocol.ChunkManifest
 import app.watchaudio.core.protocol.SourcePlatform
-import java.io.File
-import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -22,12 +20,14 @@ import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.buffered
 import kotlinx.io.files.Path
+import kotlinx.io.files.SystemFileSystem
 
 class StorageManagerTest {
-    private val dir = Files.createTempDirectory("storage").toFile()
-    private val audioDir = File(dir, "audio")
-    private val store = LocalStore.open(File(dir, LocalStore.FILE_NAME).path)
+    private val dir = TempDir("storage")
+    private val audioDir = dir.resolve("audio")
+    private val store = LocalStore.open(dir.resolve(LocalStore.FILE_NAME).toString())
     private val now = 1_791_622_800_000L // 2026-10-10T09:00:00Z
     private val environment = object : StorageEnvironment {
         var free: Long? = 5L shl 30
@@ -37,7 +37,7 @@ class StorageManagerTest {
     private val clock = object : Clock {
         override fun now(): Instant = Instant.fromEpochMilliseconds(now)
     }
-    private val storage = StorageManager(store, Path(audioDir.path), environment, clock)
+    private val storage = StorageManager(store, audioDir, environment, clock)
 
     @AfterTest
     fun tearDown() {
@@ -48,7 +48,7 @@ class StorageManagerTest {
     /** Stores a chunk that ended [daysAgo] days ago, with a real audio file of [size] bytes. */
     private suspend fun addChunk(id: String, daysAgo: Int, size: Int = 1_000, start: Long = now - daysAgo * DAY_MS - 300_000): String {
         val relative = "2026/10/${id.hashCode().mod(28) + 1}/$id.m4a"
-        File(audioDir, relative).apply { parentFile.mkdirs() }.writeBytes(ByteArray(size))
+        write(relative, ByteArray(size))
         store.transaction {
             insertChunk(
                 ChunkManifest(
@@ -70,7 +70,14 @@ class StorageManagerTest {
         saveTranscript(id, listOf(NewSegment(chunk.startedAt + 1_000, chunk.startedAt + 2_000, text, "ja")), "test")
     }
 
-    private fun exists(relative: String) = File(audioDir, relative).exists()
+    private fun audio(relative: String) = Path(audioDir, relative)
+
+    private fun write(relative: String, bytes: ByteArray) {
+        audio(relative).parent?.let { SystemFileSystem.createDirectories(it) }
+        SystemFileSystem.sink(audio(relative)).buffered().use { it.write(bytes) }
+    }
+
+    private fun exists(relative: String) = SystemFileSystem.exists(audio(relative))
 
     @Test
     fun defaultKeepsAllAudio() = runTest {
@@ -130,7 +137,7 @@ class StorageManagerTest {
     fun aMissingFileStillCountsAsPurged() = runTest {
         val path = addChunk("gone", daysAgo = 40)
         transcribe("gone")
-        File(audioDir, path).delete() // e.g. a previous run died after deleting the file
+        SystemFileSystem.delete(audio(path)) // e.g. a previous run died after deleting the file
         storage.setRetention(AudioRetention.DAYS_30)
         assertEquals(1, storage.applyRetention().purgedChunks)
         assertNotNull(store.read { chunk("gone") }!!.audioPurgedAt)
@@ -185,8 +192,8 @@ class StorageManagerTest {
         val a = addChunk("a", daysAgo = 1)
         addChunk("b", daysAgo = 2)
         transcribe("a")
-        val orphan = File(audioDir, "2025/01/01/orphan.m4a").apply { parentFile.mkdirs(); writeBytes(ByteArray(10)) }
-        val unrelated = File(audioDir, "notes.txt").apply { writeText("keep") }
+        val orphan = "2025/01/01/orphan.m4a".also { write(it, ByteArray(10)) }
+        val unrelated = "notes.txt".also { write(it, "keep".encodeToByteArray()) }
         storage.setRetention(AudioRetention.DAYS_90)
 
         storage.deleteAll()
@@ -195,9 +202,12 @@ class StorageManagerTest {
         assertEquals(0, stats.chunks)
         assertEquals(0, stats.segments)
         assertFalse(exists(a))
-        assertFalse(orphan.exists())
-        assertTrue(audioDir.listFiles()!!.none { it.isDirectory }, "date folders are removed")
-        assertTrue(unrelated.exists())
+        assertFalse(exists(orphan))
+        assertTrue(
+            SystemFileSystem.list(audioDir).none { SystemFileSystem.metadataOrNull(it)?.isDirectory == true },
+            "date folders are removed",
+        )
+        assertTrue(exists(unrelated))
         assertEquals(AudioRetention.DAYS_90, storage.retention())
         assertEquals(0, storage.breakdown().audioBytes)
     }

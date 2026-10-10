@@ -7,7 +7,6 @@ import app.watchaudio.core.protocol.AudioFile
 import app.watchaudio.core.protocol.ChunkEndReason
 import app.watchaudio.core.protocol.ChunkManifest
 import app.watchaudio.core.protocol.SourcePlatform
-import java.io.File
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -18,13 +17,13 @@ import kotlinx.coroutines.test.runTest
 
 /** Queries behind audio retention, per-day / full deletion and app settings (#33). */
 class StorageQueriesTest {
-    private val dbFile = File.createTempFile("watch-audio-storage", ".db").also { it.delete() }
-    private val store = LocalStore.open(dbFile.absolutePath)
+    private val dir = TempDir("storage-queries")
+    private val store = LocalStore.open(dir.resolve(LocalStore.FILE_NAME).toString())
 
     @AfterTest
     fun tearDown() {
         store.close()
-        listOf("", "-wal", "-shm").forEach { File(dbFile.path + it).delete() }
+        dir.deleteRecursively()
     }
 
     private fun manifest(id: String, start: Long, audio: Boolean = true) = ChunkManifest(
@@ -137,16 +136,16 @@ class StorageQueriesTest {
     @Test
     fun migrationToleratesSettingsTableFromAnotherBranch() = runTest {
         store.close()
-        listOf("", "-wal", "-shm").forEach { File(dbFile.path + it).delete() }
+        val path = dir.resolve("v1-with-settings.db").toString()
         // A database at version 1 that already has app_setting (e.g. created by a parallel migration).
-        BundledSQLiteDriver().open(dbFile.path).let { connection ->
+        BundledSQLiteDriver().open(path).let { connection ->
             MIGRATIONS[0].forEach { connection.execSQL(it.trimIndent()) }
             connection.execSQL("CREATE TABLE app_setting (key TEXT PRIMARY KEY, value TEXT)")
             connection.execSQL("INSERT INTO app_setting (key, value) VALUES ('onboarded', 'true')")
             connection.execSQL("PRAGMA user_version = 1")
             connection.close()
         }
-        LocalStore.open(dbFile.path).use { migrated ->
+        LocalStore.open(path).use { migrated ->
             assertEquals("true", migrated.read { setting("onboarded") })
             migrated.transaction { insertChunk(manifest("a", 0), "a.m4a", 0) }
             assertNull(migrated.read { chunk("a") }!!.audioPurgedAt)

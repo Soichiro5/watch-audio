@@ -8,6 +8,7 @@ import android.media.MediaPlayer
 import android.os.Build
 import android.util.Log
 import androidx.activity.result.ActivityResultLauncher
+import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import app.watchaudio.android.asr.ModelManager
 import app.watchaudio.android.work.TranscriptionScheduler
@@ -153,6 +154,14 @@ class AndroidAppServices(
         player?.release()
         player = null
     }
+
+    /**
+     * Position of the current playback in ms while audio is actually playing, else null.
+     * Lets instrumented tests verify real playback (#19, #25). Call on the main thread.
+     */
+    @VisibleForTesting
+    internal fun playingPositionMs(): Int? =
+        runCatching { player?.takeIf { it.isPlaying }?.currentPosition }.getOrNull()
 
     private companion object {
         const val TAG = "AndroidAppServices"

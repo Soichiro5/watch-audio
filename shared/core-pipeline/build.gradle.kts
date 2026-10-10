@@ -1,5 +1,5 @@
 plugins {
-    id("watchaudio.kmp.library")
+    id("watchaudio.kmp.sqlite-tests")
 }
 
 kotlin {

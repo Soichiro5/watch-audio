@@ -14,6 +14,7 @@ on:
       - "*.gradle.kts"
       - "gradle.properties"
       - ".github/workflows/ios.yml"
+      - ".github/scripts/**"
   pull_request:
     branches: [main]
     paths:
@@ -25,6 +26,7 @@ on:
       - "*.gradle.kts"
       - "gradle.properties"
       - ".github/workflows/ios.yml"
+      - ".github/scripts/**"
   workflow_dispatch:
 
 concurrency:
@@ -57,23 +59,50 @@ jobs:
       - name: Shared tests (iOS simulator)
         run: ./gradlew iosSimulatorArm64Test
 
+      # Lists every test that ran on the simulator, incl. the SQLite-backed core-db / Ingestor tests (#14).
+      - name: Shared test evidence (iOS simulator)
+        if: success() || failure()
+        run: |
+          python3 .github/scripts/junit-summary.py "Shared Kotlin tests on the iOS simulator" \
+            'shared/*/build/test-results/iosSimulatorArm64Test/*.xml' \
+            'composeApp/build/test-results/iosSimulatorArm64Test/*.xml' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Generate Xcode project
         run: |
           brew install xcodegen
           cd iosApp && xcodegen generate
 
+      # A fixed -derivedDataPath lets the launch smoke steps below reuse these build products.
       - name: Build iOS app (embeds the watchOS app)
+        id: build-ios
         run: |
           xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme iosApp \
             -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO build -quiet 2>&1 | tee xcodebuild-ios.log; exit ${PIPESTATUS[0]}
 
       - name: Build watchOS app
+        id: build-watch
         if: success() || failure()
         run: |
           xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme WatchApp \
             -configuration Debug -destination 'generic/platform=watchOS Simulator' \
+            -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO build -quiet 2>&1 | tee xcodebuild-watch.log; exit ${PIPESTATUS[0]}
+
+      # #7: the apps must start, not only build. Install the products above on a booted
+      # simulator, launch, wait 15 s, fail if the process died or a crash report appeared.
+      - name: Launch iOS app on an iPhone simulator
+        if: (success() || failure()) && steps.build-ios.outcome == 'success'
+        run: |
+          .github/scripts/simulator-smoke.sh iOS iPhone \
+            build/DerivedData/Build/Products/Debug-iphonesimulator/WatchAudio.app app.watchaudio
+
+      - name: Launch watchOS app on an Apple Watch simulator
+        if: (success() || failure()) && steps.build-watch.outcome == 'success'
+        run: |
+          .github/scripts/simulator-smoke.sh watchOS "Apple Watch" \
+            build/DerivedData/Build/Products/Debug-watchsimulator/WatchAudio.app app.watchaudio.watchkitapp
 
       # Hostless logic tests: Swift wire protocol vs. shared/core-protocol/testdata (no Kotlin build).
       - name: Swift protocol tests (iOS Simulator)
@@ -92,4 +121,12 @@ jobs:
         with:
           name: xcodebuild-logs
           path: xcodebuild-*.log
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: simulator-smoke
+          path: simulator-smoke/
+          if-no-files-found: ignore
           retention-days: 7

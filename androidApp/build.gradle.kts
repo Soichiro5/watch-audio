@@ -15,6 +15,7 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "0.1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
             // Real phones (arm64) and the emulator (x86_64); sherpa-onnx ships ~30 MB per ABI.
@@ -64,4 +65,10 @@ dependencies {
 
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.junit)
+
+    // Emulator checks of real playback and the search -> play flow (#19, #25): emulator.yml.
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(libs.kotlin.test.junit)
 }

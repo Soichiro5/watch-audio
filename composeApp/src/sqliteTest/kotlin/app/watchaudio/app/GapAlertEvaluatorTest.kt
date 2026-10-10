@@ -9,7 +9,6 @@ import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.protocol.ChunkEndReason
 import app.watchaudio.core.protocol.ChunkManifest
 import app.watchaudio.core.protocol.SourcePlatform
-import java.io.File
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -19,8 +18,8 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 
 class GapAlertEvaluatorTest {
-    private val dbFile = File.createTempFile("watch-audio-alert", ".db").also { it.delete() }
-    private val store = LocalStore.open(dbFile.absolutePath)
+    private val dir = TempDir("gap-alert")
+    private val store = LocalStore.open(dir.resolve(LocalStore.FILE_NAME).toString())
     private val tokyo = TimeZone.of("Asia/Tokyo")
     private val start = dayWindow(LocalDate(2026, 10, 10), tokyo).start
     private val evaluator = GapAlertEvaluator(store) { tokyo }
@@ -28,7 +27,7 @@ class GapAlertEvaluatorTest {
     @AfterTest
     fun tearDown() {
         store.close()
-        dbFile.delete()
+        dir.deleteRecursively()
     }
 
     private fun at(hour: Int, minute: Int = 0) = start + hour * 3_600_000L + minute * 60_000L
