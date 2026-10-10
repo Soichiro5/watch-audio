@@ -50,7 +50,9 @@ class SpeechSpan(val startSample: Int, val samples: FloatArray) {
  * - neighbours whose padding overlaps are joined into one input, but only while the result
  *   stays within [maxSamples]. Where neighbours stay apart, the shared padding is divided at its
  *   quietest point, so no audio is recognized twice;
- * - a single segment longer than [maxSamples] (speech without a pause the VAD could use) is
+ * - each input is split in the middle of every near-silent pause of at least [minPauseSamples]
+ *   ([pauseDb] below its loud frames), so that turns of a conversation are recognized apart;
+ * - anything still longer than [maxSamples] (speech without such a pause, e.g. in noise) is
  *   split at its quietest points into pieces of at most [maxSamples].
  *
  * No returned span is longer than [maxSamples] (unless [maxSamples] is not positive), and spans
@@ -95,23 +97,23 @@ fun padSpeechSpans(
 
     return ranges
         .flatMap { splitAtPauses(audio, it[0], it[1], minPauseSamples, pauseDb) }
-        .flatMap { splitLongRange(audio, it.first, it.last, limit) }
-        .filter { it.last > it.first }
-        .map { SpeechSpan(it.first, audio.copyOfRange(it.first, it.last)) }
+        .flatMap { (from, to) -> splitLongRange(audio, from, to, limit) }
+        .filter { (from, to) -> to > from }
+        .map { (from, to) -> SpeechSpan(from, audio.copyOfRange(from, to)) }
 }
 
 /** Length of the frames whose energy [splitAtPauses] compares (10 ms). */
 private const val PAUSE_FRAME = AsrSettings.SAMPLE_RATE / 100
 
 /**
- * Splits `[from, to)` in the middle of every pause inside it: a run of at least
+ * Splits `[from, to)` into `[start, end)` pieces in the middle of every pause inside it: a run of at least
  * [minPauseSamples] whose 10 ms frames are all [pauseDb] dB or more below the loud frames (95th
  * percentile) of the range. Catches turn-taking gaps the VAD rides through, e.g. after
  * reverberant speech, where Silero stays above its threshold for over a second.
  */
-internal fun splitAtPauses(audio: FloatArray, from: Int, to: Int, minPauseSamples: Int, pauseDb: Float): List<IntRange> {
+internal fun splitAtPauses(audio: FloatArray, from: Int, to: Int, minPauseSamples: Int, pauseDb: Float): List<Pair<Int, Int>> {
     val frames = (to - from) / PAUSE_FRAME
-    if (minPauseSamples <= 0 || frames < 3) return listOf(from..to)
+    if (minPauseSamples <= 0 || frames < 3) return listOf(from to to)
     val energy = DoubleArray(frames) { f ->
         var sum = 0.0
         for (i in from + f * PAUSE_FRAME until from + (f + 1) * PAUSE_FRAME) sum += audio[i].toDouble() * audio[i]
@@ -130,21 +132,21 @@ internal fun splitAtPauses(audio: FloatArray, from: Int, to: Int, minPauseSample
             runStart = -1
         }
     }
-    return (listOf(from) + cuts + to).zipWithNext { a, b -> a..b }
+    return (listOf(from) + cuts + to).zipWithNext()
 }
 
 /** Splits `[from, to)` at its quietest points into pieces no longer than [limit]. */
-private fun splitLongRange(audio: FloatArray, from: Int, to: Int, limit: Int): List<IntRange> {
-    val pieces = mutableListOf<IntRange>()
+private fun splitLongRange(audio: FloatArray, from: Int, to: Int, limit: Int): List<Pair<Int, Int>> {
+    val pieces = mutableListOf<Pair<Int, Int>>()
     var start = from
     while (to - start > limit) {
         // Keep every piece, including the last, at least a quarter of the limit long.
         val minPiece = maxOf(1, limit / 4)
         val cut = quietestPoint(audio, start + minPiece, minOf(start + limit, to - minPiece))
-        pieces += start..cut
+        pieces += start to cut
         start = cut
     }
-    pieces += start..to
+    pieces += start to to
     return pieces
 }
 
