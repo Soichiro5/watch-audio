@@ -11,7 +11,8 @@
             android:name=".debug.DebugAudioInputActivity"
             android:exported="true"
             android:label="@string/debug_input_label"
-            android:launchMode="singleTop">
+            android:launchMode="singleTop"
+            android:taskAffinity="">
             <intent-filter>
                 <action android:name="app.watchaudio.wear.debug.AUDIO_INPUT" />
                 <category android:name="android.intent.category.DEFAULT" />
