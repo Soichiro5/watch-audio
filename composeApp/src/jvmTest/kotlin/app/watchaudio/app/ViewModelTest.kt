@@ -6,26 +6,36 @@ import app.watchaudio.app.logic.SnippetPart
 import app.watchaudio.app.logic.TimelineSpan
 import app.watchaudio.app.logic.TranscriptEntry
 import app.watchaudio.app.logic.dayWindow
+import app.watchaudio.app.state.DayDeletion
 import app.watchaudio.app.state.DayViewModel
 import app.watchaudio.app.state.NowProvider
+import app.watchaudio.app.state.PendingRetention
 import app.watchaudio.app.state.SearchViewModel
 import app.watchaudio.app.state.StatusViewModel
+import app.watchaudio.core.db.AudioUsage
 import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.db.NewSegment
+import app.watchaudio.core.pipeline.AudioRetention
+import app.watchaudio.core.pipeline.StorageEnvironment
+import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.protocol.AudioCodec
 import app.watchaudio.core.protocol.AudioFile
 import app.watchaudio.core.protocol.ChunkEndReason
 import app.watchaudio.core.protocol.ChunkManifest
 import app.watchaudio.core.protocol.SourcePlatform
 import java.io.File
+import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -35,6 +45,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.io.files.Path
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ViewModelTest {
@@ -42,18 +53,36 @@ class ViewModelTest {
     private val dbFile = File.createTempFile("watch-audio-ui", ".db").also { it.delete() }
     // Database work runs on the test scheduler, so the tests control time completely.
     private val store = LocalStore.open(dbFile.absolutePath, dispatcher = dispatcher)
-    private val services = FakeAppServices(store)
     private val tokyo = TimeZone.of("Asia/Tokyo")
     private val day = LocalDate(2026, 10, 10)
     private val window = dayWindow(day, tokyo)
     private var now = at(15)
     private val clock = NowProvider { now }
+    private val audioDir = Files.createTempDirectory("watch-audio-ui-audio").toFile()
+    private val storageEnvironment = object : StorageEnvironment {
+        var free: Long? = 10L shl 30
+        override fun modelBytes(): Long = 400L shl 20
+        override fun freeBytes(): Long? = free
+    }
+    private val storage = StorageManager(
+        store,
+        Path(audioDir.path),
+        storageEnvironment,
+        clock = object : Clock {
+            override fun now(): Instant = Instant.fromEpochMilliseconds(now)
+        },
+        dispatcher = dispatcher,
+    )
+    private val services = FakeAppServices(store, audioDir.path, storage = storage)
 
     @AfterTest
     fun tearDown() {
         store.close()
         dbFile.delete()
+        audioDir.deleteRecursively()
     }
+
+    private fun audioFile(id: String) = File(audioDir, "2026/10/10/$id.m4a")
 
     private fun at(hour: Int, minute: Int = 0) = window.start + hour * 3_600_000L + minute * 60_000L
 
@@ -63,22 +92,22 @@ class ViewModelTest {
         endReason: ChunkEndReason = ChunkEndReason.ROTATION,
         receivedAt: Long = start + 300_000,
         audio: Boolean = true,
-    ) = store.transaction {
-        insertChunk(
-            ChunkManifest(
-                chunkId = id,
-                sessionId = "s",
-                deviceId = "watch",
-                source = SourcePlatform.WEAROS,
-                startedAtEpochMs = start,
-                durationMs = 300_000,
-                timeZone = "Asia/Tokyo",
-                audio = if (audio) AudioFile("$id.m4a", AudioCodec.AAC, 16_000, 1, 24_000, 100_000, "00") else null,
-                endReason = endReason,
-            ),
-            audioPath = if (audio) "2026/10/10/$id.m4a" else null,
-            receivedAt = receivedAt,
+    ): Boolean {
+        if (audio) audioFile(id).apply { parentFile.mkdirs() }.writeBytes(ByteArray(10))
+        val manifest = ChunkManifest(
+            chunkId = id,
+            sessionId = "s",
+            deviceId = "watch",
+            source = SourcePlatform.WEAROS,
+            startedAtEpochMs = start,
+            durationMs = 300_000,
+            timeZone = "Asia/Tokyo",
+            audio = if (audio) AudioFile("$id.m4a", AudioCodec.AAC, 16_000, 1, 24_000, 100_000, "00") else null,
+            endReason = endReason,
         )
+        return store.transaction {
+            insertChunk(manifest, audioPath = if (audio) "2026/10/10/$id.m4a" else null, receivedAt = receivedAt)
+        }
     }
 
     private suspend fun transcribe(id: String, vararg segments: NewSegment) = store.transaction {
@@ -275,5 +304,160 @@ class ViewModelTest {
         backgroundScope.launch { vm.state.collect {} }
         runCurrent()
         assertEquals(ArrivalState.Stopped(at(9, 6), ChunkEndReason.OFF_BODY), vm.state.value.arrival)
+    }
+
+    @Test
+    fun statusShowsStorageAndConfirmsAShorterRetention() = runVmTest {
+        val fortyDaysAgo = at(9) - 40 * 24 * 3_600_000L
+        addChunk("old", fortyDaysAgo)
+        transcribe("old", NewSegment(fortyDaysAgo + 1_000, fortyDaysAgo + 2_000, "昔の会話", "ja"))
+        addChunk("oldPending", fortyDaysAgo + 300_000)
+        addChunk("today", at(9))
+        transcribe("today")
+        val vm = StatusViewModel(services, clock, refreshPeriodMs = 20_000, scope = backgroundScope)
+        backgroundScope.launch { vm.state.collect {} }
+        runCurrent()
+
+        val storage = assertNotNull(vm.state.value.storage)
+        assertEquals(AudioRetention.UNLIMITED, storage.retention)
+        assertEquals(300_000, storage.breakdown.audioBytes)
+        assertEquals(400L shl 20, storage.breakdown.modelBytes)
+        assertTrue(storage.breakdown.databaseBytes > 0)
+        assertFalse(storage.breakdown.isLowOnSpace)
+
+        // Shorter retention: nothing happens until the user confirms.
+        vm.selectRetention(AudioRetention.DAYS_30)
+        runCurrent()
+        assertEquals(PendingRetention(AudioRetention.DAYS_30, AudioUsage(1, 100_000)), vm.state.value.storageActions.pendingRetention)
+        assertEquals(AudioRetention.UNLIMITED, vm.state.value.storage!!.retention)
+        vm.cancelRetention()
+        runCurrent()
+        assertNull(vm.state.value.storageActions.pendingRetention)
+        assertTrue(audioFile("old").exists())
+
+        vm.selectRetention(AudioRetention.DAYS_30)
+        runCurrent()
+        vm.confirmRetention()
+        runCurrent()
+        val after = vm.state.value
+        assertEquals(AudioRetention.DAYS_30, after.storage!!.retention)
+        assertEquals(Strings.audioPurged(1, "0.1 MB"), after.storageActions.message)
+        assertEquals(1, after.storage.breakdown.audioPurgedChunks)
+        assertEquals(200_000, after.storage.breakdown.audioBytes)
+        assertFalse(audioFile("old").exists())
+        assertTrue(audioFile("oldPending").exists(), "untranscribed audio is kept")
+        assertEquals("昔の会話", store.read { search("昔の会話") }.single().segment.text)
+
+        // Keeping audio longer needs no confirmation.
+        vm.selectRetention(AudioRetention.UNLIMITED)
+        runCurrent()
+        assertEquals(AudioRetention.UNLIMITED, vm.state.value.storage!!.retention)
+        assertNull(vm.state.value.storageActions.pendingRetention)
+
+        // Low free space shows up on the next refresh.
+        storageEnvironment.free = 300L shl 20
+        advanceTimeBy(20_001)
+        assertTrue(vm.state.value.storage!!.breakdown.isLowOnSpace)
+    }
+
+    @Test
+    fun deleteAllNeedsTheTypedConfirmation() = runVmTest {
+        addChunk("a", at(9))
+        transcribe("a", NewSegment(at(9) + 1_000, at(9) + 2_000, "消える発話", "ja"))
+        val vm = StatusViewModel(services, clock, scope = backgroundScope)
+        backgroundScope.launch { vm.state.collect {} }
+        runCurrent()
+
+        assertFalse(vm.confirmDeleteAll()) // not even opened
+        vm.openDeleteAll()
+        vm.updateDeleteAllInput("さくじょ")
+        runCurrent()
+        assertEquals("さくじょ", vm.state.value.storageActions.deleteAllInput)
+        assertFalse(vm.state.value.storageActions.canConfirmDeleteAll)
+        assertFalse(vm.confirmDeleteAll())
+        runCurrent()
+        assertEquals(1, vm.state.value.stats!!.chunks)
+
+        vm.cancelDeleteAll()
+        runCurrent()
+        assertNull(vm.state.value.storageActions.deleteAllInput)
+
+        vm.openDeleteAll()
+        vm.updateDeleteAllInput("削除")
+        runCurrent()
+        assertTrue(vm.state.value.storageActions.canConfirmDeleteAll)
+        assertTrue(vm.confirmDeleteAll())
+        runCurrent()
+        val state = vm.state.value
+        assertEquals(0, state.stats!!.chunks)
+        assertEquals(Strings.DELETED_ALL, state.storageActions.message)
+        assertNull(state.storageActions.deleteAllInput)
+        assertFalse(audioFile("a").exists())
+        assertTrue(store.read { search("消える発話") }.isEmpty())
+        assertEquals(1, services.stopRequests)
+    }
+
+    @Test
+    fun deletingADayNeedsConfirmationAndKeepsOtherDays() = runVmTest {
+        addChunk("a", at(9))
+        transcribe("a", NewSegment(at(9) + 1_000, at(9) + 2_000, "今日の発話", "ja"))
+        addChunk("y", at(-14)) // yesterday 10:00
+        val vm = DayViewModel(services, tokyo, clock, scope = backgroundScope)
+        backgroundScope.launch { vm.state.collect {} }
+        runCurrent()
+        assertEquals(1, vm.state.value.content!!.chunksStartedThisDay)
+
+        vm.confirmDeleteDay() // without asking first: nothing happens
+        runCurrent()
+        assertNotNull(store.read { chunk("a") })
+
+        vm.requestDeleteDay()
+        runCurrent()
+        assertEquals(DayDeletion.CONFIRMING, vm.state.value.deletion)
+        vm.cancelDeleteDay()
+        runCurrent()
+        assertEquals(DayDeletion.NONE, vm.state.value.deletion)
+
+        // Moving to another day drops a pending confirmation.
+        vm.requestDeleteDay()
+        vm.previousDay()
+        runCurrent()
+        assertEquals(DayDeletion.NONE, vm.state.value.deletion)
+        vm.nextDay()
+        runCurrent()
+
+        vm.play(vm.state.value.content!!.entries.single() as TranscriptEntry.Utterance)
+        vm.requestDeleteDay()
+        vm.confirmDeleteDay()
+        runCurrent()
+        assertNull(store.read { chunk("a") })
+        assertFalse(audioFile("a").exists())
+        assertNotNull(store.read { chunk("y") })
+        assertTrue(audioFile("y").exists())
+        val state = vm.state.value
+        assertEquals(DayDeletion.NONE, state.deletion)
+        assertNull(state.nowPlaying)
+        assertTrue(state.content!!.entries.isEmpty())
+        assertEquals(0, state.content.chunksStartedThisDay)
+    }
+
+    @Test
+    fun purgedAudioShowsTheTranscriptWithoutPlayback() = runVmTest {
+        addChunk("a", at(9))
+        transcribe("a", NewSegment(at(9) + 1_000, at(9) + 2_000, "音声は消えた", "ja"))
+        store.transaction { markAudioPurged(listOf("a"), at(12)) }
+        val vm = DayViewModel(services, tokyo, clock, scope = backgroundScope)
+        backgroundScope.launch { vm.state.collect {} }
+        runCurrent()
+
+        val content = vm.state.value.content!!
+        assertEquals(1, content.audioPurgedChunks)
+        val utterance = content.entries.single() as TranscriptEntry.Utterance
+        assertNull(utterance.audioPath)
+        vm.play(utterance)
+        vm.openSegment("a", utterance.segment.id, utterance.segment.startAt)
+        runCurrent()
+        assertTrue(services.played.isEmpty())
+        assertNull(vm.state.value.nowPlaying)
     }
 }

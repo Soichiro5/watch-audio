@@ -19,7 +19,8 @@ kotlin {
             implementation(projects.shared.corePlatform)
             // AppServices exposes LocalStore, so hosts need core-db on their classpath too.
             api(projects.shared.coreDb)
-            implementation(projects.shared.corePipeline)
+            // AppServices exposes StorageManager.
+            api(projects.shared.corePipeline)
             implementation(projects.shared.coreSearch)
             implementation(projects.shared.coreAi)
 

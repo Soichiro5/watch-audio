@@ -11,19 +11,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -48,6 +52,7 @@ import app.watchaudio.app.logic.formatClockRange
 import app.watchaudio.app.logic.formatDate
 import app.watchaudio.app.logic.formatDuration
 import app.watchaudio.app.logic.formatPercent
+import app.watchaudio.app.state.DayDeletion
 import app.watchaudio.app.state.DayUiState
 import kotlinx.datetime.TimeZone
 
@@ -64,6 +69,9 @@ internal fun DayScreen(
     onPlay: (TranscriptEntry.Utterance) -> Unit,
     onTranscribe: (TranscriptEntry.Untranscribed) -> Unit,
     onFocusHandled: () -> Unit,
+    onDeleteDay: () -> Unit,
+    onConfirmDeleteDay: () -> Unit,
+    onCancelDeleteDay: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -86,9 +94,14 @@ internal fun DayScreen(
 
     Column(modifier.fillMaxSize()) {
         DateBar(state, onPreviousDay, onNextDay, onToday)
-        DayContentList(state, timeZone, listState, highlighted, onPlay, onTranscribe)
+        DayContentList(
+            state, timeZone, listState, highlighted, onPlay, onTranscribe,
+            DeleteDayCallbacks(onDeleteDay, onConfirmDeleteDay, onCancelDeleteDay),
+        )
     }
 }
+
+private class DeleteDayCallbacks(val onRequest: () -> Unit, val onConfirm: () -> Unit, val onCancel: () -> Unit)
 
 @Composable
 private fun DayContentList(
@@ -98,6 +111,7 @@ private fun DayContentList(
     highlighted: Long?,
     onPlay: (TranscriptEntry.Utterance) -> Unit,
     onTranscribe: (TranscriptEntry.Untranscribed) -> Unit,
+    deleteDay: DeleteDayCallbacks,
 ) {
     val content = state.content
     LazyColumn(
@@ -124,6 +138,14 @@ private fun DayContentList(
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
+                if (content.audioPurgedChunks > 0) {
+                    Text(
+                        Strings.AUDIO_PURGED_NOTE,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
                 if (content.entries.isEmpty()) {
                     Text(
                         if (content.timeline.hasRecording) Strings.NO_TRANSCRIPT_YET else Strings.NO_RECORDING_THIS_DAY,
@@ -145,6 +167,33 @@ private fun DayContentList(
                     )
                     is TranscriptEntry.Untranscribed -> UntranscribedRow(entry, timeZone) { onTranscribe(entry) }
                 }
+            }
+            if (content.chunksStartedThisDay > 0) {
+                item(key = "deleteDay") { DeleteDaySection(state, content.chunksStartedThisDay, deleteDay) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeleteDaySection(state: DayUiState, chunks: Int, callbacks: DeleteDayCallbacks) {
+    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        when (state.deletion) {
+            DayDeletion.NONE -> OutlinedButton(
+                onClick = callbacks.onRequest,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            ) { Text(Strings.DELETE_DAY) }
+            DayDeletion.CONFIRMING -> Confirmation(
+                confirmLabel = Strings.DELETE,
+                confirmEnabled = true,
+                onConfirm = callbacks.onConfirm,
+                onCancel = callbacks.onCancel,
+            ) {
+                Text(Strings.confirmDeleteDay(formatDate(state.date), chunks), style = MaterialTheme.typography.bodyMedium)
+            }
+            DayDeletion.DELETING -> {
+                Text(Strings.DELETING, style = MaterialTheme.typography.bodySmall)
+                LinearProgressIndicator(Modifier.fillMaxWidth())
             }
         }
     }
@@ -253,6 +302,15 @@ private fun UtteranceRow(
             )
             Spacer(Modifier.width(8.dp))
             Text(entry.segment.text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            // No play affordance once the audio is gone (retention): the transcript stays.
+            if (entry.audioPath != null) {
+                Icon(
+                    AppIcons.Play,
+                    contentDescription = Strings.PLAY,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 8.dp).size(20.dp),
+                )
+            }
         }
     }
     HorizontalDivider(Modifier.padding(start = 72.dp), color = MaterialTheme.colorScheme.outlineVariant)

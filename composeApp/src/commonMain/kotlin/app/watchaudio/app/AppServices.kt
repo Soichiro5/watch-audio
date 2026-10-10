@@ -1,6 +1,7 @@
 package app.watchaudio.app
 
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.StorageManager
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -13,6 +14,9 @@ interface AppServices {
 
     /** Absolute path of the audio archive root; chunk `audioPath`s are relative to it. */
     val audioRoot: String
+
+    /** Retention setting, usage breakdown and deletion (#33), over [store] and [audioRoot]. */
+    val storage: StorageManager
 
     val status: StateFlow<ProcessingStatus>
 
