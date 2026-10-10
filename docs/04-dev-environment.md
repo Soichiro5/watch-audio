@@ -79,12 +79,72 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 
 正解テキスト付きの日本語会話（オフライン TTS）を Watch 録音を模して加工した検証用音声セットと、それをハーネスに流して条件ごとの CER・検出漏れ・処理時間を出す `evaluate` コマンドがある（#56）。生成手順・条件・ライセンス・結果は [docs/test-audio.md](test-audio.md)。
 
-## 5. 実機検証の手順
+## 5. 検索の性能ベンチマーク（#23）
+
+1 年分相当（約 50 万セグメント）の日本語の文字起こしを決定的に生成し（仕事・家庭・用事の語彙を組み合わせた会話文、5 分チャンク × 約 10 発話）、`StoreTransaction.search` の応答時間を測る。通常の `jvmTest` には含めない（データ投入に約 30 秒かかるため）。
+
+```bash
+./gradlew --max-workers=2 :shared:core-db:jvmBenchmark                       # 50 万セグメント、各クエリ 40 回
+./gradlew --max-workers=2 :shared:core-db:jvmBenchmark -Pbenchmark.segments=50000 -Pbenchmark.rounds=5   # 手早く試す
+```
+
+- 対象クエリ: 3 文字以上（FTS5 trigram）は頻出語・フレーズ・まれな語・ヒットなし、2 文字以下（LIKE フォールバック）は頻出語・1 文字・まれな語・ヒットなし。いずれも上限 50 件・スニペット生成込み。
+- 出力: 標準出力に `SEARCH_BENCHMARK segments=… fts_p50_ms=… fts_p95_ms=… like_p50_ms=… like_p95_ms=… all_p95_ms=… max_ms=… target_ms=300 …` の 1 行（`key=value` 区切り）と、クエリ別の表（Markdown、`shared/core-db/build/reports/search-benchmark/summary.md`）。
+- 判定: どれか 1 つのクエリの p95 が 300 ms を超えるとテストが失敗する。
+- CI: `android.yml` の「Search benchmark (500k segments, target 300 ms)」ステップで毎回実行し、表をジョブサマリーに出す。
+
+計測例（クラウドの Linux、4 CPU、JVM 21。2026-10-10）:
+
+| | FTS（3 文字以上）p50 / p95 | LIKE（2 文字以下）p50 / p95 | 最悪のクエリ p95 |
+| --- | --- | --- | --- |
+| 改善前 | 139 / 260 ms | 0.8 / 212 ms | 327 ms（2 文字・ヒットなし）、301 ms（「ミーティング」） |
+| 改善後 | 30 / 48 ms | 0.8 / 128 ms | 148 ms（2 文字・ヒットなし） |
+
+改善内容（`StoreTransaction.search`、マイグレーション 4）:
+
+- FTS5 の `snippet()` は ORDER BY / LIMIT の前に**全ヒット行**で計算されるため、頻出語で検索時間の大半を占めていた。FTS ではセグメント ID だけを新しい順に並べて上位 50 件に絞り、スニペット（一致箇所の `[` `]` と前後の切り詰め）は返す行だけ Kotlin で作る（`highlightSnippet`）。
+- LIKE フォールバックは `(start_at, text)` の索引を新しい順に走査し、表本体を読まずに絞り込む（旧 `idx_segment_start_at` を置き換え。DB は 1 年分で約 60 MB 増える）。2 文字のヒットなし検索は全件走査になるため、これが最悪ケース。
+
+実機（中位機種）での値は未計測。スマホの CPU・ストレージは上の環境より遅いので、実機入手後に同じクエリで確認する。
+
+## 6. CI での自動確認（実機なし）
+
+| ワークフロー | ステップ | 確認できること | 証拠の場所 |
+| --- | --- | --- | --- |
+| `android.yml` | Unit tests | 共通ロジック（JVM・Android ホスト）。SQLite を使う core-db / Ingestor / パイプラインのテストは JVM で実行 | テスト結果 |
+| `android.yml` | Search benchmark | 50 万セグメントでの検索応答時間（§5） | ジョブサマリーの表と `SEARCH_BENCHMARK` 行 |
+| `emulator.yml`（phone / wear） | Install, launch and check for crashes | スマホ・Wear OS アプリがエミュレータで起動し、15 秒後もクラッシュしていない | ジョブのログ、成果物 `logcat-*` |
+| `emulator.yml`（phone） | 同上（続けて実行） | 計装テスト: 実際の音声（AAC）を MediaPlayer で指定位置から再生できる・検索結果を 1 タップでその発話から再生できる（`PlaybackTest`）、SQLite のテストを Android 上で実行（core-db / core-pipeline） | ジョブサマリーのテスト一覧と `PLAYBACK_CHECK` 行、成果物 `logcat-phone`（テストレポート） |
+| `ios.yml` | Shared tests (iOS simulator) | 共通ロジックを iOS シミュレータで実行（SQLite を使う core-db / Ingestor のテストを含む） | ジョブサマリーのテスト一覧 |
+| `ios.yml` | Launch iOS app / Launch watchOS app | ビルドした iOS・watchOS アプリをシミュレータに入れて起動し、15 秒後もプロセスが生きていてクラッシュレポートがない | ジョブサマリー、成果物 `simulator-smoke`（スクリーンショット・ログ） |
+
+SQLite（bundled ドライバ）を開くテストは `src/sqliteTest` に置く（`watchaudio.kmp.sqlite-tests` プラグイン）。`jvmTest`・`iosTest`・`androidDeviceTest` から共有され、JVM・iOS シミュレータ・Android 端末/エミュレータで実行される。Android のホストテスト（`testAndroidHostTest`）では実行しない: Android 版の `sqlite-bundled` は Android の ABI 向けネイティブライブラリしか含まず、ホストの JVM では読み込めないため。
+
+- core-db（`LocalStoreTest`・`StorageQueriesTest`）と core-pipeline（`IngestorTest`・`TranscriptionPipelineTest`・`StorageManagerTest`）: JVM・iOS シミュレータ・Android 端末/エミュレータ。
+- composeApp（`GapAlertEvaluatorTest`）: JVM・iOS シミュレータ（`watchaudio.kmp.sqlite-tests-jvm-ios`）。Compose Multiplatform のリソースプラグインが KMP ライブラリの Android デバイステスト用バリアントを構成できないため、Android 端末では実行しない。
+- composeApp の `ViewModelTest`・`AppUiTest` は JVM のみ（`Dispatchers.Main` に Swing、描画にデスクトップの Skia を使うため）。
+
+手元での実行:
+
+```bash
+# iOS 向けテストのコンパイル確認（Linux、リンクなし）
+./gradlew --max-workers=2 :shared:core-db:compileTestKotlinIosSimulatorArm64 :shared:core-pipeline:compileTestKotlinIosSimulatorArm64 \
+  -Pkotlin.native.enableKlibsCrossCompilation=true
+# Android エミュレータ / 実機を接続して（KVM のある環境）
+./gradlew :androidApp:connectedDebugAndroidTest :shared:core-db:connectedAndroidDeviceTest :shared:core-pipeline:connectedAndroidDeviceTest
+adb logcat -d | grep PLAYBACK_CHECK
+# Mac: ビルド済みアプリをシミュレータで起動確認
+.github/scripts/simulator-smoke.sh iOS iPhone build/DerivedData/Build/Products/Debug-iphonesimulator/WatchAudio.app app.watchaudio
+```
+
+未対応: iOS の再生（`IosAppServices.play`）を確かめるシミュレータテスト。テスト用の AAC の生成と XCTest のホストアプリ設定が必要で、macOS の CI 時間（10 倍課金）もかかるため、現状はシミュレータでの起動確認までとする。
+
+## 7. 実機検証の手順
 
 - M0-3 / M0-4 電池計測: [docs/spikes/m0-3-m0-4-battery-protocol.md](spikes/m0-3-m0-4-battery-protocol.md)
 - Wear OS 録音アプリ（常時録音・転送）の手動テスト: [docs/impl/wearos.md §10](impl/wearos.md#10-実機での手動テスト-チェックリスト)
 
-## 6. 検証データの扱い
+## 8. 検証データの扱い
 
 - 録音検証では、**参加者全員に録音・文字起こしの目的を説明し同意を得る**。
 - 実際の会話音声はリポジトリにコミットしない（個人情報）。評価用の正解テキストと集計結果のみ共有する。

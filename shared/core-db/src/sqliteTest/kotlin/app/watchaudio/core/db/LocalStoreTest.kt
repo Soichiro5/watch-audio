@@ -1,11 +1,12 @@
 package app.watchaudio.core.db
 
+import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import androidx.sqlite.execSQL
 import app.watchaudio.core.protocol.AudioCodec
 import app.watchaudio.core.protocol.AudioFile
 import app.watchaudio.core.protocol.ChunkEndReason
 import app.watchaudio.core.protocol.ChunkManifest
 import app.watchaudio.core.protocol.SourcePlatform
-import java.io.File
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -15,13 +16,14 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
 class LocalStoreTest {
-    private val dbFile = File.createTempFile("watch-audio", ".db").also { it.delete() }
-    private val store = LocalStore.open(dbFile.absolutePath)
+    private val dir = TempDir("local-store")
+    private val dbPath = dir.resolve(LocalStore.FILE_NAME).toString()
+    private val store = LocalStore.open(dbPath)
 
     @AfterTest
     fun tearDown() {
         store.close()
-        dbFile.delete()
+        dir.deleteRecursively()
     }
 
     private fun manifest(id: String, start: Long, audio: Boolean = true, marks: List<Long> = emptyList()) = ChunkManifest(
@@ -157,6 +159,29 @@ class LocalStoreTest {
     }
 
     @Test
+    fun issueExamplesMatchSubstrings() = runTest {
+        store.transaction {
+            insertChunk(manifest("a", 0), "a.m4a", 0)
+            saveTranscript(
+                "a",
+                listOf(
+                    NewSegment(1_000, 2_000, "午後の定例会議で予算を確認", "ja"),
+                    NewSegment(3_000, 4_000, "朝のミーティングは中止です", "ja"),
+                    NewSegment(5_000, 6_000, "オンラインミーティングのリンクを送った", "ja"),
+                ),
+                "test",
+            )
+        }
+        // "会議" (two characters, LIKE) matches inside a longer word.
+        assertEquals(listOf("午後の定例[会議]で予算を確認"), store.read { search("会議") }.map { it.snippet })
+        // "ミーティング" (trigram FTS) matches both segments, newest first.
+        assertEquals(
+            listOf("オンライン[ミーティング]のリンクを送った", "朝の[ミーティング]は中止です"),
+            store.read { search("ミーティング") }.map { it.snippet },
+        )
+    }
+
+    @Test
     fun statsAndRanges() = runTest {
         store.transaction {
             insertChunk(manifest("a", 0), "a.m4a", 0)
@@ -202,11 +227,52 @@ class LocalStoreTest {
         assertEquals(1, store.changes.value)
     }
 
+    /** Creates a database at schema [version] (the first [version] migrations) with one transcribed segment. */
+    private fun databaseAtVersion(version: Int): String {
+        val path = dir.resolve("v$version.db").toString()
+        BundledSQLiteDriver().open(path).use { db ->
+            MIGRATIONS.take(version).flatten().forEach { db.execSQL(it.trimIndent()) }
+            db.execSQL("PRAGMA user_version = $version")
+            db.execSQL(
+                "INSERT INTO audio_chunk (id, session_id, device_id, source, started_at, ended_at, time_zone, end_reason, " +
+                    "state, received_at, manifest_json) VALUES ('a', 's', 'w', 'WEAROS', 0, 300000, 'UTC', 'ROTATION', 'TRANSCRIBED', 0, '{}')",
+            )
+            db.execSQL(
+                "INSERT INTO transcript_segment (chunk_id, start_at, end_at, text, engine) VALUES ('a', 1000, 2000, '歯医者の予約', 'v1')",
+            )
+        }
+        return path
+    }
+
+    /** user_version and the start_at indexes of transcript_segment. */
+    private fun schemaOf(path: String): Pair<Int, List<String>> = BundledSQLiteDriver().open(path).use { db ->
+        val version = db.prepare("PRAGMA user_version").use { it.step(); it.getInt(0) }
+        val indexes = db.prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'transcript_segment' " +
+                "AND name LIKE 'idx_segment_start%' ORDER BY name",
+        ).use { st -> buildList { while (st.step()) add(st.getText(0)) } }
+        version to indexes
+    }
+
+    @Test
+    fun upgradesVersion1And3DatabasesToTheSearchIndex() = runTest {
+        store.close()
+        assertEquals(4, MIGRATIONS.size)
+        for (version in listOf(1, 3)) {
+            val path = databaseAtVersion(version)
+            LocalStore.open(path).use { upgraded ->
+                assertEquals("歯医者の[予約]", upgraded.read { search("予約") }.single().snippet)
+                assertEquals("[歯医者]の予約", upgraded.read { search("歯医者") }.single().snippet)
+            }
+            assertEquals(4 to listOf("idx_segment_start_text"), schemaOf(path), "from version $version")
+        }
+    }
+
     @Test
     fun reopeningKeepsDataAndSchema() = runTest {
         store.transaction { insertChunk(manifest("a", 0), "a.m4a", 0) }
         store.close()
-        LocalStore.open(dbFile.absolutePath).use { reopened ->
+        LocalStore.open(dbPath).use { reopened ->
             assertEquals("a", reopened.read { chunk("a") }!!.id)
         }
     }
@@ -222,7 +288,7 @@ class LocalStoreTest {
         store.transaction { putSetting("k", null) }
         assertNull(store.read { setting("k") })
         store.close()
-        LocalStore.open(dbFile.absolutePath).use { reopened ->
+        LocalStore.open(dbPath).use { reopened ->
             assertEquals("x", reopened.read { setting("other") })
         }
     }

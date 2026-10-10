@@ -143,6 +143,21 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 ./gradlew --max-workers=2 :androidApp:assembleDebug :androidApp:lintDebug
 ```
 
+エミュレータ（CI `emulator.yml` の phone、または KVM のある手元環境）では計装テストも動く:
+
+```bash
+./gradlew :androidApp:connectedDebugAndroidTest   # PlaybackTest（下記）
+./gradlew :shared:core-db:connectedAndroidDeviceTest :shared:core-pipeline:connectedAndroidDeviceTest   # SQLite・Ingestor を Android 上で
+adb logcat -d | grep PLAYBACK_CHECK                # 再生位置の記録
+```
+
+`PlaybackTest` は MediaCodec で実際の AAC（16 kHz モノラル）を作り、本番の `Ingestor` で「前日 10:00 開始」のチャンクとして取り込んだうえで、
+
+- `AndroidAppServices.play(path, 45 秒)` で MediaPlayer が 45 秒付近から再生を始め、2 秒後に再生位置が進んでいることを確認する（#19）。
+- `MainActivity` で検索 → 結果を 1 タップ → 発話の位置（チャンク先頭から 60 秒）から再生が始まり、「HH:MM から再生中」が表示されることを確認する（#25）。
+
+計測した再生位置は `PLAYBACK_CHECK check=… requested_ms=… first_ms=… after_2s_ms=…` としてログに出し、CI のジョブサマリーにも載る。エミュレータの音声出力を有効にしておく必要がある（`-noaudio` を付けない）。
+
 ハーネスの `SherpaTranscriber` と `AndroidSherpaTranscriber` は同じ `AsrSettings`・`padSpeechSpans`・`concatenateParts` を使うので、ハーネスの認識結果は端末上の結果の目安になる（デコーダが ffmpeg か MediaCodec かの差、速度の差はある）。
 
 ### 6.2 実機（adb）
@@ -163,7 +178,7 @@ Watch が無くても、ADB 経由の Wear OS エミュレータとスマホエ�
 
 ## 7. 既知の制限・TODO
 
-- **実機・エミュレータでの動作確認は未実施**（この環境に KVM がないため）。MediaCodec デコード・sherpa-onnx AAR の読み込み・Data Layer 受信・WorkManager の挙動は実機で確認が必要。
+- **実機での動作確認は未実施**。エミュレータでは CI で起動確認と再生の計装テスト（§6.1）を実行している（この開発環境には KVM がないため手元では動かせない）。MediaCodec デコード（文字起こし用）・sherpa-onnx AAR の読み込み・Data Layer 受信・WorkManager の挙動は実機で確認が必要。
 - `TransferPaths.SYNC_REQUEST_MESSAGE`（Watch からの ACK 再送依頼）は未対応。ペイロードがなく対象チャンクが分からないため、現状は Watch がチャンクを再送 → `DUPLICATE` ACK で回復する。必要なら chunkId 一覧をペイロードに持たせる仕様にする。
 - モデルのダウンロードが約 713 MB と大きい（必要なのは約 160 MB）。int8 ファイルを個別に配布しているミラー（Hugging Face 等）からの取得や、自前の配布形態にすると通信量を約 1/4 にできる。ダウンロードの途中再開（Range）は未対応（bzip2 ストリームのため最初からやり直し）。
 - モデルファイルのハッシュ検証なし（公式のチェックサムが公開されていない）。

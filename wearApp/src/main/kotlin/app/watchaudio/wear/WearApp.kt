@@ -8,6 +8,7 @@ import app.watchaudio.wear.outbox.OutboxUploader
 import app.watchaudio.wear.outbox.UploadScheduler
 import app.watchaudio.wear.recording.ChunkFinalizer
 import app.watchaudio.wear.recording.RecorderAlerts
+import app.watchaudio.wear.recording.RecorderInput
 import app.watchaudio.wear.recording.RecorderStore
 import app.watchaudio.wear.recording.RecordingDir
 import app.watchaudio.wear.recording.currentBattery
@@ -74,6 +75,13 @@ class AppGraph(val context: Context) {
     val outbox = Outbox(File(context.filesDir, "outbox"))
     val finalizer = ChunkFinalizer(recordingDir, outbox)
     val uploader by lazy { OutboxUploader(context, this) }
+
+    /**
+     * Audio input used for the next recorder run. Always the microphone in release builds; debug
+     * builds may substitute an audio file (`src/debug`, docs/impl/wearos.md).
+     */
+    @Volatile
+    var recorderInputFactory: RecorderInput.Factory = RecorderInput.Microphone
     val alerts by lazy { RecorderAlerts(context) }
 
     /** Kept on app-specific external storage so it can be pulled with adb (no audio in it). */

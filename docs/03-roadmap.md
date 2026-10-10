@@ -19,22 +19,26 @@
 
 最新の状況は Issue ダッシュボード（`tools/roadmap-view/build.py` で生成）で確認できる。
 
+進め方: 開発環境（単体テスト・ハーネス・エミュレータ/シミュレータ CI）で確認できる完了条件を証跡付きで満たした Issue から閉じる。実機でしか確認できない条件は実機検証 Issue（#59 Wear OS、#60 watchOS/iOS、#61 Android スマホ）にまとめている。
+
 | 領域 | 状態 | 内容 |
 | --- | --- | --- |
-| 基盤・CI（#7, #8） | ✅ クローズ | KMP モノレポ、Android/Wear OS/iOS/watchOS のビルド、GitHub Actions |
-| 技術検証（#9〜#12） | 🟡 実機待ち（needs-device） | デスクトップ比較は完了（[ASR](spikes/m0-5-asr-desktop.md)・[埋め込み](spikes/m0-6-embedding-desktop.md)）。電池計測は実機待ち |
-| 転送プロトコル（#13） | ✅ | ChunkManifest / ChunkAck / フレーミング / テストベクタ |
-| ローカル DB・取り込み（#14） | ✅ | bundled SQLite + FTS5（日本語部分一致）、冪等な Ingestor |
-| 文字起こしパイプライン（#20） | ✅ クローズ | 再開可能なパイプライン + WorkManager / BGProcessingTask |
-| 実機なし検証基盤（#44） | 🟡 | JVM 上の E2E（Watch シミュレータ → 取り込み → 日本語 ASR → SQLite → 検索）を CI に組み込み済み。エミュレータテストは未着手 |
-| 検証用音声セット（#56） | 🟡 | オフライン TTS による正解付き日本語会話（16 本・約 29 分）と Watch を模した加工（腕の距離・雑音・擦れ・1 時間の 1 日）、ハーネスの `evaluate` で CER・検出漏れ・処理時間を出力。発話が続く会話で ASR が文を大量に落とす問題を検出（[test-audio.md](test-audio.md)） |
-| Android スマホ（#18, #22） | ✅ 実装済み（実機未確認） | 受信と ACK、sherpa-onnx 文字起こし、モデル取得、WorkManager。詳細: [impl/android-phone.md](impl/android-phone.md)。モデル配布サイズの削減は #46 |
-| Wear OS 録音（#16, #41, #43） | ✅ 実装済み（実機未確認） | 常時録音、装着検出・充電で自動停止/再開、送信キュー + ACK、Tile・コンプリケーション。詳細: [impl/wearos.md](impl/wearos.md) |
-| iOS / watchOS（#15, #17, #21） | ✅ 実装済み（実機未確認） | 録音、WatchConnectivity + ACK、SpeechAnalyzer、BGProcessingTask。詳細: [impl/ios-watchos.md](impl/ios-watchos.md) |
-| スマホ UI（#19, #23, #25） | ✅ クローズ | 日別タイムライン（欠損理由・カバー率）・文字起こし・検索・状態表示。詳細: [impl/phone-ui.md](impl/phone-ui.md) |
-| チャンク境界の発話分断（#45） | ✅ 実装済み（実機未確認） | 隣のチャンクの境界付近と連結して認識し、開始時刻のチャンクに保存（3 プラットフォーム共通）。ハーネスで境界をまたぐ発話の E2E を追加。詳細: [02 §6.3](02-architecture.md#63-処理パイプラインphone) |
-| 録音途絶の通知・オンボーディング（#43, #32） | 🔧 実装中 | 10 分以上届かないときの通知、初回の説明・同意・権限 |
-| ストレージ管理（#33） | 🔧 主要部分を実装（PR レビュー中） | 音声の保持期間（既定は無期限、文字起こし済みの音声のみ削除）、容量の内訳・空き容量警告、日単位/全削除（アプリ内確認）。オフロード（#40 連携）とコーデック比較は未着手 |
+| 基盤・CI（#7, #8） | ✅ クローズ | KMP モノレポ、4 アプリのビルド、エミュレータ/シミュレータでの起動確認（GitHub Actions） |
+| 実機なし検証基盤（#44） | ✅ クローズ | JVM 上の E2E（Watch シミュレータ → 取り込み → 日本語 ASR → SQLite → 検索）、エミュレータでの計装テスト（本番の Ingestor で取り込み → 再生）、iOS シミュレータでの共通テスト |
+| 検証用の音声・ファイル入力（#56, #57） | ✅ #57 クローズ / #56 PR 中 | 正解テキスト付きの日本語会話音声セット（オフライン TTS、16 会話・約 29 分、Watch を模した加工 6 条件 + 1 日分）とハーネスの `evaluate`（#56、[test-audio.md](test-audio.md)）。debug ビルドで Watch のマイク入力を音声ファイルに差し替え（#57） |
+| 技術検証（#9〜#11） | 🟡 実機待ち（needs-device） | デスクトップ比較は完了（[ASR](spikes/m0-5-asr-desktop.md)・[埋め込み](spikes/m0-6-embedding-desktop.md)）。電池計測は実機待ち |
+| 転送プロトコル（#13） | ✅ クローズ | ChunkManifest / ChunkAck / フレーミング / テストベクタ |
+| ローカル DB・取り込み（#14） | ✅ クローズ | bundled SQLite + FTS5（日本語部分一致）、冪等な Ingestor。JVM・Android エミュレータ・iOS シミュレータでテスト |
+| Wear OS 録音・転送（#16, #18） | ✅ クローズ（実機確認は #59） | 常時録音、装着検出・充電で自動停止/再開、送信キュー + ACK。詳細: [impl/wearos.md](impl/wearos.md) |
+| watchOS 録音・転送（#15, #17） | 🟡 開発環境の証跡待ち | Swift の単体テスト（停止理由・送信キュー）を作成中。詳細: [impl/ios-watchos.md](impl/ios-watchos.md) |
+| 文字起こし（#20, #21, #22） | 🟡 開発環境の証跡待ち | 再開可能なパイプライン + WorkManager / BGProcessingTask、sherpa-onnx、SpeechAnalyzer。エミュレータ/シミュレータでのテストを作成中。詳細: [impl/android-phone.md](impl/android-phone.md) |
+| 検索（#23） | ✅ クローズ（中位機種の実測は #61） | 50 万セグメントで p95 最大 150 ms 程度（目標 300 ms）。CI で毎回ベンチマーク |
+| スマホ UI・再生（#19, #25） | 🟡 Android は確認済み、iOS 待ち | 日別タイムライン・文字起こし・検索・1 タップ再生。Android エミュレータで実際のプレーヤーの再生位置を確認済み。詳細: [impl/phone-ui.md](impl/phone-ui.md) |
+| チャンク境界の発話分断（#45） | ✅ クローズ | 隣のチャンクの境界付近と連結して認識（[02 §6.3](02-architecture.md#63-処理パイプラインphone)） |
+| 録音途絶の通知・オンボーディング（#43, #32） | 🟡 開発環境の証跡待ち | 通知・権限画面のスクリーンショット、Watch 側のテスト。権限拒否画面に「設定を開く」ボタンを追加予定 |
+| Tile・コンプリケーション（#41） | 🟡 開発環境の証跡待ち | Wear OS は実装済み（エミュレータのスクリーンショット待ち）、watchOS のコンプリケーションは未実装 |
+| ストレージ管理（#33） | ✅ クローズ | 保持期間（既定は無期限、文字起こし済みの音声のみ削除）、容量の内訳・空き容量警告、日単位/全削除 |
+| モデル配布サイズ（#46） | ⬜ 未着手 | 713 MB → 約 160 MB |
 
 ## 全体の流れ
 
