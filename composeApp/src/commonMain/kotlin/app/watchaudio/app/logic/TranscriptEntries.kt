@@ -9,7 +9,10 @@ sealed interface TranscriptEntry {
     val at: Long
     val key: String
 
-    /** A transcribed utterance; [audioPath] + [offsetMs] start playback at it. */
+    /**
+     * A transcribed utterance; [audioPath] + [offsetMs] start playback at it. [audioPath] is null
+     * when there is nothing to play (the audio was deleted by the retention setting).
+     */
     data class Utterance(
         val segment: SegmentRecord,
         val audioPath: String?,
@@ -45,7 +48,7 @@ fun buildTranscriptEntries(chunks: List<ChunkRecord>, segments: List<SegmentReco
         val chunk = chunksById[segment.chunkId]
         TranscriptEntry.Utterance(
             segment = segment,
-            audioPath = chunk?.audioPath,
+            audioPath = chunk?.takeIf { it.hasAudioFile }?.audioPath,
             offsetMs = if (chunk == null) 0 else (segment.startAt - chunk.startedAt).coerceAtLeast(0),
         )
     }

@@ -8,6 +8,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
@@ -23,6 +24,7 @@ import app.watchaudio.app.logic.dayWindow
 import app.watchaudio.app.state.NowProvider
 import app.watchaudio.core.db.LocalStore
 import java.io.File
+import java.nio.file.Files
 import javax.imageio.ImageIO
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -42,7 +44,12 @@ class AppUiTest {
     private val tokyo = TimeZone.of("Asia/Tokyo")
     private val day = LocalDate(2026, 10, 10)
     private val now = dayWindow(day, tokyo).start + (15 * 60 + 40) * 60_000L
-    private val services = FakeAppServices(store, initialStatus = ProcessingStatus(asrModel = ModelState.Downloading(0.42f)))
+    private val audioDir = Files.createTempDirectory("watch-audio-app-audio").toFile()
+    private val services = FakeAppServices(
+        store,
+        audioRoot = audioDir.path,
+        initialStatus = ProcessingStatus(asrModel = ModelState.Downloading(0.42f)),
+    )
 
     private val owners = object : ViewModelStoreOwner, LifecycleOwner {
         override val viewModelStore = ViewModelStore()
@@ -54,6 +61,7 @@ class AppUiTest {
         owners.viewModelStore.clear()
         store.close()
         dbFile.delete()
+        audioDir.deleteRecursively()
     }
 
     @Test
@@ -92,6 +100,17 @@ class AppUiTest {
         waitForText("ダウンロード中… 42%")
         waitForText(Strings.PRIVACY_NOTE)
         screenshot("status")
+
+        // Storage: breakdown, retention and the typed confirmation for deleting everything.
+        waitForText(Strings.STORAGE_USAGE)
+        waitForText(Strings.RETENTION)
+        onNodeWithText(Strings.DELETE_ALL).performScrollTo().performClick()
+        waitForText(Strings.DELETE_ALL_NOTE)
+        onNode(hasSetTextAction()).performScrollTo().performTextInput(Strings.DELETE_ALL_WORD)
+        screenshot("storage")
+        onNodeWithText(Strings.DELETE_ALL_CONFIRM).performScrollTo().performClick()
+        waitForText(Strings.DELETED_ALL)
+        assertEquals(0, runBlocking { store.read { stats() } }.chunks)
     }
 
     private fun ComposeUiTest.waitForText(text: String, substring: Boolean = false) {

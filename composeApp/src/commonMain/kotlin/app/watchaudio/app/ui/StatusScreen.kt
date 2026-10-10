@@ -28,7 +28,6 @@ import app.watchaudio.app.logic.Thresholds
 import app.watchaudio.app.logic.formatAgo
 import app.watchaudio.app.logic.formatClock
 import app.watchaudio.app.logic.formatHours
-import app.watchaudio.app.logic.formatMegabytes
 import app.watchaudio.app.state.StatusUiState
 import app.watchaudio.core.db.StoreStats
 import kotlinx.datetime.TimeZone
@@ -39,6 +38,7 @@ internal fun StatusScreen(
     timeZone: TimeZone,
     onDownloadModel: (allowMetered: Boolean) -> Unit,
     onTranscribeNow: () -> Unit,
+    storageCallbacks: StorageCallbacks,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -48,6 +48,7 @@ internal fun StatusScreen(
         ArrivalCard(state, timeZone)
         ModelCard(state, onDownloadModel, onTranscribeNow)
         state.stats?.let { StatsCard(it) }
+        state.storage?.let { StorageCard(it, state.storageActions, storageCallbacks) }
         Section(Strings.PRIVACY_TITLE) {
             Text(Strings.PRIVACY_NOTE, style = MaterialTheme.typography.bodyMedium)
         }
@@ -131,7 +132,6 @@ private fun ModelCard(state: StatusUiState, onDownloadModel: (Boolean) -> Unit, 
 private fun StatsCard(stats: StoreStats) {
     Section(Strings.STORAGE) {
         StatRow(Strings.STAT_RECORDED, formatHours(stats.recordedMs))
-        StatRow(Strings.STAT_AUDIO, formatMegabytes(stats.audioBytes))
         StatRow(Strings.STAT_CHUNKS, Strings.count(stats.chunks))
         StatRow(Strings.STAT_SEGMENTS, Strings.count(stats.segments))
         StatRow(Strings.STAT_PENDING, Strings.count(stats.pendingChunks))
@@ -144,7 +144,7 @@ private fun StatsCard(stats: StoreStats) {
 }
 
 @Composable
-private fun StatRow(label: String, value: String, valueColor: Color = Color.Unspecified) {
+internal fun StatRow(label: String, value: String, valueColor: Color = Color.Unspecified) {
     Row(Modifier.fillMaxWidth()) {
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Text(value, style = MaterialTheme.typography.bodyMedium, color = valueColor)
@@ -152,7 +152,7 @@ private fun StatRow(label: String, value: String, valueColor: Color = Color.Unsp
 }
 
 @Composable
-private fun Section(title: String, container: Color? = null, content: @Composable ColumnScope.() -> Unit) {
+internal fun Section(title: String, container: Color? = null, content: @Composable ColumnScope.() -> Unit) {
     Card(
         colors = if (container != null) CardDefaults.cardColors(containerColor = container) else CardDefaults.cardColors(),
         modifier = Modifier.fillMaxWidth(),

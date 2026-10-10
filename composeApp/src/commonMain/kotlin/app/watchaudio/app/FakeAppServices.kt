@@ -1,19 +1,22 @@
 package app.watchaudio.app
 
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.StorageManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.io.files.Path
 
 /**
  * [AppServices] over a real [LocalStore] with no platform behind it: playback, transcription
- * and model downloads are only recorded. For tests, previews and as a stand-in host until a
- * platform implementation is wired in.
+ * and model downloads are only recorded, while [storage] really deletes (audio under [audioRoot]).
+ * For tests, previews and as a stand-in host until a platform implementation is wired in.
  */
 class FakeAppServices(
     override val store: LocalStore,
     override val audioRoot: String = "",
     initialStatus: ProcessingStatus = ProcessingStatus(),
+    override val storage: StorageManager = StorageManager(store, Path(audioRoot)),
 ) : AppServices {
     val mutableStatus = MutableStateFlow(initialStatus)
     override val status: StateFlow<ProcessingStatus> = mutableStatus.asStateFlow()
