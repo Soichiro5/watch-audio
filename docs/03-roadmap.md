@@ -17,6 +17,8 @@
 
 ## 進捗（2026-10-10 時点）
 
+最新の状況は Issue ダッシュボード（`tools/roadmap-view/build.py` で生成）で確認できる。
+
 | 領域 | 状態 | 内容 |
 | --- | --- | --- |
 | 基盤・CI（#7, #8） | ✅ クローズ | KMP モノレポ、Android/Wear OS/iOS/watchOS のビルド、GitHub Actions |
@@ -27,8 +29,8 @@
 | 実機なし検証基盤（#44） | 🟡 | JVM 上の E2E（Watch シミュレータ → 取り込み → 日本語 ASR → SQLite → 検索）を CI に組み込み済み。エミュレータテストは未着手 |
 | Android スマホ（#18, #22） | ✅ 実装済み（実機未確認） | 受信と ACK、sherpa-onnx 文字起こし、モデル取得、WorkManager。詳細: [impl/android-phone.md](impl/android-phone.md)。モデル配布サイズの削減は #46 |
 | Wear OS 録音（#16, #41, #43） | 🔧 実装中 | 常時録音、装着検出・充電で自動停止/再開、送信キュー、Tile |
-| iOS / watchOS（#15, #17, #21） | 🔧 実装中 | 録音、WatchConnectivity、SpeechAnalyzer、BGProcessingTask |
-| スマホ UI（#19, #23, #25） | 🔧 実装中 | 日別タイムライン・文字起こし・検索・状態表示 |
+| iOS / watchOS（#15, #17, #21） | ✅ 実装済み（実機未確認） | 録音、WatchConnectivity + ACK、SpeechAnalyzer、BGProcessingTask。詳細: [impl/ios-watchos.md](impl/ios-watchos.md) |
+| スマホ UI（#19, #23, #25） | ✅ クローズ | 日別タイムライン（欠損理由・カバー率）・文字起こし・検索・状態表示。詳細: [impl/phone-ui.md](impl/phone-ui.md) |
 | チャンク境界の発話分断（#45） | 📝 起票 | 境界をまたぐ発話の扱い |
 
 ## 全体の流れ
