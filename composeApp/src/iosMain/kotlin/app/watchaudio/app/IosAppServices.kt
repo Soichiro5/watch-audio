@@ -62,4 +62,7 @@ class IosAppServices internal constructor(
         player?.stop()
         player = null
     }
+
+    /** Position of the current playback in ms, or null when nothing is playing (simulator checks, #19). */
+    internal fun playingPositionMs(): Long? = player?.takeIf { it.playing }?.let { (it.currentTime * 1000).toLong() }
 }
