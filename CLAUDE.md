@@ -56,7 +56,8 @@ iOS/watchOS apps only build on macOS (CI `ios.yml`, Xcode 26.x): `cd iosApp && x
 
 ## Workflow
 
-- Branch: `main`. Commit small, logical units and **push regularly**; keep CI green (fix red CI before new work).
+- **Every change goes through a pull request linked to its issue.** Branch per issue from `main` (`feat/<issue>-<slug>`, `fix/…`, `docs/…`), commit small units and push regularly, open a PR whose body says `Closes #<n>` (or `Refs #<n>` for partial work), merge into `main` only when CI is green. Never push directly to `main`. Keep CI green (fix red CI before new work).
+- Sub-agent branches (worktrees) are pushed as such a feature branch and merged through a PR too.
 - With every change, **update the docs** it affects (`docs/impl/*`, `docs/02`, `docs/03` progress table, README) and the **GitHub issues**: progress comment, labels (`P0/P1/P2`, `in-progress`, `needs-device`), close with a summary when done, file new issues for problems found. Regenerate the dashboard afterwards.
 - Parallelize: hand independent work to sub-agents (git worktrees) and keep working while they and long commands run in the background — don't sit idle waiting.
 - Talk to the user in **Japanese** (see the rule at the top).

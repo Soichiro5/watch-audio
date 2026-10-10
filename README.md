@@ -17,7 +17,7 @@
 
 ## 進め方
 
-- **ブランチ**: `main` が開発ブランチ。小さな単位でコミットして push する。並行作業は作業用ブランチ（worktree）で行い、`main` にマージする。
+- **ブランチと PR**: `main` に直接 push しない。Issue ごとに作業ブランチ（`feat/<Issue番号>-<内容>` など）を切り、**Issue と紐づけた PR**（本文に `Closes #番号`、一部対応なら `Refs #番号`）を作って、CI が緑になってから `main` にマージする。マージで Issue は自動でクローズされる。
 - **Issue**: 優先度ラベル `P0`（今やる）/ `P1`（次）/ `P2`（後回し）、状態ラベル `in-progress` / `needs-device`、Issue 間の依存は GitHub の「Blocked by」で管理。現在のゴールはマイルストーン「v0.1 コア」。
 - **ダッシュボード**: Issue を優先度・状態・依存関係で一覧できるページを `tools/roadmap-view/build.py` で生成している（[ロードマップ](https://claude.ai/artifact/W2TAExeoMUzXQKTo6h4QPE)、オーナーのみ閲覧可）。
 - **CI**: GitHub Actions（`android.yml` / `ios.yml` / `emulator.yml`）。
