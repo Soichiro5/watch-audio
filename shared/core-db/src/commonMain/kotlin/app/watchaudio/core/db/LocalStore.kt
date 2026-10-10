@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.io.files.Path
+import kotlinx.io.files.SystemFileSystem
 
 /**
  * The on-device database. Everything stays local: there is no sync or backup to any server.
@@ -20,6 +22,8 @@ import kotlinx.coroutines.withContext
  * single connection serialized by a mutex.
  */
 class LocalStore private constructor(
+    /** Path of the database file. */
+    val path: String,
     private val connection: SQLiteConnection,
     private val dispatcher: CoroutineDispatcher,
 ) : AutoCloseable {
@@ -54,6 +58,22 @@ class LocalStore private constructor(
         withContext(dispatcher) { StoreTransaction(connection).block() }
     }
 
+    /** Bytes the database occupies on disk, including the WAL and shared-memory files. */
+    suspend fun sizeOnDisk(): Long = withContext(dispatcher) {
+        listOf(path, "$path-wal", "$path-shm").sumOf { SystemFileSystem.metadataOrNull(Path(it))?.size ?: 0L }
+    }
+
+    /**
+     * Gives the space of deleted rows back to the file system (VACUUM, then truncates the WAL).
+     * Rewrites the whole file, so call it after large deletions only.
+     */
+    suspend fun compact() = mutex.withLock {
+        withContext(dispatcher) {
+            connection.execSQL("VACUUM")
+            connection.pragma("wal_checkpoint(TRUNCATE)")
+        }
+    }
+
     override fun close() = connection.close()
 
     companion object {
@@ -69,7 +89,7 @@ class LocalStore private constructor(
             connection.execSQL("PRAGMA foreign_keys = ON")
             connection.execSQL("PRAGMA synchronous = NORMAL")
             migrate(connection)
-            return LocalStore(connection, dispatcher)
+            return LocalStore(path, connection, dispatcher)
         }
 
         private fun migrate(connection: SQLiteConnection) {
