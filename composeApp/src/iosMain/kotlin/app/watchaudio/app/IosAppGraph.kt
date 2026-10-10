@@ -8,6 +8,7 @@ import app.watchaudio.core.protocol.ChunkAck
 import app.watchaudio.core.protocol.decodeManifest
 import app.watchaudio.core.protocol.toJson
 import kotlin.concurrent.Volatile
+import kotlin.coroutines.resume
 import kotlin.time.Clock
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
@@ -17,9 +18,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.serialization.json.Json
@@ -62,7 +63,6 @@ object IosAppGraph {
     private var appActive = false
     private var foregroundRun: Job? = null
     private var rerunRequested = false
-    private var modelPrepared = false
 
     private lateinit var transcriber: IosSpeechTranscriber
     private lateinit var store: LocalStore
@@ -116,7 +116,6 @@ object IosAppGraph {
         if (!started) return
         appActive = active
         if (active) {
-            prepareModelOnce()
             requestTranscription()
         } else {
             // Speech analysis is not guaranteed in the background; continue in a BGProcessingTask.
@@ -134,13 +133,20 @@ object IosAppGraph {
      */
     fun ingest(manifestJson: String, filePath: String?, completion: (String?) -> Unit) {
         scope.launch {
-            val backgroundTask = UIApplication.sharedApplication.beginBackgroundTaskWithName("ingest-chunk", null)
+            // Keeps the app running long enough to verify, store and ACK when woken in the background.
+            val application = UIApplication.sharedApplication
+            var backgroundTask = UIBackgroundTaskInvalid
+            fun endBackgroundTask() {
+                if (backgroundTask != UIBackgroundTaskInvalid) {
+                    application.endBackgroundTask(backgroundTask)
+                    backgroundTask = UIBackgroundTaskInvalid
+                }
+            }
+            backgroundTask = application.beginBackgroundTaskWithName("ingest-chunk") { endBackgroundTask() }
             try {
                 completion(ingestNow(manifestJson, filePath))
             } finally {
-                if (backgroundTask != UIBackgroundTaskInvalid) {
-                    UIApplication.sharedApplication.endBackgroundTask(backgroundTask)
-                }
+                endBackgroundTask()
             }
         }
     }
@@ -206,15 +212,29 @@ object IosAppGraph {
 
     /** Serialized: at most one pipeline run (foreground or BGTask) at a time. */
     private suspend fun runPipeline(shouldContinue: () -> Boolean) = runLock.withLock {
+        // Without the model every chunk would fail and use up its retry attempts.
+        if (!ensureModel()) return@withLock
         status.update { it.copy(transcribing = true) }
         try {
             // Chunks left TRANSCRIBING by a cancelled or killed run go back into the queue.
             pipeline.recoverInterrupted()
             val result = pipeline.processPending(shouldContinue)
-            if (result.failed > 0) status.update { it.copy(message = "文字起こしに失敗したチャンク: ${result.failed}") }
+            if (result.failed > 0) {
+                // Re-check the model next time (the OS may have removed it).
+                status.update { it.copy(asrModel = ModelState.Unknown, message = "文字起こしに失敗したチャンク: ${result.failed}") }
+            }
         } finally {
             status.update { it.copy(transcribing = false) }
         }
+    }
+
+    /** Makes sure the Speech model is installed (the OS downloads it on first use). */
+    private suspend fun ensureModel(): Boolean {
+        if (status.value.asrModel == ModelState.Ready) return true
+        status.update { it.copy(asrModel = ModelState.Downloading(progress = 0f)) }
+        val error = suspendCancellableCoroutine { cont -> transcriber.prepareModel { cont.resume(it) } }
+        status.update { it.copy(asrModel = if (error == null) ModelState.Ready else ModelState.Failed(error)) }
+        return error == null
     }
 
     private fun scheduleBackgroundProcessing() {
@@ -223,23 +243,6 @@ object IosAppGraph {
         request.requiresNetworkConnectivity = false
         // Fails on the simulator and when Background App Refresh is off; foreground runs still work.
         BGTaskScheduler.sharedScheduler.submitTaskRequest(request, null)
-    }
-
-    private fun prepareModelOnce() {
-        if (modelPrepared) return
-        modelPrepared = true
-        status.update { it.copy(asrModel = ModelState.Downloading(progress = 0f)) }
-        transcriber.prepareModel { error ->
-            scope.launch {
-                if (error == null) {
-                    status.update { it.copy(asrModel = ModelState.Ready) }
-                    requestTranscription()
-                } else {
-                    modelPrepared = false // retry on next activation
-                    status.update { it.copy(asrModel = ModelState.Failed(error)) }
-                }
-            }
-        }
     }
 
     /** Files left in the inbox by a process that died mid-ingest; the watch resends them. */
