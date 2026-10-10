@@ -186,6 +186,11 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
         )
     }
 
+    /** When the most recent chunk arrived on this phone (epoch ms), or null if none yet. */
+    fun lastReceivedAt(): Long? = db.prepare("SELECT MAX(received_at) FROM audio_chunk").use { st ->
+        if (st.step() && !st.isNull(0)) st.getLong(0) else null
+    }
+
     private fun update(sql: String, vararg args: String) {
         db.prepare(sql).use { st ->
             args.forEachIndexed { i, arg -> st.bindText(i + 1, arg) }

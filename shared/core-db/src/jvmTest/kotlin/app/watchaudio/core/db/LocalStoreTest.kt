@@ -47,6 +47,16 @@ class LocalStoreTest {
     }
 
     @Test
+    fun lastReceivedAtTracksNewestArrival() = runTest {
+        assertNull(store.read { lastReceivedAt() })
+        store.transaction {
+            insertChunk(manifest("a", 0), "a.m4a", 20)
+            insertChunk(manifest("b", 300_000), "b.m4a", 10)
+        }
+        assertEquals(20, store.read { lastReceivedAt() })
+    }
+
+    @Test
     fun silentChunkIsNotQueued() = runTest {
         store.transaction { insertChunk(manifest("silent", 0, audio = false), null, 0) }
         assertEquals(ChunkState.NO_AUDIO, store.read { chunk("silent") }!!.state)
