@@ -2,6 +2,9 @@ name: Emulator smoke test
 
 # Device-free check (#44): boot a phone and a Wear OS emulator, install the debug
 # builds, launch them and fail on crashes. Runs on Linux runners (KVM), 1x minutes.
+# On the phone emulator it also runs the instrumented tests: real MediaPlayer playback and
+# the search -> one tap -> play flow (#19, #25), and the shared SQLite tests of core-db and
+# core-pipeline on Android (#14).
 on:
   push:
     branches: [main, "claude/**"]
@@ -13,6 +16,7 @@ on:
       - "gradle/**"
       - "*.gradle.kts"
       - ".github/workflows/emulator.yml"
+      - ".github/scripts/**"
   workflow_dispatch:
 
 concurrency:
@@ -31,10 +35,15 @@ jobs:
             module: androidApp
             api-level: 35
             target: google_apis
+            # Audio stays enabled: the playback tests need a working audio output.
+            emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
+            device-test-apks: :androidApp:assembleDebugAndroidTest :shared:core-db:assembleAndroidDeviceTest :shared:core-pipeline:assembleAndroidDeviceTest
+            device-tests: :androidApp:connectedDebugAndroidTest :shared:core-db:connectedAndroidDeviceTest :shared:core-pipeline:connectedAndroidDeviceTest
           - name: wear
             module: wearApp
             api-level: 34
             target: android-wear
+            emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
     name: smoke (${{ matrix.name }})
     steps:
       - uses: actions/checkout@v4
@@ -58,8 +67,8 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Build debug APK
-        run: ./gradlew :${{ matrix.module }}:assembleDebug
+      - name: Build debug APK (and instrumented test APKs)
+        run: ./gradlew :${{ matrix.module }}:assembleDebug ${{ matrix.device-test-apks }}
 
       - name: Install, launch and check for crashes
         uses: reactivecircus/android-emulator-runner@v2
@@ -69,7 +78,7 @@ jobs:
           arch: x86_64
           disable-animations: true
           disk-size: 2048M
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: ${{ matrix.emulator-options }}
           script: |
             adb install -r ${{ matrix.module }}/build/outputs/apk/debug/*.apk
             adb logcat -c
@@ -78,10 +87,30 @@ jobs:
             adb logcat -d > logcat.txt
             adb shell pidof app.watchaudio || (echo "app is not running"; exit 1)
             if grep -E "FATAL EXCEPTION|AndroidRuntime: Process: app.watchaudio" logcat.txt; then exit 1; fi
+            if [ -n "${{ matrix.device-tests }}" ]; then adb logcat -c; ./gradlew ${{ matrix.device-tests }} || touch device-tests-failed; adb logcat -d > logcat-device-tests.txt; fi
+            if [ -f device-tests-failed ]; then echo "instrumented tests failed"; exit 1; fi
+
+      - name: Instrumented test evidence
+        if: always() && matrix.device-tests != ''
+        run: |
+          python3 .github/scripts/junit-summary.py "Instrumented tests on the ${{ matrix.name }} emulator (API ${{ matrix.api-level }})" \
+            'androidApp/build/outputs/androidTest-results/connected/**/*.xml' \
+            'shared/*/build/outputs/androidTest-results/connected/**/*.xml' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "Playback checks (logcat):"
+            echo '```'
+            grep -ho "PLAYBACK_CHECK.*" logcat-device-tests.txt || echo "no PLAYBACK_CHECK lines"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: logcat-${{ matrix.name }}
-          path: logcat.txt
+          path: |
+            logcat.txt
+            logcat-device-tests.txt
+            androidApp/build/reports/androidTests/
+            shared/*/build/reports/androidTests/
+          if-no-files-found: ignore
           retention-days: 7

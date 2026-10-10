@@ -14,7 +14,7 @@ on:
       - "*.gradle.kts"
       - "gradle.properties"
       - ".github/workflows/ios.yml"
-      - ".github/scripts/simulator-smoke.sh"
+      - ".github/scripts/**"
   pull_request:
     paths:
       - "iosApp/**"
@@ -25,7 +25,7 @@ on:
       - "*.gradle.kts"
       - "gradle.properties"
       - ".github/workflows/ios.yml"
-      - ".github/scripts/simulator-smoke.sh"
+      - ".github/scripts/**"
   workflow_dispatch:
 
 concurrency:
@@ -57,6 +57,14 @@ jobs:
 
       - name: Shared tests (iOS simulator)
         run: ./gradlew iosSimulatorArm64Test
+
+      # Lists every test that ran on the simulator, incl. the SQLite-backed core-db / Ingestor tests (#14).
+      - name: Shared test evidence (iOS simulator)
+        if: success() || failure()
+        run: |
+          python3 .github/scripts/junit-summary.py "Shared Kotlin tests on the iOS simulator" \
+            'shared/*/build/test-results/iosSimulatorArm64Test/*.xml' \
+            'composeApp/build/test-results/iosSimulatorArm64Test/*.xml' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate Xcode project
         run: |
