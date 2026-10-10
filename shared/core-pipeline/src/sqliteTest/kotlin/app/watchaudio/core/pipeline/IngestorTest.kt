@@ -9,20 +9,21 @@ import app.watchaudio.core.protocol.AudioFile
 import app.watchaudio.core.protocol.ChunkEndReason
 import app.watchaudio.core.protocol.ChunkManifest
 import app.watchaudio.core.protocol.SourcePlatform
-import java.io.File
-import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.buffered
 import kotlinx.io.files.Path
+import kotlinx.io.files.SystemFileSystem
+import kotlinx.io.readByteArray
 
 class IngestorTest {
-    private val dir = Files.createTempDirectory("ingest").toFile()
-    private val store = LocalStore.open(File(dir, "db.sqlite").path)
-    private val ingestor = Ingestor(store, Path(File(dir, "audio").path))
+    private val dir = TempDir("ingest")
+    private val store = LocalStore.open(dir.resolve("db.sqlite").toString())
+    private val ingestor = Ingestor(store, dir.resolve("audio"))
 
     @AfterTest
     fun tearDown() {
@@ -30,8 +31,12 @@ class IngestorTest {
         dir.deleteRecursively()
     }
 
+    private fun write(path: Path, bytes: ByteArray) = SystemFileSystem.sink(path).buffered().use { it.write(bytes) }
+
+    private fun exists(path: Path) = SystemFileSystem.exists(path)
+
     private fun incoming(id: String, bytes: ByteArray): Pair<ChunkManifest, Path> {
-        val file = File(dir, "incoming-$id.m4a").apply { writeBytes(bytes) }
+        val file = dir.resolve("incoming-$id.m4a").also { write(it, bytes) }
         val manifest = ChunkManifest(
             chunkId = id,
             sessionId = "s",
@@ -43,7 +48,7 @@ class IngestorTest {
             audio = AudioFile(file.name, AudioCodec.AAC, 16_000, 1, 24_000, bytes.size.toLong(), Sha256().apply { update(bytes) }.digestHex()),
             endReason = ChunkEndReason.ROTATION,
         )
-        return manifest to Path(file.path)
+        return manifest to file
     }
 
     @Test
@@ -54,23 +59,25 @@ class IngestorTest {
         val chunk = store.read { chunk("c1") }!!
         assertEquals("2026/10/10/c1.m4a", chunk.audioPath)
         assertEquals(ChunkState.RECEIVED, chunk.state)
-        assertTrue(File(dir, "audio/2026/10/10/c1.m4a").exists())
-        assertFalse(File(file.toString()).exists())
+        val archived = dir.resolve("audio/2026/10/10/c1.m4a")
+        assertTrue(exists(archived))
+        assertTrue(SystemFileSystem.source(archived).buffered().use { it.readByteArray() }.contentEquals(ByteArray(4096) { it.toByte() }))
+        assertFalse(exists(file))
     }
 
     @Test
     fun resendIsDuplicate() = runTest {
         val (manifest, file) = incoming("c1", ByteArray(10) { 1 })
         ingestor.ingest(manifest, file)
-        val again = File(dir, "again.m4a").apply { writeBytes(ByteArray(10) { 1 }) }
-        assertEquals(AckStatus.DUPLICATE, ingestor.ingest(manifest, Path(again.path)).status)
-        assertFalse(again.exists())
+        val again = dir.resolve("again.m4a").also { write(it, ByteArray(10) { 1 }) }
+        assertEquals(AckStatus.DUPLICATE, ingestor.ingest(manifest, again).status)
+        assertFalse(exists(again))
     }
 
     @Test
     fun corruptFileIsNotStored() = runTest {
         val (manifest, file) = incoming("c1", ByteArray(10) { 1 })
-        File(file.toString()).writeBytes(ByteArray(10) { 2 })
+        write(file, ByteArray(10) { 2 })
         val ack = ingestor.ingest(manifest, file)
         assertEquals(AckStatus.CORRUPT, ack.status)
         assertFalse(ack.status.isFinal)

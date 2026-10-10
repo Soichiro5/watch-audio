@@ -5,7 +5,6 @@ import app.watchaudio.core.protocol.AudioFile
 import app.watchaudio.core.protocol.ChunkEndReason
 import app.watchaudio.core.protocol.ChunkManifest
 import app.watchaudio.core.protocol.SourcePlatform
-import java.io.File
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -15,13 +14,14 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
 class LocalStoreTest {
-    private val dbFile = File.createTempFile("watch-audio", ".db").also { it.delete() }
-    private val store = LocalStore.open(dbFile.absolutePath)
+    private val dir = TempDir("local-store")
+    private val dbPath = dir.resolve(LocalStore.FILE_NAME).toString()
+    private val store = LocalStore.open(dbPath)
 
     @AfterTest
     fun tearDown() {
         store.close()
-        dbFile.delete()
+        dir.deleteRecursively()
     }
 
     private fun manifest(id: String, start: Long, audio: Boolean = true, marks: List<Long> = emptyList()) = ChunkManifest(
@@ -123,6 +123,29 @@ class LocalStoreTest {
     }
 
     @Test
+    fun issueExamplesMatchSubstrings() = runTest {
+        store.transaction {
+            insertChunk(manifest("a", 0), "a.m4a", 0)
+            saveTranscript(
+                "a",
+                listOf(
+                    NewSegment(1_000, 2_000, "午後の定例会議で予算を確認", "ja"),
+                    NewSegment(3_000, 4_000, "朝のミーティングは中止です", "ja"),
+                    NewSegment(5_000, 6_000, "オンラインミーティングのリンクを送った", "ja"),
+                ),
+                "test",
+            )
+        }
+        // "会議" (two characters, LIKE) matches inside a longer word.
+        assertEquals(listOf("午後の定例[会議]で予算を確認"), store.read { search("会議") }.map { it.snippet })
+        // "ミーティング" (trigram FTS) matches both segments, newest first.
+        assertEquals(
+            listOf("オンライン[ミーティング]のリンクを送った", "朝の[ミーティング]は中止です"),
+            store.read { search("ミーティング") }.map { it.snippet },
+        )
+    }
+
+    @Test
     fun statsAndRanges() = runTest {
         store.transaction {
             insertChunk(manifest("a", 0), "a.m4a", 0)
@@ -172,7 +195,7 @@ class LocalStoreTest {
     fun reopeningKeepsDataAndSchema() = runTest {
         store.transaction { insertChunk(manifest("a", 0), "a.m4a", 0) }
         store.close()
-        LocalStore.open(dbFile.absolutePath).use { reopened ->
+        LocalStore.open(dbPath).use { reopened ->
             assertEquals("a", reopened.read { chunk("a") }!!.id)
         }
     }

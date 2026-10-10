@@ -7,8 +7,6 @@ import app.watchaudio.core.protocol.AudioFile
 import app.watchaudio.core.protocol.ChunkEndReason
 import app.watchaudio.core.protocol.ChunkManifest
 import app.watchaudio.core.protocol.SourcePlatform
-import java.io.File
-import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -17,8 +15,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.io.files.Path
 
 class TranscriptionPipelineTest {
-    private val dir = Files.createTempDirectory("pipeline").toFile()
-    private val store = LocalStore.open(File(dir, "db.sqlite").path)
+    private val dir = TempDir("pipeline")
+    private val store = LocalStore.open(dir.resolve("db.sqlite").toString())
 
     @AfterTest
     fun tearDown() {
@@ -56,7 +54,7 @@ class TranscriptionPipelineTest {
         addChunk("late", 600_000)
         addChunk("early", 0)
         val fake = FakeTranscriber()
-        val result = TranscriptionPipeline(store, Path(dir.path), fake).processPending()
+        val result = TranscriptionPipeline(store, dir.path, fake).processPending()
 
         assertEquals(TranscriptionPipeline.RunResult(transcribed = 2, failed = 0), result)
         assertEquals(listOf("early", "late"), fake.calls)
@@ -71,7 +69,7 @@ class TranscriptionPipelineTest {
         addChunk("bad", 0)
         addChunk("good", 300_000)
         val fake = FakeTranscriber(failFor = setOf("bad"))
-        val pipeline = TranscriptionPipeline(store, Path(dir.path), fake, maxAttempts = 2)
+        val pipeline = TranscriptionPipeline(store, dir.path, fake, maxAttempts = 2)
 
         assertEquals(TranscriptionPipeline.RunResult(transcribed = 1, failed = 1), pipeline.processPending())
         assertEquals(ChunkState.FAILED, store.read { chunk("bad") }!!.state)
@@ -87,7 +85,7 @@ class TranscriptionPipelineTest {
         addChunk("a", 0)
         addChunk("b", 300_000)
         val fake = FakeTranscriber()
-        val pipeline = TranscriptionPipeline(store, Path(dir.path), fake)
+        val pipeline = TranscriptionPipeline(store, dir.path, fake)
         var budget = 1
         pipeline.processPending { budget-- > 0 }
         assertEquals(listOf("a"), fake.calls)
@@ -102,7 +100,7 @@ class TranscriptionPipelineTest {
             override val engineId = "blocking"
             override suspend fun transcribe(audioFile: Path): List<TimedText> = kotlinx.coroutines.awaitCancellation()
         }
-        val job = launch { TranscriptionPipeline(store, Path(dir.path), blocking).processPending() }
+        val job = launch { TranscriptionPipeline(store, dir.path, blocking).processPending() }
         testScheduler.advanceUntilIdle()
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
             while (store.read { chunk("a") }!!.state != ChunkState.TRANSCRIBING) kotlinx.coroutines.delay(10)
