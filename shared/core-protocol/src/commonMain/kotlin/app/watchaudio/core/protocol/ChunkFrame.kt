@@ -1,0 +1,32 @@
+package app.watchaudio.core.protocol
+
+/**
+ * Framing used on byte streams (Wear OS `ChannelClient`): a 4-byte big-endian length, the UTF-8
+ * manifest JSON, then the raw audio bytes until end of stream.
+ */
+object ChunkFrame {
+    const val MAX_MANIFEST_BYTES = 64 * 1024
+
+    fun header(manifest: ChunkManifest): ByteArray {
+        val json = manifest.toJson().encodeToByteArray()
+        require(json.size <= MAX_MANIFEST_BYTES) { "manifest too large: ${json.size} bytes" }
+        val size = json.size
+        return byteArrayOf(
+            (size ushr 24).toByte(),
+            (size ushr 16).toByte(),
+            (size ushr 8).toByte(),
+            size.toByte(),
+        ) + json
+    }
+
+    /** Reads the manifest length from the first 4 bytes of a frame. */
+    fun manifestLength(prefix: ByteArray): Int {
+        require(prefix.size >= 4) { "need 4 bytes, got ${prefix.size}" }
+        val size = ((prefix[0].toInt() and 0xff) shl 24) or
+            ((prefix[1].toInt() and 0xff) shl 16) or
+            ((prefix[2].toInt() and 0xff) shl 8) or
+            (prefix[3].toInt() and 0xff)
+        require(size in 1..MAX_MANIFEST_BYTES) { "invalid manifest length: $size" }
+        return size
+    }
+}

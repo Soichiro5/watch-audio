@@ -9,7 +9,9 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 
 /**
- * Shared setup for every `shared/` module: Android (phone + Wear OS) and iOS targets.
+ * Shared setup for every `shared/` module: Android (phone + Wear OS), iOS and JVM targets.
+ * The JVM target lets the whole ingest/transcription pipeline run on Linux (CI and the
+ * cloud dev environment) without devices; see #44.
  *
  * The Android namespace is derived from the module path, e.g. `:shared:core-protocol`
  * becomes `app.watchaudio.core.protocol` and `:composeApp` becomes `app.watchaudio.composeapp`.
@@ -36,6 +38,7 @@ class KmpLibraryConventionPlugin : Plugin<Project> {
 
             iosArm64()
             iosSimulatorArm64()
+            jvm()
 
             sourceSets.getByName("commonTest").dependencies {
                 implementation(libs.findLibrary("kotlin-test").get())

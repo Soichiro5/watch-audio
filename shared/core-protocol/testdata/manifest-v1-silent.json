@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "chunkId": "0B3E8D0A-1C2B-4D5E-8F90-A1B2C3D4E5F6",
+  "sessionId": "2B1A3C4D-0000-4000-8000-000000000001",
+  "deviceId": "watch-device-01",
+  "source": "wearos",
+  "startedAtEpochMs": 1791623100000,
+  "durationMs": 120000,
+  "timeZone": "Asia/Tokyo",
+  "endReason": "charging"
+}
