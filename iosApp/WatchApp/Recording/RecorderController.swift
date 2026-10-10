@@ -33,38 +33,21 @@ private final class ActiveChunk {
 /// - Silent chunks: audio levels are sampled every second via metering; a chunk in which no
 ///   sample exceeded the threshold (and enough samples were taken) is sent as a manifest only.
 /// - Stops with a reason on charging, low battery, low storage and interruptions, and resumes
-///   automatically when possible (see `appBecameActive` / `tick`).
+///   automatically when possible (see `appBecameActive` / `tick`). The decisions themselves are
+///   in `RecorderPolicy` (unit tested); this class applies them.
 ///
 /// watchOS has no public wrist-detection API for third-party apps, so `off_body` is never
 /// produced here (the system locks the watch when it is taken off; recording continues).
 @MainActor
 @Observable
 final class RecorderController {
-    enum Phase: Equatable {
-        case idle
-        case recording
-        /// Stopped for a reason (charging, low battery, interruption, ...) while the wearer still
-        /// wants to record: resumed automatically when the condition clears.
-        case paused(ChunkEndReason)
-    }
-
     enum Config {
         static let chunkDuration: TimeInterval = 300
         static let tickSeconds: Double = 1
         static let statusEveryTicks = 30
         static let batteryLogEveryTicks = 300
-        /// dBFS. A tick counts as "sound" if the average or the peak power exceeds these.
-        static let silenceAverageThresholdDb: Float = -50
-        static let silencePeakThresholdDb: Float = -35
-        /// Only drop audio if metering covered at least this share of the chunk.
-        static let minMeterCoverage = 0.8
-        static let lowBatteryLevel: Float = 0.10
-        static let resumeBatteryLevel: Float = 0.15
-        static let minFreeBytes: Int64 = 100 * 1024 * 1024
-        /// Resend a chunk that was handed to WatchConnectivity but never ACKed after this long.
-        static let resendAfter: TimeInterval = 15 * 60
-        static let maxCorruptResends = 3
-        static let maxAutoRestarts = 3
+        /// While paused for a condition that clears by itself, check every this many ticks.
+        static let retryEveryTicks = 10
         /// If recording has not resumed this long after an interruption, a notification fires
         /// (scheduled up front because the app may be suspended by then).
         static let interruptedReminderDelay: TimeInterval = 120
@@ -76,7 +59,7 @@ final class RecorderController {
         case lowStorage
     }
 
-    private(set) var phase: Phase = .idle
+    private(set) var phase: RecorderPhase = .idle
     private(set) var recordingSince: Date?
     private(set) var pendingCount = 0
     private(set) var chunksClosed = 0
@@ -95,8 +78,7 @@ final class RecorderController {
     @ObservationIgnored private var tickCount = 0
     @ObservationIgnored private var autoRestarts = 0
     @ObservationIgnored private var interruptionObserver: NSObjectProtocol?
-    @ObservationIgnored private var lastSent: [String: Date] = [:]
-    @ObservationIgnored private var corruptResends: [String: Int] = [:]
+    @ObservationIgnored private var sendTracker = ChunkSendTracker()
     @ObservationIgnored private lazy var transport = ChunkTransport(
         onActivated: { [weak self] in
             Task { @MainActor in self?.transportActivated() }
@@ -141,7 +123,7 @@ final class RecorderController {
 
     func stop() {
         wantsRecording = false
-        stopRecording(reason: .userStop, pause: false)
+        apply(.userStop)
     }
 
     func mark() {
@@ -187,7 +169,7 @@ final class RecorderController {
         }
         guard phase != .recording else { return } // another start won the race during the await
         refreshBattery()
-        if let blocker = startBlocker() {
+        if let blocker = RecorderPolicy.startBlocker(deviceConditions()) {
             phase = .paused(blocker)
             record("start_blocked", blocker.rawValue)
             startTicker() // keeps checking while the app is alive (e.g. waiting to be unplugged)
@@ -233,7 +215,7 @@ final class RecorderController {
     }
 
     private func beginChunk() throws -> ActiveChunk {
-        if let free = outbox.freeBytes(), free < Config.minFreeBytes {
+        if let free = outbox.freeBytes(), free < RecorderPolicy.minFreeBytes {
             throw RecorderError.lowStorage
         }
         let chunkId = UUID().uuidString
@@ -272,9 +254,7 @@ final class RecorderController {
                 record("rotate_fallback", "\(error)")
             } catch {
                 record("rotate_failed", "\(error)")
-                let stopReason: ChunkEndReason = (error as? RecorderError) == .lowStorage ? .lowStorage : .error
-                stopRecording(reason: stopReason, pause: true)
-                notifyStopped("録音を続けられませんでした（\(stopReason.rawValue)）。")
+                apply(.rotationFailed(lowStorage: (error as? RecorderError) == .lowStorage))
             }
         }
     }
@@ -282,8 +262,12 @@ final class RecorderController {
     private func finish(_ chunk: ActiveChunk, reason: ChunkEndReason) {
         chunk.recorder.stop()
         let durationMs = max(0, Int64(Date.now.timeIntervalSince(chunk.startedAt) * 1000))
-        let expectedSamples = Double(durationMs) / 1000 / Config.tickSeconds
-        let silent = !chunk.heardSound && Double(chunk.meterSamples) >= expectedSamples * Config.minMeterCoverage
+        let silent = RecorderPolicy.isSilent(
+            heardSound: chunk.heardSound,
+            meterSamples: chunk.meterSamples,
+            durationMs: durationMs,
+            tickSeconds: Config.tickSeconds
+        )
         do {
             let item = try outbox.commit(
                 chunk.info,
@@ -326,19 +310,17 @@ final class RecorderController {
                 rotate(reason: .rotation)
             }
             if tickCount % Config.statusEveryTicks == 0 {
-                checkDeviceStatus()
+                refreshBattery()
+                apply(.statusCheck(deviceConditions()))
             }
             if tickCount % Config.batteryLogEveryTicks == 0 {
                 record("battery")
             }
-        case .paused(let reason):
+        case .paused:
             // Charging / battery / storage clear by themselves: retry while the app is alive.
-            let autoResumable = reason == .charging || reason == .lowBattery || reason == .lowStorage
-            if autoResumable, wantsRecording, tickCount % 10 == 0 {
+            if tickCount % Config.retryEveryTicks == 0 {
                 refreshBattery()
-                if startBlocker() == nil {
-                    Task { await startRecording(resuming: true) }
-                }
+                apply(.retryCheck(deviceConditions()))
             }
         case .idle:
             ticker?.cancel()
@@ -353,54 +335,43 @@ final class RecorderController {
         let recorder = chunk.recorder
         guard recorder.isRecording else {
             chunk.stalledTicks += 1
-            if chunk.stalledTicks >= 5 {
-                recorderStalled()
+            if chunk.stalledTicks >= RecorderPolicy.stalledTicksBeforeRestart {
+                record("recorder_stalled")
+                let restartsSoFar = autoRestarts
+                autoRestarts += 1
+                apply(.recorderStalled(restartsSoFar: restartsSoFar))
             }
             return
         }
         chunk.stalledTicks = 0
         recorder.updateMeters()
         chunk.meterSamples += 1
-        if recorder.averagePower(forChannel: 0) > Config.silenceAverageThresholdDb
-            || recorder.peakPower(forChannel: 0) > Config.silencePeakThresholdDb {
+        if RecorderPolicy.isSound(
+            averagePowerDb: recorder.averagePower(forChannel: 0),
+            peakPowerDb: recorder.peakPower(forChannel: 0)
+        ) {
             chunk.heardSound = true
         }
     }
 
-    /// The recorder stopped without an interruption notification (e.g. media services reset).
-    private func recorderStalled() {
-        record("recorder_stalled")
-        stopRecording(reason: .error, pause: true)
-        autoRestarts += 1
-        if autoRestarts <= Config.maxAutoRestarts {
+    /// Applies a `RecorderPolicy` decision: close the chunk with its end reason, alert, resume.
+    private func apply(_ event: RecorderEvent) {
+        let decision = RecorderPolicy.decide(event, phase: phase, wantsRecording: wantsRecording)
+        if let reason = decision.stopReason {
+            stopRecording(reason: reason, pause: decision.pause)
+        }
+        if let alert = decision.alert {
+            self.alert(alert)
+        }
+        if decision.resume {
             Task { await startRecording(resuming: true) }
-        } else {
-            notifyStopped("録音が繰り返し停止しました。アプリを開いて再開してください。")
         }
     }
 
-    private func checkDeviceStatus() {
-        refreshBattery()
-        let device = WKInterfaceDevice.current()
-        if isCharging {
-            // Charging is an expected gap; resumes when unplugged (see tick / appBecameActive).
-            stopRecording(reason: .charging, pause: true)
-        } else if device.batteryLevel >= 0, device.batteryLevel < Config.lowBatteryLevel {
-            stopRecording(reason: .lowBattery, pause: true)
-            notifyStopped("電池残量が少ないため録音を止めました。")
-        } else if let free = outbox.freeBytes(), free < Config.minFreeBytes {
-            stopRecording(reason: .lowStorage, pause: true)
-            notifyStopped("空き容量が少ないため録音を止めました。iPhone への転送を確認してください。")
-        }
-    }
-
-    /// Why recording cannot start right now, if anything.
-    private func startBlocker() -> ChunkEndReason? {
+    /// Current battery, charging and storage readings.
+    private func deviceConditions() -> DeviceConditions {
         let level = WKInterfaceDevice.current().batteryLevel
-        if isCharging { return .charging }
-        if level >= 0, level < Config.resumeBatteryLevel { return .lowBattery }
-        if let free = outbox.freeBytes(), free < Config.minFreeBytes { return .lowStorage }
-        return nil
+        return DeviceConditions(charging: isCharging, batteryLevel: level >= 0 ? level : nil, freeBytes: outbox.freeBytes())
     }
 
     // MARK: - Interruptions
@@ -420,16 +391,11 @@ final class RecorderController {
     private func handleInterruption(rawType: UInt?, rawOptions: UInt?) {
         switch rawType.flatMap(AVAudioSession.InterruptionType.init(rawValue:)) {
         case .began:
-            guard phase == .recording else { return }
-            // Close the chunk now so the timeline shows the gap and its reason.
-            stopRecording(reason: .interruption, pause: true)
-            scheduleInterruptedReminder()
+            apply(.interruptionBegan)
         case .ended:
-            guard phase == .paused(.interruption), wantsRecording else { return }
             let shouldResume = rawOptions.map { AVAudioSession.InterruptionOptions(rawValue: $0).contains(.shouldResume) } ?? false
             record("interruption_ended", "shouldResume=\(shouldResume)")
-            // Try even without shouldResume; on failure the wearer gets a haptic + notification.
-            Task { await startRecording(resuming: true) }
+            apply(.interruptionEnded)
         default:
             break
         }
@@ -439,19 +405,22 @@ final class RecorderController {
 
     private func send(_ item: OutboxItem) {
         if transport.send(item) {
-            lastSent[item.chunkId] = .now
+            sendTracker.markSent(item.chunkId, at: .now)
         }
     }
 
     /// Hands every pending chunk that is not already queued to WatchConnectivity. Without
-    /// `force`, a chunk is only re-sent after `Config.resendAfter` without an ACK.
+    /// `force`, a chunk is only re-sent after `ChunkSendTracker.resendAfter` without an ACK.
     private func flushOutbox(force: Bool) {
         guard transport.isActivated else { return }
-        let inFlight = transport.outstandingChunkIds()
-        for item in outbox.pendingItems() where !inFlight.contains(item.chunkId) {
-            if !force, let last = lastSent[item.chunkId], Date.now.timeIntervalSince(last) < Config.resendAfter {
-                continue
-            }
+        let pending = outbox.pendingItems()
+        let due = Set(sendTracker.dueForSend(
+            pending: pending.map(\.chunkId),
+            inFlight: transport.outstandingChunkIds(),
+            now: .now,
+            force: force
+        ))
+        for item in pending where due.contains(item.chunkId) {
             send(item)
         }
         refreshPending()
@@ -467,7 +436,7 @@ final class RecorderController {
     private func transferFinished(chunkId: String?, error: String?) {
         guard let chunkId else { return }
         if let error {
-            lastSent[chunkId] = nil
+            sendTracker.markFailed(chunkId)
             record("send_failed", "\(chunkId): \(error)")
         } else {
             record("sent", chunkId)
@@ -475,19 +444,17 @@ final class RecorderController {
     }
 
     private func handleAck(_ ack: ChunkAck) {
-        if ack.status.isFinal {
+        switch sendTracker.apply(ack) {
+        case .delete:
             outbox.remove(chunkId: ack.chunkId)
-            lastSent[ack.chunkId] = nil
-            corruptResends[ack.chunkId] = nil
             chunksAcked += 1
-        } else if ack.status == .corrupt {
-            let attempts = (corruptResends[ack.chunkId] ?? 0) + 1
-            corruptResends[ack.chunkId] = attempts
-            if attempts <= Config.maxCorruptResends, let item = outbox.item(chunkId: ack.chunkId) {
+        case .resend:
+            if let item = outbox.item(chunkId: ack.chunkId) {
                 send(item)
             }
+        case .keep:
+            break // offered again on the next activation
         }
-        // .rejected: keep the chunk; it is offered again on the next activation.
         record("ack", "\(ack.chunkId) \(ack.status.rawValue) \(ack.detail ?? "")")
         refreshPending()
     }
@@ -510,6 +477,21 @@ final class RecorderController {
 
     private func requestNotificationPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    private func alert(_ alert: RecorderAlert) {
+        switch alert {
+        case .lowBattery:
+            notifyStopped("電池残量が少ないため録音を止めました。")
+        case .lowStorage:
+            notifyStopped("空き容量が少ないため録音を止めました。iPhone への転送を確認してください。")
+        case .cannotContinue(let reason):
+            notifyStopped("録音を続けられませんでした（\(reason.rawValue)）。")
+        case .repeatedStalls:
+            notifyStopped("録音が繰り返し停止しました。アプリを開いて再開してください。")
+        case .interruptedReminder:
+            scheduleInterruptedReminder()
+        }
     }
 
     /// Haptic + local notification when recording stopped and could not resume by itself.
