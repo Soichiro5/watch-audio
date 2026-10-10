@@ -51,6 +51,8 @@ jobs:
             emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
             device-test-apks: :androidApp:assembleDebugAndroidTest :shared:core-db:assembleAndroidDeviceTest :shared:core-pipeline:assembleAndroidDeviceTest
             device-tests: :androidApp:connectedDebugAndroidTest :shared:core-db:connectedAndroidDeviceTest :shared:core-pipeline:connectedAndroidDeviceTest
+            # Each of these must report at least one test case: the test engine can end green with 0 tests (e.g. a failed APK install).
+            device-test-modules: androidApp shared/core-db shared/core-pipeline
           - name: wear
             module: wearApp
             api-level: 34
@@ -99,8 +101,11 @@ jobs:
             adb logcat -d > logcat.txt || (sleep 5 && adb wait-for-device && adb logcat -d > logcat.txt)
             adb shell pidof app.watchaudio || (echo "app is not running"; exit 1)
             if grep -q "AndroidRuntime: Process: app.watchaudio" logcat.txt; then grep -B2 -A25 "AndroidRuntime: Process: app.watchaudio" logcat.txt; exit 1; fi
+            # The test engine reinstalls the app itself; remove the smoke-test install so a signature mismatch cannot skip the tests.
+            if [ -n "${{ matrix.device-tests }}" ]; then adb uninstall app.watchaudio || true; fi
             if [ -n "${{ matrix.device-tests }}" ]; then adb logcat -c; ./gradlew ${{ matrix.device-tests }} || touch device-tests-failed; adb logcat -d > logcat-device-tests.txt || true; fi
             if [ -f device-tests-failed ]; then echo "instrumented tests failed"; exit 1; fi
+            for m in ${{ matrix.device-test-modules }}; do n=$(find "$m/build/outputs/androidTest-results/connected" -name '*.xml' -exec grep -o '<testcase ' {} + 2>/dev/null | wc -l); echo "$m: $n instrumented test cases"; if [ "$n" -eq 0 ]; then echo "no instrumented tests ran for $m"; exit 1; fi; done
 
       - name: Instrumented test evidence
         if: always() && matrix.device-tests != ''

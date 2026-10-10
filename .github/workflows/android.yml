@@ -26,8 +26,8 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: "Unit tests (shared: JVM + Android host; phone app JVM tests)"
-        run: ./gradlew jvmTest testAndroidHostTest :androidApp:testDebugUnitTest
+      - name: "Unit tests (shared: JVM + Android host; phone and Wear OS app JVM tests)"
+        run: ./gradlew jvmTest testAndroidHostTest :androidApp:testDebugUnitTest :wearApp:testDebugUnitTest
 
       # #23: ~500k generated Japanese segments (a year of transcripts); fails if any query's
       # p95 exceeds 300 ms. The numbers land in the job summary either way.
