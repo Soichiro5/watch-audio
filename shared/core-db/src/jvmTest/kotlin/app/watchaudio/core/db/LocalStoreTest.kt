@@ -97,6 +97,40 @@ class LocalStoreTest {
     }
 
     @Test
+    fun neighboursStayWithinSessionAndDevice() = runTest {
+        store.transaction {
+            insertChunk(manifest("a", 0), "a.m4a", 0)
+            insertChunk(manifest("other-session", 150_000).copy(sessionId = "s2"), "o.m4a", 0)
+            insertChunk(manifest("other-device", 200_000).copy(deviceId = "phone"), "d.m4a", 0)
+            insertChunk(manifest("b", 300_000), "b.m4a", 0)
+            insertChunk(manifest("c", 600_000), "c.m4a", 0)
+        }
+        val b = store.read { chunk("b") }!!
+        assertEquals("a", store.read { previousInSession(b) }?.id)
+        assertEquals("c", store.read { nextInSession(b) }?.id)
+        assertNull(store.read { previousInSession(chunk("a")!!) })
+        assertNull(store.read { nextInSession(chunk("c")!!) })
+    }
+
+    @Test
+    fun replaceSegmentsOnlyTouchesTheRange() = runTest {
+        store.transaction {
+            insertChunk(manifest("a", 0), "a.m4a", 0)
+            saveTranscript(
+                "a",
+                listOf(NewSegment(1_000, 2_000, "一つ目", "ja"), NewSegment(298_000, 300_000, "途中で切れ", "ja")),
+                "test",
+            )
+            replaceSegments("a", 297_000, Long.MAX_VALUE, listOf(NewSegment(298_000, 302_000, "途中で切れない発話", "ja")), "test2")
+        }
+        val texts = store.read { segmentsBetween(0, Long.MAX_VALUE) }.map { it.text }
+        assertEquals(listOf("一つ目", "途中で切れない発話"), texts)
+        assertEquals(1, store.read { search("切れない") }.size)
+        assertTrue(store.read { search("途中で切れ") }.all { it.segment.text == "途中で切れない発話" })
+        assertEquals(ChunkState.TRANSCRIBED, store.read { chunk("a") }!!.state)
+    }
+
+    @Test
     fun japaneseSubstringSearch() = runTest {
         store.transaction {
             insertChunk(manifest("a", 0), "a.m4a", 0)

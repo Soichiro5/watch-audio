@@ -75,6 +75,28 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
             if (st.step()) st.toChunk() else null
         }
 
+    /** The chunk of the same session and device that started last before [chunk], if any. */
+    fun previousInSession(chunk: ChunkRecord): ChunkRecord? = neighbourInSession(chunk, before = true)
+
+    /** The chunk of the same session and device that started first after [chunk], if any. */
+    fun nextInSession(chunk: ChunkRecord): ChunkRecord? = neighbourInSession(chunk, before = false)
+
+    private fun neighbourInSession(chunk: ChunkRecord, before: Boolean): ChunkRecord? {
+        val (comparison, order) = if (before) "<" to "DESC" else ">" to "ASC"
+        return db.prepare(
+            """
+            SELECT $CHUNK_COLUMNS FROM audio_chunk
+            WHERE session_id = ? AND device_id = ? AND started_at $comparison ?
+            ORDER BY started_at $order LIMIT 1
+            """.trimIndent(),
+        ).use { st ->
+            st.bindText(1, chunk.sessionId)
+            st.bindText(2, chunk.deviceId)
+            st.bindLong(3, chunk.startedAt)
+            if (st.step()) st.toChunk() else null
+        }
+    }
+
     /** Chunks waiting for transcription (new or retryable failures), oldest first. */
     fun pendingChunks(limit: Int, maxAttempts: Int): List<ChunkRecord> =
         db.prepare(
@@ -120,6 +142,26 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
     /** Replaces the chunk's transcript and marks it TRANSCRIBED. */
     fun saveTranscript(chunkId: String, segments: List<NewSegment>, engine: String) {
         update("DELETE FROM transcript_segment WHERE chunk_id = ?", chunkId)
+        insertSegments(chunkId, segments, engine)
+        update("UPDATE audio_chunk SET state = 'TRANSCRIBED', last_error = NULL WHERE id = ?", chunkId)
+    }
+
+    /**
+     * Replaces the chunk's segments that start in `[from, to)` with [segments], leaving the rest
+     * of its transcript and its state alone. Used when the audio around a chunk boundary is
+     * transcribed again together with the neighbouring chunk.
+     */
+    fun replaceSegments(chunkId: String, from: Long, to: Long, segments: List<NewSegment>, engine: String) {
+        db.prepare("DELETE FROM transcript_segment WHERE chunk_id = ? AND start_at >= ? AND start_at < ?").use { st ->
+            st.bindText(1, chunkId)
+            st.bindLong(2, from)
+            st.bindLong(3, to)
+            st.step()
+        }
+        insertSegments(chunkId, segments, engine)
+    }
+
+    private fun insertSegments(chunkId: String, segments: List<NewSegment>, engine: String) {
         segments.filter { it.text.isNotBlank() }.forEach { segment ->
             db.prepare(
                 "INSERT INTO transcript_segment (chunk_id, start_at, end_at, text, lang, engine) VALUES (?, ?, ?, ?, ?, ?)",
@@ -133,7 +175,6 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
                 st.step()
             }
         }
-        update("UPDATE audio_chunk SET state = 'TRANSCRIBED', last_error = NULL WHERE id = ?", chunkId)
     }
 
     fun segmentsBetween(from: Long, to: Long): List<SegmentRecord> =
