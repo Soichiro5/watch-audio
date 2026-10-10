@@ -1,0 +1,7 @@
+sherpa-onnx==1.13.8
+numpy==2.5.3
+soundfile==0.14.0
+jiwer==4.0.0
+pyarrow==26.0.0
+# optional: only if system ffmpeg is missing
+# imageio-ffmpeg
