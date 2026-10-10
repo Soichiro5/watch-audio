@@ -2,12 +2,14 @@ package app.watchaudio.app
 
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.Ingestor
+import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.pipeline.TranscriptionPipeline
 import app.watchaudio.core.protocol.AckStatus
 import app.watchaudio.core.protocol.ChunkAck
 import app.watchaudio.core.protocol.decodeManifest
 import app.watchaudio.core.protocol.toJson
 import kotlin.concurrent.Volatile
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.resume
 import kotlin.time.Clock
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -68,6 +70,7 @@ object IosAppGraph {
     private lateinit var store: LocalStore
     private lateinit var ingestor: Ingestor
     private lateinit var pipeline: TranscriptionPipeline
+    private lateinit var storage: StorageManager
     private lateinit var appServices: IosAppServices
 
     /** For the shared Compose UI; valid after [start]. */
@@ -105,7 +108,8 @@ object IosAppGraph {
         store = LocalStore.open("$rootDirectory/${LocalStore.FILE_NAME}")
         ingestor = Ingestor(store, Path(audioRoot))
         pipeline = TranscriptionPipeline(store, Path(audioRoot), IosTranscriberAdapter(transcriber))
-        appServices = IosAppServices(store, audioRoot, status, ::requestTranscription)
+        storage = StorageManager(store, Path(audioRoot), IosStorageEnvironment(rootDirectory))
+        appServices = IosAppServices(store, audioRoot, storage, status, ::requestTranscription)
         BGTaskScheduler.sharedScheduler.registerForTaskWithIdentifier(PROCESSING_TASK_ID, null) { task ->
             if (task != null) scope.launch { runBackgroundTask(task) }
         }
@@ -210,10 +214,17 @@ object IosAppGraph {
         if (flag.expired) scheduleBackgroundProcessing()
     }
 
-    /** Serialized: at most one pipeline run (foreground or BGTask) at a time. */
+    /**
+     * Serialized: at most one pipeline run (foreground or BGTask) at a time. Transcribes, then
+     * applies the audio retention setting (only transcribed audio is ever deleted, #33).
+     */
     private suspend fun runPipeline(shouldContinue: () -> Boolean) = runLock.withLock {
         // Without the model every chunk would fail and use up its retry attempts.
-        if (!ensureModel()) return@withLock
+        if (ensureModel()) transcribePending(shouldContinue)
+        applyRetention(shouldContinue)
+    }
+
+    private suspend fun transcribePending(shouldContinue: () -> Boolean) {
         status.update { it.copy(transcribing = true) }
         try {
             // Chunks left TRANSCRIBING by a cancelled or killed run go back into the queue.
@@ -225,6 +236,16 @@ object IosAppGraph {
             }
         } finally {
             status.update { it.copy(transcribing = false) }
+        }
+    }
+
+    private suspend fun applyRetention(shouldContinue: () -> Boolean) {
+        try {
+            storage.applyRetention(shouldContinue)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            status.update { it.copy(message = "古い音声の削除に失敗: ${e.message}") }
         }
     }
 
