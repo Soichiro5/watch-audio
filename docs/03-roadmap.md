@@ -29,7 +29,7 @@
 | 実機なし検証基盤（#44） | 🟡 | JVM 上の E2E（Watch シミュレータ → 取り込み → 日本語 ASR → SQLite → 検索）を CI に組み込み済み。エミュレータテストは未着手 |
 | Android スマホ（#18, #22） | ✅ 実装済み（実機未確認） | 受信と ACK、sherpa-onnx 文字起こし、モデル取得、WorkManager。詳細: [impl/android-phone.md](impl/android-phone.md)。モデル配布サイズの削減は #46 |
 | Wear OS 録音（#16, #41, #43） | ✅ 実装済み（実機未確認） | 常時録音、装着検出・充電で自動停止/再開、送信キュー + ACK、Tile・コンプリケーション。詳細: [impl/wearos.md](impl/wearos.md) |
-| iOS / watchOS（#15, #17, #21） | ✅ 実装済み（実機未確認） | 録音、WatchConnectivity + ACK、SpeechAnalyzer、BGProcessingTask。詳細: [impl/ios-watchos.md](impl/ios-watchos.md) |
+| iOS / watchOS（#15, #17, #21） | ✅ 実装済み（実機未確認） | 録音、WatchConnectivity + ACK、SpeechAnalyzer、BGProcessingTask。CI のシミュレータで停止理由の判定・送信キュー（Swift ユニットテスト）、iOS の再生（#19, #25）、SpeechTranscriber の文字起こし（使えなければ理由を記録）を確認。詳細: [impl/ios-watchos.md](impl/ios-watchos.md) |
 | スマホ UI（#19, #23, #25） | ✅ クローズ | 日別タイムライン（欠損理由・カバー率）・文字起こし・検索・状態表示。詳細: [impl/phone-ui.md](impl/phone-ui.md) |
 | チャンク境界の発話分断（#45） | ✅ 実装済み（実機未確認） | 隣のチャンクの境界付近と連結して認識し、開始時刻のチャンクに保存（3 プラットフォーム共通）。ハーネスで境界をまたぐ発話の E2E を追加。詳細: [02 §6.3](02-architecture.md#63-処理パイプラインphone) |
 | 録音途絶の通知・オンボーディング（#43, #32） | 🔧 実装中 | 10 分以上届かないときの通知、初回の説明・同意・権限 |
