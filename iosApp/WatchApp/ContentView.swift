@@ -11,6 +11,9 @@ struct ContentView: View {
                     header(now: context.date)
                     controls
                     status
+                    #if DEBUG
+                    debugAudioInput
+                    #endif
                 }
             }
         }
@@ -54,6 +57,24 @@ struct ContentView: View {
         }
         .font(.footnote)
     }
+
+    #if DEBUG
+    /// Debug builds only: record a file from `Documents/debug-input` instead of the microphone.
+    @ViewBuilder
+    private var debugAudioInput: some View {
+        if let playback = DebugAudioInput.playback {
+            Text("ファイル入力: \(playback.url.lastPathComponent)").font(.footnote)
+            Button("ファイル入力を止める") { recorder.stopDebugAudioInput() }
+        } else {
+            ForEach(DebugAudioInput.availableFiles(), id: \.self) { url in
+                Button("▶ \(url.lastPathComponent)") {
+                    Task { await recorder.startDebugAudioInput(url, loop: false) }
+                }
+                .font(.footnote)
+            }
+        }
+    }
+    #endif
 
     private static func pausedLabel(_ reason: ChunkEndReason) -> String {
         switch reason {

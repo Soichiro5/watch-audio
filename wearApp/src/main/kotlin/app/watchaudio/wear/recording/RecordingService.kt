@@ -28,8 +28,9 @@ import kotlinx.coroutines.launch
  * Always-on recorder (#16). Started by the wearer from the foreground (app or tile tap → app),
  * then keeps running as a `microphone` foreground service until the wearer taps Stop:
  *
- * - records ~5 minute AAC chunks gaplessly ([ChunkRecorder]) and journals the current chunk so a
- *   process death loses at most the chunk in progress;
+ * - records ~5 minute AAC chunks gaplessly ([RecorderInput]: the microphone, [ChunkRecorder]) and
+ *   journals the current chunk ([ChunkTracker]) so a process death loses at most the chunk in
+ *   progress;
  * - pauses (closing the chunk with the matching [ChunkEndReason]) when the watch is taken off,
  *   put on the charger, low on battery or storage, or the microphone is taken, and resumes on its
  *   own when the condition clears. Resuming happens inside the still-running foreground service,
@@ -39,7 +40,7 @@ import kotlinx.coroutines.launch
  * The decisions themselves live in [RecorderPolicy] (pure, unit-tested); this class only wires
  * Android events to it and applies the result.
  */
-class RecordingService : LifecycleService(), ChunkRecorder.Listener {
+class RecordingService : LifecycleService(), RecorderInput.Listener {
     private val graph by lazy { AppGraph.of(this) }
     private val handler = Handler(Looper.getMainLooper())
 
@@ -51,8 +52,8 @@ class RecordingService : LifecycleService(), ChunkRecorder.Listener {
     private var inForeground = false
     private var reconcileQueued = false
 
-    private var recorder: ChunkRecorder? = null
-    private var current: ActiveChunk? = null
+    private var recorder: RecorderInput? = null
+    private var current: ChunkTracker? = null
     private var pendingNextChunkId: String? = null
     private var sessionId: String? = null
     private var sessionStartedAtEpochMs: Long? = null
@@ -66,12 +67,6 @@ class RecordingService : LifecycleService(), ChunkRecorder.Listener {
     private lateinit var offBodyMonitor: OffBodyMonitor
     private val audioManager by lazy { getSystemService(AudioManager::class.java) }
     private var recordingCallbackRegistered = false
-
-    /** The chunk being recorded: its journal plus in-memory state. */
-    private class ActiveChunk(var journal: ChunkJournal, val startElapsedMs: Long) {
-        val silence = journal.silenceDetector()
-        val durationMs get() = SystemClock.elapsedRealtime() - startElapsedMs
-    }
 
     private val recordingCallback = object : AudioManager.AudioRecordingCallback() {
         override fun onRecordingConfigChanged(configs: MutableList<AudioRecordingConfiguration>) {
@@ -155,15 +150,15 @@ class RecordingService : LifecycleService(), ChunkRecorder.Listener {
 
     private fun mark() {
         val chunk = current
-        if (chunk == null) {
+        val rec = recorder
+        if (chunk == null || rec == null) {
             if (!inForeground) stopSelf()
             return
         }
-        val offset = chunk.durationMs
-        chunk.journal = chunk.journal.copy(markOffsetsMs = chunk.journal.markOffsetsMs + offset)
+        val offset = chunk.mark(rec.elapsedRealtime())
         writeJournal(chunk)
         RecorderStore.update { it.copy(marksInSession = it.marksInSession + 1) }
-        graph.log("mark", "${chunk.journal.chunkId} +${offset}ms")
+        graph.log("mark", "${chunk.chunkId} +${offset}ms")
     }
 
     private fun enterForeground(): Boolean {
@@ -286,7 +281,7 @@ class RecordingService : LifecycleService(), ChunkRecorder.Listener {
     private fun startRecording(): Boolean {
         val chunkId = UUID.randomUUID().toString()
         val file = graph.recordingDir.audioFile(chunkId)
-        val rec = ChunkRecorder(this, this)
+        val rec = graph.recorderInputFactory.create(this, this)
         val startElapsed = try {
             rec.start(file)
         } catch (e: Exception) {
@@ -302,7 +297,7 @@ class RecordingService : LifecycleService(), ChunkRecorder.Listener {
         sessionId = session
         sessionStartedAtEpochMs = startedAt
         RecorderStore.update { it.copy(sessionStartedAtEpochMs = startedAt, marksInSession = 0) }
-        val chunk = ActiveChunk(
+        val chunk = ChunkTracker(
             ChunkJournal(
                 chunkId = chunkId,
                 sessionId = session,
@@ -323,7 +318,7 @@ class RecordingService : LifecycleService(), ChunkRecorder.Listener {
     private fun stopRecording(endReason: ChunkEndReason) {
         val rec = recorder ?: return
         recorder = null
-        val stoppedAt = SystemClock.elapsedRealtime()
+        val stoppedAt = rec.elapsedRealtime()
         val clean = rec.stop()
         tickerJob?.cancel()
         tickerJob = null
@@ -334,8 +329,7 @@ class RecordingService : LifecycleService(), ChunkRecorder.Listener {
 
         val chunk = current ?: return
         current = null
-        val duration = stoppedAt - chunk.startElapsedMs
-        val journal = chunk.journal.withSilence(chunk.silence).copy(lastAliveAtEpochMs = chunk.journal.startedAtEpochMs + duration)
+        val (journal, duration) = chunk.end(stoppedAt)
         if (endReason == ChunkEndReason.INTERRUPTION && journal.retryProbe && duration < InterruptionBackoff.PROBE_DISCARD_MS) {
             // A retry silenced right away: the gap that started with the previous chunk continues.
             graph.scope.launch(graph.chunkIo) { graph.recordingDir.delete(journal.chunkId) }
@@ -353,25 +347,12 @@ class RecordingService : LifecycleService(), ChunkRecorder.Listener {
     }
 
     override fun onRotated(atElapsedMs: Long) {
-        val closed = current ?: return
+        val chunk = current ?: return
         val nextId = pendingNextChunkId ?: return
-        val session = sessionId ?: return
+        if (sessionId == null) return
         pendingNextChunkId = null
-        val duration = atElapsedMs - closed.startElapsedMs
-        val next = ActiveChunk(
-            ChunkJournal(
-                chunkId = nextId,
-                sessionId = session,
-                deviceId = closed.journal.deviceId,
-                // Derived from the previous chunk so consecutive chunks tile the timeline exactly.
-                startedAtEpochMs = closed.journal.startedAtEpochMs + duration,
-                timeZone = TimeZone.getDefault().id,
-            ),
-            atElapsedMs,
-        )
-        current = next
-        writeJournal(next)
-        val journal = closed.journal.withSilence(closed.silence).copy(lastAliveAtEpochMs = closed.journal.startedAtEpochMs + duration)
+        val (journal, duration) = chunk.rotate(nextId, atElapsedMs, TimeZone.getDefault().id)
+        writeJournal(chunk)
         finalizeChunk(journal, duration, ChunkEndReason.ROTATION, audioUsable = true)
     }
 
@@ -392,23 +373,24 @@ class RecordingService : LifecycleService(), ChunkRecorder.Listener {
         tickerJob = lifecycleScope.launch {
             var lastHeartbeat = SystemClock.elapsedRealtime()
             while (isActive) {
-                delay(SilenceDetector.POLL_INTERVAL_MS)
+                // Once per second of audio (a debug file input may play faster than real time).
+                delay((SilenceDetector.POLL_INTERVAL_MS / (recorder?.speed ?: 1.0)).toLong().coerceAtLeast(1))
                 val rec = recorder ?: break
                 val chunk = current ?: continue
-                chunk.silence.add(rec.pollMaxAmplitude())
+                chunk.addAmplitude(rec.pollMaxAmplitude())
                 val now = SystemClock.elapsedRealtime()
                 if (rec.isSilenced) {
                     onInterrupted(hardFailure = false, ChunkEndReason.INTERRUPTION, "silenced (poll)")
                     break
                 }
-                if (backoff.sinceMs != null && now - recorderStartedAtElapsed >= InterruptionBackoff.HEALTHY_AFTER_MS) {
+                if (backoff.sinceMs != null && rec.elapsedRealtime() - recorderStartedAtElapsed >= InterruptionBackoff.HEALTHY_AFTER_MS) {
                     backoff.onHealthy()
                     graph.log("recovered")
                     requestReconcile()
                 }
                 if (now - lastHeartbeat >= HEARTBEAT_INTERVAL_MS) {
                     lastHeartbeat = now
-                    chunk.journal = chunk.journal.withSilence(chunk.silence).copy(lastAliveAtEpochMs = System.currentTimeMillis())
+                    chunk.heartbeat(System.currentTimeMillis())
                     writeJournal(chunk)
                     val free = freeStorage()
                     if (free < RecorderPolicy.LOW_STORAGE_BYTES) {
@@ -420,8 +402,8 @@ class RecordingService : LifecycleService(), ChunkRecorder.Listener {
         }
     }
 
-    private fun writeJournal(chunk: ActiveChunk) {
-        val journal = chunk.journal.withSilence(chunk.silence)
+    private fun writeJournal(chunk: ChunkTracker) {
+        val journal = chunk.snapshot()
         runCatching { graph.recordingDir.write(journal) }.onFailure { graph.log("journal_failed", it.toString()) }
     }
 

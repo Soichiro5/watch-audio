@@ -9,7 +9,7 @@ import app.watchaudio.wear.outbox.Outbox
 import java.io.File
 import java.security.MessageDigest
 
-/** Audio format written by [ChunkRecorder]; recorded in every manifest. */
+/** Audio format written by every [RecorderInput]; recorded in every manifest. */
 object AudioFormat {
     const val SAMPLE_RATE_HZ = 16_000
     const val CHANNELS = 1
@@ -17,6 +17,9 @@ object AudioFormat {
 
     /** ~5 minutes at [BITRATE_BPS]; `MediaRecorder` rotates by size (see [ChunkRecorder]). */
     const val CHUNK_BYTES = BITRATE_BPS / 8L * 300
+
+    /** The chunk length [CHUNK_BYTES] amounts to at [BITRATE_BPS] (5 minutes). */
+    const val CHUNK_DURATION_MS = CHUNK_BYTES * 8 * 1000 / BITRATE_BPS
 }
 
 /**
