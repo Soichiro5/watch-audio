@@ -28,6 +28,9 @@ class TestSetEvaluator(private val models: File, private val workDir: File, priv
         val chunks: Int,
         val silentChunks: Int,
         val transcribeSeconds: Double,
+        /** Median and longest stored segment, i.e. recognizer input (padding included), in seconds. */
+        val medianSegmentSeconds: Double,
+        val maxSegmentSeconds: Double,
     ) {
         val audioSeconds get() = recording.durationMs / 1000.0
         val rtf get() = transcribeSeconds / audioSeconds
@@ -46,9 +49,9 @@ class TestSetEvaluator(private val models: File, private val workDir: File, priv
                 evaluate(File(manifestFile.absoluteFile.parentFile, recording.audio), recording, transcriber).also {
                     File(workDir, "${recording.id}/row.md").writeText(markdownRow(it))
                     println(
-                        "%s: CER %.1f%% (oracle segmentation %.1f%%), missed %d/%d, %d chunks (%d silent), ASR %.0fs (RTF %.3f)".format(
+                        "%s: CER %.1f%% (oracle segmentation %.1f%%), missed %d/%d, segments median %.1fs max %.1fs, %d chunks (%d silent), ASR %.0fs (RTF %.3f)".format(
                             recording.id, it.score.cer * 100, it.oracleCer * 100, it.score.missed, it.score.utterances,
-                            it.chunks, it.silentChunks, it.transcribeSeconds, it.rtf,
+                            it.medianSegmentSeconds, it.maxSegmentSeconds, it.chunks, it.silentChunks, it.transcribeSeconds, it.rtf,
                         ),
                     )
                 }
@@ -80,7 +83,8 @@ class TestSetEvaluator(private val models: File, private val workDir: File, priv
             val score = scoreRecording(recording.segments, hypotheses)
             val oracleScore = scoreRecording(recording.segments, oracle)
             File(dir, "report.md").writeText(detailReport(recording, score, oracle))
-            Result(recording, score, oracleScore.cer, chunks.size, silent, transcribeSeconds)
+            val lengths = hypotheses.map { (it.endMs - it.startMs) / 1000.0 }.sorted().ifEmpty { listOf(0.0) }
+            Result(recording, score, oracleScore.cer, chunks.size, silent, transcribeSeconds, lengths[lengths.size / 2], lengths.last())
         }
     }
 
