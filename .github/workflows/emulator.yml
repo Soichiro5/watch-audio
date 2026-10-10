@@ -124,8 +124,8 @@ jobs:
             adb shell pidof app.watchaudio || (echo "app is not running"; exit 1)
             if grep -q "AndroidRuntime: Process: app.watchaudio" logcat.txt; then grep -B2 -A25 "AndroidRuntime: Process: app.watchaudio" logcat.txt; exit 1; fi
             if [ -n "${{ matrix.scenarios }}" ]; then bash ${{ matrix.scenarios }} || touch device-tests-failed; fi
-            # The test engine reinstalls the app itself; remove the smoke-test install so a signature mismatch cannot skip the tests.
-            if [ -n "${{ matrix.device-tests }}" ]; then adb uninstall app.watchaudio || true; fi
+            # The test engine reinstalls both APKs itself; remove the earlier installs (smoke test, scenarios) so a signature mismatch cannot skip the tests.
+            if [ -n "${{ matrix.device-tests }}" ]; then adb uninstall app.watchaudio || true; adb uninstall app.watchaudio.test || true; fi
             if [ -n "${{ matrix.device-tests }}" ]; then adb logcat -c; ./gradlew ${{ matrix.device-tests }} ${{ matrix.device-test-args }} || touch device-tests-failed; adb logcat -d > logcat-device-tests.txt || true; fi
             adb pull /data/local/tmp/watchaudio-screenshots screenshots-${{ matrix.name }} || true
             if [ -f device-tests-failed ]; then echo "instrumented tests failed"; exit 1; fi
