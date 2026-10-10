@@ -69,7 +69,7 @@ flowchart LR
   end
 ```
 
-- プラットフォームとの契約は `AppServices`（`store`, `audioRoot`, `status`, `requestTranscription()`, `play()`, `stopPlayback()`, `downloadModel(allowMetered)`）。`downloadModel` はデフォルト no-op（iOS のように OS がモデルを管理する場合はそのまま）。
+- プラットフォームとの契約は `AppServices`（`store`, `audioRoot`, `status`, `requestTranscription()`, `play()`, `stopPlayback()`, `downloadModels(allowMetered)`）。`downloadModels` はデフォルト no-op（iOS のように OS がモデルを管理する場合はそのまま）。
 - 計算はすべて UI から独立した純粋関数（`logic/`）で、`commonTest` でテストしている。
 - 時刻表示は端末のタイムゾーン（`TimeZone.currentSystemDefault()`、kotlinx-datetime）。チャンクの `timeZone` も DB に保存されているが、表示には使っていない。
 

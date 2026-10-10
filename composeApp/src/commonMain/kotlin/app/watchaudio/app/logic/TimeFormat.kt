@@ -30,12 +30,6 @@ fun formatClock(epochMs: Long, timeZone: TimeZone): String {
     return "${t.hour.pad2()}:${t.minute.pad2()}"
 }
 
-/** `HH:mm:ss` in [timeZone]. */
-fun formatClockSeconds(epochMs: Long, timeZone: TimeZone): String {
-    val t = Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(timeZone)
-    return "${t.hour.pad2()}:${t.minute.pad2()}:${t.second.pad2()}"
-}
-
 /** `HH:mm–HH:mm`; an end at local midnight is shown as `24:00`. */
 fun formatClockRange(from: Long, to: Long, timeZone: TimeZone): String {
     val end = Instant.fromEpochMilliseconds(to).toLocalDateTime(timeZone)

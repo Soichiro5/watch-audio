@@ -51,7 +51,7 @@ class StatusViewModel(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StatusUiState(services.status.value))
 
-    fun downloadModel(allowMetered: Boolean) = services.downloadModel(allowMetered)
+    fun downloadModels(allowMetered: Boolean) = services.downloadModels(allowMetered)
 
     fun requestTranscription() = services.requestTranscription()
 }

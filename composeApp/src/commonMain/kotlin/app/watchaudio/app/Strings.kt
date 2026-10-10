@@ -7,8 +7,6 @@ import app.watchaudio.core.protocol.ChunkEndReason
  * Compose resources / localized later. Japanese only for now.
  */
 object Strings {
-    const val APP_NAME = "watch-audio"
-
     // Navigation
     const val TAB_TIMELINE = "タイムライン"
     const val TAB_SEARCH = "検索"
@@ -29,7 +27,6 @@ object Strings {
     const val NO_RECORDING_THIS_DAY = "この日の録音はありません"
     const val NO_TRANSCRIPT_YET = "文字起こしされた発話はまだありません"
     const val RETRY = "再試行"
-    const val LOADING = "読み込み中…"
 
     fun coverageDetail(covered: String, day: String) = "$covered / $day"
     fun audioAndSilent(audio: String, silent: String) = "音声 $audio ・ 無音 $silent"

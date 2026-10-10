@@ -37,7 +37,7 @@ class FakeAppServices(
         stopRequests++
     }
 
-    override fun downloadModel(allowMetered: Boolean) {
+    override fun downloadModels(allowMetered: Boolean) {
         downloadRequests += allowMetered
     }
 

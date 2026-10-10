@@ -115,7 +115,7 @@ fun App(
                     StatusScreen(
                         state = statusState,
                         timeZone = timeZone,
-                        onDownloadModel = statusViewModel::downloadModel,
+                        onDownloadModel = statusViewModel::downloadModels,
                         onTranscribeNow = statusViewModel::requestTranscription,
                         modifier = modifier,
                     )

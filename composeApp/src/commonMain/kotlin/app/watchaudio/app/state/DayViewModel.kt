@@ -98,8 +98,9 @@ class DayViewModel(
 
     /** Jumps to the day of a segment (e.g. a search hit), scrolls to it and plays it. */
     fun openSegment(chunkId: String, segmentId: Long, startAt: Long) {
-        selected.value = localDateOf(startAt, timeZone)
+        // Focus first, so no intermediate state shows the new day without it.
         focus.value = segmentId
+        selected.value = localDateOf(startAt, timeZone)
         viewModelScope.launch {
             val chunk = services.store.read { chunk(chunkId) } ?: return@launch
             val path = chunk.audioPath ?: return@launch

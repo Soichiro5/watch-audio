@@ -32,7 +32,6 @@ class FormattingTest {
     fun clockAndDateInLocalTimeZone() {
         val t = at(9, 5) + 7_000
         assertEquals("09:05", formatClock(t, TOKYO))
-        assertEquals("09:05:07", formatClockSeconds(t, TOKYO))
         assertEquals("00:05", formatClock(t, TimeZone.UTC))
         assertEquals(DAY, localDateOf(t, TOKYO))
         assertEquals(LocalDate(2026, 10, 10), localDateOf(at(0), TOKYO))

@@ -29,7 +29,7 @@ interface AppServices {
      * [ModelState.Downloading]. Platforms whose model is managed by the OS keep the no-op.
      * @param allowMetered also download over mobile data, not only Wi-Fi.
      */
-    fun downloadModel(allowMetered: Boolean) {}
+    fun downloadModels(allowMetered: Boolean) {}
 }
 
 data class ProcessingStatus(

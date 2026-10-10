@@ -262,7 +262,7 @@ class ViewModelTest {
         assertIs<ArrivalState.Receiving>(vm.state.value.arrival)
         assertEquals(ModelState.Ready, vm.state.value.status.asrModel)
 
-        vm.downloadModel(allowMetered = true)
+        vm.downloadModels(allowMetered = true)
         vm.requestTranscription()
         assertEquals(listOf(true), services.downloadRequests)
         assertEquals(1, services.transcriptionRequests)
