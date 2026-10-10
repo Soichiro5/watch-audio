@@ -146,33 +146,37 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
     /**
      * Substring search over transcripts, newest first. Trigram FTS needs 3+ characters, so
      * shorter queries fall back to LIKE.
+     *
+     * Shaped for a year of data (#23, `:shared:core-db:jvmBenchmark`): the FTS path sorts only
+     * segment ids and loads the [limit] newest rows afterwards, and the LIKE path scans the
+     * `(start_at, text)` index newest-first, stopping at [limit] hits. Snippets are built in
+     * Kotlin for the returned rows only ([highlightSnippet]).
      */
     fun search(query: String, limit: Int = 50): List<SearchHit> {
         val q = query.trim()
         if (q.isEmpty()) return emptyList()
-        return if (q.length >= 3) {
-            db.prepare(
-                """
-                SELECT ${SEGMENT_COLUMNS.prefixed("s")}, snippet(segment_fts, 0, '[', ']', '…', 24)
-                FROM segment_fts JOIN transcript_segment s ON s.id = segment_fts.rowid
+        val sql = if (q.length >= 3) {
+            """
+            SELECT $SEGMENT_COLUMNS FROM transcript_segment WHERE id IN (
+                SELECT s.id FROM segment_fts JOIN transcript_segment s ON s.id = segment_fts.rowid
                 WHERE segment_fts MATCH ? ORDER BY s.start_at DESC LIMIT ?
-                """.trimIndent(),
-            ).use { st ->
-                st.bindText(1, "\"" + q.replace("\"", "\"\"") + "\"")
-                st.bindLong(2, limit.toLong())
-                buildList { while (st.step()) add(SearchHit(st.toSegment(), st.getText(7))) }
-            }
+            ) ORDER BY start_at DESC
+            """.trimIndent()
         } else {
-            db.prepare(
-                "SELECT $SEGMENT_COLUMNS FROM transcript_segment WHERE text LIKE ? ESCAPE '\\' ORDER BY start_at DESC LIMIT ?",
-            ).use { st ->
-                st.bindText(1, "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
-                st.bindLong(2, limit.toLong())
-                buildList {
-                    while (st.step()) {
-                        val segment = st.toSegment()
-                        add(SearchHit(segment, segment.text.replace(q, "[$q]")))
-                    }
+            "SELECT $SEGMENT_COLUMNS FROM transcript_segment WHERE text LIKE ? ESCAPE '\\' ORDER BY start_at DESC LIMIT ?"
+        }
+        val pattern = if (q.length >= 3) {
+            "\"" + q.replace("\"", "\"\"") + "\""
+        } else {
+            "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        }
+        return db.prepare(sql).use { st ->
+            st.bindText(1, pattern)
+            st.bindLong(2, limit.toLong())
+            buildList {
+                while (st.step()) {
+                    val segment = st.toSegment()
+                    add(SearchHit(segment, highlightSnippet(segment.text, q)))
                 }
             }
         }
@@ -250,7 +254,5 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
         const val CHUNK_COLUMNS =
             "id, session_id, device_id, source, started_at, ended_at, time_zone, audio_path, end_reason, state, attempts, last_error"
         const val SEGMENT_COLUMNS = "id, chunk_id, start_at, end_at, text, lang, engine"
-
-        fun String.prefixed(alias: String) = split(", ").joinToString(", ") { "$alias.$it" }
     }
 }

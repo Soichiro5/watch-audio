@@ -1,5 +1,7 @@
 package app.watchaudio.core.db
 
+import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import androidx.sqlite.execSQL
 import app.watchaudio.core.protocol.AudioCodec
 import app.watchaudio.core.protocol.AudioFile
 import app.watchaudio.core.protocol.ChunkEndReason
@@ -189,6 +191,27 @@ class LocalStoreTest {
         assertEquals(1, store.changes.value)
         runCatching { store.transaction { error("rolled back") } }
         assertEquals(1, store.changes.value)
+    }
+
+    @Test
+    fun upgradesAVersion1Database() = runTest {
+        store.close()
+        val path = dir.resolve("v1.db").toString()
+        BundledSQLiteDriver().open(path).use { db ->
+            MIGRATIONS[0].forEach { db.execSQL(it.trimIndent()) }
+            db.execSQL("PRAGMA user_version = 1")
+            db.execSQL(
+                "INSERT INTO audio_chunk (id, session_id, device_id, source, started_at, ended_at, time_zone, end_reason, " +
+                    "state, received_at, manifest_json) VALUES ('a', 's', 'w', 'WEAROS', 0, 300000, 'UTC', 'ROTATION', 'TRANSCRIBED', 0, '{}')",
+            )
+            db.execSQL(
+                "INSERT INTO transcript_segment (chunk_id, start_at, end_at, text, engine) VALUES ('a', 1000, 2000, '歯医者の予約', 'v1')",
+            )
+        }
+        LocalStore.open(path).use { upgraded ->
+            assertEquals("歯医者の[予約]", upgraded.read { search("予約") }.single().snippet)
+            assertEquals("[歯医者]の予約", upgraded.read { search("歯医者") }.single().snippet)
+        }
     }
 
     @Test
