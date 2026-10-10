@@ -23,6 +23,13 @@ interface AppServices {
     fun play(audioPath: String, offsetMs: Long)
 
     fun stopPlayback()
+
+    /**
+     * Start (or resume) downloading the ASR model; progress is reported through [status] as
+     * [ModelState.Downloading]. Platforms whose model is managed by the OS keep the no-op.
+     * @param allowMetered also download over mobile data, not only Wi-Fi.
+     */
+    fun downloadModel(allowMetered: Boolean) {}
 }
 
 data class ProcessingStatus(
