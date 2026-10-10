@@ -14,11 +14,12 @@
 4. **共通化はロジック、UI 以外の OS 依存はアダプタで** — 共通ロジックは Kotlin Multiplatform、Watch アプリはネイティブ。OS 差分はインターフェースの裏に閉じ込める。
 5. **小さく積んで、常に緑** — 小さな単位でコミット・push し、CI が赤なら新しい作業より先に直す。
 6. **ドキュメントと Issue を同時に更新する** — 変更のたびに関係するドキュメントと Issue（進捗・ラベル・クローズ）を更新する。
+7. **Issue は完了条件で閉じる** — すべての Issue に「完了条件」（判定できる条件と確認方法）を書く。条件を変えたら本文を更新し、理由をコメントに残す。クローズは、各条件を満たした**証拠**（テスト・CI の結果、コミット/PR、計測値、スクリーンショット）を条件ごとにコメントしてから行う。実装しただけではクローズしない（実機が必要な条件は `needs-device` で残す）。
 
 ## 進め方
 
 - **`main` は正式ブランチ**: CI と CD（ビルド成果物の作成）は `main` で動く。`main` には直接コミット・push しない。
-- **必ず別ブランチで開発して PR を出す**: Issue ごとに作業ブランチ（`feat/<Issue番号>-<内容>` など）を切り、**Issue と紐づけた PR**（本文に `Closes #番号`、一部対応なら `Refs #番号`）を作る。PR でも CI が動き、緑になってから `main` にマージする（現時点では Claude が CI を確認してマージしてよい）。マージで Issue は自動でクローズされる。
+- **必ず別ブランチで開発して PR を出す**: Issue ごとに作業ブランチ（`feat/<Issue番号>-<内容>` など）を切り、**Issue と紐づけた PR**（本文に `Closes #番号`、一部対応なら `Refs #番号`）を作る。`Closes` は PR だけで完了条件をすべて満たす場合に限る。PR でも CI が動き、緑になってから `main` にマージする（現時点では Claude が CI を確認してマージしてよい）。マージで Issue は自動でクローズされる。
 - **Issue**: 優先度ラベル `P0`（今やる）/ `P1`（次）/ `P2`（後回し）、状態ラベル `in-progress` / `needs-device`、Issue 間の依存は GitHub の「Blocked by」で管理。現在のゴールはマイルストーン「v0.1 コア」。
 - **ダッシュボード**: Issue を優先度・状態・依存関係で一覧できるページを `tools/roadmap-view/build.py` で生成している（[ロードマップ](https://claude.ai/artifact/W2TAExeoMUzXQKTo6h4QPE)、オーナーのみ閲覧可）。
 - **CI/CD**: GitHub Actions。PR と `main` で `android.yml`（テスト・実機なし E2E・ビルド）/ `ios.yml`（iOS・watchOS、関連変更時のみ）/ `emulator.yml`（起動スモークテスト）、`main` へのマージで `deliver.yml`（スマホ・Wear OS の APK を成果物として保存。将来は TestFlight / Play 内部テストへ自動配信）。
