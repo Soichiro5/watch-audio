@@ -38,6 +38,11 @@ final class ChunkTransport: NSObject, WCSessionDelegate, @unchecked Sendable {
         WCSession.isSupported() && WCSession.default.activationState == .activated
     }
 
+    /// Received content (e.g. ACKs) is still waiting to be delivered to the delegate.
+    var hasContentPending: Bool {
+        WCSession.isSupported() && WCSession.default.hasContentPending
+    }
+
     /// Chunk ids the system is still trying to deliver (these must not be queued twice).
     func outstandingChunkIds() -> Set<String> {
         guard isActivated else { return [] }

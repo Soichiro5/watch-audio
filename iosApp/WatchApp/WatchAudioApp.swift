@@ -14,5 +14,9 @@ struct WatchAudioApp: App {
                     }
                 }
         }
+        // The system wakes the app in the background to deliver WatchConnectivity content.
+        .backgroundTask(.watchConnectivity) { [recorder] in
+            await recorder.receivePendingTransfers()
+        }
     }
 }

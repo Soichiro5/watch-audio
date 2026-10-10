@@ -165,6 +165,18 @@ final class RecorderController {
         Task { await startRecording(resuming: true) }
     }
 
+    /// Background wake for WatchConnectivity (e.g. ACKs arriving while the app is suspended):
+    /// stay awake until the pending content has been handed to the delegate.
+    func receivePendingTransfers() async {
+        var waited = 0
+        while transport.hasContentPending, waited < 20 {
+            try? await Task.sleep(for: .seconds(1))
+            waited += 1
+        }
+        // Let the delegate's hops to the main actor (ACK handling) run before suspending.
+        try? await Task.sleep(for: .milliseconds(500))
+    }
+
     // MARK: - Recording
 
     private func startRecording(resuming: Bool) async {
