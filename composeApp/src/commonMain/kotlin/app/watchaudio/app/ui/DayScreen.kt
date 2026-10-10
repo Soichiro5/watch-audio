@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
@@ -50,8 +51,8 @@ import app.watchaudio.app.logic.formatPercent
 import app.watchaudio.app.state.DayUiState
 import kotlinx.datetime.TimeZone
 
-/** Number of LazyColumn items above the transcript entries (date bar, summary, gaps, header). */
-private const val HEADER_ITEMS = 4
+/** Number of LazyColumn items above the transcript entries (summary, gaps, header). */
+private const val HEADER_ITEMS = 3
 
 @Composable
 internal fun DayScreen(
@@ -69,6 +70,9 @@ internal fun DayScreen(
     var highlighted by remember { mutableStateOf<Long?>(null) }
     val content = state.content
 
+    LaunchedEffect(state.date) {
+        if (state.focusSegmentId == null) listState.scrollToItem(0)
+    }
     LaunchedEffect(state.focusSegmentId, content) {
         val target = state.focusSegmentId ?: return@LaunchedEffect
         if (content == null) return@LaunchedEffect
@@ -80,14 +84,27 @@ internal fun DayScreen(
         onFocusHandled()
     }
 
+    Column(modifier.fillMaxSize()) {
+        DateBar(state, onPreviousDay, onNextDay, onToday)
+        DayContentList(state, timeZone, listState, highlighted, onPlay, onTranscribe)
+    }
+}
+
+@Composable
+private fun DayContentList(
+    state: DayUiState,
+    timeZone: TimeZone,
+    listState: LazyListState,
+    highlighted: Long?,
+    onPlay: (TranscriptEntry.Utterance) -> Unit,
+    onTranscribe: (TranscriptEntry.Untranscribed) -> Unit,
+) {
+    val content = state.content
     LazyColumn(
         state = listState,
-        modifier = modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 16.dp),
     ) {
-        item(key = "date") {
-            DateBar(state, onPreviousDay, onNextDay, onToday)
-        }
         item(key = "summary") {
             if (content == null) {
                 Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {

@@ -33,5 +33,11 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)
         }
+        jvmTest.dependencies {
+            // Headless Compose UI smoke tests (Skia for the host OS).
+            implementation(libs.compose.ui.test)
+            implementation(compose.desktop.currentOs)
+            implementation(libs.kotlinx.coroutines.swing) // Dispatchers.Main for view models
+        }
     }
 }

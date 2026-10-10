@@ -47,12 +47,13 @@ internal fun timelineColors(): TimelineColors {
     val scheme = MaterialTheme.colorScheme
     return TimelineColors(
         audio = scheme.primary,
-        silent = scheme.primary.copy(alpha = 0.35f),
+        silent = scheme.primary.copy(alpha = 0.5f),
         stopped = scheme.tertiary,
         missing = scheme.error,
         awaiting = scheme.outline,
-        notRecorded = scheme.surfaceVariant,
-        future = scheme.surfaceVariant.copy(alpha = 0.4f),
+        notRecorded = scheme.onSurface.copy(alpha = 0.1f),
+        // Lighter than the card it sits on.
+        future = scheme.surface,
     )
 }
 
