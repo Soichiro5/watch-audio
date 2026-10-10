@@ -1,0 +1,12 @@
+<resources>
+    <!-- Debug builds only (audio file input, docs/impl/wearos.md). -->
+    <string name="debug_input_label">Debug: audio file input</string>
+    <string name="debug_input_title">Audio file input</string>
+    <string name="debug_input_status_mic">Input: microphone · %1$s</string>
+    <string name="debug_input_status_file">Input: %1$s ×%2$.0f · %3$d s · %4$s</string>
+    <string name="debug_input_stop">Stop · back to mic</string>
+    <string name="debug_input_speed">Speed ×%1$.0f</string>
+    <string name="debug_input_loop">Loop</string>
+    <string name="debug_input_no_files">No files. Push audio to:\n%1$s</string>
+    <string name="debug_input_not_found">Not found: %1$s</string>
+</resources>

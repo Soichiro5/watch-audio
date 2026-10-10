@@ -32,6 +32,11 @@ class MainActivity : ComponentActivity() {
 
     private var askedOptional = false
 
+    /** Label of the debug-only audio file input screen; null in release builds (not declared there). */
+    private val debugInputLabel: String? by lazy {
+        packageManager.resolveActivity(debugInputIntent(), PackageManager.ResolveInfoFlags.of(0))?.loadLabel(packageManager)?.toString()
+    }
+
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         if (hasMicPermission()) {
             if (!RecorderStore.state.value.serviceRunning) startRecording()
@@ -56,6 +61,8 @@ class MainActivity : ComponentActivity() {
                         onStop = ::stopRecording,
                         onMark = { RecordingService.mark(this@MainActivity) },
                         onUploadEnabledChange = ::changeUploadEnabled,
+                        debugInputLabel = debugInputLabel,
+                        onDebugInput = ::openDebugInput,
                     )
                 }
             }
@@ -106,6 +113,10 @@ class MainActivity : ComponentActivity() {
         armed = false
     }
 
+    private fun debugInputIntent() = Intent(ACTION_DEBUG_AUDIO_INPUT).setPackage(packageName)
+
+    private fun openDebugInput() = startActivity(debugInputIntent())
+
     private fun changeUploadEnabled(enabled: Boolean) {
         graph.prefs.uploadEnabled = enabled
         uploadEnabled = enabled
@@ -135,5 +146,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val ACTION_RESUME = "app.watchaudio.wear.action.RESUME"
         const val EXTRA_FROM_TILE = "from_tile"
+
+        /** Declared only by the debug manifest (`src/debug`): the audio file input screen. */
+        private const val ACTION_DEBUG_AUDIO_INPUT = "app.watchaudio.wear.debug.AUDIO_INPUT"
     }
 }

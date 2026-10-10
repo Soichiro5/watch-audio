@@ -114,6 +114,22 @@ jobs:
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO build -quiet 2>&1 | tee xcodebuild-watch.log; exit ${PIPESTATUS[0]}
 
+      # #57: the audio-file input is Debug-only (#if DEBUG). Build Release and make sure it is not in the binary;
+      # the Debug build above is the positive control for the search.
+      - name: watchOS Release build has no debug audio input
+        if: (success() || failure()) && steps.build-watch.outcome == 'success'
+        run: |
+          xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme WatchApp \
+            -configuration Release -destination 'generic/platform=watchOS Simulator' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO build -quiet 2>&1 | tee xcodebuild-watch-release.log; test ${PIPESTATUS[0]} -eq 0
+          DEBUG_APP=$(find build/DerivedData/Build/Products/Debug-watchsimulator -maxdepth 1 -name '*.app' | head -1)
+          RELEASE_APP=$(find build/DerivedData/Build/Products/Release-watchsimulator -maxdepth 1 -name '*.app' | head -1)
+          echo "Debug: $DEBUG_APP / Release: $RELEASE_APP"
+          grep -rqa DebugAudioFileInput "$DEBUG_APP" || { echo "DebugAudioFileInput not found in the Debug app (search is broken)"; exit 1; }
+          if grep -rla DebugAudioFileInput "$RELEASE_APP"; then echo "DebugAudioFileInput leaked into the Release app"; exit 1; fi
+          echo "OK: DebugAudioFileInput is in the Debug app and absent from the Release app" | tee -a "$GITHUB_STEP_SUMMARY"
+
       # #7: the apps must start, not only build. Install the products above on a booted
       # simulator, launch, wait 15 s, fail if the process died or a crash report appeared.
       - name: Launch iOS app on an iPhone simulator
