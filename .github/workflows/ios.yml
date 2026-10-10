@@ -1,0 +1,81 @@
+name: iOS & watchOS
+
+# macOS minutes are billed at 10x on private repos, so this only runs when
+# Apple-side or shared code changes (or on demand).
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths:
+      - "iosApp/**"
+      - "shared/**"
+      - "composeApp/**"
+      - "build-logic/**"
+      - "gradle/**"
+      - "*.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "iosApp/**"
+      - "shared/**"
+      - "composeApp/**"
+      - "build-logic/**"
+      - "gradle/**"
+      - "*.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Cache Kotlin/Native toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Shared tests (iOS simulator)
+        run: ./gradlew iosSimulatorArm64Test
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          cd iosApp && xcodegen generate
+
+      - name: Build iOS app (embeds the watchOS app)
+        run: |
+          xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme iosApp \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build -quiet 2>&1 | tee xcodebuild-ios.log; exit ${PIPESTATUS[0]}
+
+      - name: Build watchOS app
+        run: |
+          xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme WatchApp \
+            -configuration Debug -destination 'generic/platform=watchOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build -quiet 2>&1 | tee xcodebuild-watch.log; exit ${PIPESTATUS[0]}
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: xcodebuild-logs
+          path: xcodebuild-*.log
+          retention-days: 7
