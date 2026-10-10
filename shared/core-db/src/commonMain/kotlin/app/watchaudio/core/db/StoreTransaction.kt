@@ -102,6 +102,15 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
         }
     }
 
+    /**
+     * Puts failed chunks back in the queue with a fresh attempt budget (user-initiated retry).
+     * @return number of chunks re-queued.
+     */
+    fun requeueFailed(ids: List<String>): Int = ids.sumOf { id ->
+        update("UPDATE audio_chunk SET state = 'RECEIVED', attempts = 0 WHERE id = ? AND state = 'FAILED'", id)
+        changes()
+    }
+
     /** Puts chunks left in TRANSCRIBING by a killed process back in the queue. */
     fun resetInterrupted(): Int {
         update("UPDATE audio_chunk SET state = 'RECEIVED' WHERE state = 'TRANSCRIBING'")

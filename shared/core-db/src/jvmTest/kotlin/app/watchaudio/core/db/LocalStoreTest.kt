@@ -78,6 +78,12 @@ class LocalStoreTest {
         }
         assertEquals(listOf("b"), store.read { pendingChunks(10, 3) }.map { it.id })
         assertTrue(store.read { pendingChunks(10, 1) }.isEmpty())
+
+        // A user retry resets the attempt budget; only failed chunks are touched.
+        assertEquals(1, store.transaction { requeueFailed(listOf("a", "b")) })
+        assertEquals(ChunkState.RECEIVED, store.read { chunk("b") }!!.state)
+        assertEquals(ChunkState.TRANSCRIBED, store.read { chunk("a") }!!.state)
+        assertEquals(listOf("b"), store.read { pendingChunks(10, 1) }.map { it.id })
     }
 
     @Test
