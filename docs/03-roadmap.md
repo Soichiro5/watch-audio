@@ -1,5 +1,9 @@
 # 03. 実装手順（ロードマップ）
 
+> **テーマ**: 常に起動しっぱなしで 24 時間録音を取り続け、会話をすべてデータとして残す。
+> これに合わせて M1 に「スマホへのハンドオフ（#42）」「連続性監視（#43）」「ワンタップ再開（#41）」、
+> M4 に「E2E 暗号化バックアップ（#40）」を追加・前倒しした（2026-10-10）。
+
 各タスクは GitHub Issue として起票済み。タイトル先頭のコード（例: `[M1-3]`）で依存関係を表す。
 マイルストーンごとに Epic Issue があり、各タスクはその sub-issue になっている。
 
@@ -57,8 +61,11 @@ Epic: [#2](https://github.com/Soichiro5/watch-audio/issues/2)
 | [M1-5 (#17)](https://github.com/Soichiro5/watch-audio/issues/17) | watchOS → iOS 転送（WatchConnectivity + ACK） | M1-2, M1-3 |
 | [M1-6 (#18)](https://github.com/Soichiro5/watch-audio/issues/18) | Wear OS → Android 転送（Data Layer + ACK） | M1-2, M1-4 |
 | [M1-7 (#19)](https://github.com/Soichiro5/watch-audio/issues/19) | Days タイムラインと音声再生 UI（最小） | [M1-2 (#14)](https://github.com/Soichiro5/watch-audio/issues/14) |
+| [M1-8 (#42)](https://github.com/Soichiro5/watch-audio/issues/42) | スマホ録音へのハンドオフ（Watch 充電中・非装着時の 24h 継続） | M1-2, M1-3, M1-4 |
+| [M1-9 (#43)](https://github.com/Soichiro5/watch-audio/issues/43) | 録音の連続性監視とアラート（欠損区間の可視化） | M1-5/M1-6, M1-7 |
+| [M1-10 (#41)](https://github.com/Soichiro5/watch-audio/issues/41) | Watch のコンプリケーション / Tiles（ワンタップ録音開始・再開） | M1-3, M1-4 |
 
-**完了条件**: 両 OS で「Watch で録音 → スマホに届く → タイムラインで再生できる」。
+**完了条件**: 両 OS で「Watch で録音 → スマホに届く → タイムラインで再生できる」。24 時間モードで録音カバー率 95% 以上、停止は 10 分以内に通知。
 
 ## M2: 文字起こしと検索
 
@@ -100,7 +107,8 @@ Epic: [#5](https://github.com/Soichiro5/watch-audio/issues/5)
 | [M4-2 (#33)](https://github.com/Soichiro5/watch-audio/issues/33) | ストレージ管理（保持期間・容量表示・全削除） | [M2-1 (#20)](https://github.com/Soichiro5/watch-audio/issues/20) |
 | [M4-3 (#34)](https://github.com/Soichiro5/watch-audio/issues/34) | 買い切り課金（StoreKit 2 / Play Billing） | [M0-1 (#7)](https://github.com/Soichiro5/watch-audio/issues/7) |
 | [M4-4 (#35)](https://github.com/Soichiro5/watch-audio/issues/35) | ベータ配信と実機長時間 QA（TestFlight / Play 内部テスト） | M3 全体 |
-| [M4-5 (#36)](https://github.com/Soichiro5/watch-audio/issues/36) | ストア申請準備（審査対応・プライバシーポリシー・LP） | M4-1〜M4-4 |
+| [M4-5 (#36)](https://github.com/Soichiro5/watch-audio/issues/36) | ストア申請準備（審査対応・プライバシーポリシー・LP） | M4-1〜M4-4, M4-6 |
+| [M4-6 (#40)](https://github.com/Soichiro5/watch-audio/issues/40) | E2E 暗号化バックアップとエクスポート（「すべて残す」ため MVP に前倒し） | M1-2 |
 
 ## Phase 2: 差別化・拡張
 
@@ -111,5 +119,3 @@ Epic: [#6](https://github.com/Soichiro5/watch-audio/issues/6)
 | [P2-1 (#37)](https://github.com/Soichiro5/watch-audio/issues/37) | Body: HealthKit / Health Connect 取り込みとストレス推定 |
 | [P2-2 (#38)](https://github.com/Soichiro5/watch-audio/issues/38) | Places: 録音中の位置取得・クラスタリング・地名化 |
 | [P2-3 (#39)](https://github.com/Soichiro5/watch-audio/issues/39) | オンデバイス LLM（Apple Foundation Models / Gemini Nano） |
-| [P2-4 (#40)](https://github.com/Soichiro5/watch-audio/issues/40) | E2E 暗号化バックアップとエクスポート（Markdown 等） |
-| [P2-5 (#41)](https://github.com/Soichiro5/watch-audio/issues/41) | Watch のコンプリケーション / Tiles（ワンタップ録音開始） |
