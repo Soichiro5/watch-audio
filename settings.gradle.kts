@@ -15,6 +15,11 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // sherpa-onnx (on-device ASR) is only published on JitPack; never look for it elsewhere.
+        exclusiveContent {
+            forRepository { maven("https://jitpack.io") }
+            filter { includeGroup("com.github.k2-fsa.sherpa-onnx") }
+        }
     }
 }
 
@@ -31,3 +36,6 @@ include(":shared:core-ai")
 include(":composeApp")
 include(":androidApp")
 include(":wearApp")
+
+// Device-free verification on Linux/CI (#44)
+include(":tools:harness")

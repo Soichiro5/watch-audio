@@ -21,6 +21,7 @@ koin = "4.2.2"
 ktor = "3.6.0"
 kotlinx-io = "0.9.1"
 androidx-sqlite = "2.7.1"
+sherpa-onnx = "v1.13.8"
 play-services-wearable = "20.0.1"
 wear-compose = "1.7.1"
 wear-ongoing = "1.1.0"
@@ -45,6 +46,10 @@ ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 kotlinx-io-core = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version.ref = "kotlinx-io" }
 androidx-sqlite = { module = "androidx.sqlite:sqlite", version.ref = "androidx-sqlite" }
 androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "androidx-sqlite" }
+# sherpa-onnx (on-device ASR) is published on JitPack only.
+sherpa-onnx-android = { module = "com.github.k2-fsa.sherpa-onnx:sherpa-onnx", version.ref = "sherpa-onnx" }
+sherpa-onnx-jvm = { module = "com.github.k2-fsa.sherpa-onnx:sherpa-onnx-jvm", version.ref = "sherpa-onnx" }
+sherpa-onnx-native-linux-x64 = { module = "com.github.k2-fsa.sherpa-onnx:sherpa-onnx-native-lib-linux-x64", version.ref = "sherpa-onnx" }
 
 # Compose Multiplatform
 compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose-multiplatform" }
@@ -71,6 +76,7 @@ wear-tooling-preview = { module = "androidx.wear:wear-tooling-preview", version.
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-kmp-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }

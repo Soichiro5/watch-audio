@@ -55,11 +55,25 @@ open WatchAudio.xcodeproj   # iosApp スキームを実機に Run（Watch アプ
 
 Wear OS 実機への接続は「開発者向けオプション → ワイヤレスデバッグ」→ `adb pair` / `adb connect`。
 
-## 4. 実機検証の手順
+## 4. 実機なしでの通し検証（Linux）
+
+Watch の役割をシミュレートし、「チャンク化 → 取り込み → オンデバイス文字起こし → ローカル SQLite に蓄積 → 検索」までを Linux 上で動かせる（#44）。Android アプリと同じ sherpa-onnx・同じモデル・同じ VAD 設定を使うので、精度の確認に使える（速度は実機と異なる）。
+
+```bash
+tools/harness/download-models.sh          # モデルを tools/harness/models/ に取得（受信のみ）
+./gradlew :tools:harness:test             # E2E テスト（日本語の参照音声 5 文）
+
+# 任意の音声ファイルで試す（mp3/wav/m4a など。ffmpeg が必要）
+./gradlew :tools:harness:run --args="record /tmp/wa-data path/to/audio.mp3"
+./gradlew :tools:harness:run --args="search /tmp/wa-data 会議"
+./gradlew :tools:harness:run --args="show /tmp/wa-data"
+```
+
+## 5. 実機検証の手順
 
 - M0-3 / M0-4 電池計測: [docs/spikes/m0-3-m0-4-battery-protocol.md](spikes/m0-3-m0-4-battery-protocol.md)
 
-## 5. 検証データの扱い
+## 6. 検証データの扱い
 
 - 録音検証では、**参加者全員に録音・文字起こしの目的を説明し同意を得る**。
 - 実際の会話音声はリポジトリにコミットしない（個人情報）。評価用の正解テキストと集計結果のみ共有する。
