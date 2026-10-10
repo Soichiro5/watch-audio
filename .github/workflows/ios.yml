@@ -68,6 +68,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO build -quiet 2>&1 | tee xcodebuild-ios.log; exit ${PIPESTATUS[0]}
 
       - name: Build watchOS app
+        if: success() || failure()
         run: |
           xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme WatchApp \
             -configuration Debug -destination 'generic/platform=watchOS Simulator' \
