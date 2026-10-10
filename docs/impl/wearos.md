@@ -138,6 +138,8 @@ sequenceDiagram
 - **タイル**: 状態・送信待ち件数・ボタン（Start / Resume / Open）。タップでアプリを開き（`from_tile` extra）、未録音なら開始・再開する。**タイルから直接前景サービスは開始できない**（Android 14+ の制約）ため、必ずアプリを経由する。
 - **コンプリケーション**（SHORT_TEXT）: `REC` / `OFF` / `CHG` / `BAT` / `FULL` / `MIC` / `!`（録音 ON なのに停止中）/ `—`。タップでアプリ。状態変化時に更新を要求する（定期更新なし）。
 - **Ongoing Activity**: 録音中はストップウォッチ、一時停止中は理由を表示。
+- **エミュレータでの確認（#41）**: CI `emulator.yml` の wear ジョブが `.github/scripts/wear-surfaces.sh` で、Wear OS のデバッグ用ブロードキャスト（`com.google.android.wearable.app.DEBUG_SURFACE` の `add-tile` / `set-complication`、`DEBUG_SYSUI` の `show-tile`）を使って Tile を表示し、現在の文字盤（`dumpsys wallpaper`）のスロットにコンプリケーションを設定する。停止中 → Tile のボタンをタップ（`uiautomator dump` で「Start」を探し、見つからなければ画面下寄りの中央）→ アプリが開いて録音開始 → 録音中、の順にスクリーンショットを撮る（成果物 `screenshots-wear`: `wear-tile-stopped.png` / `wear-tile-tap-opens-app.png` / `wear-tile-recording.png` / `wear-complication-*.png`）。エミュレータは AC 給電扱いで録音が「充電中」で止まるため、`dumpsys battery unplug` してから行う。マイク・通知の権限は `pm grant` で事前に付与（許可ダイアログを挟まないため）。音声入力はエミュレータの既定（ホストに入力がなければ無音）で、仮想マイクは使わない。
+  - システム UI のブロードキャストはイメージによって動かないことがあるため、このスクリプトは失敗してもジョブを落とさず、`WEAR_SURFACE_CHECK step=… ok=false` としてジョブサマリーに出す。特に `set-complication` は公式ドキュメントに記載がなく（Android Studio の実行構成が使う形式）、文字盤のスロット番号も文字盤ごとに違うため、0–3・100–103 を順に試す。
 
 ## 6. 権限
 
@@ -161,7 +163,7 @@ sequenceDiagram
 
 ## 8. 実機なしで検証できること / できないこと
 
-**Linux で検証済み**: `./gradlew :wearApp:testDebugUnitTest :wearApp:assembleDebug :wearApp:lintDebug`。CI（`android.yml`）でも、単体テスト（`:wearApp:testDebugUnitTest`、36 件）・lint・ビルドを毎回実行する。
+**Linux で検証済み**: `./gradlew :wearApp:testDebugUnitTest :wearApp:assembleDebug :wearApp:lintDebug`。CI（`android.yml`）でも、単体テスト（`:wearApp:testDebugUnitTest`、36 件）・lint・ビルドを毎回実行する。CI（`emulator.yml` の wear ジョブ）では Wear OS エミュレータで起動確認に加えて、Tile・コンプリケーションの表示と Tile のタップでの録音開始のスクリーンショットを撮る（§5）。
 
 | 検証できる（単体テスト） | 実機が必要 |
 | --- | --- |
