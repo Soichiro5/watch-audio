@@ -17,7 +17,8 @@ kotlin {
             implementation(projects.shared.coreModel)
             implementation(projects.shared.coreProtocol)
             implementation(projects.shared.corePlatform)
-            implementation(projects.shared.coreDb)
+            // AppServices exposes LocalStore, so hosts need core-db on their classpath too.
+            api(projects.shared.coreDb)
             implementation(projects.shared.corePipeline)
             implementation(projects.shared.coreSearch)
             implementation(projects.shared.coreAi)
@@ -27,6 +28,16 @@ kotlin {
             implementation(libs.compose.ui)
             implementation(libs.compose.material3)
             implementation(libs.compose.lifecycle.viewmodel)
+            implementation(libs.kotlinx.datetime)
+        }
+        commonTest.dependencies {
+            implementation(libs.kotlinx.coroutines.test)
+        }
+        jvmTest.dependencies {
+            // Headless Compose UI smoke tests (Skia for the host OS).
+            implementation(libs.compose.ui.test)
+            implementation(compose.desktop.currentOs)
+            implementation(libs.kotlinx.coroutines.swing) // Dispatchers.Main for view models
         }
     }
 }

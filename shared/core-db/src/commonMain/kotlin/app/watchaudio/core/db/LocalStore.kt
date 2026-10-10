@@ -6,6 +6,9 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
 import app.watchaudio.core.platform.IoDispatcher
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -21,13 +24,24 @@ class LocalStore private constructor(
     private val dispatcher: CoroutineDispatcher,
 ) : AutoCloseable {
     private val mutex = Mutex()
+    private val changeCount = MutableStateFlow(0L)
+
+    /**
+     * Number of write transactions committed through this instance since it was opened.
+     * SQLite has no change notifications, so observers (the UI) re-query when this moves.
+     * Writes from another process or connection are not counted.
+     */
+    val changes: StateFlow<Long> = changeCount.asStateFlow()
 
     /** Runs [block] in a write transaction; rolls back if it throws. */
     suspend fun <T> transaction(block: StoreTransaction.() -> T): T = mutex.withLock {
         withContext(dispatcher) {
             connection.execSQL("BEGIN IMMEDIATE")
             try {
-                StoreTransaction(connection).block().also { connection.execSQL("COMMIT") }
+                StoreTransaction(connection).block().also {
+                    connection.execSQL("COMMIT")
+                    changeCount.value += 1
+                }
             } catch (t: Throwable) {
                 connection.execSQL("ROLLBACK")
                 throw t

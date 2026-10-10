@@ -16,6 +16,7 @@
 | [docs/04-dev-environment.md](docs/04-dev-environment.md) | 開発・検証環境、ビルド手順、実機なしでの通し検証 |
 | [docs/spikes/](docs/spikes/) | 技術検証の結果（ASR・埋め込み・電池計測手順） |
 | [docs/impl/android-phone.md](docs/impl/android-phone.md) | Android スマホ側の実装（受信・ACK・オンデバイス文字起こし・モデル配信） |
+| [docs/impl/phone-ui.md](docs/impl/phone-ui.md) | スマホ UI（タイムライン・検索・状態画面）の実装メモ |
 
 ## 技術スタック（予定）
 

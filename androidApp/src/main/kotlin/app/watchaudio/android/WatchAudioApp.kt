@@ -7,7 +7,7 @@ import kotlinx.coroutines.launch
 class WatchAudioApp : Application() {
     val graph: AppGraph get() = AppGraph.get(this)
 
-    /** What the shared Compose UI needs (`App(services)` once the UI takes it). */
+    /** What the shared Compose UI needs (`App(services)`). */
     val services: AndroidAppServices get() = graph.services
 
     override fun onCreate() {

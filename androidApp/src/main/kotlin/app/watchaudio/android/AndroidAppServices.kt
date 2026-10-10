@@ -54,7 +54,9 @@ class AndroidAppServices(
      * Starts downloading the speech models. Without [allowMetered] it waits for Wi-Fi; pass true
      * only after the user agreed to use mobile data (the archive is several hundred MB).
      */
-    fun downloadModels(allowMetered: Boolean) = models.download(allowMetered)
+    override fun downloadModels(allowMetered: Boolean) {
+        models.download(allowMetered)
+    }
 
     /** Call on the main thread. */
     override fun play(audioPath: String, offsetMs: Long) {
