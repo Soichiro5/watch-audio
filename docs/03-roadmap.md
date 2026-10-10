@@ -31,73 +31,85 @@ gantt
 
 ## M0: 基盤・技術検証（最重要: リスクの早期潰し）
 
+Epic: [#1](https://github.com/Soichiro5/watch-audio/issues/1)
+
 | コード | タスク | 依存 |
 | --- | --- | --- |
-| M0-1 | モノレポ初期化（KMP + Compose MP + Wear OS + iOS/watchOS） | - |
-| M0-2 | CI 構築（GitHub Actions） | M0-1 |
-| M0-3 | [Spike] watchOS 長時間バックグラウンド録音と電池計測 | - |
-| M0-4 | [Spike] Wear OS 前景サービス録音と電池計測 | - |
-| M0-5 | [Spike] オンデバイス日本語 ASR の精度・速度比較 | - |
-| M0-6 | [Spike] 多言語埋め込みモデルの KMP 実行 | M0-1 |
+| [M0-1 (#7)](https://github.com/Soichiro5/watch-audio/issues/7) | モノレポ初期化（KMP + Compose MP + Wear OS + iOS/watchOS） | - |
+| [M0-2 (#8)](https://github.com/Soichiro5/watch-audio/issues/8) | CI 構築（GitHub Actions） | [M0-1 (#7)](https://github.com/Soichiro5/watch-audio/issues/7) |
+| [M0-3 (#9)](https://github.com/Soichiro5/watch-audio/issues/9) | [Spike] watchOS 長時間バックグラウンド録音と電池計測 | - |
+| [M0-4 (#10)](https://github.com/Soichiro5/watch-audio/issues/10) | [Spike] Wear OS 前景サービス録音と電池計測 | - |
+| [M0-5 (#11)](https://github.com/Soichiro5/watch-audio/issues/11) | [Spike] オンデバイス日本語 ASR の精度・速度比較 | - |
+| [M0-6 (#12)](https://github.com/Soichiro5/watch-audio/issues/12) | [Spike] 多言語埋め込みモデルの KMP 実行 | [M0-1 (#7)](https://github.com/Soichiro5/watch-audio/issues/7) |
 
 **Go/No-Go 判定**: M0-3〜M0-5 の結果で「Wear OS 対応の可否・目標録音時間」「ASR エンジン」を確定し、`docs/02-architecture.md` を更新する。
 
 ## M1: 録音と同期
 
+Epic: [#2](https://github.com/Soichiro5/watch-audio/issues/2)
+
 | コード | タスク | 依存 |
 | --- | --- | --- |
-| M1-1 | チャンク/マニフェスト形式と転送プロトコル定義（core-protocol） | M0-1 |
-| M1-2 | DB スキーマと取り込み処理（core-db / Ingestor） | M1-1 |
-| M1-3 | watchOS 録音アプリ | M0-3, M1-1 |
-| M1-4 | Wear OS 録音アプリ | M0-4, M1-1 |
-| M1-5 | watchOS → iOS 転送（WatchConnectivity + ACK） | M1-2, M1-3 |
-| M1-6 | Wear OS → Android 転送（Data Layer + ACK） | M1-2, M1-4 |
-| M1-7 | Days タイムラインと音声再生 UI（最小） | M1-2 |
+| [M1-1 (#13)](https://github.com/Soichiro5/watch-audio/issues/13) | チャンク/マニフェスト形式と転送プロトコル定義（core-protocol） | [M0-1 (#7)](https://github.com/Soichiro5/watch-audio/issues/7) |
+| [M1-2 (#14)](https://github.com/Soichiro5/watch-audio/issues/14) | DB スキーマと取り込み処理（core-db / Ingestor） | [M1-1 (#13)](https://github.com/Soichiro5/watch-audio/issues/13) |
+| [M1-3 (#15)](https://github.com/Soichiro5/watch-audio/issues/15) | watchOS 録音アプリ | M0-3, M1-1 |
+| [M1-4 (#16)](https://github.com/Soichiro5/watch-audio/issues/16) | Wear OS 録音アプリ | M0-4, M1-1 |
+| [M1-5 (#17)](https://github.com/Soichiro5/watch-audio/issues/17) | watchOS → iOS 転送（WatchConnectivity + ACK） | M1-2, M1-3 |
+| [M1-6 (#18)](https://github.com/Soichiro5/watch-audio/issues/18) | Wear OS → Android 転送（Data Layer + ACK） | M1-2, M1-4 |
+| [M1-7 (#19)](https://github.com/Soichiro5/watch-audio/issues/19) | Days タイムラインと音声再生 UI（最小） | [M1-2 (#14)](https://github.com/Soichiro5/watch-audio/issues/14) |
 
 **完了条件**: 両 OS で「Watch で録音 → スマホに届く → タイムラインで再生できる」。
 
 ## M2: 文字起こしと検索
 
+Epic: [#3](https://github.com/Soichiro5/watch-audio/issues/3)
+
 | コード | タスク | 依存 |
 | --- | --- | --- |
-| M2-1 | ジョブスケジューラとパイプライン状態機械 | M1-2 |
-| M2-2 | VAD + Transcriber 抽象 & iOS 実装（SpeechAnalyzer） | M0-5, M2-1 |
-| M2-3 | Android Transcriber 実装（sherpa-onnx）とモデル配信 | M0-5, M2-1 |
-| M2-4 | キーワード検索（FTS5 trigram） | M2-2 or M2-3 |
-| M2-5 | セマンティック検索（埋め込み + RRF ハイブリッド） | M0-6, M2-4 |
-| M2-6 | 検索 UI と文字起こし表示 | M2-4 |
+| [M2-1 (#20)](https://github.com/Soichiro5/watch-audio/issues/20) | ジョブスケジューラとパイプライン状態機械 | [M1-2 (#14)](https://github.com/Soichiro5/watch-audio/issues/14) |
+| [M2-2 (#21)](https://github.com/Soichiro5/watch-audio/issues/21) | VAD + Transcriber 抽象 & iOS 実装（SpeechAnalyzer） | M0-5, M2-1 |
+| [M2-3 (#22)](https://github.com/Soichiro5/watch-audio/issues/22) | Android Transcriber 実装（sherpa-onnx）とモデル配信 | M0-5, M2-1 |
+| [M2-4 (#23)](https://github.com/Soichiro5/watch-audio/issues/23) | キーワード検索（FTS5 trigram） | M2-2 or M2-3 |
+| [M2-5 (#24)](https://github.com/Soichiro5/watch-audio/issues/24) | セマンティック検索（埋め込み + RRF ハイブリッド） | M0-6, M2-4 |
+| [M2-6 (#25)](https://github.com/Soichiro5/watch-audio/issues/25) | 検索 UI と文字起こし表示 | [M2-4 (#23)](https://github.com/Soichiro5/watch-audio/issues/23) |
 
 **完了条件**: 録音した会話が翌朝までに日本語/英語で文字起こしされ、キーワード・意味の両方で検索できる。
 
 ## M3: AI（BYOK）
 
+Epic: [#4](https://github.com/Soichiro5/watch-audio/issues/4)
+
 | コード | タスク | 依存 |
 | --- | --- | --- |
-| M3-1 | LLM Provider 抽象と AI 設定画面 | M0-1 |
-| M3-2 | Hourly Review（Highlights / Summary / 情報密度） | M2-1, M3-1 |
-| M3-3 | Home 画面（24h バー + Highlights） | M3-2 |
-| M3-4 | Daily Reflection | M3-2 |
-| M3-5 | Memory（事実の抽出・編集・無効化） | M3-2 |
-| M3-6 | Chat（RAG + 引用 + ストリーミング） | M2-5, M3-1, M3-5 |
+| [M3-1 (#26)](https://github.com/Soichiro5/watch-audio/issues/26) | LLM Provider 抽象と AI 設定画面 | [M0-1 (#7)](https://github.com/Soichiro5/watch-audio/issues/7) |
+| [M3-2 (#27)](https://github.com/Soichiro5/watch-audio/issues/27) | Hourly Review（Highlights / Summary / 情報密度） | M2-1, M3-1 |
+| [M3-3 (#28)](https://github.com/Soichiro5/watch-audio/issues/28) | Home 画面（24h バー + Highlights） | [M3-2 (#27)](https://github.com/Soichiro5/watch-audio/issues/27) |
+| [M3-4 (#29)](https://github.com/Soichiro5/watch-audio/issues/29) | Daily Reflection | [M3-2 (#27)](https://github.com/Soichiro5/watch-audio/issues/27) |
+| [M3-5 (#30)](https://github.com/Soichiro5/watch-audio/issues/30) | Memory（事実の抽出・編集・無効化） | [M3-2 (#27)](https://github.com/Soichiro5/watch-audio/issues/27) |
+| [M3-6 (#31)](https://github.com/Soichiro5/watch-audio/issues/31) | Chat（RAG + 引用 + ストリーミング） | M2-5, M3-1, M3-5 |
 
 **完了条件**: API キーを入れると、1 時間ごとのハイライトと日次振り返りが自動生成され、引用付きで過去の会話について質問できる。
 
 ## M4: リリース準備
 
+Epic: [#5](https://github.com/Soichiro5/watch-audio/issues/5)
+
 | コード | タスク | 依存 |
 | --- | --- | --- |
-| M4-1 | オンボーディング・権限・録音同意の注意喚起 | M1-3, M1-4 |
-| M4-2 | ストレージ管理（保持期間・容量表示・全削除） | M2-1 |
-| M4-3 | 買い切り課金（StoreKit 2 / Play Billing） | M0-1 |
-| M4-4 | ベータ配信と実機長時間 QA（TestFlight / Play 内部テスト） | M3 全体 |
-| M4-5 | ストア申請準備（審査対応・プライバシーポリシー・LP） | M4-1〜M4-4 |
+| [M4-1 (#32)](https://github.com/Soichiro5/watch-audio/issues/32) | オンボーディング・権限・録音同意の注意喚起 | M1-3, M1-4 |
+| [M4-2 (#33)](https://github.com/Soichiro5/watch-audio/issues/33) | ストレージ管理（保持期間・容量表示・全削除） | [M2-1 (#20)](https://github.com/Soichiro5/watch-audio/issues/20) |
+| [M4-3 (#34)](https://github.com/Soichiro5/watch-audio/issues/34) | 買い切り課金（StoreKit 2 / Play Billing） | [M0-1 (#7)](https://github.com/Soichiro5/watch-audio/issues/7) |
+| [M4-4 (#35)](https://github.com/Soichiro5/watch-audio/issues/35) | ベータ配信と実機長時間 QA（TestFlight / Play 内部テスト） | M3 全体 |
+| [M4-5 (#36)](https://github.com/Soichiro5/watch-audio/issues/36) | ストア申請準備（審査対応・プライバシーポリシー・LP） | M4-1〜M4-4 |
 
 ## Phase 2: 差別化・拡張
 
+Epic: [#6](https://github.com/Soichiro5/watch-audio/issues/6)
+
 | コード | タスク |
 | --- | --- |
-| P2-1 | Body: HealthKit / Health Connect 取り込みとストレス推定 |
-| P2-2 | Places: 録音中の位置取得・クラスタリング・地名化 |
-| P2-3 | オンデバイス LLM（Apple Foundation Models / Gemini Nano） |
-| P2-4 | E2E 暗号化バックアップとエクスポート（Markdown 等） |
-| P2-5 | Watch のコンプリケーション / Tiles（ワンタップ録音開始） |
+| [P2-1 (#37)](https://github.com/Soichiro5/watch-audio/issues/37) | Body: HealthKit / Health Connect 取り込みとストレス推定 |
+| [P2-2 (#38)](https://github.com/Soichiro5/watch-audio/issues/38) | Places: 録音中の位置取得・クラスタリング・地名化 |
+| [P2-3 (#39)](https://github.com/Soichiro5/watch-audio/issues/39) | オンデバイス LLM（Apple Foundation Models / Gemini Nano） |
+| [P2-4 (#40)](https://github.com/Soichiro5/watch-audio/issues/40) | E2E 暗号化バックアップとエクスポート（Markdown 等） |
+| [P2-5 (#41)](https://github.com/Soichiro5/watch-audio/issues/41) | Watch のコンプリケーション / Tiles（ワンタップ録音開始） |
