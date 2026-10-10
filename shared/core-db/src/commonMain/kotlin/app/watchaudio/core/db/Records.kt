@@ -33,7 +33,14 @@ data class ChunkRecord(
     val state: ChunkState,
     val attempts: Int,
     val lastError: String?,
-)
+    /** Size of the audio file as received, or null for a silent chunk. */
+    val sizeBytes: Long? = null,
+    /** When the audio file was deleted by the retention setting (the transcript is kept). */
+    val audioPurgedAt: Long? = null,
+) {
+    /** True if the chunk's audio file should still exist and can be played. */
+    val hasAudioFile: Boolean get() = audioPath != null && audioPurgedAt == null
+}
 
 data class NewSegment(
     val startAt: Long,
@@ -64,8 +71,14 @@ data class StoreStats(
     val transcribedChunks: Int,
     val failedChunks: Int,
     val segments: Int,
+    /** Audio still on the device (purged audio excluded). */
     val audioBytes: Long,
     val recordedMs: Long,
     /** When the phone last stored a chunk (`received_at`), or null if there are none. */
     val lastReceivedAt: Long? = null,
+    /** Chunks whose audio was deleted by the retention setting (their transcript is kept). */
+    val audioPurgedChunks: Int = 0,
 )
+
+/** Number and total size of audio files, e.g. those a retention change would delete. */
+data class AudioUsage(val chunks: Int, val bytes: Long)

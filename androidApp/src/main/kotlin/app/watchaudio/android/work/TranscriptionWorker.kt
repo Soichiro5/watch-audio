@@ -6,11 +6,13 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import app.watchaudio.android.AppGraph
 import app.watchaudio.app.ModelState
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Transcribes pending chunks until none are left or WorkManager stops the worker. Progress lives
- * in the database, so a stopped run loses at most the chunk in progress (it is re-queued).
+ * Transcribes pending chunks until none are left or WorkManager stops the worker, then applies the
+ * audio retention setting. Progress lives in the database, so a stopped run loses at most the
+ * chunk in progress (it is re-queued).
  */
 class TranscriptionWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
@@ -18,7 +20,8 @@ class TranscriptionWorker(context: Context, params: WorkerParameters) : Coroutin
         graph.startup.join()
         if (!graph.models.isReady()) {
             // ModelManager requests a run as soon as the model arrives; retry only while it is on its way.
-            Log.i(TAG, "speech model not ready; skipping")
+            Log.i(TAG, "speech model not ready; skipping transcription")
+            applyRetention(graph)
             return if (graph.models.state.value is ModelState.Downloading) Result.retry() else Result.success()
         }
         // The one-off and the periodic worker may overlap; one pipeline run at a time.
@@ -30,8 +33,21 @@ class TranscriptionWorker(context: Context, params: WorkerParameters) : Coroutin
             }
         }
         Log.i(TAG, "transcribed ${result.transcribed}, failed ${result.failed}")
+        applyRetention(graph)
         if (!isStopped && graph.hasPendingChunks()) graph.scheduler.requestNow()
         return Result.success()
+    }
+
+    /** Deletes audio past the user's retention setting; only transcribed chunks lose audio (#33). */
+    private suspend fun applyRetention(graph: AppGraph) {
+        try {
+            val purged = graph.storage.applyRetention { !isStopped }
+            if (purged.purgedChunks > 0) Log.i(TAG, "deleted audio of ${purged.purgedChunks} chunks (${purged.freedBytes} bytes)")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "audio retention failed", e)
+        }
     }
 
     private companion object {

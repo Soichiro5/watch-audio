@@ -9,6 +9,7 @@ import app.watchaudio.android.transfer.ChunkReceiver
 import app.watchaudio.android.work.TranscriptionScheduler
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.Ingestor
+import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.pipeline.TranscriptionPipeline
 import java.io.File
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -46,6 +47,7 @@ class AppGraph private constructor(context: Context) {
     val models = ModelManager(app, scope, onReady = scheduler::requestNow)
     val transcriber = AndroidSherpaTranscriber(models.files)
     val pipeline = TranscriptionPipeline(store, Path(audioRoot.path), transcriber, maxAttempts = MAX_ATTEMPTS)
+    val storage = StorageManager(store, Path(audioRoot.path), AndroidStorageEnvironment(models.files.root, app.filesDir))
 
     /** Serializes pipeline runs between overlapping workers. */
     val transcriptionLock = Mutex()
@@ -58,7 +60,7 @@ class AppGraph private constructor(context: Context) {
         scheduler.requestNow()
     }
 
-    val services = AndroidAppServices(app, store, audioRoot, models, scheduler, lastChunkReceivedAt, scope)
+    val services = AndroidAppServices(app, store, storage, audioRoot, models, scheduler, lastChunkReceivedAt, scope)
 
     /**
      * Start-up recovery: re-queues chunks a killed process left mid-transcription and publishes

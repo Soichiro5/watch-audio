@@ -10,6 +10,7 @@ import app.watchaudio.app.AppServices
 import app.watchaudio.app.ModelState
 import app.watchaudio.app.ProcessingStatus
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.StorageManager
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharingStarted
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.stateIn
 class AndroidAppServices(
     private val context: Context,
     override val store: LocalStore,
+    override val storage: StorageManager,
     audioRootDir: File,
     private val models: ModelManager,
     private val scheduler: TranscriptionScheduler,

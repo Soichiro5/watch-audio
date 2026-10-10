@@ -37,6 +37,7 @@ import app.watchaudio.app.ui.AppIcons
 import app.watchaudio.app.ui.DayScreen
 import app.watchaudio.app.ui.SearchScreen
 import app.watchaudio.app.ui.StatusScreen
+import app.watchaudio.app.ui.StorageCallbacks
 import kotlinx.datetime.TimeZone
 
 private enum class Tab(val label: String, val icon: ImageVector) {
@@ -92,6 +93,9 @@ fun App(
                     onPlay = dayViewModel::play,
                     onTranscribe = dayViewModel::transcribe,
                     onFocusHandled = dayViewModel::focusHandled,
+                    onDeleteDay = dayViewModel::requestDeleteDay,
+                    onConfirmDeleteDay = dayViewModel::confirmDeleteDay,
+                    onCancelDeleteDay = dayViewModel::cancelDeleteDay,
                     modifier = modifier,
                 )
                 Tab.SEARCH -> {
@@ -117,6 +121,18 @@ fun App(
                         timeZone = timeZone,
                         onDownloadModel = statusViewModel::downloadModels,
                         onTranscribeNow = statusViewModel::requestTranscription,
+                        storageCallbacks = StorageCallbacks(
+                            onSelectRetention = statusViewModel::selectRetention,
+                            onConfirmRetention = statusViewModel::confirmRetention,
+                            onCancelRetention = statusViewModel::cancelRetention,
+                            onOpenDeleteAll = statusViewModel::openDeleteAll,
+                            onDeleteAllInput = statusViewModel::updateDeleteAllInput,
+                            onConfirmDeleteAll = {
+                                // The day screen's playback bar must not outlive the data.
+                                if (statusViewModel.confirmDeleteAll()) dayViewModel.stopPlayback()
+                            },
+                            onCancelDeleteAll = statusViewModel::cancelDeleteAll,
+                        ),
                         modifier = modifier,
                     )
                 }

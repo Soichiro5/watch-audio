@@ -4,6 +4,7 @@ import app.watchaudio.core.db.ChunkState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 
 class TranscriptEntriesTest {
     @Test
@@ -13,6 +14,15 @@ class TranscriptEntriesTest {
         val utterance = assertIs<TranscriptEntry.Utterance>(entries.single())
         assertEquals("a.m4a", utterance.audioPath)
         assertEquals(12_000, utterance.offsetMs)
+    }
+
+    @Test
+    fun purgedAudioKeepsTheTranscriptButCannotBePlayed() {
+        val chunks = listOf(chunk("a", at(9)).copy(audioPurgedAt = at(12)))
+        val entries = buildTranscriptEntries(chunks, listOf(segment(1, "a", at(9) + 12_000, "残っている発話")))
+        val utterance = assertIs<TranscriptEntry.Utterance>(entries.single())
+        assertEquals("残っている発話", utterance.segment.text)
+        assertNull(utterance.audioPath)
     }
 
     @Test

@@ -35,6 +35,8 @@ data class DayUiState(
     /** Segment to scroll to (set when opening a search hit). */
     val focusSegmentId: Long? = null,
     val nowPlaying: NowPlaying? = null,
+    /** Progress of 「この日のデータを削除」, which needs an explicit confirmation. */
+    val deletion: DayDeletion = DayDeletion.NONE,
 ) {
     val isToday: Boolean get() = date == today
     val canGoForward: Boolean get() = date < today
@@ -44,7 +46,19 @@ data class DayContent(
     val date: LocalDate,
     val timeline: DayTimeline,
     val entries: List<TranscriptEntry>,
+    /** Chunks that started on this day: what 「この日のデータを削除」 removes. */
+    val chunksStartedThisDay: Int = 0,
+    /** Chunks shown on this day whose audio was deleted by the retention setting. */
+    val audioPurgedChunks: Int = 0,
 )
+
+enum class DayDeletion {
+    NONE,
+
+    /** The user asked to delete the day; waiting for them to confirm or cancel. */
+    CONFIRMING,
+    DELETING,
+}
 
 /** What was last sent to [AppServices.play]; the platform does not report when it ends. */
 data class NowPlaying(val audioPath: String, val offsetMs: Long, val startsAt: Long)
@@ -64,12 +78,13 @@ class DayViewModel(
     private val selected = MutableStateFlow(today())
     private val focus = MutableStateFlow<Long?>(null)
     private val playing = MutableStateFlow<NowPlaying?>(null)
+    private val deletion = MutableStateFlow(DayDeletion.NONE)
 
     private val content: StateFlow<DayContent?> = selected
         .flatMapLatest { date -> refreshSignal(services, refreshPeriodMs).conflate().mapLatest { load(date) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    val state: StateFlow<DayUiState> = combine(selected, content, focus, playing) { date, content, focus, playing ->
+    val state: StateFlow<DayUiState> = combine(selected, content, focus, playing, deletion) { date, content, focus, playing, deletion ->
         DayUiState(
             date = date,
             today = today(),
@@ -77,12 +92,15 @@ class DayViewModel(
             content = content?.takeIf { it.date == date },
             focusSegmentId = focus,
             nowPlaying = playing,
+            deletion = deletion,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DayUiState(selected.value, today()))
 
     fun selectDate(date: LocalDate) {
+        if (deletion.value == DayDeletion.DELETING) return
         selected.value = minOf(date, today())
         focus.value = null
+        deletion.value = DayDeletion.NONE
     }
 
     fun previousDay() = selectDate(selected.value.minus(1, DateTimeUnit.DAY))
@@ -102,7 +120,7 @@ class DayViewModel(
         focus.value = segmentId
         selected.value = localDateOf(startAt, timeZone)
         viewModelScope.launch {
-            val chunk = services.store.read { chunk(chunkId) } ?: return@launch
+            val chunk = services.store.read { chunk(chunkId) }?.takeIf { it.hasAudioFile } ?: return@launch
             val path = chunk.audioPath ?: return@launch
             startPlayback(NowPlaying(path, (startAt - chunk.startedAt).coerceAtLeast(0), startAt))
         }
@@ -128,6 +146,33 @@ class DayViewModel(
         }
     }
 
+    /** First step of 「この日のデータを削除」: shows the confirmation. */
+    fun requestDeleteDay() {
+        if (deletion.value == DayDeletion.NONE) deletion.value = DayDeletion.CONFIRMING
+    }
+
+    fun cancelDeleteDay() {
+        if (deletion.value == DayDeletion.CONFIRMING) deletion.value = DayDeletion.NONE
+    }
+
+    /**
+     * Deletes the chunks that started on the selected day (audio, transcripts, marks). Does
+     * nothing unless [requestDeleteDay] was confirmed first.
+     */
+    fun confirmDeleteDay() {
+        if (deletion.value != DayDeletion.CONFIRMING) return
+        deletion.value = DayDeletion.DELETING
+        val window = dayWindow(selected.value, timeZone)
+        playing.value?.takeIf { it.startsAt >= window.start && it.startsAt < window.end }?.let { stopPlayback() }
+        viewModelScope.launch {
+            try {
+                services.storage.deleteRange(window.start, window.end)
+            } finally {
+                deletion.value = DayDeletion.NONE
+            }
+        }
+    }
+
     private fun startPlayback(request: NowPlaying) {
         services.play(request.audioPath, request.offsetMs)
         playing.value = request
@@ -147,6 +192,8 @@ class DayViewModel(
             date = date,
             timeline = buildDayTimeline(window, chunks, previous, now),
             entries = buildTranscriptEntries(chunks, segments),
+            chunksStartedThisDay = chunks.count { it.startedAt >= window.start && it.startedAt < window.end },
+            audioPurgedChunks = chunks.count { it.audioPurgedAt != null },
         )
     }
 
