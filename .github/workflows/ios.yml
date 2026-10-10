@@ -148,7 +148,7 @@ jobs:
         timeout-minutes: 15
         run: |
           status=0
-          .github/scripts/xcode-test.sh SpeechTests "SpeechTranscriber (ja_JP) on the iOS simulator" || status=$?
+          ERASE_SIMULATOR=1 .github/scripts/xcode-test.sh SpeechTests "SpeechTranscriber (ja_JP) on the iOS simulator" || status=$?
           {
             echo "Speech check logs (build/swift-evidence):"
             echo '```'
@@ -164,6 +164,17 @@ jobs:
           path: |
             xcodebuild-*.log
             build/xcresults/
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kotlin-ios-test-results
+          path: |
+            shared/*/build/test-results/iosSimulatorArm64Test/
+            composeApp/build/test-results/iosSimulatorArm64Test/
+            composeApp/build/reports/tests/iosSimulatorArm64Test/
+          if-no-files-found: ignore
           retention-days: 7
 
       - uses: actions/upload-artifact@v4

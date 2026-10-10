@@ -114,12 +114,18 @@ class IosPlaybackFixture {
      * keeps advancing in real time. Prints a `PLAYBACK_CHECK` line (kept in the test report).
      */
     fun assertPlaysFrom(requestedMs: Long, check: String) {
-        val first = waitFor(15_000, "playback at >= $requestedMs ms") {
-            services.playingPositionMs()?.takeIf { it >= requestedMs }
+        val first = try {
+            waitFor(15_000, "playback at >= $requestedMs ms") {
+                services.playingPositionMs()?.takeIf { it >= requestedMs }
+            }
+        } catch (e: IllegalStateException) {
+            println("PLAYBACK_CHECK check=$check requested_ms=$requestedMs FAILED ${services.playbackDiagnostics()}")
+            throw IllegalStateException("${e.message}: ${services.playbackDiagnostics()}", e)
         }
         pumpMainRunLoop(2_000)
         val later = services.playingPositionMs()
-        val summary = "PLAYBACK_CHECK check=$check requested_ms=$requestedMs first_ms=$first after_2s_ms=$later"
+        val summary = "PLAYBACK_CHECK check=$check requested_ms=$requestedMs first_ms=$first after_2s_ms=$later " +
+            "(${services.playbackDiagnostics()})"
         println(summary)
         check(first < requestedMs + 5_000) { "playback started at $first ms, requested $requestedMs ms" }
         check(later != null && later - first >= 1_000) { "playback did not advance: $first -> $later ms ($summary)" }

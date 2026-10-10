@@ -56,6 +56,11 @@ class PlaybackTest {
         runBlocking { PlaybackFixtures.graph.store.updateSettings { it.copy(onboardingCompleted = true) } }
 
         ActivityScenario.launch(MainActivity::class.java).use {
+            // The settings load asynchronously (an empty surface until then); on a fresh install
+            // the first launch is slow, so wait for the tabs instead of assuming they are there.
+            compose.waitUntil(timeoutMillis = 20_000) {
+                compose.onAllNodes(hasText(Strings.TAB_SEARCH)).fetchSemanticsNodes().isNotEmpty()
+            }
             compose.onNodeWithText(Strings.TAB_SEARCH).performClick()
             compose.onNode(hasSetTextAction()).performTextInput(word)
             compose.waitUntil(timeoutMillis = 10_000) {

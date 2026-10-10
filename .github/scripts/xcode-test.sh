@@ -4,7 +4,7 @@
 #
 # Usage: xcode-test.sh <scheme> <summary title>
 #   e.g. xcode-test.sh SwiftUnitTests "Swift unit tests on the iOS simulator"
-# Env: DERIVED_DATA (default build/DerivedData, shared with the build steps so a hosted test
+# Env: ERASE_SIMULATOR=1 erases the simulator first (hosted tests), DERIVED_DATA (default build/DerivedData, shared with the build steps so a hosted test
 #      reuses the app build), RESULTS_DIR (default build/xcresults).
 # Exits with xcodebuild's status (skipped tests do not fail it).
 set -uo pipefail
@@ -29,6 +29,15 @@ if [ -z "$udid" ] || [ "$udid" = "null" ]; then
   exit 1
 fi
 echo "Simulator: $udid"
+
+# Hosted tests: start from a clean device. With the app still installed from the launch smoke
+# step, the test host was launched from the replaced (dead) container and the test bundle
+# could not be loaded ("Failed to create a bundle instance ... Check that the bundle exists").
+if [ "${ERASE_SIMULATOR:-0}" = "1" ]; then
+  xcrun simctl shutdown "$udid" 2>/dev/null || true
+  xcrun simctl erase "$udid"
+  echo "Erased simulator $udid"
+fi
 
 xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme "$scheme" \
   -destination "platform=iOS Simulator,id=$udid" \
