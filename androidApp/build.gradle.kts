@@ -52,8 +52,11 @@ dependencies {
     implementation(projects.shared.corePipeline)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
+    // play-services pulls in fragment 1.1; the Activity Result API needs 1.3+.
+    implementation(libs.androidx.fragment)
     implementation(libs.androidx.work.runtime)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.datetime)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.play.services.wearable)
     implementation(libs.sherpa.onnx.android)

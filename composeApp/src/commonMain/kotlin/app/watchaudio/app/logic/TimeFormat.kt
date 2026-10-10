@@ -30,6 +30,9 @@ fun formatClock(epochMs: Long, timeZone: TimeZone): String {
     return "${t.hour.pad2()}:${t.minute.pad2()}"
 }
 
+/** `HH:mm` for a minute after local midnight (quiet hours). */
+fun formatMinuteOfDay(minuteOfDay: Int): String = "${(minuteOfDay / 60).pad2()}:${(minuteOfDay % 60).pad2()}"
+
 /** `HH:mm–HH:mm`; an end at local midnight is shown as `24:00`. */
 fun formatClockRange(from: Long, to: Long, timeZone: TimeZone): String {
     val end = Instant.fromEpochMilliseconds(to).toLocalDateTime(timeZone)

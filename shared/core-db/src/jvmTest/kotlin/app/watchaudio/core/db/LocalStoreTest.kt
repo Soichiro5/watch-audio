@@ -210,4 +210,20 @@ class LocalStoreTest {
             assertEquals("a", reopened.read { chunk("a") }!!.id)
         }
     }
+
+    @Test
+    fun settingsAreStoredReplacedAndRemoved() = runTest {
+        assertNull(store.read { setting("k") })
+        store.transaction { putSetting("k", "1") }
+        store.transaction { putSetting("k", "2") }
+        store.transaction { putSetting("other", "x") }
+        assertEquals("2", store.read { setting("k") })
+        assertEquals(mapOf("k" to "2", "other" to "x"), store.read { settings() })
+        store.transaction { putSetting("k", null) }
+        assertNull(store.read { setting("k") })
+        store.close()
+        LocalStore.open(dbFile.absolutePath).use { reopened ->
+            assertEquals("x", reopened.read { setting("other") })
+        }
+    }
 }

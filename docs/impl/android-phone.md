@@ -10,13 +10,15 @@
 | --- | --- | --- |
 | `WatchAudioApp` | `WatchAudioApp.kt` | `Application`。起動時に `AppGraph` を作り、定期ジョブ登録・残件の処理要求・（Wi-Fi 時の）モデル取得を行う |
 | `AppGraph` | `AppGraph.kt` | プロセス内で 1 つの依存グラフ。`LocalStore`（`files/watch-audio.db`）、音声ルート（`files/audio`）、`Ingestor`、`ModelManager`、`AndroidSherpaTranscriber`、`TranscriptionPipeline`、`AndroidAppServices` を保持。`startup` ジョブで `pipeline.recoverInterrupted()` を **プロセス起動ごとに 1 回**実行 |
-| `AndroidAppServices` | `AndroidAppServices.kt` | 共通 UI 向け契約 `AppServices` の Android 実装。`status`（モデル状態・処理中・最終チャンク受信時刻・メッセージ）、`requestTranscription()`（WorkManager）、`play/stopPlayback`（`MediaPlayer` でオフセットへシーク）。追加で `downloadModels(allowMetered)` |
+| `AndroidAppServices` | `AndroidAppServices.kt` | 共通 UI 向け契約 `AppServices` の Android 実装。`status`（モデル状態・処理中・最終チャンク受信時刻・メッセージ）、`requestTranscription()`（WorkManager）、`play/stopPlayback`（`MediaPlayer` でオフセットへシーク）。追加で `downloadModels(allowMetered)`、権限（Android 13+ の `POST_NOTIFICATIONS`。`permissionStatus` / `requestPermission`）、`gapAlertSettingsChanged()` |
 | `ChunkReceiverService` | `transfer/` | `WearableListenerService`。`/watch-audio/chunk/` 配下のチャネルを受け、処理を `ChunkReceiver` に渡す |
 | `ChunkReceiver` / `FrameReader` | `transfer/` | `ChunkFrame` を解析 → 音声を `cacheDir/incoming/*.part` にストリーム保存 → `Ingestor.ingest` → `MessageClient` で `ChunkAck` を返す |
 | `AndroidSherpaTranscriber` | `asr/` | sherpa-onnx（AAR の Kotlin API）。Silero VAD → ReazonSpeech Zipformer int8。認識器は初回に読み込み、ワーカー 1 回分の間は使い回す。入力は音声パーツのリスト（チャンク単体、または境界付近の隣のチャンクの音声と連結したもの。[02 §6.3](../02-architecture.md#63-処理パイプラインphone)）で、各ファイルを `AudioDecoder` でデコードして `concatenateParts` で切り出し・連結する |
 | `AudioDecoder` | `asr/` | `MediaExtractor` + `MediaCodec` で m4a(AAC)/ogg(Opus) を 16 kHz モノラル float PCM に。ダウンミックスと線形リサンプルは `core-pipeline` の `Pcm.kt`（共通コード・単体テストあり） |
 | `ModelManager` / `ModelDownloadWorker` / `ModelArchive` | `asr/` | モデルの用意（adb サイドロード取り込み・ダウンロード・展開・原子的な配置） |
 | `TranscriptionScheduler` / `TranscriptionWorker` | `work/` | WorkManager による文字起こしの起動 |
+| `GapAlertMonitor` / `GapAlertWorker` | `alert/` | 録音の途絶アラート（#43）。判定は共通の `GapAlertEvaluator`、ここでは WorkManager でのチェックと通知の表示のみ（§4.1） |
+| `MainActivity` | `MainActivity.kt` | `App(services)` をホスト。オンボーディングの権限要求用に Activity Result の launcher を `AndroidAppServices` に渡す |
 
 共通コードの追加:
 
@@ -102,6 +104,8 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 | `transcription`（1 回限り・unique） | チャンクを `STORED` で受信したとき、UI からの要求、モデル準備完了時、起動時に残件があるとき | 電池残量低下でないこと | `pipeline.processPending { !isStopped }` → `storage.applyRetention { !isStopped }`（音声の保持期間、#33） |
 | `transcription-periodic`（6 時間ごと） | アプリ起動時に登録（`KEEP`） | 充電中 | 同上（取りこぼしの保険） |
 | `model-download`（unique） | 起動時（Wi-Fi 制約）またはユーザー操作 | UNMETERED / CONNECTED、ストレージ残量 | §3.1 |
+| `gap-alert-timer`（1 回限り・unique・`REPLACE`） | チャンクを `STORED` で受信したとき・通知設定の変更時。次にアラートが必要になる時刻に遅延実行 | なし | §4.1 |
+| `gap-alert-periodic`（15 分ごと） | アプリ起動時に登録（`KEEP`） | なし | §4.1（タイマーの取りこぼし・おやすみ時間明けの保険） |
 
 - 要求時の方針: 待機中のジョブがあれば何もしない（`KEEP` 相当）。**実行中なら後続を 1 つだけ追加**（`APPEND_OR_REPLACE`）。実行中のジョブが新着チャンクを見逃しても後続が拾う。追加は最大 1 つなので鎖は伸びない。
 - 実行後にまだ保留中のチャンクがあれば（実行中に届いた、失敗して再試行回数が残っている）、もう一度要求する。WorkManager に停止された場合は WorkManager 自身が再スケジュールする。
@@ -109,6 +113,17 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 - モデル未準備ならスキップ（ダウンロード中のみ `retry`、それ以外は成功扱いで終了し、モデル準備完了時に改めて要求）。チャンクを `FAILED` にして試行回数を浪費しないため、ワーカー側で事前に確認する。
 - 1 回限りジョブと定期ジョブが重なってもパイプラインは `Mutex` で 1 本ずつ。各実行の終わりに認識器を解放してメモリを返す（次回は再読み込み、数秒）。
 - 中断耐性: 処理中のチャンクは `TRANSCRIBING` になり、プロセスが殺されても次回起動時の `recoverInterrupted()` で `RECEIVED` に戻る。ワーカーは `AppGraph.startup` の完了を待ってから処理する。
+
+### 4.1 録音の途絶アラート（#43）
+
+「録音しているはずなのにチャンクが届かない」ときにローカル通知を出す。判定ロジックは composeApp の共通コード（`logic/GapAlert.kt` の `gapAlertAt` / `gapAlertDecision`、DB から読む `alert/GapAlertEvaluator`）で、iOS と共通・単体テストあり。
+
+- 条件: 最新チャンク（開始時刻順）の `endReason` が継続（`ROTATION` / `MARK`）で、最終受信（`MAX(received_at)`）から **10 分超**何も届いていない。`user_stop` / `charging` / `off_body` など停止理由付きで終わっていれば録音停止は既知なので通知しない。
+- おやすみ時間（既定 23:00–7:00、状態タブで変更・無効化可）の間は通知せず、終了時刻まで待つ。通知自体のオン/オフも状態タブ。
+- 同じ途絶には 1 回だけ通知（通知した途絶の `lastReceivedAt` を設定 `gap_alert.shown_for` に保存）。
+- チャンク受信ごとに表示中の通知を消し、`gap-alert-timer` を張り直す。ワーカー自身は張り直さない（実行中のワーカーを `REPLACE` で自分ごと取り消さないため）。待ちになった分は 15 分ごとの `gap-alert-periodic` が拾うので、通知は最大 15 分程度遅れうる（Doze 中はさらに遅れる）。
+- 通知: チャネル `gap_alert`（「録音の途絶アラート」、重要度 HIGH）、本文「録音が届いていません（最後の受信: HH:mm）。Watch を確認してください」、タップでアプリを開く。
+- `POST_NOTIFICATIONS`（Android 13+）が無い場合は通知せず、記録もしない（許可後の次のチェックで通知する）。権限はオンボーディングで要求する（`MainActivity` の `registerForActivityResult(RequestPermission())` を `AndroidAppServices` が使う。Activity Result API の lint 要件のため `androidx.fragment` 1.8.9 を明示的に依存に追加）。
 
 ## 5. プライバシー・パッケージング
 
@@ -135,12 +150,12 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 ```bash
 ./gradlew :androidApp:installDebug :wearApp:installDebug
 # モデルを §3.2 の手順で入れる（または Wi-Fi 接続で自動ダウンロードを待つ）
-adb logcat -s ChunkReceiver TranscriptionWorker ModelManager ModelDownloadWorker AppGraph
+adb logcat -s ChunkReceiver TranscriptionWorker ModelManager ModelDownloadWorker AppGraph GapAlertMonitor
 # 受信・文字起こし結果の確認（debug ビルドのみ run-as 可）
 adb shell run-as app.watchaudio ls -R files/audio
 adb exec-out run-as app.watchaudio cat files/watch-audio.db > /tmp/wa.db   # WAL のため直前に処理が走っていると最新でない場合あり
 sqlite3 /tmp/wa.db "select state, count(*) from audio_chunk group by state; select start_at, text from transcript_segment order by start_at desc limit 20;"
-# WorkManager の状態
+# WorkManager の状態（gap-alert-* も含む）
 adb shell dumpsys jobscheduler | grep -A3 app.watchaudio
 ```
 
@@ -153,7 +168,7 @@ Watch が無くても、ADB 経由の Wear OS エミュレータとスマホエ�
 - モデルのダウンロードが約 713 MB と大きい（必要なのは約 160 MB）。int8 ファイルを個別に配布しているミラー（Hugging Face 等）からの取得や、自前の配布形態にすると通信量を約 1/4 にできる。ダウンロードの途中再開（Range）は未対応（bzip2 ストリームのため最初からやり直し）。
 - モデルファイルのハッシュ検証なし（公式のチェックサムが公開されていない）。
 - `ModelDownloadWorker` の通知には進捗を出していない（状態は `AppServices.status` で UI に出す）。Android 13+ で通知権限がないと通知は表示されないが、ダウンロードは続く。
-- 録音の途絶アラート（N 分チャンクが来ない → 通知、#43）は未実装。`status.lastChunkReceivedAt` は用意済み。
-- 共通 UI（`App()`）はまだ `AppServices` を受け取らない。UI 側が受け取るようになったら `MainActivity` で `(application as WatchAudioApp).services` を渡す。
+- 録音の途絶アラートは WorkManager の精度に依存する（タイマーは Doze で遅れうる、定期チェックは最短 15 分）。厳密な時刻が必要なら `AlarmManager` を検討。実機での確認（Watch の録音を強制停止 → 10〜25 分以内に通知）が必要。
+- 通知権限の「拒否済み」は同じプロセス内で拒否された場合しか区別できない（再起動後は「未許可」と表示し、要求すると OS が即座に拒否を返して「拒否済み」になる）。
 - `AudioDecoder` は 1 チャンク分（5 分 ≈ 480 万サンプル ≈ 19 MB）をメモリに展開する。極端に長いチャンクが来る場合はストリーミング VAD に変える。
 - 48 kHz などからのダウンサンプルは低域通過フィルタなしの線形補間（Watch は 16 kHz で録音するので通常は通らない）。

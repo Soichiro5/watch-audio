@@ -2,6 +2,9 @@ package app.watchaudio.app
 
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -21,6 +24,8 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import app.watchaudio.app.logic.dayWindow
+import app.watchaudio.app.settings.loadSettings
+import app.watchaudio.app.settings.updateSettings
 import app.watchaudio.app.state.NowProvider
 import app.watchaudio.core.db.LocalStore
 import java.io.File
@@ -29,6 +34,7 @@ import javax.imageio.ImageIO
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -66,15 +72,11 @@ class AppUiTest {
 
     @Test
     fun walkThroughTabs() = runDesktopComposeUiTest(width = 412, height = 915) {
-        runBlocking { DemoData.seed(store, day, tokyo, until = now - 20 * 60_000L) }
-        setContent {
-            CompositionLocalProvider(
-                LocalViewModelStoreOwner provides owners,
-                LocalLifecycleOwner provides owners,
-            ) {
-                App(services, tokyo, NowProvider { now })
-            }
+        runBlocking {
+            DemoData.seed(store, day, tokyo, until = now - 20 * 60_000L)
+            store.updateSettings { it.copy(onboardingCompleted = true) }
         }
+        showApp(services)
 
         // Timeline: coverage, the charging gap and the transcript.
         waitForText("2026年10月10日(土)")
@@ -101,6 +103,11 @@ class AppUiTest {
         waitForText(Strings.PRIVACY_NOTE)
         screenshot("status")
 
+        // Alert settings: turning quiet hours off is stored and reported to the platform.
+        onNodeWithText(Strings.QUIET_HOURS_SWITCH).performScrollTo().performClick()
+        waitUntil(timeoutMillis = 10_000) { services.gapAlertSettingsChanges == 1 }
+        assertEquals(false, runBlocking { store.loadSettings() }.gapAlert.quietHours.enabled)
+
         // Storage: breakdown, retention and the typed confirmation for deleting everything.
         waitForText(Strings.STORAGE_USAGE)
         waitForText(Strings.RETENTION)
@@ -111,6 +118,66 @@ class AppUiTest {
         onNodeWithText(Strings.DELETE_ALL_CONFIRM).performScrollTo().performClick()
         waitForText(Strings.DELETED_ALL)
         assertEquals(0, runBlocking { store.read { stats() } }.chunks)
+    }
+
+    @Test
+    fun onboardingThenMainScreen() = runDesktopComposeUiTest(width = 412, height = 915) {
+        val services = FakeAppServices(
+            store,
+            initialStatus = ProcessingStatus(asrModel = ModelState.Missing),
+            permissions = listOf(AppPermission.NOTIFICATIONS),
+        )
+        showApp(services)
+
+        waitForText(Strings.WELCOME_TITLE)
+        waitForText(Strings.PRIVACY_NOTE)
+        screenshot("onboarding-welcome")
+        onNodeWithText(Strings.ONBOARDING_NEXT).performClick()
+
+        // Consent is required before going on.
+        waitForText(Strings.CONSENT_TITLE)
+        onNodeWithText(Strings.ONBOARDING_NEXT).assertIsNotEnabled()
+        onNodeWithText(Strings.CONSENT_CHECKBOX).performScrollTo().performClick()
+        onNodeWithText(Strings.ONBOARDING_NEXT).assertIsEnabled()
+        screenshot("onboarding-consent")
+        onNodeWithText(Strings.ONBOARDING_NEXT).performClick()
+
+        waitForText(Strings.PERMISSIONS_TITLE)
+        onNodeWithText(Strings.PERMISSION_ALLOW).performClick()
+        waitForText(Strings.PERMISSION_GRANTED)
+        assertEquals(listOf(AppPermission.NOTIFICATIONS), services.permissionRequests)
+        onNodeWithText(Strings.ONBOARDING_NEXT).performClick()
+
+        waitForText(Strings.MODEL_SETUP_TITLE)
+        onNodeWithText(Strings.DOWNLOAD_ANY).performClick()
+        assertEquals(listOf(true), services.downloadRequests)
+        screenshot("onboarding-model")
+        onNodeWithText(Strings.ONBOARDING_SKIP).performClick()
+
+        waitForText(Strings.WATCH_INSTRUCTION)
+        onNodeWithText(Strings.ONBOARDING_BACK).performClick()
+        waitForText(Strings.MODEL_SETUP_TITLE)
+        onNodeWithText(Strings.ONBOARDING_SKIP).performClick()
+        onNodeWithText(Strings.ONBOARDING_START).performClick()
+
+        waitForText(Strings.TAB_STATUS)
+        assertTrue(runBlocking { store.loadSettings() }.onboardingCompleted)
+
+        // The guide can be opened again from the status tab; it starts over.
+        onNodeWithText(Strings.TAB_STATUS).performClick()
+        onNodeWithText(Strings.SHOW_ONBOARDING_AGAIN).performScrollTo().performClick()
+        waitForText(Strings.WELCOME_TITLE)
+    }
+
+    private fun ComposeUiTest.showApp(services: AppServices) {
+        setContent {
+            CompositionLocalProvider(
+                LocalViewModelStoreOwner provides owners,
+                LocalLifecycleOwner provides owners,
+            ) {
+                App(services, tokyo, NowProvider { now })
+            }
+        }
     }
 
     private fun ComposeUiTest.waitForText(text: String, substring: Boolean = false) {

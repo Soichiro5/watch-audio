@@ -8,6 +8,8 @@
     <!-- The model download (hundreds of MB) runs as a WorkManager foreground worker. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Gap alert (#43) and model download progress; requested during onboarding (Android 13+). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".WatchAudioApp"

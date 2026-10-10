@@ -1,17 +1,25 @@
 package app.watchaudio.android
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.os.Build
 import android.util.Log
+import androidx.activity.result.ActivityResultLauncher
+import androidx.core.content.ContextCompat
 import app.watchaudio.android.asr.ModelManager
 import app.watchaudio.android.work.TranscriptionScheduler
+import app.watchaudio.app.AppPermission
 import app.watchaudio.app.AppServices
 import app.watchaudio.app.ModelState
+import app.watchaudio.app.PermissionStatus
 import app.watchaudio.app.ProcessingStatus
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.StorageManager
 import java.io.File
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +39,7 @@ class AndroidAppServices(
     private val scheduler: TranscriptionScheduler,
     lastChunkReceivedAt: StateFlow<Long?>,
     scope: CoroutineScope,
+    private val onGapAlertSettingsChanged: () -> Unit,
 ) : AppServices {
     override val audioRoot: String = audioRootDir.absolutePath
 
@@ -49,6 +58,54 @@ class AndroidAppServices(
     }.stateIn(scope, SharingStarted.Eagerly, ProcessingStatus())
 
     private var player: MediaPlayer? = null
+
+    // Permission prompts go through the visible activity; main thread only.
+    private var permissionLauncher: ActivityResultLauncher<String>? = null
+    private var pendingPermission: CompletableDeferred<Boolean>? = null
+    private var notificationsRefused = false
+
+    /** POST_NOTIFICATIONS is a runtime permission from Android 13 (API 33). */
+    override val permissions: List<AppPermission> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) listOf(AppPermission.NOTIFICATIONS) else emptyList()
+
+    override suspend fun permissionStatus(permission: AppPermission): PermissionStatus = when {
+        permission !in permissions || notificationsGranted() -> PermissionStatus.GRANTED
+        notificationsRefused -> PermissionStatus.DENIED
+        else -> PermissionStatus.NOT_REQUESTED
+    }
+
+    override suspend fun requestPermission(permission: AppPermission): PermissionStatus {
+        val launcher = permissionLauncher
+        if (permission in permissions && !notificationsGranted() && launcher != null) {
+            val result = CompletableDeferred<Boolean>()
+            pendingPermission?.cancel()
+            pendingPermission = result
+            launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            // After repeated refusals Android answers false at once without showing a prompt.
+            if (!result.await()) notificationsRefused = true
+        }
+        return permissionStatus(permission)
+    }
+
+    fun attachPermissionLauncher(launcher: ActivityResultLauncher<String>) {
+        permissionLauncher = launcher
+    }
+
+    fun detachPermissionLauncher(launcher: ActivityResultLauncher<String>) {
+        if (permissionLauncher === launcher) permissionLauncher = null
+    }
+
+    /** Result of a prompt started by [requestPermission] (delivered to the current activity). */
+    fun onPermissionResult(granted: Boolean) {
+        pendingPermission?.complete(granted)
+        pendingPermission = null
+    }
+
+    private fun notificationsGranted(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+    override fun gapAlertSettingsChanged() = onGapAlertSettingsChanged()
 
     override fun requestTranscription() = scheduler.requestNow()
 

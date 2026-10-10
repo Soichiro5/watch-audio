@@ -325,6 +325,11 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
             if (st.step() && !st.isNull(0)) st.getText(0) else null
         }
 
+    /** All stored (non-null) app settings. */
+    fun settings(): Map<String, String> = db.prepare("SELECT key, value FROM app_setting WHERE value IS NOT NULL").use { st ->
+        buildMap { while (st.step()) put(st.getText(0), st.getText(1)) }
+    }
+
     /** Stores an app setting; null removes it. */
     fun putSetting(key: String, value: String?) {
         if (value == null) {

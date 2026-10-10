@@ -3,6 +3,7 @@ package app.watchaudio.android
 import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
+import app.watchaudio.android.alert.GapAlertMonitor
 import app.watchaudio.android.asr.AndroidSherpaTranscriber
 import app.watchaudio.android.asr.ModelManager
 import app.watchaudio.android.transfer.ChunkReceiver
@@ -55,12 +56,25 @@ class AppGraph private constructor(context: Context) {
     private val _lastChunkReceivedAt = MutableStateFlow<Long?>(null)
     val lastChunkReceivedAt: StateFlow<Long?> = _lastChunkReceivedAt.asStateFlow()
 
+    val gapAlerts = GapAlertMonitor(app, store, scope)
+
     val chunkReceiver = ChunkReceiver(app, ingestor, scope) {
         _lastChunkReceivedAt.value = System.currentTimeMillis()
         scheduler.requestNow()
+        gapAlerts.onChunkStored()
     }
 
-    val services = AndroidAppServices(app, store, storage, audioRoot, models, scheduler, lastChunkReceivedAt, scope)
+    val services = AndroidAppServices(
+        app,
+        store,
+        storage,
+        audioRoot,
+        models,
+        scheduler,
+        lastChunkReceivedAt,
+        scope,
+        onGapAlertSettingsChanged = gapAlerts::onSettingsChanged,
+    )
 
     /**
      * Start-up recovery: re-queues chunks a killed process left mid-transcription and publishes
