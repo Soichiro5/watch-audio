@@ -67,4 +67,8 @@ internal val MIGRATIONS: List<List<String>> = listOf(
         END
         """,
     ),
+    // 2: small key-value settings (onboarding, alert preferences)
+    listOf(
+        "CREATE TABLE setting (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+    ),
 )
