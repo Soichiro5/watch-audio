@@ -8,7 +8,7 @@ import WatchKit
 @MainActor
 private final class ActiveChunk {
     var info: InProgressChunk
-    let recorder: AVAudioRecorder
+    let recorder: any ChunkAudioInput
     let startedAt: Date
     /// Metering samples taken and whether any of them was above the silence threshold.
     var meterSamples = 0
@@ -16,7 +16,7 @@ private final class ActiveChunk {
     /// Consecutive ticks in which the recorder unexpectedly was not recording.
     var stalledTicks = 0
 
-    init(info: InProgressChunk, recorder: AVAudioRecorder, startedAt: Date) {
+    init(info: InProgressChunk, recorder: any ChunkAudioInput, startedAt: Date) {
         self.info = info
         self.recorder = recorder
         self.startedAt = startedAt
@@ -128,6 +128,12 @@ final class RecorderController {
         observeInterruptions()
         transport.activate()
         refreshPending()
+        #if DEBUG
+        // `-debugAudioInput <file>`: record an audio file instead of the microphone.
+        if let url = DebugAudioInput.launchArgumentFile() {
+            Task { await self.startDebugAudioInput(url, loop: DebugAudioInput.launchArgumentLoop) }
+        }
+        #endif
     }
 
     // MARK: - Controls
@@ -238,8 +244,7 @@ final class RecorderController {
         }
         let chunkId = UUID().uuidString
         let url = outbox.recordingAudioURL(chunkId)
-        let recorder = try AVAudioRecorder(url: url, settings: ChunkAudioFormat.recorderSettings)
-        recorder.isMeteringEnabled = true
+        let recorder = try makeInput(url: url)
         guard recorder.record() else {
             try? FileManager.default.removeItem(at: url)
             throw RecorderError.recordFailed
@@ -254,6 +259,16 @@ final class RecorderController {
         )
         outbox.saveInProgress(info)
         return ActiveChunk(info: info, recorder: recorder, startedAt: startedAt)
+    }
+
+    /// The microphone, or in Debug builds the audio file selected with `startDebugAudioInput`.
+    private func makeInput(url: URL) throws -> any ChunkAudioInput {
+        #if DEBUG
+        if let playback = DebugAudioInput.playback {
+            return try DebugAudioFileInput(url: url, playback: playback)
+        }
+        #endif
+        return try MicrophoneChunkInput(url: url)
     }
 
     /// Starts the next file before stopping the current one so no audio is lost; falls back to
