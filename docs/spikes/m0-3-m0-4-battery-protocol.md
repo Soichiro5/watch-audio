@@ -3,18 +3,20 @@
 Watch での長時間録音が成立するかを判定するための計測手順。
 対象 Issue: [#9 watchOS](https://github.com/Soichiro5/watch-audio/issues/9) / [#10 Wear OS](https://github.com/Soichiro5/watch-audio/issues/10)
 
-## 計測用アプリの仕様（スパイク版）
+## 計測用アプリの仕様
+
+Wear OS は M1-4（#16）でスパイク版を本実装（[docs/impl/wearos.md](../impl/wearos.md)）に置き換えた。計測にもその本実装をそのまま使う（装着検出・充電での自動停止/再開も含めた実利用の消費になる）。
 
 | 項目 | watchOS | Wear OS |
 | --- | --- | --- |
-| 録音形式 | AAC-LC 16kHz mono 32kbps | 同左 |
-| 録音方式 | `AVAudioRecorder` + background audio | `MediaRecorder` + 前景サービス（microphone）+ Ongoing Activity |
-| チャンク | 5 分ごと（新ファイル開始 → 旧ファイル停止の重ね合わせ方式）・Mark でも区切る | 約 5 分（ファイルサイズ基準・`setNextOutputFile` で無音ギャップなし） |
-| ログ | 5 分ごと + イベント時に CSV へ追記 | 同左 |
-| 転送 | ON の場合、閉じたチャンクを iPhone へ `transferFile`（送信成功後に Watch から削除） | ON の場合、閉じたチャンクをスマホへ `ChannelClient` |
-| ログの取り出し | 停止時に log.csv を iPhone へ送信 → iPhone の「ファイル」アプリ › このiPhone内 › watch-audio › WatchInbox | `adb pull /sdcard/Android/data/app.watchaudio/files/spike` |
+| 録音形式 | AAC-LC 16kHz mono 32kbps | AAC-LC 16kHz mono **24kbps** |
+| 録音方式 | `AVAudioRecorder` + background audio | `MediaRecorder` + 前景サービス（microphone）+ Ongoing Activity。非装着・充電中・電池 5% 以下は自動で一時停止し、条件が戻ると自動再開 |
+| チャンク | 5 分ごと（新ファイル開始 → 旧ファイル停止の重ね合わせ方式）・Mark でも区切る | 約 5 分（ファイルサイズ基準・`setNextOutputFile` で無音ギャップなし）。全体が無音のチャンクは音声を捨てる |
+| ログ | 5 分ごと + イベント時に CSV へ追記 | 同左（`battery` 行が 5 分ごと。列: `timestamp,battery_pct,charging,mode,pending_uploads,event,detail`。最大 約 1 MB でローテーション） |
+| 転送 | ON の場合、閉じたチャンクを iPhone へ `transferFile`（送信成功後に Watch から削除） | 画面の「Send to phone」が ON の場合、閉じたチャンクをスマホへ `ChannelClient`（近接ノードのみ）。スマホの ACK 後に Watch から削除。OFF の間は Watch に溜まる |
+| ログの取り出し | 停止時に log.csv を iPhone へ送信 → iPhone の「ファイル」アプリ › このiPhone内 › watch-audio › WatchInbox | `adb pull /sdcard/Android/data/app.watchaudio/files/diagnostics` |
 
-画面に「開始時/現在のバッテリー」「消費速度（%/時、15 分経過後に表示）」「チャンク数/送信数」が出るので、目視でも確認できる。
+watchOS は画面に「開始時/現在のバッテリー」「消費速度（%/時、15 分経過後に表示）」「チャンク数/送信数」が出る。Wear OS の画面は現在の電池残量・送信待ち件数・最終 ACK 時刻のみなので、消費速度は CSV の `battery` 行から計算する。
 
 ## 計測シナリオ
 
@@ -23,7 +25,7 @@ Watch での長時間録音が成立するかを判定するための計測手�
 | # | 条件 | 時間 | 目的 |
 | --- | --- | --- | --- |
 | A | 転送 ON・普段どおり装着して生活（会話あり） | 8〜12 時間 | 実利用の電池消費 |
-| B | 転送 OFF・同条件 | 4 時間 | 転送のコスト切り分け |
+| B | 転送 OFF・同条件（Wear OS は画面の「Send to phone」を OFF） | 4 時間 | 転送のコスト切り分け |
 | C | 録音なし・普段どおり装着 | 4 時間 | ベースライン（Watch 単体の消費） |
 | D | 録音中に着信・Siri/アシスタント・アラーム・他アプリで録音 | 各 1 回 | 割り込み時の挙動 |
 | E | 録音中にスマホとの接続を切る（機内モード 30 分）→ 戻す | 1 回 | 再送・転送の追従 |
@@ -41,7 +43,7 @@ Issue にコメントで以下の表を貼る（CSV も添付）。
 
 確認ポイント:
 - CSV の `battery` 行が **5 分おきに途切れず** 記録されているか（間隔が伸びていれば OS にスリープさせられている）。
-- `rotate_fallback`（watchOS）/ `max_size_reached`（Wear OS）/ `silenced` / `error` イベントの有無。
+- `rotate_fallback` / `silenced` / `error`（watchOS）、`interrupted` / `alert` / `send_failed` / `terminated`（Wear OS）イベントの有無。Wear OS は `mode` 行で一時停止の理由（`paused_off_body` / `paused_charging` など）も分かる。
 - 録音ファイルを数個聞いて、チャンクの境目で音が欠けていないか。
 - 割り込み後に `interruption_ended resumed=true/false` のどちらになったか（watchOS）。
 
