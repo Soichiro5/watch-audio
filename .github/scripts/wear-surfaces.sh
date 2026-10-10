@@ -7,8 +7,12 @@
 #   3. recording: shows the tile and the watch face again -> screenshots.
 #
 # Evidence only: system UI broadcasts differ between emulator images, so a step that does not work
-# is reported (WEAR_SURFACE_CHECK ... ok=false) instead of failing the job. Screenshots land in
-# /data/local/tmp/watchaudio-screenshots (pulled by the workflow).
+# is reported (WEAR_SURFACE_CHECK ... ok=false) instead of failing the job. Each screenshot is
+# pulled into screenshots-wear/ right away (the emulator has gone offline at the end of a run).
+#
+# First CI run (38047480914) showed: the Wear system UI still shows "Starting…" for a while after
+# boot_completed, so the script waits for it; the default watch face (Orbita) has its complication
+# slots disabled, so the script tries the installed watch faces in turn.
 set -uo pipefail
 
 PKG=app.watchaudio
@@ -16,13 +20,36 @@ TILE=$PKG/app.watchaudio.wear.tile.RecorderTileService
 COMPLICATION=$PKG/app.watchaudio.wear.tile.RecorderComplicationService
 SHOTS=/data/local/tmp/watchaudio-screenshots
 OUT=wear-surfaces
-mkdir -p "$OUT"
+LOCAL_SHOTS=screenshots-wear
+mkdir -p "$OUT" "$LOCAL_SHOTS"
 
 log() { echo "$*" | tee -a "$OUT/summary.txt"; }
 shot() {
   sleep 3
   adb shell screencap -p "$SHOTS/$1.png"
-  log "SCREENSHOT name=$1.png bytes=$(adb shell stat -c %s "$SHOTS/$1.png" 2>/dev/null | tr -d '\r')"
+  adb pull "$SHOTS/$1.png" "$LOCAL_SHOTS/$1.png" > /dev/null 2>&1
+  log "SCREENSHOT name=$1.png bytes=$(stat -c %s "$LOCAL_SHOTS/$1.png" 2>/dev/null || echo missing)"
+}
+
+# Dumps the view hierarchy to $OUT/$1.xml.
+dump_ui() {
+  adb shell uiautomator dump /data/local/tmp/wear-ui.xml > /dev/null 2>&1
+  adb pull /data/local/tmp/wear-ui.xml "$OUT/$1.xml" > /dev/null 2>&1
+}
+
+# Waits (up to 5 min) until the system UI has finished its "Starting…" screen.
+wait_for_system_ui() {
+  local i
+  for i in $(seq 1 60); do
+    adb shell input keyevent KEYCODE_WAKEUP
+    dump_ui ready-check
+    if [ -s "$OUT/ready-check.xml" ] && ! grep -q "starting_screen" "$OUT/ready-check.xml"; then
+      check system-ui-ready true "after_s=$((i * 5))"
+      return
+    fi
+    sleep 5
+  done
+  check system-ui-ready false "still starting after 300 s"
 }
 check() { log "WEAR_SURFACE_CHECK step=$1 ok=$2 ${3:-}"; }
 broadcast() { adb shell am broadcast -a "$1" "${@:2}" 2>&1 | tr -d '\r' | tail -1; }
@@ -36,20 +63,46 @@ show_tile() {
   check "show-tile($1)" "$([[ $result == *result=1* ]] && echo true || echo false)" "result='$result'"
 }
 
-# The watch face is a wallpaper service; complications are set on one of its slots.
-set_complication() {
-  local face result slot
-  face=$(adb shell dumpsys wallpaper | tr -d '\r' | sed -n 's/.*mWallpaperComponent=ComponentInfo{\([^}]*\)}.*/\1/p' | head -1)
-  log "watch face: ${face:-unknown}"
-  [ -n "$face" ] || { check set-complication false "no watch face found"; return; }
-  for slot in 0 1 2 3 100 101 102 103; do
+current_face() {
+  adb shell dumpsys wallpaper | tr -d '\r' | sed -n 's/.*mWallpaperComponent=ComponentInfo{\([^}]*\)}.*/\1/p' | head -1
+}
+
+# Tries the slots of watch face $1; returns 0 once one accepts the complication.
+try_slots() {
+  local face=$1 result slot
+  for slot in 0 1 2 3 4 5 6 7 100 101 102 103; do
     # type 3 = SHORT_TEXT (ComplicationType wire value)
     result=$(broadcast com.google.android.wearable.app.DEBUG_SURFACE --es operation set-complication \
       --ecn component "$COMPLICATION" --ecn watchface "$face" --ei slot "$slot" --ei type 3)
-    log "set-complication slot=$slot: $result"
-    if [[ $result == *result=1* ]]; then check set-complication true "slot=$slot face=$face"; return; fi
+    log "set-complication face=$face slot=$slot: $result"
+    if [[ $result == *result=1* ]]; then check set-complication true "slot=$slot face=$face"; return 0; fi
+    # Past the last slot of this face.
+    [[ $result == *"out of range"* ]] && [ "$slot" -lt 100 ] && return 1
   done
-  check set-complication false "face=$face"
+  return 1
+}
+
+# The watch face is a wallpaper service. The current one first, then every installed watch face
+# (made current with the debug broadcast set-watchface) until one has an enabled slot.
+set_complication() {
+  local face candidate result
+  face=$(current_face)
+  log "watch face: ${face:-unknown}"
+  [ -n "$face" ] && try_slots "$face" && return
+  adb shell cmd package query-services --brief -a android.service.wallpaper.WallpaperService | tr -d '\r' | grep "/" > "$OUT/watch-faces.txt"
+  log "installed watch faces: $(tr '\n' ' ' < "$OUT/watch-faces.txt")"
+  # fd 3: adb shell would otherwise read the rest of the list from stdin.
+  while read -r candidate <&3; do
+    # Expand the short form pkg/.Class to pkg/pkg.Class, like dumpsys prints it.
+    [[ $candidate == */.* ]] && candidate="${candidate%%/*}/${candidate%%/*}${candidate#*/}"
+    [ "$candidate" = "$face" ] && continue
+    result=$(broadcast com.google.android.wearable.app.DEBUG_SURFACE --es operation set-watchface --ecn component "$candidate")
+    log "set-watchface $candidate: $result"
+    sleep 5
+    [ "$(current_face)" = "$candidate" ] || continue
+    try_slots "$candidate" && return
+  done 3< "$OUT/watch-faces.txt"
+  check set-complication false "no watch face with an enabled slot"
 }
 
 go_home() { adb shell input keyevent KEYCODE_HOME; sleep 2; }
@@ -57,8 +110,7 @@ go_home() { adb shell input keyevent KEYCODE_HOME; sleep 2; }
 # Taps the tile button ("Start"/"Resume") found in the view hierarchy, else the lower middle of the screen.
 tap_tile_button() {
   local xy size
-  adb shell uiautomator dump /data/local/tmp/wear-ui.xml > /dev/null 2>&1
-  adb pull /data/local/tmp/wear-ui.xml "$OUT/tile-ui.xml" > /dev/null 2>&1
+  dump_ui tile-ui
   xy=$(python3 - "$OUT/tile-ui.xml" <<'EOF'
 import re, sys
 try:
@@ -88,6 +140,7 @@ EOF
 recording() { adb shell dumpsys activity services "$PKG" | grep -q "RecordingService"; }
 
 adb shell mkdir -p "$SHOTS"
+wait_for_system_ui
 # The recorder pauses while charging, and the emulator reports AC power by default.
 adb shell dumpsys battery unplug
 adb shell dumpsys battery set level 80
@@ -106,6 +159,8 @@ shot wear-tile-stopped
 tap_tile_button
 sleep 8
 shot wear-tile-tap-opens-app
+dump_ui after-tile-tap
+adb logcat -d -s RecordingService:* ChunkRecorder:* AndroidRuntime:E > "$OUT/recorder-log.txt" 2>/dev/null || true
 if recording; then check tile-tap-starts-recording true; else check tile-tap-starts-recording false "RecordingService not running"; fi
 adb shell dumpsys activity services "$PKG" | tr -d '\r' | grep -E "ServiceRecord|isForeground" > "$OUT/services.txt" || true
 
@@ -116,5 +171,4 @@ show_tile recording
 shot wear-tile-recording
 
 adb logcat -d > "$OUT/logcat-wear-surfaces.txt" || true
-adb shell dumpsys battery reset || true
 exit 0

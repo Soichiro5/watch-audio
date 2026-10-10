@@ -95,5 +95,6 @@ else
 fi
 save_logcat
 
-grep -ho "[A-Z_]*_CHECK .*\|SCREENSHOT .*\|MODEL_INSTALL .*" "$OUT/logcat-scenarios.txt" >> "$OUT/summary.txt" || true
+# Lines can be logged twice (Log + System.out); keep the first of each.
+grep -ho "[A-Z_]*_CHECK .*\|SCREENSHOT .*\|MODEL_INSTALL .*" "$OUT/logcat-scenarios.txt" | awk '!seen[$0]++' >> "$OUT/summary.txt" || true
 exit $status

@@ -139,7 +139,8 @@ sequenceDiagram
 - **コンプリケーション**（SHORT_TEXT）: `REC` / `OFF` / `CHG` / `BAT` / `FULL` / `MIC` / `!`（録音 ON なのに停止中）/ `—`。タップでアプリ。状態変化時に更新を要求する（定期更新なし）。
 - **Ongoing Activity**: 録音中はストップウォッチ、一時停止中は理由を表示。
 - **エミュレータでの確認（#41）**: CI `emulator.yml` の wear ジョブが `.github/scripts/wear-surfaces.sh` で、Wear OS のデバッグ用ブロードキャスト（`com.google.android.wearable.app.DEBUG_SURFACE` の `add-tile` / `set-complication`、`DEBUG_SYSUI` の `show-tile`）を使って Tile を表示し、現在の文字盤（`dumpsys wallpaper`）のスロットにコンプリケーションを設定する。停止中 → Tile のボタンをタップ（`uiautomator dump` で「Start」を探し、見つからなければ画面下寄りの中央）→ アプリが開いて録音開始 → 録音中、の順にスクリーンショットを撮る（成果物 `screenshots-wear`: `wear-tile-stopped.png` / `wear-tile-tap-opens-app.png` / `wear-tile-recording.png` / `wear-complication-*.png`）。エミュレータは AC 給電扱いで録音が「充電中」で止まるため、`dumpsys battery unplug` してから行う。マイク・通知の権限は `pm grant` で事前に付与（許可ダイアログを挟まないため）。音声入力はエミュレータの既定（ホストに入力がなければ無音）で、仮想マイクは使わない。
-  - システム UI のブロードキャストはイメージによって動かないことがあるため、このスクリプトは失敗してもジョブを落とさず、`WEAR_SURFACE_CHECK step=… ok=false` としてジョブサマリーに出す。特に `set-complication` は公式ドキュメントに記載がなく（Android Studio の実行構成が使う形式）、文字盤のスロット番号も文字盤ごとに違うため、0–3・100–103 を順に試す。
+  - システム UI のブロードキャストはイメージによって動かないことがあるため、このスクリプトは失敗してもジョブを落とさず、`WEAR_SURFACE_CHECK step=… ok=false` としてジョブサマリーに出す。特に `set-complication` は公式ドキュメントに記載がなく（Android Studio の実行構成が使う形式）、文字盤のスロット番号も文字盤ごとに違うため、0–7・100–103 を順に試す。
+  - 最初の CI 実行（run 38047480914）でわかったこと: 起動完了（`sys.boot_completed`）の後もしばらくシステム UI が「Starting…」画面のままで、その間のスクリーンショットはすべてこの画面だった → スクリプトは `uiautomator dump` で `starting_screen` が消えるまで最大 5 分待つ。既定の文字盤（Orbita）はスロット 0–2 が無効（`Complication slot is not enabled`）→ インストール済みの文字盤（`cmd package query-services -a android.service.wallpaper.WallpaperService`）を `set-watchface` で順に切り替えて試す。最後に adb が切断されスクリーンショットを回収できなかった → 撮るたびにその場で `adb pull` する。
 
 ## 6. 権限
 

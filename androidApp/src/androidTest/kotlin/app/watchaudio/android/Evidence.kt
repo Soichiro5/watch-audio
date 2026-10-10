@@ -21,7 +21,6 @@ object Evidence {
     /** Logs one evidence line, e.g. `ASR_CHECK chunks=1 …`. */
     fun log(line: String) {
         Log.i(TAG, line)
-        println(line)
     }
 
     /** Instrumentation argument (`-e name value`, or `android.testInstrumentationRunnerArguments.name`). */

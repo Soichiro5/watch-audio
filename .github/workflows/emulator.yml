@@ -127,7 +127,7 @@ jobs:
             # The test engine reinstalls both APKs itself; remove the earlier installs (smoke test, scenarios) so a signature mismatch cannot skip the tests.
             if [ -n "${{ matrix.device-tests }}" ]; then adb uninstall app.watchaudio || true; adb uninstall app.watchaudio.test || true; fi
             if [ -n "${{ matrix.device-tests }}" ]; then adb logcat -c; ./gradlew ${{ matrix.device-tests }} ${{ matrix.device-test-args }} || touch device-tests-failed; adb logcat -d > logcat-device-tests.txt || true; fi
-            adb pull /data/local/tmp/watchaudio-screenshots screenshots-${{ matrix.name }} || true
+            if [ ! -d screenshots-${{ matrix.name }} ]; then adb pull /data/local/tmp/watchaudio-screenshots screenshots-${{ matrix.name }} || true; fi
             if [ -f device-tests-failed ]; then echo "instrumented tests failed"; exit 1; fi
             for m in ${{ matrix.device-test-modules }}; do n=$(find "$m/build/outputs/androidTest-results/connected" -name '*.xml' -exec grep -o '<testcase ' {} + 2>/dev/null | wc -l); echo "$m: $n instrumented test cases"; if [ "$n" -eq 0 ]; then echo "no instrumented tests ran for $m"; exit 1; fi; done
 
@@ -142,7 +142,7 @@ jobs:
           {
             echo "Checks on the ${{ matrix.name }} emulator (logcat and scenario scripts):"
             echo '```'
-            grep -ho "[A-Z_]*_CHECK .*\|SCREENSHOT .*\|MODEL_INSTALL .*" logcat-device-tests.txt 2>/dev/null || true
+            grep -ho "[A-Z_]*_CHECK .*\|SCREENSHOT .*\|MODEL_INSTALL .*" logcat-device-tests.txt 2>/dev/null | awk '!seen[$0]++' || true
             cat scenario-logs/summary.txt wear-surfaces/summary.txt 2>/dev/null || true
             echo '```'
             echo "Screenshots (artifact screenshots-${{ matrix.name }}):"
