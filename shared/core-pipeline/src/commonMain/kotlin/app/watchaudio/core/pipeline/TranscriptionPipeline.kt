@@ -29,9 +29,10 @@ class TranscriptionPipeline(
 
     /**
      * Processes pending chunks until none are left or [shouldContinue] returns false.
+     * [observer] hears about each chunk (e.g. for logs).
      * @return number of chunks attempted in this run.
      */
-    suspend fun processPending(shouldContinue: () -> Boolean = { true }): RunResult {
+    suspend fun processPending(observer: Observer = Observer.NONE, shouldContinue: () -> Boolean = { true }): RunResult {
         val attempted = mutableSetOf<String>()
         var transcribed = 0
         var failed = 0
@@ -39,7 +40,10 @@ class TranscriptionPipeline(
             val next = store.read { pendingChunks(limit = attempted.size + 1, maxAttempts = maxAttempts) }
                 .firstOrNull { it.id !in attempted } ?: break
             attempted += next.id
-            if (process(next)) transcribed++ else failed++
+            observer.started(next.id)
+            val ok = process(next)
+            if (ok) transcribed++ else failed++
+            observer.finished(next.id, ok)
         }
         return RunResult(transcribed = transcribed, failed = failed)
     }
@@ -96,4 +100,16 @@ class TranscriptionPipeline(
     }
 
     data class RunResult(val transcribed: Int, val failed: Int)
+
+    /** Progress of [processPending], chunk by chunk. A chunk interrupted by cancellation never finishes. */
+    interface Observer {
+        fun started(chunkId: String) {}
+
+        /** [transcribed] is false when the attempt failed (see `markFailed`). */
+        fun finished(chunkId: String, transcribed: Boolean) {}
+
+        companion object {
+            val NONE: Observer = object : Observer {}
+        }
+    }
 }
