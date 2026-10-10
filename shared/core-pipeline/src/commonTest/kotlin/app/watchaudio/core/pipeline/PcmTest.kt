@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.io.files.Path
 
 class PcmTest {
     @Test
@@ -59,5 +60,14 @@ class PcmTest {
             val expected = (input.size - 1).toLong() * to / from + 1
             assertTrue(abs(whole.size - expected) <= 1, "$from -> $to: ${whole.size} vs $expected")
         }
+    }
+
+    @Test
+    fun concatenatePartsCutsRangesAndPadsShortFiles() {
+        // 1 kHz "audio" so 1 ms = 1 sample; values encode the file and the position.
+        val files = mapOf("a" to FloatArray(10) { 100f + it }, "b" to FloatArray(4) { 200f + it })
+        val parts = listOf(AudioPart(Path("a"), 6, 10), AudioPart(Path("b"), 1, 7))
+        val joined = concatenateParts(parts, sampleRate = 1_000) { files.getValue(it.file.name) }
+        assertContentEquals(floatArrayOf(106f, 107f, 108f, 109f, 201f, 202f, 203f, 0f, 0f, 0f), joined)
     }
 }

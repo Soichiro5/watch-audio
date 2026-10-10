@@ -1,14 +1,23 @@
 package app.watchaudio.app
 
+import app.watchaudio.core.pipeline.AudioPart
 import app.watchaudio.core.pipeline.TimedText
 import app.watchaudio.core.pipeline.Transcriber
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.io.files.Path
 
-/** One utterance from the Swift transcriber, times relative to the start of the file. */
+/**
+ * One utterance from the Swift transcriber, times relative to the start of the concatenated
+ * parts.
+ */
 class IosTimedText(val startMs: Long, val endMs: Long, val text: String)
+
+/**
+ * The range `[fromMs, toMs)` (ms from the start of the file) of the audio file at [path]; see
+ * [IosSpeechTranscriber.transcribe].
+ */
+class IosAudioPart(val path: String, val fromMs: Long, val toMs: Long)
 
 /**
  * Implemented in Swift (`SpeechAnalyzerTranscriber`, Speech framework / SpeechTranscriber) and
@@ -29,8 +38,13 @@ interface IosSpeechTranscriber {
      */
     fun prepareModel(callback: (String?) -> Unit)
 
-    /** Transcribes the audio file at [path]: segments on success, or (null, error message). */
-    fun transcribe(path: String, callback: (List<IosTimedText>?, String?) -> Unit)
+    /**
+     * Transcribes the concatenation of [parts] as one recording: segments on success, or
+     * (null, error message). Usually one whole chunk; at a chunk boundary, the chunk joined with
+     * the adjoining audio of its neighbours. Each part must contribute exactly `toMs - fromMs`
+     * of audio (padded with silence if its file is shorter), so times map back to the parts.
+     */
+    fun transcribe(parts: List<IosAudioPart>, callback: (List<IosTimedText>?, String?) -> Unit)
 
     /** Cancels the running [transcribe]; its callback is still invoked (with an error). */
     fun cancel()
@@ -42,9 +56,9 @@ class IosTranscriptionException(message: String) : Exception(message)
 internal class IosTranscriberAdapter(private val delegate: IosSpeechTranscriber) : Transcriber {
     override val engineId: String get() = delegate.engineId
 
-    override suspend fun transcribe(audioFile: Path): List<TimedText> = suspendCancellableCoroutine { cont ->
+    override suspend fun transcribe(parts: List<AudioPart>): List<TimedText> = suspendCancellableCoroutine { cont ->
         cont.invokeOnCancellation { delegate.cancel() }
-        delegate.transcribe(audioFile.toString()) { segments, error ->
+        delegate.transcribe(parts.map { IosAudioPart(it.file.toString(), it.fromMs, it.toMs) }) { segments, error ->
             // Resuming an already-cancelled continuation is a no-op.
             if (segments != null) {
                 val language = delegate.language

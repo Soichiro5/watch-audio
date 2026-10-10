@@ -64,3 +64,27 @@ class LinearResampler(fromRate: Int, toRate: Int) {
         return if (n == out.size) out else out.copyOf(n)
     }
 }
+
+/**
+ * Builds the input for [Transcriber.transcribe]: decodes each part with [decode] (16 kHz mono
+ * by default), cuts out its range and concatenates the ranges. A range running past the end of
+ * its file is padded with silence, so every part contributes exactly its declared length.
+ */
+fun concatenateParts(
+    parts: List<AudioPart>,
+    sampleRate: Int = AsrSettings.SAMPLE_RATE,
+    decode: (AudioPart) -> FloatArray,
+): FloatArray {
+    fun samples(ms: Long): Int = (ms * sampleRate / 1000).toInt()
+    val output = FloatArray(parts.sumOf { samples(it.durationMs) })
+    var position = 0
+    for (part in parts) {
+        val length = samples(part.durationMs)
+        val decoded = decode(part)
+        val from = samples(part.fromMs).coerceAtMost(decoded.size)
+        val to = minOf(from + length, decoded.size)
+        decoded.copyInto(output, destinationOffset = position, startIndex = from, endIndex = to)
+        position += length
+    }
+    return output
+}

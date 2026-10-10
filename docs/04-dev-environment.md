@@ -69,7 +69,7 @@ Watch の役割をシミュレートし、「チャンク化 → 取り込み �
 
 ```bash
 tools/harness/download-models.sh          # モデルを tools/harness/models/ に取得（受信のみ）
-./gradlew :tools:harness:test             # E2E テスト（日本語の参照音声 5 文）
+./gradlew :tools:harness:test             # E2E テスト（日本語の参照音声 5 文、チャンク境界をまたぐ発話）
 
 # 任意の音声ファイルで試す（mp3/wav/m4a など。ffmpeg が必要）
 ./gradlew :tools:harness:run --args="record /tmp/wa-data path/to/audio.mp3"

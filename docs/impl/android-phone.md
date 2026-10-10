@@ -13,7 +13,7 @@
 | `AndroidAppServices` | `AndroidAppServices.kt` | 共通 UI 向け契約 `AppServices` の Android 実装。`status`（モデル状態・処理中・最終チャンク受信時刻・メッセージ）、`requestTranscription()`（WorkManager）、`play/stopPlayback`（`MediaPlayer` でオフセットへシーク）。追加で `downloadModels(allowMetered)` |
 | `ChunkReceiverService` | `transfer/` | `WearableListenerService`。`/watch-audio/chunk/` 配下のチャネルを受け、処理を `ChunkReceiver` に渡す |
 | `ChunkReceiver` / `FrameReader` | `transfer/` | `ChunkFrame` を解析 → 音声を `cacheDir/incoming/*.part` にストリーム保存 → `Ingestor.ingest` → `MessageClient` で `ChunkAck` を返す |
-| `AndroidSherpaTranscriber` | `asr/` | sherpa-onnx（AAR の Kotlin API）。Silero VAD → ReazonSpeech Zipformer int8。認識器は初回に読み込み、ワーカー 1 回分の間は使い回す |
+| `AndroidSherpaTranscriber` | `asr/` | sherpa-onnx（AAR の Kotlin API）。Silero VAD → ReazonSpeech Zipformer int8。認識器は初回に読み込み、ワーカー 1 回分の間は使い回す。入力は音声パーツのリスト（チャンク単体、または境界付近の隣のチャンクの音声と連結したもの。[02 §6.3](../02-architecture.md#63-処理パイプラインphone)）で、各ファイルを `AudioDecoder` でデコードして `concatenateParts` で切り出し・連結する |
 | `AudioDecoder` | `asr/` | `MediaExtractor` + `MediaCodec` で m4a(AAC)/ogg(Opus) を 16 kHz モノラル float PCM に。ダウンミックスと線形リサンプルは `core-pipeline` の `Pcm.kt`（共通コード・単体テストあり） |
 | `ModelManager` / `ModelDownloadWorker` / `ModelArchive` | `asr/` | モデルの用意（adb サイドロード取り込み・ダウンロード・展開・原子的な配置） |
 | `TranscriptionScheduler` / `TranscriptionWorker` | `work/` | WorkManager による文字起こしの起動 |
@@ -21,7 +21,9 @@
 共通コードの追加:
 
 - `core-pipeline/SpeechSegmentation.kt`: `AsrSettings`（VAD しきい値 0.3、パディング 0.3 s など）と `padSpeechSpans`。**JVM ハーネスと Android で同一の分割**を使うため。
-- `core-pipeline/Pcm.kt`: `downmixToMono` / `pcm16ToFloat` / `LinearResampler`（ストリーミング）。
+- `core-pipeline/Pcm.kt`: `downmixToMono` / `pcm16ToFloat` / `LinearResampler`（ストリーミング）/ `concatenateParts`（パーツの範囲を切り出して連結。足りない分は無音）。
+- `core-pipeline/BoundaryJoin.kt`: チャンク境界をまたぐ発話を 1 つとして認識するための連結範囲の決定と、結果のチャンクへの振り分け（#45）。
+- `core-db/StoreTransaction.previousInSession` / `nextInSession` / `replaceSegments`: 同じセッションの隣のチャンクと、範囲内のセグメントの置き換え（境界の再認識用）。
 - `core-protocol/ChunkFrame.readManifest`: フレームヘッダ（4 byte 長 + manifest JSON）の読み取り。不正なら `IllegalArgumentException`。
 - `core-db/StoreTransaction.lastReceivedAt()`: 最後にチャンクを受信した時刻（連続性表示用）。
 
@@ -47,6 +49,8 @@ sequenceDiagram
   WM->>T: 実行
   T->>I: processPending { !isStopped } → transcript_segment / FTS
 ```
+
+- 文字起こしは古い順。境界に発話がある場合は、文字起こし済みの隣のチャンクの境界付近（最大 30 秒）も一緒に認識し、隣のセグメントの該当部分を置き換える（詳細と残る制約は [02 §6.3](../02-architecture.md#63-処理パイプラインphone)）。隣の音声も `files/audio` から読むので、追加のファイルや権限は不要。
 
 - **ACK を返さないケース**: フレームが壊れている（長さ・JSON・manifest 不正）、転送が途中で切れた、DB 例外。Watch は ACK が来ないチャンクを保持して再送する。取り込みは chunkId で冪等なので、再送されても `DUPLICATE` が返るだけ。
 - `CORRUPT`（サイズ/ハッシュ不一致）・`REJECTED`（新しいスキーマ）は ACK として返す（`isFinal=false` なので Watch は保持・再送）。
@@ -124,7 +128,7 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 ./gradlew --max-workers=2 :androidApp:assembleDebug :androidApp:lintDebug
 ```
 
-ハーネスの `SherpaTranscriber` と `AndroidSherpaTranscriber` は同じ `AsrSettings` と `padSpeechSpans` を使うので、ハーネスの認識結果は端末上の結果の目安になる（デコーダが ffmpeg か MediaCodec かの差、速度の差はある）。
+ハーネスの `SherpaTranscriber` と `AndroidSherpaTranscriber` は同じ `AsrSettings`・`padSpeechSpans`・`concatenateParts` を使うので、ハーネスの認識結果は端末上の結果の目安になる（デコーダが ffmpeg か MediaCodec かの差、速度の差はある）。
 
 ### 6.2 実機（adb）
 
