@@ -1,0 +1,10 @@
+.venv/
+models/
+cache/
+data/raw/
+__pycache__/
+*.pyc
+java/*.class
+java/out/
+data/jagovfaqs_subset.json
+data/jsts_val.json

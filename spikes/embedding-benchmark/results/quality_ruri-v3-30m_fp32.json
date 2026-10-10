@@ -1,0 +1,161 @@
+{
+ "model": "ruri-v3-30m",
+ "variant": "fp32",
+ "dim": 256,
+ "conv_fp32vec": {
+  "R@1": 0.76,
+  "R@5": 0.84,
+  "R@10": 0.86,
+  "MRR@10": 0.7968571428571428
+ },
+ "conv_fp32vec_by_type": {
+  "en": {
+   "R@1": 0.7,
+   "R@5": 0.9,
+   "R@10": 0.9,
+   "MRR@10": 0.8
+  },
+  "ja_kw": {
+   "R@1": 1.0,
+   "R@5": 1.0,
+   "R@10": 1.0,
+   "MRR@10": 1.0
+  },
+  "ja_para": {
+   "R@1": 0.6842105263157895,
+   "R@5": 0.7894736842105263,
+   "R@10": 0.8421052631578947,
+   "MRR@10": 0.7285714285714285
+  },
+  "x_en2ja": {
+   "R@1": 0.4,
+   "R@5": 0.4,
+   "R@10": 0.4,
+   "MRR@10": 0.4
+  },
+  "x_ja2en": {
+   "R@1": 1.0,
+   "R@5": 1.0,
+   "R@10": 1.0,
+   "MRR@10": 1.0
+  }
+ },
+ "conv_misses": [
+  {
+   "q": "先週話した旅行の件",
+   "top3": [
+    "なんか、さっきまでニュースで台風のことやってたね",
+    "まあ、最近ニュースで台風のことやってたんだよね",
+    "えーと、この前あくびが止まらないんだって"
+   ]
+  },
+  {
+   "q": "会議の結論どうなった",
+   "top3": [
+    "えーと、カーテンを洗ったし、サッカーの代表戦、引き分けだったみたい",
+    "会議室の予約、また取れてなかったんだけど",
+    "カーテンを洗ったし、サッカーの代表戦、引き分けだった"
+   ]
+  },
+  {
+   "q": "夕飯何食べたいって言ってたっけ",
+   "top3": [
+    "先輩が昨日の夜なんか甘いもの食べたいって言ってた",
+    "あの子がこの前なんか甘いもの食べたいって言ってた",
+    "なんか、あの子がこの前なんか甘いもの食べたいって言ってた"
+   ]
+  },
+  {
+   "q": "お金貸した件どうなった",
+   "top3": [
+    "保険の営業の人からまた電話あった",
+    "お金の話って友達とはしにくいよね",
+    "隣の人が今日自転車のチェーンが外れたって言ってた"
+   ]
+  },
+  {
+   "q": "job interview result",
+   "top3": [
+    "interviewing candidates all day is exhausting",
+    "the results of the survey came in",
+    "見積もりの書類、会社に置いてきちゃった"
+   ]
+  },
+  {
+   "q": "when is the recycling pickup",
+   "top3": [
+    "so my bike chain came off, and the miso soup was a little bland",
+    "like, just now the leaves are turning red",
+    "like, the miso soup was a little bland, and my bike chain came off"
+   ]
+  },
+  {
+   "q": "how much did the movers quote us",
+   "top3": [
+    "the miso soup was a little bland, and the news was all about the typhoon",
+    "so my bike chain came off, and the miso soup was a little bland",
+    "um, the miso soup was a little bland, and the new manga volume came out"
+   ]
+  },
+  {
+   "q": "what did the doctor say about the medication",
+   "top3": [
+    "anyway my shoulders are killing me, and the bus never showed up",
+    "um, there was a line at the copier, and the convenience store has a new dessert",
+    "our manager said there was a marathon downtown yesterday"
+   ]
+  }
+ ],
+ "conv_int8vec": {
+  "R@1": 0.76,
+  "R@5": 0.84,
+  "R@10": 0.86,
+  "MRR@10": 0.796
+ },
+ "conv_int8vec_by_type": {
+  "en": {
+   "R@1": 0.7,
+   "R@5": 0.9,
+   "R@10": 0.9,
+   "MRR@10": 0.8
+  },
+  "ja_kw": {
+   "R@1": 1.0,
+   "R@5": 1.0,
+   "R@10": 1.0,
+   "MRR@10": 1.0
+  },
+  "ja_para": {
+   "R@1": 0.6842105263157895,
+   "R@5": 0.7894736842105263,
+   "R@10": 0.8421052631578947,
+   "MRR@10": 0.7263157894736841
+  },
+  "x_en2ja": {
+   "R@1": 0.4,
+   "R@5": 0.4,
+   "R@10": 0.4,
+   "MRR@10": 0.4
+  },
+  "x_ja2en": {
+   "R@1": 1.0,
+   "R@5": 1.0,
+   "R@10": 1.0,
+   "MRR@10": 1.0
+  }
+ },
+ "gov_fp32vec": {
+  "R@1": 0.86,
+  "R@5": 0.96,
+  "R@10": 0.9666666666666667,
+  "MRR@10": 0.9041111111111112
+ },
+ "gov_int8vec": {
+  "R@1": 0.8666666666666667,
+  "R@5": 0.9533333333333334,
+  "R@10": 0.9666666666666667,
+  "MRR@10": 0.9066666666666666
+ },
+ "jsts_spearman": 0.7973671500106791,
+ "eval_seconds": 49.0
+}

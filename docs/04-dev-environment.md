@@ -30,7 +30,7 @@
 | Apple Developer Program | M0-3（Watch 実機に長期インストール）、M4（TestFlight） | 年 $99（無料アカウントでも実機インストールは可能だが 7 日で失効） |
 | Google Play Console | M4（内部テスト配信） | 初回 $25 |
 | AI プロバイダの API キー（OpenAI / Anthropic / Gemini のいずれか） | M3 | 従量課金 |
-| GitHub Actions | 常時 | 非公開リポジトリは無料枠 2,000 分/月。**macOS は 10 倍消費**（iOS ビルド 1 回 ≈ 10〜15 分 → 100〜150 分相当） |
+| GitHub Actions | 常時 | 非公開リポジトリは無料枠 2,000 分/月。**macOS は 10 倍消費**（iOS CI 1 回 ≈ 3〜6 分 → 30〜60 分相当。Apple 側・共通コードの変更時のみ実行） |
 
 ### ソフトウェア
 
@@ -55,7 +55,11 @@ open WatchAudio.xcodeproj   # iosApp スキームを実機に Run（Watch アプ
 
 Wear OS 実機への接続は「開発者向けオプション → ワイヤレスデバッグ」→ `adb pair` / `adb connect`。
 
-## 4. 検証データの扱い
+## 4. 実機検証の手順
+
+- M0-3 / M0-4 電池計測: [docs/spikes/m0-3-m0-4-battery-protocol.md](spikes/m0-3-m0-4-battery-protocol.md)
+
+## 5. 検証データの扱い
 
 - 録音検証では、**参加者全員に録音・文字起こしの目的を説明し同意を得る**。
 - 実際の会話音声はリポジトリにコミットしない（個人情報）。評価用の正解テキストと集計結果のみ共有する。

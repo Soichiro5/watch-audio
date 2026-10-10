@@ -1,0 +1,110 @@
+{
+ "env": {
+  "cpu": "x86_64",
+  "cpus": 4,
+  "numpy": "2.5.3",
+  "loadavg_start": [
+   10.09228515625,
+   9.98046875,
+   6.31298828125
+  ],
+  "loadavg_end": [
+   11.34033203125,
+   10.240234375,
+   6.58935546875
+  ]
+ },
+ "dim": 384,
+ "k": 50,
+ "runs": [
+  {
+   "n": 100000,
+   "mode": "int32",
+   "threads": 1,
+   "min_ms": 53.01,
+   "median_ms": 55.94
+  },
+  {
+   "n": 100000,
+   "mode": "int32",
+   "threads": 4,
+   "min_ms": 50.06,
+   "median_ms": 95.85
+  },
+  {
+   "n": 100000,
+   "mode": "f32",
+   "threads": 1,
+   "min_ms": 25.63,
+   "median_ms": 28.91
+  },
+  {
+   "n": 100000,
+   "mode": "f32",
+   "threads": 4,
+   "min_ms": 28.09,
+   "median_ms": 59.77
+  },
+  {
+   "n": 500000,
+   "mode": "int32",
+   "threads": 1,
+   "min_ms": 205.55,
+   "median_ms": 230.02
+  },
+  {
+   "n": 500000,
+   "mode": "int32",
+   "threads": 4,
+   "min_ms": 198.21,
+   "median_ms": 256.35
+  },
+  {
+   "n": 500000,
+   "mode": "f32",
+   "threads": 1,
+   "min_ms": 104.22,
+   "median_ms": 121.26
+  },
+  {
+   "n": 500000,
+   "mode": "f32",
+   "threads": 4,
+   "min_ms": 111.93,
+   "median_ms": 152.25
+  },
+  {
+   "n": 1000000,
+   "mode": "int32",
+   "threads": 1,
+   "min_ms": 414.71,
+   "median_ms": 441.6
+  },
+  {
+   "n": 1000000,
+   "mode": "int32",
+   "threads": 4,
+   "min_ms": 459.36,
+   "median_ms": 522.87
+  },
+  {
+   "n": 1000000,
+   "mode": "f32",
+   "threads": 1,
+   "min_ms": 222.23,
+   "median_ms": 229.85
+  },
+  {
+   "n": 1000000,
+   "mode": "f32",
+   "threads": 4,
+   "min_ms": 367.2,
+   "median_ms": 479.08
+  }
+ ],
+ "storage_mb": {
+  "100000": 38.8,
+  "500000": 194.0,
+  "1000000": 388.0
+ }
+}

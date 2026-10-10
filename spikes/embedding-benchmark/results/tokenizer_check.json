@@ -1,0 +1,45 @@
+{
+ "e5-small": {
+  "n_texts": 3340,
+  "normalizer": "Sequence",
+  "mismatch_nfkc": 0.0958,
+  "mismatch_nfkc_ws": 0.0039,
+  "mismatch_nonorm": 0.2108,
+  "mismatch_spm_pieces": 0.0009,
+  "spm_file": "sentencepiece.bpe.model"
+ },
+ "mMiniLM-L12": {
+  "n_texts": 3340,
+  "normalizer": "Precompiled",
+  "mismatch_nfkc": 0.0039,
+  "mismatch_nfkc_ws": 0.0039,
+  "mismatch_nonorm": 0.1653,
+  "mismatch_spm_pieces": 0.0,
+  "spm_file": "sentencepiece.bpe.model"
+ },
+ "ruri-v3-30m": {
+  "n_texts": 3340,
+  "normalizer": null,
+  "mismatch_nfkc": 0.176,
+  "mismatch_nfkc_ws": 0.2114,
+  "mismatch_nonorm": 0.0,
+  "mismatch_spm_pieces": 0.0,
+  "spm_file": "tokenizer.model"
+ },
+ "embeddinggemma-300m": {
+  "n_texts": 3340,
+  "normalizer": "Replace",
+  "mismatch_nfkc": 0.438,
+  "mismatch_nfkc_ws": 0.438,
+  "mismatch_nonorm": 0.3123,
+  "mismatch_spm_pieces": 0.0,
+  "spm_file": "tokenizer.model"
+ },
+ "bge-m3": {
+  "n_texts": 3340,
+  "normalizer": "Sequence",
+  "mismatch_nfkc": 0.0958,
+  "mismatch_nfkc_ws": 0.0039,
+  "mismatch_nonorm": 0.2108
+ }
+}

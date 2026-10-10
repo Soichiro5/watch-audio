@@ -1,0 +1,9 @@
+{
+ "n": 500000,
+ "dim": 384,
+ "sqlite_db_mb": 205.3,
+ "sqlite_full_read_ms": 3101.2,
+ "mmap_open_touch_ms": 5.9,
+ "bytes_per_row_sqlite": 410.6,
+ "sqlite_version": "3.45.1"
+}

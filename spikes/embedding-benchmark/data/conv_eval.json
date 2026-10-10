@@ -1,0 +1,11087 @@
+{
+"queries": [
+{
+"id": "q01",
+"text": "歯医者の予約いつだっけ",
+"type": "ja_kw",
+"relevant": [
+"q01_r0"
+]
+},
+{
+"id": "q02",
+"text": "先週話した旅行の件",
+"type": "ja_para",
+"relevant": [
+"q02_r0",
+"q02_r1"
+]
+},
+{
+"id": "q03",
+"text": "鍵どこに置いたって言ってた？",
+"type": "ja_kw",
+"relevant": [
+"q03_r0"
+]
+},
+{
+"id": "q04",
+"text": "田中さんの誕生日プレゼント何にする？",
+"type": "ja_para",
+"relevant": [
+"q04_r0"
+]
+},
+{
+"id": "q05",
+"text": "病院で言われた薬の飲み方",
+"type": "ja_para",
+"relevant": [
+"q05_r0"
+]
+},
+{
+"id": "q06",
+"text": "引っ越しの見積もりっていくらだった",
+"type": "ja_kw",
+"relevant": [
+"q06_r0"
+]
+},
+{
+"id": "q07",
+"text": "子供のお迎え誰が行くんだっけ",
+"type": "ja_para",
+"relevant": [
+"q07_r0"
+]
+},
+{
+"id": "q08",
+"text": "会議の結論どうなった",
+"type": "ja_para",
+"relevant": [
+"q08_r0"
+]
+},
+{
+"id": "q09",
+"text": "エアコン修理の人いつ来る",
+"type": "ja_para",
+"relevant": [
+"q09_r0"
+]
+},
+{
+"id": "q10",
+"text": "夕飯何食べたいって言ってたっけ",
+"type": "ja_para",
+"relevant": [
+"q10_r0"
+]
+},
+{
+"id": "q11",
+"text": "車検の期限",
+"type": "ja_kw",
+"relevant": [
+"q11_r0"
+]
+},
+{
+"id": "q12",
+"text": "お金貸した件どうなった",
+"type": "ja_para",
+"relevant": [
+"q12_r0"
+]
+},
+{
+"id": "q13",
+"text": "健康診断の結果",
+"type": "ja_para",
+"relevant": [
+"q13_r0"
+]
+},
+{
+"id": "q14",
+"text": "Wi-Fiのパスワード",
+"type": "ja_kw",
+"relevant": [
+"q14_r0"
+]
+},
+{
+"id": "q15",
+"text": "猫の予防接種いつ",
+"type": "ja_para",
+"relevant": [
+"q15_r0"
+]
+},
+{
+"id": "q16",
+"text": "母の日の花どうした",
+"type": "ja_kw",
+"relevant": [
+"q16_r0"
+]
+},
+{
+"id": "q17",
+"text": "健太の結婚式の日取り",
+"type": "ja_para",
+"relevant": [
+"q17_r0"
+]
+},
+{
+"id": "q18",
+"text": "ゴミの日いつ",
+"type": "ja_kw",
+"relevant": [
+"q18_r0"
+]
+},
+{
+"id": "q19",
+"text": "スマホの契約変えた話",
+"type": "ja_para",
+"relevant": [
+"q19_r0"
+]
+},
+{
+"id": "q20",
+"text": "保険の更新手続き",
+"type": "ja_kw",
+"relevant": [
+"q20_r0"
+]
+},
+{
+"id": "q21",
+"text": "資料の締め切りいつまで",
+"type": "ja_para",
+"relevant": [
+"q21_r0"
+]
+},
+{
+"id": "q22",
+"text": "車どこに停めた",
+"type": "ja_para",
+"relevant": [
+"q22_r0"
+]
+},
+{
+"id": "q23",
+"text": "来週の飲み会の店",
+"type": "ja_kw",
+"relevant": [
+"q23_r0"
+]
+},
+{
+"id": "q24",
+"text": "新しい部長ってどんな人",
+"type": "ja_para",
+"relevant": [
+"q24_r0"
+]
+},
+{
+"id": "q25",
+"text": "昨日の映画どうだった",
+"type": "ja_kw",
+"relevant": [
+"q25_r0"
+]
+},
+{
+"id": "q26",
+"text": "what did we decide about the budget",
+"type": "en",
+"relevant": [
+"q26_r0"
+]
+},
+{
+"id": "q27",
+"text": "where are we meeting for lunch",
+"type": "en",
+"relevant": [
+"q27_r0"
+]
+},
+{
+"id": "q28",
+"text": "flight details for the London trip",
+"type": "en",
+"relevant": [
+"q28_r0"
+]
+},
+{
+"id": "q29",
+"text": "who is picking up the kids on Wednesday",
+"type": "en",
+"relevant": [
+"q29_r0"
+]
+},
+{
+"id": "q30",
+"text": "the login bug",
+"type": "en",
+"relevant": [
+"q30_r0"
+]
+},
+{
+"id": "q31",
+"text": "my workout schedule",
+"type": "en",
+"relevant": [
+"q31_r0"
+]
+},
+{
+"id": "q32",
+"text": "did the landlord fix the leak",
+"type": "en",
+"relevant": [
+"q32_r0"
+]
+},
+{
+"id": "q33",
+"text": "how do you make the pasta sauce",
+"type": "en",
+"relevant": [
+"q33_r0"
+]
+},
+{
+"id": "q34",
+"text": "job interview result",
+"type": "en",
+"relevant": [
+"q34_r0"
+]
+},
+{
+"id": "q35",
+"text": "how did mom's surgery go",
+"type": "en",
+"relevant": [
+"q35_r0"
+]
+},
+{
+"id": "q36",
+"text": "サーバー移行の日程",
+"type": "x_ja2en",
+"relevant": [
+"q36_r0"
+]
+},
+{
+"id": "q37",
+"text": "クライアントが値段について何て言ってた",
+"type": "x_ja2en",
+"relevant": [
+"q37_r0"
+]
+},
+{
+"id": "q38",
+"text": "シンガポール出張のホテル",
+"type": "x_ja2en",
+"relevant": [
+"q38_r0"
+]
+},
+{
+"id": "q39",
+"text": "新入社員の研修はいつから",
+"type": "x_ja2en",
+"relevant": [
+"q39_r0"
+]
+},
+{
+"id": "q40",
+"text": "契約書のチェック",
+"type": "x_ja2en",
+"relevant": [
+"q40_r0"
+]
+},
+{
+"id": "q41",
+"text": "when is the recycling pickup",
+"type": "x_en2ja",
+"relevant": [
+"q18_r0"
+]
+},
+{
+"id": "q42",
+"text": "how much did the movers quote us",
+"type": "x_en2ja",
+"relevant": [
+"q06_r0"
+]
+},
+{
+"id": "q43",
+"text": "what did the doctor say about the medication",
+"type": "x_en2ja",
+"relevant": [
+"q05_r0"
+]
+},
+{
+"id": "q44",
+"text": "when is Kenta's wedding",
+"type": "x_en2ja",
+"relevant": [
+"q17_r0"
+]
+},
+{
+"id": "q45",
+"text": "cat vaccination appointment",
+"type": "x_en2ja",
+"relevant": [
+"q15_r0"
+]
+},
+{
+"id": "q46",
+"text": "体調悪くて休んでる人",
+"type": "ja_para",
+"relevant": [
+"q46_r0"
+]
+},
+{
+"id": "q47",
+"text": "洗濯機の調子悪いって話",
+"type": "ja_para",
+"relevant": [
+"q47_r0"
+]
+},
+{
+"id": "q48",
+"text": "来年の目標",
+"type": "ja_para",
+"relevant": [
+"q48_r0"
+]
+},
+{
+"id": "q49",
+"text": "荷物の再配達頼んだ？",
+"type": "ja_para",
+"relevant": [
+"q49_r0"
+]
+},
+{
+"id": "q50",
+"text": "家族旅行の予算",
+"type": "ja_kw",
+"relevant": [
+"q50_r0"
+]
+}
+],
+"docs": [
+{
+"id": "f0287",
+"text": "えーと、隣の人がこの前ニュースで台風のことやってたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0011",
+"text": "あのー、おとといドラマの続きが気になって寝られなかったんだよね",
+"kind": "filler"
+},
+{
+"id": "f1939",
+"text": "um, my brother said the bus never showed up yesterday",
+"kind": "filler"
+},
+{
+"id": "f1182",
+"text": "最近唐揚げ作りすぎちゃったよ",
+"kind": "filler"
+},
+{
+"id": "f1877",
+"text": "the train was delayed again, and they played an old song on the radio",
+"kind": "filler"
+},
+{
+"id": "f0613",
+"text": "ていうか、先輩が昨日の夜雲がすごく低くて雨が降りそうって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1343",
+"text": "Mike said the train was delayed again the other day",
+"kind": "filler"
+},
+{
+"id": "f0023",
+"text": "あのー、さっきまで雲がすごく低くて雨が降りそうんだよね",
+"kind": "filler"
+},
+{
+"id": "q14_n1",
+"text": "Wi-Fiが遅いのってルーターのせいかな",
+"kind": "hard_negative"
+},
+{
+"id": "f0975",
+"text": "キーボードの調子が悪いし、植木に水やるの忘れてた",
+"kind": "filler"
+},
+{
+"id": "f0997",
+"text": "ドラッグストアでティッシュ買ったし、パン屋さんのクロワッサンが美味しかったみたい",
+"kind": "filler"
+},
+{
+"id": "f1059",
+"text": "今朝雲がすごく低くて雨が降りそうみたい",
+"kind": "filler"
+},
+{
+"id": "q17_n1",
+"text": "健太って昔サッカー部だったよね",
+"kind": "hard_negative"
+},
+{
+"id": "q19_r0",
+"text": "携帯の料金プラン、格安SIMに乗り換えて月三千円になったよ",
+"kind": "relevant"
+},
+{
+"id": "f1137",
+"text": "日差しが強くて暑かったし、自転車のチェーンが外れたかも",
+"kind": "filler"
+},
+{
+"id": "f1727",
+"text": "our manager said there was a marathon downtown just now",
+"kind": "filler"
+},
+{
+"id": "f1738",
+"text": "so Jenny said the croissants at the bakery were amazing on the weekend",
+"kind": "filler"
+},
+{
+"id": "f1545",
+"text": "like, my roommate said matcha ice cream is the best this morning",
+"kind": "filler"
+},
+{
+"id": "f1417",
+"text": "anyway on the weekend I made way too much fried chicken",
+"kind": "filler"
+},
+{
+"id": "f1912",
+"text": "um, Tom said eggs were on sale at the supermarket just now",
+"kind": "filler"
+},
+{
+"id": "f0269",
+"text": "えーと、朝からドラマの続きが気になって寝られなかったね",
+"kind": "filler"
+},
+{
+"id": "f0261",
+"text": "えーと、昼過ぎに電車が人身事故で遅れてたの",
+"kind": "filler"
+},
+{
+"id": "f0747",
+"text": "なんか、今日天気予報だと明日は晴れるらしいね",
+"kind": "filler"
+},
+{
+"id": "f0417",
+"text": "そういえば、さっきゲームのイベント周回してたんだよね",
+"kind": "filler"
+},
+{
+"id": "f0286",
+"text": "えーと、鈴木くんが朝から雲がすごく低くて雨が降りそうって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0943",
+"text": "まあ、朝から公園で犬の散歩してる人が多かったの",
+"kind": "filler"
+},
+{
+"id": "f0501",
+"text": "そういえば、朝から天気予報だと明日は晴れるらしいって",
+"kind": "filler"
+},
+{
+"id": "f1190",
+"text": "最近部屋の電球が切れたかも",
+"kind": "filler"
+},
+{
+"id": "f0745",
+"text": "なんか、今日プリンターの紙詰まりがまた起きたの",
+"kind": "filler"
+},
+{
+"id": "f1282",
+"text": "電車が人身事故で遅れてたし、紅葉がきれいだったみたい",
+"kind": "filler"
+},
+{
+"id": "f0313",
+"text": "おとといキーボードの調子が悪いんだよね",
+"kind": "filler"
+},
+{
+"id": "f0862",
+"text": "まあ、キーボードの調子が悪いし、抹茶のアイスが好きなんだよねって",
+"kind": "filler"
+},
+{
+"id": "f1015",
+"text": "メールの返信がたまってるし、ドラッグストアでティッシュ買ったの",
+"kind": "filler"
+},
+{
+"id": "q50_n0",
+"text": "旅行の写真、アルバムにまとめたよ",
+"kind": "hard_negative"
+},
+{
+"id": "f1926",
+"text": "um, it was really humid outside, and there was a line at the copier",
+"kind": "filler"
+},
+{
+"id": "f1364",
+"text": "anyway Alex said I forgot to water the plants last night",
+"kind": "filler"
+},
+{
+"id": "f0846",
+"text": "まあ、お味噌汁の味がちょっと薄かったし、桜がもうすぐ咲きそうわ",
+"kind": "filler"
+},
+{
+"id": "f1251",
+"text": "部屋の電球が切れたし、ゲームのイベント周回してた",
+"kind": "filler"
+},
+{
+"id": "f1210",
+"text": "朝から雲がすごく低くて雨が降りそうみたい",
+"kind": "filler"
+},
+{
+"id": "f0635",
+"text": "ていうか、昨日の夜自転車のチェーンが外れたんだって",
+"kind": "filler"
+},
+{
+"id": "f1684",
+"text": "oh and the soccer match ended in a draw, and the train was delayed again",
+"kind": "filler"
+},
+{
+"id": "f1238",
+"text": "紅葉がきれいだったし、コーヒー豆を新しいのに変えたね",
+"kind": "filler"
+},
+{
+"id": "f0566",
+"text": "ていうか、さっきまで百円ショップで収納ケース見つけたって",
+"kind": "filler"
+},
+{
+"id": "f0176",
+"text": "えーと、さっきドラッグストアでティッシュ買ったね",
+"kind": "filler"
+},
+{
+"id": "f0856",
+"text": "まあ、さっきエクセルの関数がうまく動かないね",
+"kind": "filler"
+},
+{
+"id": "f0821",
+"text": "なんか、隣の人が昨日の夜眠くて仕方ないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0196",
+"text": "えーと、プリンターの紙詰まりがまた起きたし、スーパーで卵が安かった",
+"kind": "filler"
+},
+{
+"id": "f0701",
+"text": "なんか、お父さんが昨日の夜野球の試合、九回で逆転したんだってって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0194",
+"text": "えーと、ドラマの続きが気になって寝られなかったし、動画を見てたら夜更かししちゃったなあ",
+"kind": "filler"
+},
+{
+"id": "f1132",
+"text": "抹茶のアイスが好きなんだよねし、公園で犬の散歩してる人が多かったみたい",
+"kind": "filler"
+},
+{
+"id": "q01_r0",
+"text": "来週の木曜、午後三時に歯医者さん予約しといたからね",
+"kind": "relevant"
+},
+{
+"id": "f0316",
+"text": "おとといプリンターの紙詰まりがまた起きたんだって",
+"kind": "filler"
+},
+{
+"id": "f0777",
+"text": "なんか、後輩が昼過ぎに唐揚げ作りすぎちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1511",
+"text": "like, Mike said the weather forecast says it'll be sunny tomorrow the other day",
+"kind": "filler"
+},
+{
+"id": "f0127",
+"text": "あのー、高橋さんが最近テレビのクイズ番組おもしろかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1832",
+"text": "the baseball game went into extra innings, and there was a marathon downtown",
+"kind": "filler"
+},
+{
+"id": "f0491",
+"text": "そういえば、最近動画を見てたら夜更かししちゃったね",
+"kind": "filler"
+},
+{
+"id": "q26_r0",
+"text": "okay so we agreed to cut the marketing budget by ten percent next quarter",
+"kind": "relevant"
+},
+{
+"id": "f1104",
+"text": "山本さんがさっきまでテレビのクイズ番組おもしろかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1089",
+"text": "天気予報だと明日は晴れるらしいし、カーテンを洗ったんだよね",
+"kind": "filler"
+},
+{
+"id": "q34_n0",
+"text": "interviewing candidates all day is exhausting",
+"kind": "hard_negative"
+},
+{
+"id": "f0279",
+"text": "えーと、紅葉がきれいだったし、雲がすごく低くて雨が降りそう",
+"kind": "filler"
+},
+{
+"id": "f1674",
+"text": "oh and the light bulb in my room burned out, and there was a marathon downtown",
+"kind": "filler"
+},
+{
+"id": "f1117",
+"text": "店長が最近動画を見てたら夜更かししちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0068",
+"text": "あのー、妹が今朝お味噌汁の味がちょっと薄かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1468",
+"text": "earlier the leaves are turning red",
+"kind": "filler"
+},
+{
+"id": "f0407",
+"text": "そういえば、お父さんが今日公園で犬の散歩してる人が多かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1881",
+"text": "there was a line at the copier, and I cleaned the fish tank",
+"kind": "filler"
+},
+{
+"id": "f1501",
+"text": "like, I cleaned the fish tank, and my keyboard is acting up",
+"kind": "filler"
+},
+{
+"id": "f0931",
+"text": "まあ、昼過ぎになんか甘いもの食べたいなあ",
+"kind": "filler"
+},
+{
+"id": "f0574",
+"text": "ていうか、さっき自転車のチェーンが外れたみたい",
+"kind": "filler"
+},
+{
+"id": "f1741",
+"text": "so Lisa said the spreadsheet formula keeps breaking this morning",
+"kind": "filler"
+},
+{
+"id": "f0183",
+"text": "えーと、カーテンを洗ったし、サッカーの代表戦、引き分けだったみたい",
+"kind": "filler"
+},
+{
+"id": "f0436",
+"text": "そういえば、メールの返信がたまってるし、電車が人身事故で遅れてたって",
+"kind": "filler"
+},
+{
+"id": "f1630",
+"text": "oh and Jenny said I cleaned the fish tank all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1681",
+"text": "oh and the other day the printer jammed again",
+"kind": "filler"
+},
+{
+"id": "f1221",
+"text": "百円ショップで収納ケース見つけたし、メールの返信がたまってるらしいよ",
+"kind": "filler"
+},
+{
+"id": "q02_r1",
+"text": "沖縄のホテル、国際通りの近くにしようと思ってるんだけど",
+"kind": "relevant"
+},
+{
+"id": "f0713",
+"text": "なんか、さっきまでコーヒー豆を新しいのに変えたよ",
+"kind": "filler"
+},
+{
+"id": "f0699",
+"text": "なんか、お父さんがさっき肩こりがひどいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0024",
+"text": "あのー、さっきドラッグストアでティッシュ買ったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0184",
+"text": "えーと、ゲームのイベント周回してたし、自転車のチェーンが外れたんだよね",
+"kind": "filler"
+},
+{
+"id": "f0706",
+"text": "なんか、この前動画を見てたら夜更かししちゃったんだって",
+"kind": "filler"
+},
+{
+"id": "f0230",
+"text": "えーと、妹がさっきセミがうるさかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "q16_n0",
+"text": "母が最近スマホ使えるようになってさ",
+"kind": "hard_negative"
+},
+{
+"id": "f1129",
+"text": "後輩が昨日の夜公園で犬の散歩してる人が多かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "q18_r0",
+"text": "燃えるゴミは月曜と木曜、ペットボトルは水曜日だよ",
+"kind": "relevant"
+},
+{
+"id": "f0522",
+"text": "そういえば、隣の人がさっきまで肩こりがひどいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1875",
+"text": "the train was delayed again, and I'm so sleepy",
+"kind": "filler"
+},
+{
+"id": "f1001",
+"text": "ドラマの続きが気になって寝られなかったし、肩こりがひどいらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0538",
+"text": "ていうか、あの子が昼過ぎに公園で犬の散歩してる人が多かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0008",
+"text": "あのー、うちの兄がさっき電車が人身事故で遅れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0656",
+"text": "ていうか、桜がもうすぐ咲きそうし、公園で犬の散歩してる人が多かったわ",
+"kind": "filler"
+},
+{
+"id": "f0150",
+"text": "えーと、あくびが止まらないし、駅の階段で転びそうになったわ",
+"kind": "filler"
+},
+{
+"id": "f0404",
+"text": "そういえば、お父さんがおとといセミがうるさかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1295",
+"text": "高橋さんが今朝ラジオで懐かしい曲が流れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1629",
+"text": "oh and I'm craving something sweet, and there was a marathon downtown",
+"kind": "filler"
+},
+{
+"id": "f1579",
+"text": "like, this morning I'm craving something sweet",
+"kind": "filler"
+},
+{
+"id": "f1327",
+"text": "Lisa said I made way too much fried chicken this morning",
+"kind": "filler"
+},
+{
+"id": "f1675",
+"text": "oh and the miso soup was a little bland, and that quiz show was hilarious",
+"kind": "filler"
+},
+{
+"id": "f1177",
+"text": "最近あくびが止まらないんだって",
+"kind": "filler"
+},
+{
+"id": "f1289",
+"text": "駅の階段で転びそうになったし、なんか甘いもの食べたい",
+"kind": "filler"
+},
+{
+"id": "f1942",
+"text": "um, my neighbor said I forgot to water the plants earlier",
+"kind": "filler"
+},
+{
+"id": "q05_r0",
+"text": "先生がね、この錠剤は一日二回、朝と夜の食後に飲んでくださいって",
+"kind": "relevant"
+},
+{
+"id": "f0752",
+"text": "なんか、今朝ドラッグストアでティッシュ買ったって",
+"kind": "filler"
+},
+{
+"id": "f0222",
+"text": "えーと、先輩が昨日の夜肩こりがひどいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1964",
+"text": "um, the new guy said it was really humid outside earlier",
+"kind": "filler"
+},
+{
+"id": "f0093",
+"text": "あのー、昼過ぎにコンビニの新しいスイーツ食べてみたって",
+"kind": "filler"
+},
+{
+"id": "f0448",
+"text": "そういえば、伊藤さんが今日唐揚げ作りすぎちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1883",
+"text": "they played an old song on the radio, and eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f0165",
+"text": "えーと、この前パン屋さんのクロワッサンが美味しかったなあ",
+"kind": "filler"
+},
+{
+"id": "f1574",
+"text": "like, the weather forecast says it'll be sunny tomorrow, and that quiz show was hilarious",
+"kind": "filler"
+},
+{
+"id": "f0487",
+"text": "そういえば、昼過ぎにラジオで懐かしい曲が流れてたかも",
+"kind": "filler"
+},
+{
+"id": "f1525",
+"text": "like, just now the leaves are turning red",
+"kind": "filler"
+},
+{
+"id": "f1707",
+"text": "on the weekend my inbox is out of control",
+"kind": "filler"
+},
+{
+"id": "f1632",
+"text": "oh and Jenny said the weather forecast says it'll be sunny tomorrow this morning",
+"kind": "filler"
+},
+{
+"id": "f1996",
+"text": "yesterday the croissants at the bakery were amazing",
+"kind": "filler"
+},
+{
+"id": "f1634",
+"text": "oh and Lisa said my inbox is out of control just now",
+"kind": "filler"
+},
+{
+"id": "f1031",
+"text": "今日日差しが強くて暑かったわ",
+"kind": "filler"
+},
+{
+"id": "q49_n0",
+"text": "宅配便の仕事って大変そうだよね",
+"kind": "hard_negative"
+},
+{
+"id": "f1098",
+"text": "妹が朝からなんか甘いもの食べたいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0248",
+"text": "えーと、後輩が朝からコピー機の前で行列ができてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1568",
+"text": "like, the new manga volume came out, and I switched to a new coffee brand",
+"kind": "filler"
+},
+{
+"id": "f0732",
+"text": "なんか、サッカーの代表戦、引き分けだったし、なんか甘いもの食べたいわ",
+"kind": "filler"
+},
+{
+"id": "f1578",
+"text": "like, this morning I cleaned the fish tank",
+"kind": "filler"
+},
+{
+"id": "f0776",
+"text": "なんか、後輩が昨日の夜日差しが強くて暑かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0480",
+"text": "そういえば、日差しが強くて暑かったし、エクセルの関数がうまく動かないわ",
+"kind": "filler"
+},
+{
+"id": "f1003",
+"text": "ニュースで台風のことやってたし、マラソン大会のボランティアしてたみたい",
+"kind": "filler"
+},
+{
+"id": "f1070",
+"text": "伊藤さんが最近眠くて仕方ないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1028",
+"text": "今日天気予報だと明日は晴れるらしいみたい",
+"kind": "filler"
+},
+{
+"id": "f0956",
+"text": "まあ、隣の人が今日セミがうるさかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "q29_n0",
+"text": "kids these days are glued to their phones",
+"kind": "hard_negative"
+},
+{
+"id": "f1186",
+"text": "最近眠くて仕方ないね",
+"kind": "filler"
+},
+{
+"id": "f1310",
+"text": "I forgot to water the plants, and my inbox is out of control",
+"kind": "filler"
+},
+{
+"id": "f0005",
+"text": "あのー、あの子が昨日の夜日差しが強くて暑かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0998",
+"text": "ドラマの続きが気になって寝られなかったし、ゲームのイベント周回してたわ",
+"kind": "filler"
+},
+{
+"id": "f1205",
+"text": "朝から唐揚げ作りすぎちゃった",
+"kind": "filler"
+},
+{
+"id": "f1903",
+"text": "um, Jenny said I cleaned the fish tank all afternoon",
+"kind": "filler"
+},
+{
+"id": "f0356",
+"text": "この前雲がすごく低くて雨が降りそうらしいよ",
+"kind": "filler"
+},
+{
+"id": "q08_n0",
+"text": "会議室の予約、また取れてなかったんだけど",
+"kind": "hard_negative"
+},
+{
+"id": "q37_n1",
+"text": "the client meeting is at two",
+"kind": "hard_negative"
+},
+{
+"id": "f0654",
+"text": "ていうか、朝から雲がすごく低くて雨が降りそうかも",
+"kind": "filler"
+},
+{
+"id": "f0711",
+"text": "なんか、さっきお味噌汁の味がちょっと薄かったわ",
+"kind": "filler"
+},
+{
+"id": "f0493",
+"text": "そういえば、最近野球の試合、九回で逆転したんだってよ",
+"kind": "filler"
+},
+{
+"id": "f0600",
+"text": "ていうか、今朝ゲームのイベント周回してたなあ",
+"kind": "filler"
+},
+{
+"id": "f1197",
+"text": "最近駅の階段で転びそうになったんだって",
+"kind": "filler"
+},
+{
+"id": "f0816",
+"text": "なんか、鈴木くんが最近バスが全然来なかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0947",
+"text": "まあ、眠くて仕方ないし、サッカーの代表戦、引き分けだったって",
+"kind": "filler"
+},
+{
+"id": "f1036",
+"text": "今日電車が人身事故で遅れてたんだよね",
+"kind": "filler"
+},
+{
+"id": "f1309",
+"text": "I forgot to water the plants, and eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f0731",
+"text": "なんか、コーヒー豆を新しいのに変えたし、ゲームのイベント周回してたわ",
+"kind": "filler"
+},
+{
+"id": "f0410",
+"text": "そういえば、この前コーヒー豆を新しいのに変えたかも",
+"kind": "filler"
+},
+{
+"id": "f0343",
+"text": "お父さんが最近テレビのクイズ番組おもしろかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1344",
+"text": "Mike said the weather forecast says it'll be sunny tomorrow the other day",
+"kind": "filler"
+},
+{
+"id": "f1471",
+"text": "earlier the printer jammed again",
+"kind": "filler"
+},
+{
+"id": "f0907",
+"text": "まあ、妹がおとといカーテンを洗ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1956",
+"text": "um, the chat notifications never stop, and the news was all about the typhoon",
+"kind": "filler"
+},
+{
+"id": "f1439",
+"text": "anyway the other day I switched to a new coffee brand",
+"kind": "filler"
+},
+{
+"id": "f0968",
+"text": "エクセルの関数がうまく動かないし、百円ショップで収納ケース見つけたね",
+"kind": "filler"
+},
+{
+"id": "f1017",
+"text": "メールの返信がたまってるし、抹茶のアイスが好きなんだよねの",
+"kind": "filler"
+},
+{
+"id": "f0767",
+"text": "なんか、動画を見てたら夜更かししちゃったし、紅葉がきれいだったなあ",
+"kind": "filler"
+},
+{
+"id": "f0400",
+"text": "そういえば、おとといドラマの続きが気になって寝られなかったって",
+"kind": "filler"
+},
+{
+"id": "f0132",
+"text": "あの子がさっきまでドラッグストアでティッシュ買ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0437",
+"text": "そういえば、今日キーボードの調子が悪いみたい",
+"kind": "filler"
+},
+{
+"id": "f1446",
+"text": "anyway there was a line at the copier, and matcha ice cream is the best",
+"kind": "filler"
+},
+{
+"id": "f1717",
+"text": "on the weekend they played an old song on the radio",
+"kind": "filler"
+},
+{
+"id": "f0901",
+"text": "まあ、先輩が朝から漫画の新刊が出てたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0775",
+"text": "なんか、後輩がさっきバスが全然来なかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0512",
+"text": "そういえば、部屋の電球が切れたし、電車が人身事故で遅れてたみたい",
+"kind": "filler"
+},
+{
+"id": "f0438",
+"text": "そういえば、今日テレビのクイズ番組おもしろかったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1254",
+"text": "部屋の電球が切れたし、日差しが強くて暑かったわ",
+"kind": "filler"
+},
+{
+"id": "f1155",
+"text": "昨日の夜自転車のチェーンが外れたんだよね",
+"kind": "filler"
+},
+{
+"id": "f0554",
+"text": "ていうか、この前バスが全然来なかったの",
+"kind": "filler"
+},
+{
+"id": "q35_n1",
+"text": "the surgery department is on the third floor",
+"kind": "hard_negative"
+},
+{
+"id": "f1312",
+"text": "I found storage boxes at the dollar store, and I couldn't stop watching that drama",
+"kind": "filler"
+},
+{
+"id": "f0773",
+"text": "なんか、店長が最近セミがうるさかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1563",
+"text": "like, the leaves are turning red, and the train was delayed again",
+"kind": "filler"
+},
+{
+"id": "f1559",
+"text": "like, the bus never showed up, and the weather forecast says it'll be sunny tomorrow",
+"kind": "filler"
+},
+{
+"id": "f0172",
+"text": "えーと、さっきまでテレビのクイズ番組おもしろかったなあ",
+"kind": "filler"
+},
+{
+"id": "f0849",
+"text": "まあ、この前ラジオで懐かしい曲が流れてたかも",
+"kind": "filler"
+},
+{
+"id": "f1133",
+"text": "抹茶のアイスが好きなんだよねし、眠くて仕方ないわ",
+"kind": "filler"
+},
+{
+"id": "f1790",
+"text": "so on the weekend my shoulders are killing me",
+"kind": "filler"
+},
+{
+"id": "f0190",
+"text": "えーと、スーパーで卵が安かったし、駅の階段で転びそうになったみたい",
+"kind": "filler"
+},
+{
+"id": "f1222",
+"text": "百円ショップで収納ケース見つけたし、植木に水やるの忘れてたみたい",
+"kind": "filler"
+},
+{
+"id": "f0006",
+"text": "あのー、うちの兄がおとといお味噌汁の味がちょっと薄かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1540",
+"text": "like, my neighbor said I made way too much fried chicken yesterday",
+"kind": "filler"
+},
+{
+"id": "f0859",
+"text": "まあ、さっき紅葉がきれいだったね",
+"kind": "filler"
+},
+{
+"id": "f0259",
+"text": "えーと、昼過ぎに百円ショップで収納ケース見つけたね",
+"kind": "filler"
+},
+{
+"id": "f1936",
+"text": "um, matcha ice cream is the best, and I cleaned the fish tank",
+"kind": "filler"
+},
+{
+"id": "f1403",
+"text": "anyway last night there was a line at the copier",
+"kind": "filler"
+},
+{
+"id": "f0210",
+"text": "えーと、今朝キーボードの調子が悪いんだよね",
+"kind": "filler"
+},
+{
+"id": "f1111",
+"text": "店長がさっきまで風が冷たくなってきたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1361",
+"text": "all afternoon the new manga volume came out",
+"kind": "filler"
+},
+{
+"id": "f1569",
+"text": "like, the news was all about the typhoon, and my inbox is out of control",
+"kind": "filler"
+},
+{
+"id": "f0386",
+"text": "さっき植木に水やるの忘れてたなあ",
+"kind": "filler"
+},
+{
+"id": "f0636",
+"text": "ていうか、昨日の夜金魚の水槽を掃除したの",
+"kind": "filler"
+},
+{
+"id": "f1375",
+"text": "anyway Lisa said the soccer match ended in a draw on the weekend",
+"kind": "filler"
+},
+{
+"id": "f1685",
+"text": "oh and the spreadsheet formula keeps breaking, and eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f0182",
+"text": "えーと、なんか甘いもの食べたいし、マラソン大会のボランティアしてたみたい",
+"kind": "filler"
+},
+{
+"id": "f1817",
+"text": "so this morning the light bulb in my room burned out",
+"kind": "filler"
+},
+{
+"id": "f1943",
+"text": "um, my neighbor said the miso soup was a little bland on the weekend",
+"kind": "filler"
+},
+{
+"id": "f1617",
+"text": "my roommate said the cicadas were so loud on the weekend",
+"kind": "filler"
+},
+{
+"id": "f1970",
+"text": "um, the other day eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f0148",
+"text": "うちの兄が昨日の夜天気予報だと明日は晴れるらしいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1332",
+"text": "Lisa said the miso soup was a little bland earlier",
+"kind": "filler"
+},
+{
+"id": "f1811",
+"text": "so they played an old song on the radio, and I'm craving something sweet",
+"kind": "filler"
+},
+{
+"id": "f1245",
+"text": "紅葉がきれいだったし、肩こりがひどいみたい",
+"kind": "filler"
+},
+{
+"id": "f0277",
+"text": "えーと、漫画の新刊が出てたし、ドラマの続きが気になって寝られなかったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0724",
+"text": "なんか、さっき漫画の新刊が出てたって",
+"kind": "filler"
+},
+{
+"id": "f0603",
+"text": "ていうか、今朝桜がもうすぐ咲きそうね",
+"kind": "filler"
+},
+{
+"id": "f1577",
+"text": "like, there was a marathon downtown, and it was really humid outside",
+"kind": "filler"
+},
+{
+"id": "q02_n1",
+"text": "旅行会社のパンフレットもう捨てていい？",
+"kind": "hard_negative"
+},
+{
+"id": "f1489",
+"text": "last night I was grinding that game event",
+"kind": "filler"
+},
+{
+"id": "f0141",
+"text": "うちの兄がさっきまでサッカーの代表戦、引き分けだったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0840",
+"text": "まあ、おとといあくびが止まらないね",
+"kind": "filler"
+},
+{
+"id": "f1769",
+"text": "so my bike chain came off, and the miso soup was a little bland",
+"kind": "filler"
+},
+{
+"id": "f1689",
+"text": "oh and there was a line at the copier, and eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f1562",
+"text": "like, the croissants at the bakery were amazing, and the spreadsheet formula keeps breaking",
+"kind": "filler"
+},
+{
+"id": "q10_n0",
+"text": "昼ごはんのラーメン屋、めっちゃ混んでたね",
+"kind": "hard_negative"
+},
+{
+"id": "f0571",
+"text": "ていうか、さっき抹茶のアイスが好きなんだよねなあ",
+"kind": "filler"
+},
+{
+"id": "f0594",
+"text": "ていうか、今日マラソン大会のボランティアしてた",
+"kind": "filler"
+},
+{
+"id": "f1751",
+"text": "so all afternoon eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "q09_n0",
+"text": "エアコン新しいのに買い替えたほうが電気代安くなるかもね",
+"kind": "hard_negative"
+},
+{
+"id": "f0428",
+"text": "そういえば、スーパーで卵が安かったし、金魚の水槽を掃除したね",
+"kind": "filler"
+},
+{
+"id": "f0691",
+"text": "なんか、うちの兄が昼過ぎにドラッグストアでティッシュ買ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1029",
+"text": "今日抹茶のアイスが好きなんだよねんだって",
+"kind": "filler"
+},
+{
+"id": "f0916",
+"text": "まあ、後輩がおとといプリンターの紙詰まりがまた起きたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0980",
+"text": "ゲームのイベント周回してたし、テレビのクイズ番組おもしろかったね",
+"kind": "filler"
+},
+{
+"id": "f1465",
+"text": "earlier the baseball game went into extra innings",
+"kind": "filler"
+},
+{
+"id": "f1349",
+"text": "Tom said it was really humid outside last night",
+"kind": "filler"
+},
+{
+"id": "f0038",
+"text": "あのー、ニュースで台風のことやってたし、植木に水やるの忘れてたみたい",
+"kind": "filler"
+},
+{
+"id": "f1570",
+"text": "like, the news was all about the typhoon, and the leaves are turning red",
+"kind": "filler"
+},
+{
+"id": "f0957",
+"text": "まあ、隣の人が今朝桜がもうすぐ咲きそうって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1144",
+"text": "昨日の夜ドラッグストアでティッシュ買ったんだよね",
+"kind": "filler"
+},
+{
+"id": "f1537",
+"text": "like, my brother said my keyboard is acting up all afternoon",
+"kind": "filler"
+},
+{
+"id": "f0046",
+"text": "あのー、今日セミがうるさかったの",
+"kind": "filler"
+},
+{
+"id": "f0051",
+"text": "あのー、今朝漫画の新刊が出てたんだって",
+"kind": "filler"
+},
+{
+"id": "f0684",
+"text": "なんか、あの子が昨日の夜あくびが止まらないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1523",
+"text": "like, just now I couldn't stop watching that drama",
+"kind": "filler"
+},
+{
+"id": "f0241",
+"text": "えーと、店長がさっきコーヒー豆を新しいのに変えたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1788",
+"text": "so my shoulders are killing me, and the leaves are turning red",
+"kind": "filler"
+},
+{
+"id": "f0521",
+"text": "そういえば、隣の人がこの前野球の試合、九回で逆転したんだってって言ってた",
+"kind": "filler"
+},
+{
+"id": "q05_n0",
+"text": "薬局のポイントカードどこいったかな",
+"kind": "hard_negative"
+},
+{
+"id": "f0192",
+"text": "えーと、テレビのクイズ番組おもしろかったし、部屋の電球が切れたみたい",
+"kind": "filler"
+},
+{
+"id": "f0541",
+"text": "ていうか、うちの兄が最近スーパーで卵が安かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1081",
+"text": "先輩が最近紅葉がきれいだったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1985",
+"text": "um, yesterday the light bulb in my room burned out",
+"kind": "filler"
+},
+{
+"id": "f0284",
+"text": "えーと、鈴木くんが昨日の夜ラジオで懐かしい曲が流れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1893",
+"text": "this morning the chat notifications never stop",
+"kind": "filler"
+},
+{
+"id": "f1639",
+"text": "oh and Mike said it looked like it was going to rain last night",
+"kind": "filler"
+},
+{
+"id": "f0809",
+"text": "なんか、部屋の電球が切れたし、コンビニの新しいスイーツ食べてみたの",
+"kind": "filler"
+},
+{
+"id": "f1406",
+"text": "anyway my brother said the miso soup was a little bland the other day",
+"kind": "filler"
+},
+{
+"id": "f0599",
+"text": "ていうか、今朝エクセルの関数がうまく動かないなあ",
+"kind": "filler"
+},
+{
+"id": "f1966",
+"text": "um, the new guy said they played an old song on the radio earlier",
+"kind": "filler"
+},
+{
+"id": "f0633",
+"text": "ていうか、昨日の夜セミがうるさかったみたい",
+"kind": "filler"
+},
+{
+"id": "f0926",
+"text": "まあ、日差しが強くて暑かったし、百円ショップで収納ケース見つけたなあ",
+"kind": "filler"
+},
+{
+"id": "f1214",
+"text": "桜がもうすぐ咲きそうし、公園で犬の散歩してる人が多かった",
+"kind": "filler"
+},
+{
+"id": "f0043",
+"text": "あのー、今日なんか甘いもの食べたいね",
+"kind": "filler"
+},
+{
+"id": "f0621",
+"text": "ていうか、山本さんが最近コンビニの新しいスイーツ食べてみたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1601",
+"text": "my inbox is out of control, and my shoulders are killing me",
+"kind": "filler"
+},
+{
+"id": "f1413",
+"text": "anyway my neighbor said the spreadsheet formula keeps breaking on the weekend",
+"kind": "filler"
+},
+{
+"id": "f0515",
+"text": "そういえば、鈴木くんがこの前メールの返信がたまってるって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0974",
+"text": "キーボードの調子が悪いし、ラジオで懐かしい曲が流れてたって",
+"kind": "filler"
+},
+{
+"id": "f0109",
+"text": "あのー、眠くて仕方ないし、テレビのクイズ番組おもしろかったかも",
+"kind": "filler"
+},
+{
+"id": "f1264",
+"text": "鈴木くんが昨日の夜セミがうるさかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1851",
+"text": "the new guy said I made way too much fried chicken yesterday",
+"kind": "filler"
+},
+{
+"id": "f0453",
+"text": "そういえば、先輩が今朝スーパーで卵が安かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1086",
+"text": "動画を見てたら夜更かししちゃったし、パン屋さんのクロワッサンが美味しかったかも",
+"kind": "filler"
+},
+{
+"id": "q37_r0",
+"text": "the client said our quote was too high and asked for a fifteen percent discount",
+"kind": "relevant"
+},
+{
+"id": "f0730",
+"text": "なんか、コピー機の前で行列ができてたし、野球の試合、九回で逆転したんだってよ",
+"kind": "filler"
+},
+{
+"id": "f0646",
+"text": "ていうか、最近肩こりがひどいんだよね",
+"kind": "filler"
+},
+{
+"id": "f1780",
+"text": "so my keyboard is acting up, and the cherry blossoms are almost out",
+"kind": "filler"
+},
+{
+"id": "f0233",
+"text": "えーと、妹が朝から自転車のチェーンが外れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0864",
+"text": "まあ、コーヒー豆を新しいのに変えたし、お味噌汁の味がちょっと薄かったかも",
+"kind": "filler"
+},
+{
+"id": "f0207",
+"text": "えーと、今日漫画の新刊が出てたみたい",
+"kind": "filler"
+},
+{
+"id": "f1167",
+"text": "昼過ぎに唐揚げ作りすぎちゃったんだよね",
+"kind": "filler"
+},
+{
+"id": "f0779",
+"text": "なんか、後輩が最近野球の試合、九回で逆転したんだってって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1974",
+"text": "um, there was a line at the copier, and the baseball game went into extra innings",
+"kind": "filler"
+},
+{
+"id": "f0710",
+"text": "なんか、この前電車が人身事故で遅れてた",
+"kind": "filler"
+},
+{
+"id": "f1219",
+"text": "漫画の新刊が出てたし、百円ショップで収納ケース見つけたって",
+"kind": "filler"
+},
+{
+"id": "f0789",
+"text": "なんか、昼過ぎにメールの返信がたまってるよ",
+"kind": "filler"
+},
+{
+"id": "f0358",
+"text": "さっきまでサッカーの代表戦、引き分けだった",
+"kind": "filler"
+},
+{
+"id": "f0293",
+"text": "えーと、隣の人が朝からメールの返信がたまってるって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0899",
+"text": "まあ、伊藤さんが最近社内チャットの通知が多すぎるって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0220",
+"text": "えーと、先輩が今日エクセルの関数がうまく動かないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1838",
+"text": "the cherry blossoms are almost out, and the new manga volume came out",
+"kind": "filler"
+},
+{
+"id": "f1744",
+"text": "so Mike said the bus never showed up the other day",
+"kind": "filler"
+},
+{
+"id": "f0649",
+"text": "ていうか、朝からメールの返信がたまってるなあ",
+"kind": "filler"
+},
+{
+"id": "f0467",
+"text": "そういえば、山本さんがおととい眠くて仕方ないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0951",
+"text": "まあ、紅葉がきれいだったし、駅の階段で転びそうになったみたい",
+"kind": "filler"
+},
+{
+"id": "f0357",
+"text": "さっきなんか甘いもの食べたいよ",
+"kind": "filler"
+},
+{
+"id": "f1637",
+"text": "oh and Lisa said the soccer match ended in a draw earlier",
+"kind": "filler"
+},
+{
+"id": "f1531",
+"text": "like, last night there was a line at the copier",
+"kind": "filler"
+},
+{
+"id": "f0539",
+"text": "ていうか、うちの兄がこの前社内チャットの通知が多すぎるって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1863",
+"text": "the other day the light bulb in my room burned out",
+"kind": "filler"
+},
+{
+"id": "f1291",
+"text": "高橋さんがさっきまで電車が人身事故で遅れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0204",
+"text": "えーと、今日バスが全然来なかったね",
+"kind": "filler"
+},
+{
+"id": "f0595",
+"text": "ていうか、今日抹茶のアイスが好きなんだよねんだよね",
+"kind": "filler"
+},
+{
+"id": "f1178",
+"text": "最近エクセルの関数がうまく動かないなあ",
+"kind": "filler"
+},
+{
+"id": "q15_n1",
+"text": "予防のためにマスクしていったほうがいいかな",
+"kind": "hard_negative"
+},
+{
+"id": "f0686",
+"text": "なんか、うちの兄がおとといサッカーの代表戦、引き分けだったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0017",
+"text": "あのー、この前ドラッグストアでティッシュ買ったの",
+"kind": "filler"
+},
+{
+"id": "f1672",
+"text": "oh and the cicadas were so loud, and the leaves are turning red",
+"kind": "filler"
+},
+{
+"id": "f0449",
+"text": "そういえば、伊藤さんが今朝セミがうるさかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0879",
+"text": "まあ、ラジオで懐かしい曲が流れてたし、なんか甘いもの食べたいみたい",
+"kind": "filler"
+},
+{
+"id": "f1110",
+"text": "店長がさっきまで電車が人身事故で遅れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1358",
+"text": "all afternoon my shoulders are killing me",
+"kind": "filler"
+},
+{
+"id": "f1767",
+"text": "so last night the weather forecast says it'll be sunny tomorrow",
+"kind": "filler"
+},
+{
+"id": "f1304",
+"text": "Alex said it looked like it was going to rain on the weekend",
+"kind": "filler"
+},
+{
+"id": "f1803",
+"text": "so the other day I was grinding that game event",
+"kind": "filler"
+},
+{
+"id": "f1949",
+"text": "um, on the weekend my bike chain came off",
+"kind": "filler"
+},
+{
+"id": "f1069",
+"text": "伊藤さんが昼過ぎに電車が人身事故で遅れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0828",
+"text": "なんか、高橋さんが今日野球の試合、九回で逆転したんだってって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0969",
+"text": "カーテンを洗ったし、コンビニの新しいスイーツ食べてみたよ",
+"kind": "filler"
+},
+{
+"id": "f0360",
+"text": "さっきまでドラッグストアでティッシュ買ったんだよね",
+"kind": "filler"
+},
+{
+"id": "f0892",
+"text": "まあ、今朝自転車のチェーンが外れたかも",
+"kind": "filler"
+},
+{
+"id": "q49_n1",
+"text": "荷物多いから駅まで車で送ってくれない？",
+"kind": "hard_negative"
+},
+{
+"id": "f1781",
+"text": "so my keyboard is acting up, and the convenience store has a new dessert",
+"kind": "filler"
+},
+{
+"id": "f0084",
+"text": "あのー、昨日の夜マラソン大会のボランティアしてた",
+"kind": "filler"
+},
+{
+"id": "q40_n1",
+"text": "can you check if the door is locked",
+"kind": "hard_negative"
+},
+{
+"id": "f0914",
+"text": "まあ、山本さんが最近百円ショップで収納ケース見つけたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0361",
+"text": "さっきまでパン屋さんのクロワッサンが美味しかったって",
+"kind": "filler"
+},
+{
+"id": "f1288",
+"text": "風が冷たくなってきたし、自転車のチェーンが外れたんだって",
+"kind": "filler"
+},
+{
+"id": "f1373",
+"text": "anyway Lisa said I was grinding that game event on the weekend",
+"kind": "filler"
+},
+{
+"id": "f0807",
+"text": "なんか、自転車のチェーンが外れたし、金魚の水槽を掃除したなあ",
+"kind": "filler"
+},
+{
+"id": "f0379",
+"text": "さっきセミがうるさかった",
+"kind": "filler"
+},
+{
+"id": "f0928",
+"text": "まあ、昨日の夜コンビニの新しいスイーツ食べてみたんだよね",
+"kind": "filler"
+},
+{
+"id": "f0200",
+"text": "えーと、今日ゲームのイベント周回してたんだよね",
+"kind": "filler"
+},
+{
+"id": "f0585",
+"text": "ていうか、バスが全然来なかったし、唐揚げ作りすぎちゃったの",
+"kind": "filler"
+},
+{
+"id": "f1145",
+"text": "昨日の夜バスが全然来なかったわ",
+"kind": "filler"
+},
+{
+"id": "f0991",
+"text": "スーパーで卵が安かったし、コピー機の前で行列ができてたなあ",
+"kind": "filler"
+},
+{
+"id": "f1509",
+"text": "like, Mike said it was really humid outside just now",
+"kind": "filler"
+},
+{
+"id": "q10_n1",
+"text": "夕方になると急に寒くなるね",
+"kind": "hard_negative"
+},
+{
+"id": "f1044",
+"text": "今朝セミがうるさかったなあ",
+"kind": "filler"
+},
+{
+"id": "f1666",
+"text": "oh and our manager said that quiz show was hilarious the other day",
+"kind": "filler"
+},
+{
+"id": "f1533",
+"text": "like, matcha ice cream is the best, and the cicadas were so loud",
+"kind": "filler"
+},
+{
+"id": "f0869",
+"text": "まあ、ドラマの続きが気になって寝られなかったし、エクセルの関数がうまく動かないかも",
+"kind": "filler"
+},
+{
+"id": "f0852",
+"text": "まあ、この前駅の階段で転びそうになったわ",
+"kind": "filler"
+},
+{
+"id": "f0483",
+"text": "そういえば、昨日の夜抹茶のアイスが好きなんだよねわ",
+"kind": "filler"
+},
+{
+"id": "f1149",
+"text": "昨日の夜ラジオで懐かしい曲が流れてたよ",
+"kind": "filler"
+},
+{
+"id": "f0949",
+"text": "まあ、紅葉がきれいだったし、あくびが止まらないらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0551",
+"text": "ていうか、この前お味噌汁の味がちょっと薄かったわ",
+"kind": "filler"
+},
+{
+"id": "f1968",
+"text": "um, the news was all about the typhoon, and my inbox is out of control",
+"kind": "filler"
+},
+{
+"id": "f0398",
+"text": "そういえば、おとといエクセルの関数がうまく動かないんだって",
+"kind": "filler"
+},
+{
+"id": "f1620",
+"text": "oh and Alex said it looked like it was going to rain the other day",
+"kind": "filler"
+},
+{
+"id": "f1549",
+"text": "like, on the weekend I found storage boxes at the dollar store",
+"kind": "filler"
+},
+{
+"id": "f1567",
+"text": "like, the new guy said the soccer match ended in a draw yesterday",
+"kind": "filler"
+},
+{
+"id": "f0181",
+"text": "えーと、さっき金魚の水槽を掃除したんだよね",
+"kind": "filler"
+},
+{
+"id": "f0906",
+"text": "まあ、天気予報だと明日は晴れるらしいし、日差しが強くて暑かったよ",
+"kind": "filler"
+},
+{
+"id": "f1618",
+"text": "my roommate said the train was delayed again last night",
+"kind": "filler"
+},
+{
+"id": "f1346",
+"text": "Mike said they played an old song on the radio just now",
+"kind": "filler"
+},
+{
+"id": "f0546",
+"text": "ていうか、おととい自転車のチェーンが外れたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0716",
+"text": "なんか、さっきまで唐揚げ作りすぎちゃったの",
+"kind": "filler"
+},
+{
+"id": "f0123",
+"text": "あのー、高橋さんがこの前紅葉がきれいだったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1786",
+"text": "so my roommate said I'm so sleepy the other day",
+"kind": "filler"
+},
+{
+"id": "f0718",
+"text": "なんか、さっきまで社内チャットの通知が多すぎるね",
+"kind": "filler"
+},
+{
+"id": "f0722",
+"text": "なんか、さっきニュースで台風のことやってたかも",
+"kind": "filler"
+},
+{
+"id": "f1824",
+"text": "so yesterday the cicadas were so loud",
+"kind": "filler"
+},
+{
+"id": "f1423",
+"text": "anyway our manager said the bus never showed up the other day",
+"kind": "filler"
+},
+{
+"id": "f0073",
+"text": "あのー、山本さんが今朝桜がもうすぐ咲きそうって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0857",
+"text": "まあ、さっきコンビニの新しいスイーツ食べてみた",
+"kind": "filler"
+},
+{
+"id": "f1461",
+"text": "earlier it was really humid outside",
+"kind": "filler"
+},
+{
+"id": "f1450",
+"text": "anyway this morning I'm craving something sweet",
+"kind": "filler"
+},
+{
+"id": "f0987",
+"text": "コーヒー豆を新しいのに変えたし、コンビニの新しいスイーツ食べてみたかも",
+"kind": "filler"
+},
+{
+"id": "f0655",
+"text": "ていうか、朝から駅の階段で転びそうになったわ",
+"kind": "filler"
+},
+{
+"id": "f0867",
+"text": "まあ、セミがうるさかったし、ニュースで台風のことやってた",
+"kind": "filler"
+},
+{
+"id": "f1981",
+"text": "um, yesterday I cleaned the fish tank",
+"kind": "filler"
+},
+{
+"id": "f1678",
+"text": "oh and the new manga volume came out, and the baseball game went into extra innings",
+"kind": "filler"
+},
+{
+"id": "f1034",
+"text": "今日社内チャットの通知が多すぎるんだよね",
+"kind": "filler"
+},
+{
+"id": "f1754",
+"text": "so earlier I'm craving something sweet",
+"kind": "filler"
+},
+{
+"id": "f0872",
+"text": "まあ、バスが全然来なかったし、マラソン大会のボランティアしてたかも",
+"kind": "filler"
+},
+{
+"id": "f0625",
+"text": "ていうか、店長が昨日の夜お味噌汁の味がちょっと薄かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0168",
+"text": "えーと、この前動画を見てたら夜更かししちゃったんだって",
+"kind": "filler"
+},
+{
+"id": "f1610",
+"text": "my neighbor said the news was all about the typhoon this morning",
+"kind": "filler"
+},
+{
+"id": "f1200",
+"text": "朝からエクセルの関数がうまく動かないわ",
+"kind": "filler"
+},
+{
+"id": "f1393",
+"text": "anyway just now I couldn't stop watching that drama",
+"kind": "filler"
+},
+{
+"id": "f1152",
+"text": "昨日の夜動画を見てたら夜更かししちゃったみたい",
+"kind": "filler"
+},
+{
+"id": "f0262",
+"text": "えーと、最近カーテンを洗ったね",
+"kind": "filler"
+},
+{
+"id": "f1150",
+"text": "昨日の夜公園で犬の散歩してる人が多かったなあ",
+"kind": "filler"
+},
+{
+"id": "f0332",
+"text": "お父さんがさっきまで電車が人身事故で遅れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "q14_n0",
+"text": "パスワード忘れてログインできなくなっちゃった",
+"kind": "hard_negative"
+},
+{
+"id": "f1764",
+"text": "so last night I was grinding that game event",
+"kind": "filler"
+},
+{
+"id": "f1096",
+"text": "妹が最近セミがうるさかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1185",
+"text": "最近漫画の新刊が出てたね",
+"kind": "filler"
+},
+{
+"id": "f0734",
+"text": "なんか、ニュースで台風のことやってたし、あくびが止まらないよ",
+"kind": "filler"
+},
+{
+"id": "f0868",
+"text": "まあ、テレビのクイズ番組おもしろかったし、サッカーの代表戦、引き分けだったなあ",
+"kind": "filler"
+},
+{
+"id": "f0424",
+"text": "そういえば、コンビニの新しいスイーツ食べてみたし、ラジオで懐かしい曲が流れてたの",
+"kind": "filler"
+},
+{
+"id": "f0774",
+"text": "なんか、後輩がさっきゲームのイベント周回してたって言ってた",
+"kind": "filler"
+},
+{
+"id": "q35_r0",
+"text": "mom's knee operation went well and she's going home on Tuesday",
+"kind": "relevant"
+},
+{
+"id": "f1074",
+"text": "先輩がおととい雲がすごく低くて雨が降りそうって言ってた",
+"kind": "filler"
+},
+{
+"id": "q08_n1",
+"text": "結論から言うと、まだ何も決まってないです",
+"kind": "hard_negative"
+},
+{
+"id": "f0189",
+"text": "えーと、スーパーで卵が安かったし、風が冷たくなってきたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0992",
+"text": "セミがうるさかったし、あくびが止まらないなあ",
+"kind": "filler"
+},
+{
+"id": "f1258",
+"text": "鈴木くんがこの前肩こりがひどいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0063",
+"text": "あのー、唐揚げ作りすぎちゃったし、マラソン大会のボランティアしてた",
+"kind": "filler"
+},
+{
+"id": "f1878",
+"text": "the weather forecast says it'll be sunny tomorrow, and I couldn't stop watching that drama",
+"kind": "filler"
+},
+{
+"id": "f0405",
+"text": "そういえば、お父さんがこの前駅の階段で転びそうになったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0020",
+"text": "あのー、さっきまで動画を見てたら夜更かししちゃったんだよね",
+"kind": "filler"
+},
+{
+"id": "q35_n0",
+"text": "my mother loves gardening",
+"kind": "hard_negative"
+},
+{
+"id": "f0788",
+"text": "なんか、昼過ぎにセミがうるさかったなあ",
+"kind": "filler"
+},
+{
+"id": "f1708",
+"text": "on the weekend my keyboard is acting up",
+"kind": "filler"
+},
+{
+"id": "q31_n0",
+"text": "the gym membership fee went up again",
+"kind": "hard_negative"
+},
+{
+"id": "f0059",
+"text": "あのー、伊藤さんが最近ドラッグストアでティッシュ買ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "q13_n0",
+"text": "健康のためにジム通い始めようかな",
+"kind": "hard_negative"
+},
+{
+"id": "q30_n1",
+"text": "there's a bug in my apartment, I think it's a spider",
+"kind": "hard_negative"
+},
+{
+"id": "f0811",
+"text": "なんか、野球の試合、九回で逆転したんだってし、カーテンを洗った",
+"kind": "filler"
+},
+{
+"id": "f0429",
+"text": "そういえば、セミがうるさかったし、コーヒー豆を新しいのに変えたみたい",
+"kind": "filler"
+},
+{
+"id": "f0465",
+"text": "そういえば、妹が昨日の夜エクセルの関数がうまく動かないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0242",
+"text": "えーと、店長が今日部屋の電球が切れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1909",
+"text": "um, Mike said I cleaned the fish tank yesterday",
+"kind": "filler"
+},
+{
+"id": "f1495",
+"text": "last night the leaves are turning red",
+"kind": "filler"
+},
+{
+"id": "f1872",
+"text": "the spreadsheet formula keeps breaking, and I couldn't stop watching that drama",
+"kind": "filler"
+},
+{
+"id": "f0964",
+"text": "まあ、高橋さんが今朝ドラマの続きが気になって寝られなかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0000",
+"text": "あくびが止まらないし、ニュースで台風のことやってたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1713",
+"text": "on the weekend the leaves are turning red",
+"kind": "filler"
+},
+{
+"id": "f0095",
+"text": "あのー、昼過ぎにバスが全然来なかったね",
+"kind": "filler"
+},
+{
+"id": "f1740",
+"text": "so Lisa said the chat notifications never stop on the weekend",
+"kind": "filler"
+},
+{
+"id": "f0458",
+"text": "そういえば、動画を見てたら夜更かししちゃったし、眠くて仕方ないかも",
+"kind": "filler"
+},
+{
+"id": "f1293",
+"text": "高橋さんが今日お味噌汁の味がちょっと薄かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0433",
+"text": "そういえば、パン屋さんのクロワッサンが美味しかったし、コーヒー豆を新しいのに変えた",
+"kind": "filler"
+},
+{
+"id": "f1271",
+"text": "隣の人がさっき唐揚げ作りすぎちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0208",
+"text": "えーと、今日部屋の電球が切れたの",
+"kind": "filler"
+},
+{
+"id": "f0729",
+"text": "なんか、コピー機の前で行列ができてたし、コーヒー豆を新しいのに変えたの",
+"kind": "filler"
+},
+{
+"id": "f1896",
+"text": "this morning the miso soup was a little bland",
+"kind": "filler"
+},
+{
+"id": "f0511",
+"text": "そういえば、肩こりがひどいし、野球の試合、九回で逆転したんだって",
+"kind": "filler"
+},
+{
+"id": "f1248",
+"text": "肩こりがひどいし、風が冷たくなってきたの",
+"kind": "filler"
+},
+{
+"id": "f0827",
+"text": "なんか、高橋さんがさっきゲームのイベント周回してたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0608",
+"text": "ていうか、伊藤さんが今朝エクセルの関数がうまく動かないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1139",
+"text": "日差しが強くて暑かったし、雲がすごく低くて雨が降りそうなあ",
+"kind": "filler"
+},
+{
+"id": "f0616",
+"text": "ていうか、妹がおとといメールの返信がたまってるって言ってた",
+"kind": "filler"
+},
+{
+"id": "q16_n1",
+"text": "ベランダの花が枯れちゃった",
+"kind": "hard_negative"
+},
+{
+"id": "f1345",
+"text": "Mike said the weather forecast says it'll be sunny tomorrow yesterday",
+"kind": "filler"
+},
+{
+"id": "f1763",
+"text": "so it was really humid outside, and I couldn't stop watching that drama",
+"kind": "filler"
+},
+{
+"id": "f1326",
+"text": "Lisa said I made way too much fried chicken all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1529",
+"text": "like, last night it looked like it was going to rain",
+"kind": "filler"
+},
+{
+"id": "q39_r0",
+"text": "the onboarding training for new hires starts on April third",
+"kind": "relevant"
+},
+{
+"id": "f0323",
+"text": "おととい部屋の電球が切れたみたい",
+"kind": "filler"
+},
+{
+"id": "f1068",
+"text": "伊藤さんが昼過ぎに桜がもうすぐ咲きそうって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0314",
+"text": "おとといコンビニの新しいスイーツ食べてみたなあ",
+"kind": "filler"
+},
+{
+"id": "f1561",
+"text": "like, the convenience store has a new dessert, and the soccer match ended in a draw",
+"kind": "filler"
+},
+{
+"id": "f0829",
+"text": "なんか、高橋さんが最近眠くて仕方ないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0310",
+"text": "えーと、高橋さんが朝からプリンターの紙詰まりがまた起きたって言ってた",
+"kind": "filler"
+},
+{
+"id": "q13_n1",
+"text": "診断書って会社に出さないといけないの？",
+"kind": "hard_negative"
+},
+{
+"id": "f0066",
+"text": "あのー、妹がこの前キーボードの調子が悪いって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1116",
+"text": "店長が最近お味噌汁の味がちょっと薄かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0839",
+"text": "まあ、うちの兄が朝からゲームのイベント周回してたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1870",
+"text": "the soccer match ended in a draw, and my shoulders are killing me",
+"kind": "filler"
+},
+{
+"id": "f0471",
+"text": "そういえば、店長がさっきまでなんか甘いもの食べたいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0651",
+"text": "ていうか、朝から桜がもうすぐ咲きそうって",
+"kind": "filler"
+},
+{
+"id": "f0808",
+"text": "なんか、部屋の電球が切れたし、ゲームのイベント周回してたね",
+"kind": "filler"
+},
+{
+"id": "f1729",
+"text": "so Alex said I'm craving something sweet last night",
+"kind": "filler"
+},
+{
+"id": "f1720",
+"text": "our manager said it looked like it was going to rain on the weekend",
+"kind": "filler"
+},
+{
+"id": "f0223",
+"text": "えーと、公園で犬の散歩してる人が多かったし、天気予報だと明日は晴れるらしいらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1853",
+"text": "the new guy said the croissants at the bakery were amazing this morning",
+"kind": "filler"
+},
+{
+"id": "f0815",
+"text": "なんか、鈴木くんが昼過ぎに漫画の新刊が出てたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0508",
+"text": "そういえば、百円ショップで収納ケース見つけたし、肩こりがひどいんだって",
+"kind": "filler"
+},
+{
+"id": "f1626",
+"text": "oh and I switched to a new coffee brand, and my bike chain came off",
+"kind": "filler"
+},
+{
+"id": "f0236",
+"text": "えーと、山本さんがこの前ドラッグストアでティッシュ買ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1321",
+"text": "Jenny said it looked like it was going to rain all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1455",
+"text": "anyway yesterday the convenience store has a new dessert",
+"kind": "filler"
+},
+{
+"id": "f1954",
+"text": "um, the baseball game went into extra innings, and I cleaned the fish tank",
+"kind": "filler"
+},
+{
+"id": "f0288",
+"text": "えーと、隣の人が今日カーテンを洗ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0052",
+"text": "あのー、今朝社内チャットの通知が多すぎる",
+"kind": "filler"
+},
+{
+"id": "f0185",
+"text": "えーと、コンビニの新しいスイーツ食べてみたし、眠くて仕方ないの",
+"kind": "filler"
+},
+{
+"id": "f1351",
+"text": "Tom said the baseball game went into extra innings all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1458",
+"text": "earlier I forgot to water the plants",
+"kind": "filler"
+},
+{
+"id": "f1095",
+"text": "妹が最近お味噌汁の味がちょっと薄かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "q05_n1",
+"text": "病院の待ち時間ほんと長かった",
+"kind": "hard_negative"
+},
+{
+"id": "f0921",
+"text": "まあ、後輩が最近公園で犬の散歩してる人が多かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0781",
+"text": "なんか、昨日の夜お味噌汁の味がちょっと薄かったんだよね",
+"kind": "filler"
+},
+{
+"id": "f1076",
+"text": "先輩がこの前眠くて仕方ないって言ってた",
+"kind": "filler"
+},
+{
+"id": "q48_r0",
+"text": "来年こそは英語ちゃんと勉強してTOEIC八百点取りたい",
+"kind": "relevant"
+},
+{
+"id": "f1687",
+"text": "oh and the weather forecast says it'll be sunny tomorrow, and the soccer match ended in a draw",
+"kind": "filler"
+},
+{
+"id": "f0814",
+"text": "なんか、鈴木くんが今日紅葉がきれいだったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0845",
+"text": "まあ、お味噌汁の味がちょっと薄かったし、バスが全然来なかったんだって",
+"kind": "filler"
+},
+{
+"id": "f1043",
+"text": "今朝コピー機の前で行列ができてたかも",
+"kind": "filler"
+},
+{
+"id": "f0122",
+"text": "あのー、風が冷たくなってきたし、抹茶のアイスが好きなんだよねんだって",
+"kind": "filler"
+},
+{
+"id": "f0896",
+"text": "まあ、今朝電車が人身事故で遅れてたって",
+"kind": "filler"
+},
+{
+"id": "f1886",
+"text": "this morning I cleaned the fish tank",
+"kind": "filler"
+},
+{
+"id": "f0853",
+"text": "まあ、さっきなんか甘いもの食べたいの",
+"kind": "filler"
+},
+{
+"id": "f1062",
+"text": "伊藤さんがおととい百円ショップで収納ケース見つけたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0416",
+"text": "そういえば、さっきまでメールの返信がたまってるんだよね",
+"kind": "filler"
+},
+{
+"id": "f0780",
+"text": "なんか、後輩が朝から風が冷たくなってきたって言ってた",
+"kind": "filler"
+},
+{
+"id": "q11_n1",
+"text": "期限切れのクーポン捨てといて",
+"kind": "hard_negative"
+},
+{
+"id": "f0337",
+"text": "お父さんが今朝野球の試合、九回で逆転したんだってって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0659",
+"text": "ていうか、百円ショップで収納ケース見つけたし、コンビニの新しいスイーツ食べてみたんだって",
+"kind": "filler"
+},
+{
+"id": "f1236",
+"text": "社内チャットの通知が多すぎるし、天気予報だと明日は晴れるらしいんだって",
+"kind": "filler"
+},
+{
+"id": "f0216",
+"text": "えーと、伊藤さんがさっき紅葉がきれいだったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1938",
+"text": "um, my brother said my bike chain came off on the weekend",
+"kind": "filler"
+},
+{
+"id": "f0067",
+"text": "あのー、妹が今日パン屋さんのクロワッサンが美味しかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0673",
+"text": "ていうか、隣の人が昨日の夜唐揚げ作りすぎちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1536",
+"text": "like, my brother said it looked like it was going to rain the other day",
+"kind": "filler"
+},
+{
+"id": "f1233",
+"text": "社内チャットの通知が多すぎるし、パン屋さんのクロワッサンが美味しかったの",
+"kind": "filler"
+},
+{
+"id": "f0094",
+"text": "あのー、昼過ぎにドラッグストアでティッシュ買ったなあ",
+"kind": "filler"
+},
+{
+"id": "f1547",
+"text": "like, my shoulders are killing me, and my keyboard is acting up",
+"kind": "filler"
+},
+{
+"id": "f0456",
+"text": "そういえば、公園で犬の散歩してる人が多かったし、メールの返信がたまってるかも",
+"kind": "filler"
+},
+{
+"id": "f0806",
+"text": "なんか、紅葉がきれいだったし、キーボードの調子が悪いかも",
+"kind": "filler"
+},
+{
+"id": "f1698",
+"text": "oh and yesterday I'm so sleepy",
+"kind": "filler"
+},
+{
+"id": "f1768",
+"text": "so my bike chain came off, and the chat notifications never stop",
+"kind": "filler"
+},
+{
+"id": "f1083",
+"text": "先輩が朝からキーボードの調子が悪いって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0195",
+"text": "えーと、パン屋さんのクロワッサンが美味しかったし、なんか甘いもの食べたいの",
+"kind": "filler"
+},
+{
+"id": "f1037",
+"text": "今日風が冷たくなってきたんだって",
+"kind": "filler"
+},
+{
+"id": "f1581",
+"text": "like, this morning the chat notifications never stop",
+"kind": "filler"
+},
+{
+"id": "f0787",
+"text": "なんか、昼過ぎにセミがうるさかった",
+"kind": "filler"
+},
+{
+"id": "f1385",
+"text": "anyway all afternoon I cleaned the fish tank",
+"kind": "filler"
+},
+{
+"id": "f0329",
+"text": "お父さんがさっきなんか甘いもの食べたいって言ってた",
+"kind": "filler"
+},
+{
+"id": "q30_r0",
+"text": "users can't sign in on Safari because the session cookie isn't being set",
+"kind": "relevant"
+},
+{
+"id": "f1040",
+"text": "今朝あくびが止まらない",
+"kind": "filler"
+},
+{
+"id": "f1270",
+"text": "隣の人がこの前百円ショップで収納ケース見つけたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0158",
+"text": "えーと、お父さんがさっきまでドラッグストアでティッシュ買ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "q33_r0",
+"text": "you just simmer the tomatoes with garlic and a splash of olive oil for twenty minutes",
+"kind": "relevant"
+},
+{
+"id": "f1485",
+"text": "just now the soccer match ended in a draw",
+"kind": "filler"
+},
+{
+"id": "f1999",
+"text": "yesterday they played an old song on the radio",
+"kind": "filler"
+},
+{
+"id": "f1201",
+"text": "朝からコンビニの新しいスイーツ食べてみたかも",
+"kind": "filler"
+},
+{
+"id": "f1739",
+"text": "so Lisa said I was grinding that game event the other day",
+"kind": "filler"
+},
+{
+"id": "f1483",
+"text": "just now the leaves are turning red",
+"kind": "filler"
+},
+{
+"id": "f0430",
+"text": "そういえば、セミがうるさかったし、駅の階段で転びそうになったみたい",
+"kind": "filler"
+},
+{
+"id": "f1813",
+"text": "so this morning I couldn't stop watching that drama",
+"kind": "filler"
+},
+{
+"id": "f0738",
+"text": "なんか、パン屋さんのクロワッサンが美味しかったし、ドラマの続きが気になって寝られなかった",
+"kind": "filler"
+},
+{
+"id": "f1759",
+"text": "so earlier the news was all about the typhoon",
+"kind": "filler"
+},
+{
+"id": "f0206",
+"text": "えーと、今日抹茶のアイスが好きなんだよね",
+"kind": "filler"
+},
+{
+"id": "f1657",
+"text": "oh and my brother said I'm so sleepy this morning",
+"kind": "filler"
+},
+{
+"id": "f1957",
+"text": "um, the cherry blossoms are almost out, and the train was delayed again",
+"kind": "filler"
+},
+{
+"id": "f1045",
+"text": "今朝セミがうるさかったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0915",
+"text": "まあ、店長がさっきまで植木に水やるの忘れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1231",
+"text": "社内チャットの通知が多すぎるし、なんか甘いもの食べたいね",
+"kind": "filler"
+},
+{
+"id": "f1482",
+"text": "just now the croissants at the bakery were amazing",
+"kind": "filler"
+},
+{
+"id": "f1409",
+"text": "anyway my neighbor said my bike chain came off last night",
+"kind": "filler"
+},
+{
+"id": "f0893",
+"text": "まあ、今朝自転車のチェーンが外れたって",
+"kind": "filler"
+},
+{
+"id": "f1170",
+"text": "昼過ぎに桜がもうすぐ咲きそうかも",
+"kind": "filler"
+},
+{
+"id": "f1317",
+"text": "I made way too much fried chicken, and my keyboard is acting up",
+"kind": "filler"
+},
+{
+"id": "f0668",
+"text": "ていうか、鈴木くんがさっき部屋の電球が切れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0308",
+"text": "えーと、高橋さんが最近プリンターの紙詰まりがまた起きたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0941",
+"text": "まあ、朝からコピー機の前で行列ができてたみたい",
+"kind": "filler"
+},
+{
+"id": "f1230",
+"text": "眠くて仕方ないし、駅の階段で転びそうになったみたい",
+"kind": "filler"
+},
+{
+"id": "f0763",
+"text": "なんか、先輩が昨日の夜テレビのクイズ番組おもしろかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0505",
+"text": "そういえば、植木に水やるの忘れてたし、部屋の電球が切れたんだよね",
+"kind": "filler"
+},
+{
+"id": "q04_n1",
+"text": "誕生日ケーキはいちごのやつにしよう",
+"kind": "hard_negative"
+},
+{
+"id": "f1027",
+"text": "今日動画を見てたら夜更かししちゃったわ",
+"kind": "filler"
+},
+{
+"id": "f0824",
+"text": "なんか、雲がすごく低くて雨が降りそうし、植木に水やるの忘れてたの",
+"kind": "filler"
+},
+{
+"id": "f0371",
+"text": "さっきまで紅葉がきれいだったね",
+"kind": "filler"
+},
+{
+"id": "f1395",
+"text": "anyway just now I was grinding that game event",
+"kind": "filler"
+},
+{
+"id": "f1969",
+"text": "um, the news was all about the typhoon, and the baseball game went into extra innings",
+"kind": "filler"
+},
+{
+"id": "f0115",
+"text": "あのー、部屋の電球が切れたし、サッカーの代表戦、引き分けだった",
+"kind": "filler"
+},
+{
+"id": "f0299",
+"text": "えーと、電車が人身事故で遅れてたし、バスが全然来なかったよ",
+"kind": "filler"
+},
+{
+"id": "f0092",
+"text": "あのー、昼過ぎにコピー機の前で行列ができてたなあ",
+"kind": "filler"
+},
+{
+"id": "f1916",
+"text": "um, Tom said the printer jammed again the other day",
+"kind": "filler"
+},
+{
+"id": "f0180",
+"text": "えーと、さっき眠くて仕方ないよ",
+"kind": "filler"
+},
+{
+"id": "f1047",
+"text": "今朝パン屋さんのクロワッサンが美味しかったみたい",
+"kind": "filler"
+},
+{
+"id": "f0081",
+"text": "あのー、後輩が最近マラソン大会のボランティアしてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1787",
+"text": "so my shoulders are killing me, and eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f0967",
+"text": "エクセルの関数がうまく動かないし、漫画の新刊が出てたの",
+"kind": "filler"
+},
+{
+"id": "q03_n1",
+"text": "合鍵作るのって駅前のお店でできるのかな",
+"kind": "hard_negative"
+},
+{
+"id": "q18_n1",
+"text": "日曜はどこも混んでるからやめとこう",
+"kind": "hard_negative"
+},
+{
+"id": "q04_r0",
+"text": "田中さんへの贈り物、ハンドクリームのセットがいいんじゃないかって話になった",
+"kind": "relevant"
+},
+{
+"id": "f1284",
+"text": "風が冷たくなってきたし、ゲームのイベント周回してた",
+"kind": "filler"
+},
+{
+"id": "f0623",
+"text": "ていうか、店長が今日天気予報だと明日は晴れるらしいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0298",
+"text": "えーと、電車が人身事故で遅れてたし、ニュースで台風のことやってたわ",
+"kind": "filler"
+},
+{
+"id": "f1390",
+"text": "anyway earlier my shoulders are killing me",
+"kind": "filler"
+},
+{
+"id": "f1246",
+"text": "紅葉がきれいだったし、金魚の水槽を掃除したらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1341",
+"text": "Mike said the miso soup was a little bland last night",
+"kind": "filler"
+},
+{
+"id": "f0201",
+"text": "えーと、今日コンビニの新しいスイーツ食べてみたなあ",
+"kind": "filler"
+},
+{
+"id": "f0459",
+"text": "そういえば、動画を見てたら夜更かししちゃったし、電車が人身事故で遅れてたかも",
+"kind": "filler"
+},
+{
+"id": "f1885",
+"text": "they played an old song on the radio, and the news was all about the typhoon",
+"kind": "filler"
+},
+{
+"id": "f1448",
+"text": "anyway this morning I found storage boxes at the dollar store",
+"kind": "filler"
+},
+{
+"id": "f0933",
+"text": "まあ、昼過ぎにパン屋さんのクロワッサンが美味しかったわ",
+"kind": "filler"
+},
+{
+"id": "f1772",
+"text": "so my inbox is out of control, and I forgot to water the plants",
+"kind": "filler"
+},
+{
+"id": "f0336",
+"text": "お父さんが今朝ドラッグストアでティッシュ買ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0466",
+"text": "そういえば、山本さんがおとといセミがうるさかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1810",
+"text": "so there was a line at the copier, and the leaves are turning red",
+"kind": "filler"
+},
+{
+"id": "f1052",
+"text": "今朝日差しが強くて暑かったなあ",
+"kind": "filler"
+},
+{
+"id": "q36_r0",
+"text": "we'll migrate the database servers over the weekend of the fifteenth",
+"kind": "relevant"
+},
+{
+"id": "f0550",
+"text": "ていうか、お父さんが最近プリンターの紙詰まりがまた起きたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0083",
+"text": "あのー、昨日の夜お味噌汁の味がちょっと薄かったわ",
+"kind": "filler"
+},
+{
+"id": "f0133",
+"text": "あの子がさっき日差しが強くて暑かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1774",
+"text": "so my inbox is out of control, and the bus never showed up",
+"kind": "filler"
+},
+{
+"id": "f0971",
+"text": "キーボードの調子が悪いし、ニュースで台風のことやってたんだって",
+"kind": "filler"
+},
+{
+"id": "f1755",
+"text": "so earlier eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f1463",
+"text": "earlier my bike chain came off",
+"kind": "filler"
+},
+{
+"id": "f0256",
+"text": "えーと、昼過ぎにドラマの続きが気になって寝られなかったよ",
+"kind": "filler"
+},
+{
+"id": "f0078",
+"text": "あのー、後輩が今日金魚の水槽を掃除したって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1520",
+"text": "like, earlier I'm craving something sweet",
+"kind": "filler"
+},
+{
+"id": "f0689",
+"text": "なんか、うちの兄が今朝コーヒー豆を新しいのに変えたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1806",
+"text": "so the other day the new manga volume came out",
+"kind": "filler"
+},
+{
+"id": "q27_r0",
+"text": "let's grab food at that Thai place across from the station around noon",
+"kind": "relevant"
+},
+{
+"id": "f1546",
+"text": "like, my roommate said the baseball game went into extra innings last night",
+"kind": "filler"
+},
+{
+"id": "f0587",
+"text": "ていうか、プリンターの紙詰まりがまた起きたし、マラソン大会のボランティアしてたわ",
+"kind": "filler"
+},
+{
+"id": "f1743",
+"text": "so Mike said I cleaned the fish tank earlier",
+"kind": "filler"
+},
+{
+"id": "f0153",
+"text": "えーと、うちの兄が昨日の夜ドラッグストアでティッシュ買ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1324",
+"text": "Jenny said the leaves are turning red last night",
+"kind": "filler"
+},
+{
+"id": "f0611",
+"text": "ていうか、先輩が今日日差しが強くて暑かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1286",
+"text": "風が冷たくなってきたし、桜がもうすぐ咲きそうって",
+"kind": "filler"
+},
+{
+"id": "f0478",
+"text": "そういえば、後輩が昼過ぎに唐揚げ作りすぎちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "q07_r0",
+"text": "金曜日の保育園の送り迎えはおばあちゃんにお願いしてあるから",
+"kind": "relevant"
+},
+{
+"id": "f0086",
+"text": "あのー、昨日の夜日差しが強くて暑かったんだよね",
+"kind": "filler"
+},
+{
+"id": "f1460",
+"text": "earlier eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f1616",
+"text": "my roommate said my shoulders are killing me just now",
+"kind": "filler"
+},
+{
+"id": "f1731",
+"text": "so Alex said matcha ice cream is the best just now",
+"kind": "filler"
+},
+{
+"id": "f1500",
+"text": "like, Alex said the chat notifications never stop last night",
+"kind": "filler"
+},
+{
+"id": "f0802",
+"text": "なんか、漫画の新刊が出てたし、公園で犬の散歩してる人が多かったね",
+"kind": "filler"
+},
+{
+"id": "f1354",
+"text": "all afternoon I was grinding that game event",
+"kind": "filler"
+},
+{
+"id": "f1856",
+"text": "the other day I forgot to water the plants",
+"kind": "filler"
+},
+{
+"id": "f0770",
+"text": "なんか、山本さんが最近肩こりがひどいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0516",
+"text": "そういえば、鈴木くんがさっきまでお味噌汁の味がちょっと薄かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1466",
+"text": "earlier the bus never showed up",
+"kind": "filler"
+},
+{
+"id": "f1105",
+"text": "山本さんが昼過ぎにコンビニの新しいスイーツ食べてみたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1085",
+"text": "動画を見てたら夜更かししちゃったし、コーヒー豆を新しいのに変えたよ",
+"kind": "filler"
+},
+{
+"id": "f0639",
+"text": "ていうか、昼過ぎにカーテンを洗ったわ",
+"kind": "filler"
+},
+{
+"id": "f0547",
+"text": "ていうか、おととい雲がすごく低くて雨が降りそうって",
+"kind": "filler"
+},
+{
+"id": "f0330",
+"text": "お父さんがさっきまでサッカーの代表戦、引き分けだったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0322",
+"text": "おととい自転車のチェーンが外れたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1825",
+"text": "so yesterday the weather forecast says it'll be sunny tomorrow",
+"kind": "filler"
+},
+{
+"id": "q03_n0",
+"text": "鍵開けっぱなしで出かけちゃったかも、ちょっと心配",
+"kind": "hard_negative"
+},
+{
+"id": "f1479",
+"text": "just now my shoulders are killing me",
+"kind": "filler"
+},
+{
+"id": "f1671",
+"text": "oh and the cicadas were so loud, and the convenience store has a new dessert",
+"kind": "filler"
+},
+{
+"id": "q34_n1",
+"text": "the results of the survey came in",
+"kind": "hard_negative"
+},
+{
+"id": "f0507",
+"text": "そういえば、漫画の新刊が出てたし、ニュースで台風のことやってたんだって",
+"kind": "filler"
+},
+{
+"id": "q21_n0",
+"text": "プロジェクターの電源が入らないんですけど",
+"kind": "hard_negative"
+},
+{
+"id": "f0378",
+"text": "さっきスーパーで卵が安かった",
+"kind": "filler"
+},
+{
+"id": "f0213",
+"text": "えーと、今朝日差しが強くて暑かったんだって",
+"kind": "filler"
+},
+{
+"id": "f1833",
+"text": "the bus never showed up, and I switched to a new coffee brand",
+"kind": "filler"
+},
+{
+"id": "f1280",
+"text": "雲がすごく低くて雨が降りそうし、お味噌汁の味がちょっと薄かったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1724",
+"text": "our manager said the miso soup was a little bland this morning",
+"kind": "filler"
+},
+{
+"id": "f0375",
+"text": "さっきカーテンを洗ったって",
+"kind": "filler"
+},
+{
+"id": "f0110",
+"text": "あのー、眠くて仕方ないし、電車が人身事故で遅れてたって",
+"kind": "filler"
+},
+{
+"id": "f0725",
+"text": "なんか、さっき社内チャットの通知が多すぎる",
+"kind": "filler"
+},
+{
+"id": "f0278",
+"text": "えーと、百円ショップで収納ケース見つけたし、あくびが止まらないよ",
+"kind": "filler"
+},
+{
+"id": "f0751",
+"text": "なんか、今日駅の階段で転びそうになったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1342",
+"text": "Mike said the printer jammed again all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1922",
+"text": "um, earlier the light bulb in my room burned out",
+"kind": "filler"
+},
+{
+"id": "f0632",
+"text": "ていうか、昨日の夜ゲームのイベント周回してたわ",
+"kind": "filler"
+},
+{
+"id": "f0671",
+"text": "ていうか、隣の人がこの前駅の階段で転びそうになったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1998",
+"text": "yesterday the printer jammed again",
+"kind": "filler"
+},
+{
+"id": "f1102",
+"text": "山本さんがさっきまであくびが止まらないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0648",
+"text": "ていうか、朝からスーパーで卵が安かったよ",
+"kind": "filler"
+},
+{
+"id": "f1800",
+"text": "so the new manga volume came out, and I switched to a new coffee brand",
+"kind": "filler"
+},
+{
+"id": "f0561",
+"text": "ていうか、さっきまでコピー機の前で行列ができてたかも",
+"kind": "filler"
+},
+{
+"id": "f0090",
+"text": "あのー、昨日の夜電車が人身事故で遅れてたって",
+"kind": "filler"
+},
+{
+"id": "f1196",
+"text": "最近駅の階段で転びそうになったって",
+"kind": "filler"
+},
+{
+"id": "f0581",
+"text": "ていうか、セミがうるさかったし、サッカーの代表戦、引き分けだったかも",
+"kind": "filler"
+},
+{
+"id": "q22_n0",
+"text": "駐車違反の切符切られたことある？",
+"kind": "hard_negative"
+},
+{
+"id": "f0822",
+"text": "なんか、隣の人が最近エクセルの関数がうまく動かないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1653",
+"text": "oh and just now the baseball game went into extra innings",
+"kind": "filler"
+},
+{
+"id": "f0606",
+"text": "ていうか、伊藤さんがさっき眠くて仕方ないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1905",
+"text": "um, Lisa said eggs were on sale at the supermarket this morning",
+"kind": "filler"
+},
+{
+"id": "f1357",
+"text": "all afternoon my bike chain came off",
+"kind": "filler"
+},
+{
+"id": "f1600",
+"text": "my inbox is out of control, and matcha ice cream is the best",
+"kind": "filler"
+},
+{
+"id": "f0618",
+"text": "ていうか、妹が今日セミがうるさかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0191",
+"text": "えーと、セミがうるさかったし、お味噌汁の味がちょっと薄かったみたい",
+"kind": "filler"
+},
+{
+"id": "f0697",
+"text": "なんか、おととい自転車のチェーンが外れたよ",
+"kind": "filler"
+},
+{
+"id": "f1850",
+"text": "the miso soup was a little bland, and the news was all about the typhoon",
+"kind": "filler"
+},
+{
+"id": "f1502",
+"text": "like, I found storage boxes at the dollar store, and I was grinding that game event",
+"kind": "filler"
+},
+{
+"id": "f1058",
+"text": "今朝雲がすごく低くて雨が降りそうかも",
+"kind": "filler"
+},
+{
+"id": "f0604",
+"text": "ていうか、伊藤さんがこの前メールの返信がたまってるって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1506",
+"text": "like, Jenny said there was a line at the copier yesterday",
+"kind": "filler"
+},
+{
+"id": "f0760",
+"text": "なんか、先輩がおとといドラマの続きが気になって寝られなかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1298",
+"text": "高橋さんが昨日の夜日差しが強くて暑かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1504",
+"text": "like, I'm craving something sweet, and the convenience store has a new dessert",
+"kind": "filler"
+},
+{
+"id": "f0037",
+"text": "あのー、ドラマの続きが気になって寝られなかったし、公園で犬の散歩してる人が多かったって",
+"kind": "filler"
+},
+{
+"id": "f0703",
+"text": "なんか、この前カーテンを洗ったなあ",
+"kind": "filler"
+},
+{
+"id": "f1091",
+"text": "妹がおとといセミがうるさかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1860",
+"text": "the other day it was really humid outside",
+"kind": "filler"
+},
+{
+"id": "f1580",
+"text": "like, this morning it was really humid outside",
+"kind": "filler"
+},
+{
+"id": "f1330",
+"text": "Lisa said my shoulders are killing me the other day",
+"kind": "filler"
+},
+{
+"id": "f1235",
+"text": "社内チャットの通知が多すぎるし、公園で犬の散歩してる人が多かったね",
+"kind": "filler"
+},
+{
+"id": "q37_n0",
+"text": "prices at the cafeteria went up again",
+"kind": "hard_negative"
+},
+{
+"id": "f1758",
+"text": "so earlier the bus never showed up",
+"kind": "filler"
+},
+{
+"id": "f0797",
+"text": "なんか、最近唐揚げ作りすぎちゃったね",
+"kind": "filler"
+},
+{
+"id": "f1425",
+"text": "anyway our manager said the train was delayed again just now",
+"kind": "filler"
+},
+{
+"id": "q07_n1",
+"text": "子供の頃よく近所の川で遊んだなあ",
+"kind": "hard_negative"
+},
+{
+"id": "f1242",
+"text": "紅葉がきれいだったし、メールの返信がたまってるよ",
+"kind": "filler"
+},
+{
+"id": "f0492",
+"text": "そういえば、最近社内チャットの通知が多すぎるみたい",
+"kind": "filler"
+},
+{
+"id": "f0390",
+"text": "さっき電車が人身事故で遅れてたの",
+"kind": "filler"
+},
+{
+"id": "f0692",
+"text": "なんか、うちの兄が昼過ぎに動画を見てたら夜更かししちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0464",
+"text": "そういえば、妹がこの前電車が人身事故で遅れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0473",
+"text": "そういえば、店長が今日動画を見てたら夜更かししちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0576",
+"text": "ていうか、カーテンを洗ったし、紅葉がきれいだったって",
+"kind": "filler"
+},
+{
+"id": "f0355",
+"text": "この前金魚の水槽を掃除したらしいよ",
+"kind": "filler"
+},
+{
+"id": "q32_n1",
+"text": "someone leaked the product roadmap to the press",
+"kind": "hard_negative"
+},
+{
+"id": "f0130",
+"text": "あの子がこの前自転車のチェーンが外れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "q01_n1",
+"text": "美容院の予約、土曜の十時に取れたよ",
+"kind": "hard_negative"
+},
+{
+"id": "f1399",
+"text": "anyway last night the cherry blossoms are almost out",
+"kind": "filler"
+},
+{
+"id": "f1839",
+"text": "the cicadas were so loud, and I found storage boxes at the dollar store",
+"kind": "filler"
+},
+{
+"id": "f0714",
+"text": "なんか、さっきまでスーパーで卵が安かったなあ",
+"kind": "filler"
+},
+{
+"id": "f0135",
+"text": "あの子が今朝動画を見てたら夜更かししちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0076",
+"text": "あのー、店長が今日公園で犬の散歩してる人が多かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1818",
+"text": "so this morning the printer jammed again",
+"kind": "filler"
+},
+{
+"id": "f0925",
+"text": "まあ、抹茶のアイスが好きなんだよねし、社内チャットの通知が多すぎるんだって",
+"kind": "filler"
+},
+{
+"id": "f0484",
+"text": "そういえば、昼過ぎになんか甘いもの食べたいの",
+"kind": "filler"
+},
+{
+"id": "f0154",
+"text": "えーと、うちの兄が朝から桜がもうすぐ咲きそうって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0377",
+"text": "さっきコピー機の前で行列ができてたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1301",
+"text": "Alex said I couldn't stop watching that drama yesterday",
+"kind": "filler"
+},
+{
+"id": "f0422",
+"text": "そういえば、さっき公園で犬の散歩してる人が多かったみたい",
+"kind": "filler"
+},
+{
+"id": "f0374",
+"text": "さっきまで風が冷たくなってきたみたい",
+"kind": "filler"
+},
+{
+"id": "f0065",
+"text": "あのー、天気予報だと明日は晴れるらしいし、自転車のチェーンが外れたって",
+"kind": "filler"
+},
+{
+"id": "f0769",
+"text": "なんか、妹が昼過ぎにあくびが止まらないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1503",
+"text": "like, I switched to a new coffee brand, and my inbox is out of control",
+"kind": "filler"
+},
+{
+"id": "f1297",
+"text": "高橋さんが昨日の夜コンビニの新しいスイーツ食べてみたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0749",
+"text": "なんか、今日電車が人身事故で遅れてたんだって",
+"kind": "filler"
+},
+{
+"id": "f0362",
+"text": "さっきまでプリンターの紙詰まりがまた起きたかも",
+"kind": "filler"
+},
+{
+"id": "q02_n0",
+"text": "出張で大阪に行くのって来週だっけ",
+"kind": "hard_negative"
+},
+{
+"id": "f1669",
+"text": "oh and that quiz show was hilarious, and the spreadsheet formula keeps breaking",
+"kind": "filler"
+},
+{
+"id": "f1808",
+"text": "so the printer jammed again, and the baseball game went into extra innings",
+"kind": "filler"
+},
+{
+"id": "f0647",
+"text": "ていうか、朝からあくびが止まらない",
+"kind": "filler"
+},
+{
+"id": "f1937",
+"text": "um, my brother said I'm so sleepy all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1261",
+"text": "鈴木くんが今日風が冷たくなってきたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0441",
+"text": "そういえば、今日部屋の電球が切れたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0349",
+"text": "この前スーパーで卵が安かった",
+"kind": "filler"
+},
+{
+"id": "f0408",
+"text": "そういえば、お父さんが昼過ぎに金魚の水槽を掃除したって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1558",
+"text": "like, the baseball game went into extra innings, and the spreadsheet formula keeps breaking",
+"kind": "filler"
+},
+{
+"id": "f1615",
+"text": "my roommate said matcha ice cream is the best on the weekend",
+"kind": "filler"
+},
+{
+"id": "f0693",
+"text": "なんか、おとといサッカーの代表戦、引き分けだったなあ",
+"kind": "filler"
+},
+{
+"id": "f1967",
+"text": "um, the new manga volume came out, and I'm so sleepy",
+"kind": "filler"
+},
+{
+"id": "f0579",
+"text": "ていうか、コンビニの新しいスイーツ食べてみたし、社内チャットの通知が多すぎるの",
+"kind": "filler"
+},
+{
+"id": "q13_r0",
+"text": "人間ドックの結果が来て、コレステロールがちょっと高めだって",
+"kind": "relevant"
+},
+{
+"id": "f0030",
+"text": "あのー、カーテンを洗ったし、駅の階段で転びそうになったんだよね",
+"kind": "filler"
+},
+{
+"id": "f1757",
+"text": "so earlier that quiz show was hilarious",
+"kind": "filler"
+},
+{
+"id": "f0762",
+"text": "なんか、先輩が今朝肩こりがひどいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0445",
+"text": "そういえば、伊藤さんがおとといセミがうるさかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0198",
+"text": "えーと、ラジオで懐かしい曲が流れてたし、肩こりがひどいんだよね",
+"kind": "filler"
+},
+{
+"id": "q15_n0",
+"text": "猫カフェ行ってみたいんだよね",
+"kind": "hard_negative"
+},
+{
+"id": "f0826",
+"text": "なんか、駅の階段で転びそうになったし、バスが全然来なかったね",
+"kind": "filler"
+},
+{
+"id": "f0027",
+"text": "あのー、さっき百円ショップで収納ケース見つけたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0687",
+"text": "なんか、うちの兄がおととい自転車のチェーンが外れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0924",
+"text": "まあ、抹茶のアイスが好きなんだよねし、百円ショップで収納ケース見つけた",
+"kind": "filler"
+},
+{
+"id": "f1551",
+"text": "like, on the weekend eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f1983",
+"text": "um, yesterday the chat notifications never stop",
+"kind": "filler"
+},
+{
+"id": "q49_r0",
+"text": "不在票入ってたから、夜の時間帯でもう一回持ってきてもらうようにしといた",
+"kind": "relevant"
+},
+{
+"id": "f0756",
+"text": "なんか、今朝電車が人身事故で遅れてたよ",
+"kind": "filler"
+},
+{
+"id": "f0665",
+"text": "ていうか、鈴木くんがおとといサッカーの代表戦、引き分けだったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1441",
+"text": "anyway the other day the new manga volume came out",
+"kind": "filler"
+},
+{
+"id": "f0620",
+"text": "ていうか、山本さんがおとといゲームのイベント周回してたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1976",
+"text": "um, there was a line at the copier, and the weather forecast says it'll be sunny tomorrow",
+"kind": "filler"
+},
+{
+"id": "f1982",
+"text": "um, yesterday I'm craving something sweet",
+"kind": "filler"
+},
+{
+"id": "f1300",
+"text": "Alex said I couldn't stop watching that drama last night",
+"kind": "filler"
+},
+{
+"id": "f1241",
+"text": "紅葉がきれいだったし、バスが全然来なかったよ",
+"kind": "filler"
+},
+{
+"id": "f0317",
+"text": "おとといラジオで懐かしい曲が流れてたの",
+"kind": "filler"
+},
+{
+"id": "q23_n0",
+"text": "最近お酒弱くなっちゃって",
+"kind": "hard_negative"
+},
+{
+"id": "f0851",
+"text": "まあ、この前部屋の電球が切れたなあ",
+"kind": "filler"
+},
+{
+"id": "f1462",
+"text": "earlier matcha ice cream is the best",
+"kind": "filler"
+},
+{
+"id": "f0396",
+"text": "そういえば、うちの兄が今朝野球の試合、九回で逆転したんだってって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1777",
+"text": "so my inbox is out of control, and the spreadsheet formula keeps breaking",
+"kind": "filler"
+},
+{
+"id": "f1212",
+"text": "朝から風が冷たくなってきたの",
+"kind": "filler"
+},
+{
+"id": "f0519",
+"text": "そういえば、隣の人がおとといサッカーの代表戦、引き分けだったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1726",
+"text": "our manager said the printer jammed again yesterday",
+"kind": "filler"
+},
+{
+"id": "f1315",
+"text": "I made way too much fried chicken, and eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f1659",
+"text": "oh and my brother said there was a marathon downtown all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1434",
+"text": "anyway the new guy said the cicadas were so loud on the weekend",
+"kind": "filler"
+},
+{
+"id": "f0607",
+"text": "ていうか、伊藤さんが今日キーボードの調子が悪いって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1314",
+"text": "I found storage boxes at the dollar store, and eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f1337",
+"text": "Mike said it was really humid outside all afternoon",
+"kind": "filler"
+},
+{
+"id": "f0388",
+"text": "さっき部屋の電球が切れたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1524",
+"text": "like, just now the croissants at the bakery were amazing",
+"kind": "filler"
+},
+{
+"id": "f0790",
+"text": "なんか、昼過ぎにラジオで懐かしい曲が流れてたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0224",
+"text": "えーと、動画を見てたら夜更かししちゃったし、部屋の電球が切れたんだよね",
+"kind": "filler"
+},
+{
+"id": "f0918",
+"text": "まあ、後輩が今日天気予報だと明日は晴れるらしいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0875",
+"text": "まあ、マラソン大会のボランティアしてたし、コンビニの新しいスイーツ食べてみた",
+"kind": "filler"
+},
+{
+"id": "f1365",
+"text": "anyway Alex said eggs were on sale at the supermarket all afternoon",
+"kind": "filler"
+},
+{
+"id": "f0837",
+"text": "まあ、うちの兄が昨日の夜ドラマの続きが気になって寝られなかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0384",
+"text": "さっき動画を見てたら夜更かししちゃったって",
+"kind": "filler"
+},
+{
+"id": "f0348",
+"text": "この前サッカーの代表戦、引き分けだった",
+"kind": "filler"
+},
+{
+"id": "f1782",
+"text": "so my neighbor said my shoulders are killing me on the weekend",
+"kind": "filler"
+},
+{
+"id": "f1339",
+"text": "Mike said my bike chain came off earlier",
+"kind": "filler"
+},
+{
+"id": "f0690",
+"text": "なんか、うちの兄が今朝ニュースで台風のことやってたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1869",
+"text": "the printer jammed again, and the new manga volume came out",
+"kind": "filler"
+},
+{
+"id": "f0772",
+"text": "なんか、店長が昼過ぎになんか甘いもの食べたいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1206",
+"text": "朝から唐揚げ作りすぎちゃったみたい",
+"kind": "filler"
+},
+{
+"id": "f0442",
+"text": "そういえば、今日雲がすごく低くて雨が降りそうらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1710",
+"text": "on the weekend the chat notifications never stop",
+"kind": "filler"
+},
+{
+"id": "f0609",
+"text": "ていうか、伊藤さんが昼過ぎになんか甘いもの食べたいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1518",
+"text": "like, all afternoon the chat notifications never stop",
+"kind": "filler"
+},
+{
+"id": "f1680",
+"text": "oh and the other day my keyboard is acting up",
+"kind": "filler"
+},
+{
+"id": "q09_r0",
+"text": "冷房直しに来る業者さん、土曜の午前中に来てくれるって",
+"kind": "relevant"
+},
+{
+"id": "f1336",
+"text": "Mike said I found storage boxes at the dollar store earlier",
+"kind": "filler"
+},
+{
+"id": "f0486",
+"text": "そういえば、昼過ぎにニュースで台風のことやってたよ",
+"kind": "filler"
+},
+{
+"id": "q19_n0",
+"text": "スマホの画面割れちゃった",
+"kind": "hard_negative"
+},
+{
+"id": "f1846",
+"text": "the croissants at the bakery were amazing, and the soccer match ended in a draw",
+"kind": "filler"
+},
+{
+"id": "f1131",
+"text": "後輩が朝から天気予報だと明日は晴れるらしいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1611",
+"text": "my neighbor said the printer jammed again earlier",
+"kind": "filler"
+},
+{
+"id": "f1725",
+"text": "our manager said the news was all about the typhoon just now",
+"kind": "filler"
+},
+{
+"id": "f1913",
+"text": "um, Tom said it looked like it was going to rain earlier",
+"kind": "filler"
+},
+{
+"id": "f1868",
+"text": "the printer jammed again, and that quiz show was hilarious",
+"kind": "filler"
+},
+{
+"id": "f1267",
+"text": "隣の人がおとといカーテンを洗ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0792",
+"text": "なんか、最近お味噌汁の味がちょっと薄かったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0582",
+"text": "ていうか、ドラッグストアでティッシュ買ったし、マラソン大会のボランティアしてたよ",
+"kind": "filler"
+},
+{
+"id": "f0366",
+"text": "さっきまで動画を見てたら夜更かししちゃったね",
+"kind": "filler"
+},
+{
+"id": "q38_r0",
+"text": "I booked a hotel near the convention center in Singapore for four nights",
+"kind": "relevant"
+},
+{
+"id": "f1988",
+"text": "yesterday I couldn't stop watching that drama",
+"kind": "filler"
+},
+{
+"id": "f1078",
+"text": "先輩が今日日差しが強くて暑かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1737",
+"text": "so Jenny said it looked like it was going to rain yesterday",
+"kind": "filler"
+},
+{
+"id": "f1046",
+"text": "今朝ニュースで台風のことやってたんだよね",
+"kind": "filler"
+},
+{
+"id": "f0087",
+"text": "あのー、昨日の夜社内チャットの通知が多すぎるかも",
+"kind": "filler"
+},
+{
+"id": "f0698",
+"text": "なんか、お父さんがこの前電車が人身事故で遅れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "q36_n1",
+"text": "can you send me the schedule for the offsite",
+"kind": "hard_negative"
+},
+{
+"id": "q16_r0",
+"text": "お母さんへのカーネーション、花屋さんに配達頼んでおいた",
+"kind": "relevant"
+},
+{
+"id": "f1249",
+"text": "自転車のチェーンが外れたし、お味噌汁の味がちょっと薄かった",
+"kind": "filler"
+},
+{
+"id": "f1018",
+"text": "ラジオで懐かしい曲が流れてたし、スーパーで卵が安かったって",
+"kind": "filler"
+},
+{
+"id": "f0902",
+"text": "まあ、公園で犬の散歩してる人が多かったし、雲がすごく低くて雨が降りそう",
+"kind": "filler"
+},
+{
+"id": "f0399",
+"text": "そういえば、おとといコンビニの新しいスイーツ食べてみたんだって",
+"kind": "filler"
+},
+{
+"id": "f1924",
+"text": "um, it looked like it was going to rain, and the news was all about the typhoon",
+"kind": "filler"
+},
+{
+"id": "f0235",
+"text": "えーと、山本さんがこの前エクセルの関数がうまく動かないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0527",
+"text": "そういえば、雲がすごく低くて雨が降りそうし、ゲームのイベント周回してたって",
+"kind": "filler"
+},
+{
+"id": "q25_n1",
+"text": "昨日は一日中雨だったね",
+"kind": "hard_negative"
+},
+{
+"id": "f0614",
+"text": "ていうか、先輩が最近ニュースで台風のことやってたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1958",
+"text": "um, the cherry blossoms are almost out, and they played an old song on the radio",
+"kind": "filler"
+},
+{
+"id": "f0966",
+"text": "エクセルの関数がうまく動かないし、ゲームのイベント周回してた",
+"kind": "filler"
+},
+{
+"id": "f0855",
+"text": "まあ、さっきまで漫画の新刊が出てたよ",
+"kind": "filler"
+},
+{
+"id": "f1820",
+"text": "so yesterday I switched to a new coffee brand",
+"kind": "filler"
+},
+{
+"id": "f0239",
+"text": "えーと、店長がおととい公園で犬の散歩してる人が多かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0173",
+"text": "えーと、さっきまで電車が人身事故で遅れてたんだって",
+"kind": "filler"
+},
+{
+"id": "f1871",
+"text": "the soccer match ended in a draw, and the miso soup was a little bland",
+"kind": "filler"
+},
+{
+"id": "f1789",
+"text": "so on the weekend eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f1845",
+"text": "the croissants at the bakery were amazing, and the bus never showed up",
+"kind": "filler"
+},
+{
+"id": "f0841",
+"text": "まあ、おとといラジオで懐かしい曲が流れてたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1550",
+"text": "like, on the weekend I switched to a new coffee brand",
+"kind": "filler"
+},
+{
+"id": "f0593",
+"text": "ていうか、今日お味噌汁の味がちょっと薄かったね",
+"kind": "filler"
+},
+{
+"id": "f1013",
+"text": "マラソン大会のボランティアしてたし、百円ショップで収納ケース見つけたよ",
+"kind": "filler"
+},
+{
+"id": "f0089",
+"text": "あのー、昨日の夜金魚の水槽を掃除したみたい",
+"kind": "filler"
+},
+{
+"id": "f0894",
+"text": "まあ、今朝部屋の電球が切れたね",
+"kind": "filler"
+},
+{
+"id": "f0753",
+"text": "なんか、今朝ドラマの続きが気になって寝られなかった",
+"kind": "filler"
+},
+{
+"id": "f0525",
+"text": "そういえば、隣の人が昨日の夜部屋の電球が切れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1784",
+"text": "so my neighbor said the soccer match ended in a draw last night",
+"kind": "filler"
+},
+{
+"id": "f0567",
+"text": "ていうか、さっきまで部屋の電球が切れたわ",
+"kind": "filler"
+},
+{
+"id": "f0577",
+"text": "ていうか、キーボードの調子が悪いし、雲がすごく低くて雨が降りそうらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0352",
+"text": "この前マラソン大会のボランティアしてたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1253",
+"text": "部屋の電球が切れたし、テレビのクイズ番組おもしろかったよ",
+"kind": "filler"
+},
+{
+"id": "f1156",
+"text": "昨日の夜野球の試合、九回で逆転したんだって",
+"kind": "filler"
+},
+{
+"id": "q12_n1",
+"text": "お金の話って友達とはしにくいよね",
+"kind": "hard_negative"
+},
+{
+"id": "f0973",
+"text": "キーボードの調子が悪いし、メールの返信がたまってるわ",
+"kind": "filler"
+},
+{
+"id": "f1604",
+"text": "my keyboard is acting up, and the spreadsheet formula keeps breaking",
+"kind": "filler"
+},
+{
+"id": "f1598",
+"text": "my brother said the bus never showed up all afternoon",
+"kind": "filler"
+},
+{
+"id": "f0739",
+"text": "なんか、パン屋さんのクロワッサンが美味しかったし、プリンターの紙詰まりがまた起きたなあ",
+"kind": "filler"
+},
+{
+"id": "f1240",
+"text": "紅葉がきれいだったし、ドラッグストアでティッシュ買ったって",
+"kind": "filler"
+},
+{
+"id": "f0303",
+"text": "えーと、駅の階段で転びそうになったし、ラジオで懐かしい曲が流れてたの",
+"kind": "filler"
+},
+{
+"id": "f0592",
+"text": "ていうか、ラジオで懐かしい曲が流れてたし、部屋の電球が切れたみたい",
+"kind": "filler"
+},
+{
+"id": "f0415",
+"text": "そういえば、さっきまでサッカーの代表戦、引き分けだったみたい",
+"kind": "filler"
+},
+{
+"id": "f1840",
+"text": "the cicadas were so loud, and there was a marathon downtown",
+"kind": "filler"
+},
+{
+"id": "f0434",
+"text": "そういえば、マラソン大会のボランティアしてたし、ラジオで懐かしい曲が流れてたんだって",
+"kind": "filler"
+},
+{
+"id": "f0510",
+"text": "そういえば、肩こりがひどいし、エクセルの関数がうまく動かないよ",
+"kind": "filler"
+},
+{
+"id": "f1749",
+"text": "so Tom said the spreadsheet formula keeps breaking all afternoon",
+"kind": "filler"
+},
+{
+"id": "f0719",
+"text": "なんか、さっきまで金魚の水槽を掃除したね",
+"kind": "filler"
+},
+{
+"id": "f1994",
+"text": "yesterday the chat notifications never stop",
+"kind": "filler"
+},
+{
+"id": "f0118",
+"text": "あのー、鈴木くんがさっきパン屋さんのクロワッサンが美味しかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0496",
+"text": "そういえば、朝からドラッグストアでティッシュ買ったんだって",
+"kind": "filler"
+},
+{
+"id": "f1836",
+"text": "the cherry blossoms are almost out, and matcha ice cream is the best",
+"kind": "filler"
+},
+{
+"id": "f1109",
+"text": "店長がさっきまで日差しが強くて暑かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1603",
+"text": "my keyboard is acting up, and the miso soup was a little bland",
+"kind": "filler"
+},
+{
+"id": "f1106",
+"text": "店長がおととい百円ショップで収納ケース見つけたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1188",
+"text": "最近社内チャットの通知が多すぎるんだよね",
+"kind": "filler"
+},
+{
+"id": "f0735",
+"text": "なんか、ニュースで台風のことやってたし、キーボードの調子が悪い",
+"kind": "filler"
+},
+{
+"id": "f1773",
+"text": "so my inbox is out of control, and it looked like it was going to rain",
+"kind": "filler"
+},
+{
+"id": "f0685",
+"text": "なんか、あの子が朝から植木に水やるの忘れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0285",
+"text": "えーと、鈴木くんが昼過ぎにマラソン大会のボランティアしてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0488",
+"text": "そういえば、昼過ぎに動画を見てたら夜更かししちゃったんだよね",
+"kind": "filler"
+},
+{
+"id": "f1519",
+"text": "like, all afternoon the cicadas were so loud",
+"kind": "filler"
+},
+{
+"id": "q07_n0",
+"text": "保育園の運動会って雨だったら延期？",
+"kind": "hard_negative"
+},
+{
+"id": "f1530",
+"text": "like, last night the cherry blossoms are almost out",
+"kind": "filler"
+},
+{
+"id": "f0187",
+"text": "えーと、コーヒー豆を新しいのに変えたし、プリンターの紙詰まりがまた起きたわ",
+"kind": "filler"
+},
+{
+"id": "f0403",
+"text": "そういえば、おととい駅の階段で転びそうになったなあ",
+"kind": "filler"
+},
+{
+"id": "f0071",
+"text": "あのー、山本さんがさっき動画を見てたら夜更かししちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0044",
+"text": "あのー、今日なんか甘いもの食べたいんだって",
+"kind": "filler"
+},
+{
+"id": "f0114",
+"text": "あのー、自転車のチェーンが外れたし、お味噌汁の味がちょっと薄かったね",
+"kind": "filler"
+},
+{
+"id": "f1760",
+"text": "so earlier the printer jammed again",
+"kind": "filler"
+},
+{
+"id": "q32_n0",
+"text": "my landlord raised the rent again",
+"kind": "hard_negative"
+},
+{
+"id": "f0296",
+"text": "えーと、雲がすごく低くて雨が降りそうし、動画を見てたら夜更かししちゃったかも",
+"kind": "filler"
+},
+{
+"id": "f1948",
+"text": "um, on the weekend I'm so sleepy",
+"kind": "filler"
+},
+{
+"id": "f1313",
+"text": "I found storage boxes at the dollar store, and I made way too much fried chicken",
+"kind": "filler"
+},
+{
+"id": "f1917",
+"text": "um, all afternoon I couldn't stop watching that drama",
+"kind": "filler"
+},
+{
+"id": "f0406",
+"text": "そういえば、お父さんがさっき公園で犬の散歩してる人が多かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1785",
+"text": "so my neighbor said they played an old song on the radio just now",
+"kind": "filler"
+},
+{
+"id": "f0884",
+"text": "まあ、今日部屋の電球が切れたなあ",
+"kind": "filler"
+},
+{
+"id": "f0159",
+"text": "えーと、お父さんが今朝メールの返信がたまってるって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0103",
+"text": "あのー、朝から部屋の電球が切れた",
+"kind": "filler"
+},
+{
+"id": "f1655",
+"text": "oh and last night my shoulders are killing me",
+"kind": "filler"
+},
+{
+"id": "f1931",
+"text": "um, just now the train was delayed again",
+"kind": "filler"
+},
+{
+"id": "f1645",
+"text": "oh and all afternoon there was a line at the copier",
+"kind": "filler"
+},
+{
+"id": "f1929",
+"text": "um, just now the cicadas were so loud",
+"kind": "filler"
+},
+{
+"id": "f1876",
+"text": "the train was delayed again, and the light bulb in my room burned out",
+"kind": "filler"
+},
+{
+"id": "f1415",
+"text": "anyway my roommate said the cicadas were so loud last night",
+"kind": "filler"
+},
+{
+"id": "f1164",
+"text": "昼過ぎにエクセルの関数がうまく動かないわ",
+"kind": "filler"
+},
+{
+"id": "f0627",
+"text": "ていうか、店長が昨日の夜動画を見てたら夜更かししちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0568",
+"text": "ていうか、さっきまで金魚の水槽を掃除したって",
+"kind": "filler"
+},
+{
+"id": "f1854",
+"text": "the new guy said the new manga volume came out just now",
+"kind": "filler"
+},
+{
+"id": "f1122",
+"text": "後輩がさっきまで日差しが強くて暑かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0881",
+"text": "まあ、今日マラソン大会のボランティアしてたんだって",
+"kind": "filler"
+},
+{
+"id": "f0049",
+"text": "あのー、今日風が冷たくなってきたね",
+"kind": "filler"
+},
+{
+"id": "f0376",
+"text": "さっきカーテンを洗ったよ",
+"kind": "filler"
+},
+{
+"id": "f1290",
+"text": "高橋さんがおととい肩こりがひどいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1023",
+"text": "今日コピー機の前で行列ができてたの",
+"kind": "filler"
+},
+{
+"id": "f1217",
+"text": "植木に水やるの忘れてたし、駅の階段で転びそうになったの",
+"kind": "filler"
+},
+{
+"id": "f1189",
+"text": "最近紅葉がきれいだった",
+"kind": "filler"
+},
+{
+"id": "f0517",
+"text": "そういえば、鈴木くんがさっき公園で犬の散歩してる人が多かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1323",
+"text": "Jenny said the chat notifications never stop the other day",
+"kind": "filler"
+},
+{
+"id": "f0045",
+"text": "あのー、今日サッカーの代表戦、引き分けだったかも",
+"kind": "filler"
+},
+{
+"id": "f1955",
+"text": "um, the bus never showed up, and the leaves are turning red",
+"kind": "filler"
+},
+{
+"id": "f1054",
+"text": "今朝眠くて仕方ない",
+"kind": "filler"
+},
+{
+"id": "f1478",
+"text": "just now matcha ice cream is the best",
+"kind": "filler"
+},
+{
+"id": "f0353",
+"text": "この前動画を見てたら夜更かししちゃった",
+"kind": "filler"
+},
+{
+"id": "f1572",
+"text": "like, the soccer match ended in a draw, and I made way too much fried chicken",
+"kind": "filler"
+},
+{
+"id": "f1775",
+"text": "so my inbox is out of control, and the chat notifications never stop",
+"kind": "filler"
+},
+{
+"id": "f0305",
+"text": "えーと、駅の階段で転びそうになったし、日差しが強くて暑かった",
+"kind": "filler"
+},
+{
+"id": "f0744",
+"text": "なんか、今日キーボードの調子が悪いんだよね",
+"kind": "filler"
+},
+{
+"id": "q47_n0",
+"text": "洗濯物、雨降りそうだから取り込んでおいて",
+"kind": "hard_negative"
+},
+{
+"id": "f1433",
+"text": "anyway the new guy said the cicadas were so loud just now",
+"kind": "filler"
+},
+{
+"id": "f1521",
+"text": "like, earlier the spreadsheet formula keeps breaking",
+"kind": "filler"
+},
+{
+"id": "f0188",
+"text": "えーと、コーヒー豆を新しいのに変えたし、漫画の新刊が出てたなあ",
+"kind": "filler"
+},
+{
+"id": "f1944",
+"text": "um, my roommate said I couldn't stop watching that drama yesterday",
+"kind": "filler"
+},
+{
+"id": "f1890",
+"text": "this morning my bike chain came off",
+"kind": "filler"
+},
+{
+"id": "f1158",
+"text": "昨日の夜野球の試合、九回で逆転したんだってよ",
+"kind": "filler"
+},
+{
+"id": "q33_n1",
+"text": "the sauce stained my white shirt",
+"kind": "hard_negative"
+},
+{
+"id": "f1829",
+"text": "that quiz show was hilarious, and there was a line at the copier",
+"kind": "filler"
+},
+{
+"id": "f1842",
+"text": "the convenience store has a new dessert, and the printer jammed again",
+"kind": "filler"
+},
+{
+"id": "f1761",
+"text": "so earlier the spreadsheet formula keeps breaking",
+"kind": "filler"
+},
+{
+"id": "f1575",
+"text": "like, there was a line at the copier, and I found storage boxes at the dollar store",
+"kind": "filler"
+},
+{
+"id": "f1430",
+"text": "anyway the new guy said I made way too much fried chicken this morning",
+"kind": "filler"
+},
+{
+"id": "f0778",
+"text": "なんか、後輩が最近肩こりがひどいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0531",
+"text": "そういえば、風が冷たくなってきたし、百円ショップで収納ケース見つけたよ",
+"kind": "filler"
+},
+{
+"id": "f1719",
+"text": "our manager said eggs were on sale at the supermarket just now",
+"kind": "filler"
+},
+{
+"id": "f0634",
+"text": "ていうか、昨日の夜社内チャットの通知が多すぎる",
+"kind": "filler"
+},
+{
+"id": "f1914",
+"text": "um, Tom said my shoulders are killing me this morning",
+"kind": "filler"
+},
+{
+"id": "f0615",
+"text": "ていうか、先輩が朝から社内チャットの通知が多すぎるって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1795",
+"text": "so our manager said it was really humid outside on the weekend",
+"kind": "filler"
+},
+{
+"id": "f1009",
+"text": "マラソン大会のボランティアしてたし、あくびが止まらないって",
+"kind": "filler"
+},
+{
+"id": "f1020",
+"text": "今日あくびが止まらないみたい",
+"kind": "filler"
+},
+{
+"id": "f1830",
+"text": "the baseball game went into extra innings, and I found storage boxes at the dollar store",
+"kind": "filler"
+},
+{
+"id": "f0419",
+"text": "そういえば、さっきニュースで台風のことやってた",
+"kind": "filler"
+},
+{
+"id": "f0944",
+"text": "まあ、朝から眠くて仕方ないかも",
+"kind": "filler"
+},
+{
+"id": "f0524",
+"text": "そういえば、隣の人が今朝眠くて仕方ないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1174",
+"text": "昼過ぎに雲がすごく低くて雨が降りそうみたい",
+"kind": "filler"
+},
+{
+"id": "f0468",
+"text": "そういえば、山本さんがこの前社内チャットの通知が多すぎるって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0726",
+"text": "なんか、さっき風が冷たくなってきたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0885",
+"text": "まあ、今日野球の試合、九回で逆転したんだってんだよね",
+"kind": "filler"
+},
+{
+"id": "f0514",
+"text": "そういえば、金魚の水槽を掃除したし、風が冷たくなってきたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1014",
+"text": "マラソン大会のボランティアしてたし、駅の階段で転びそうになったよ",
+"kind": "filler"
+},
+{
+"id": "f0427",
+"text": "そういえば、スーパーで卵が安かったし、パン屋さんのクロワッサンが美味しかったよ",
+"kind": "filler"
+},
+{
+"id": "f0469",
+"text": "そういえば、山本さんが昨日の夜エクセルの関数がうまく動かないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0858",
+"text": "まあ、さっき公園で犬の散歩してる人が多かったんだって",
+"kind": "filler"
+},
+{
+"id": "f1203",
+"text": "朝からドラマの続きが気になって寝られなかったんだって",
+"kind": "filler"
+},
+{
+"id": "f0727",
+"text": "なんか、ゲームのイベント周回してたし、スーパーで卵が安かったみたい",
+"kind": "filler"
+},
+{
+"id": "f0674",
+"text": "ていうか、隣の人が最近お味噌汁の味がちょっと薄かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0475",
+"text": "そういえば、後輩がおとといプリンターの紙詰まりがまた起きたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1608",
+"text": "my neighbor said the miso soup was a little bland all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1213",
+"text": "朝から駅の階段で転びそうになったみたい",
+"kind": "filler"
+},
+{
+"id": "f1130",
+"text": "後輩が最近ニュースで台風のことやってたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1660",
+"text": "oh and my neighbor said my shoulders are killing me this morning",
+"kind": "filler"
+},
+{
+"id": "f0755",
+"text": "なんか、今朝唐揚げ作りすぎちゃったよ",
+"kind": "filler"
+},
+{
+"id": "f0680",
+"text": "ていうか、高橋さんが昼過ぎに紅葉がきれいだったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1770",
+"text": "so my brother said I couldn't stop watching that drama last night",
+"kind": "filler"
+},
+{
+"id": "f1792",
+"text": "so on the weekend the soccer match ended in a draw",
+"kind": "filler"
+},
+{
+"id": "f0107",
+"text": "あのー、百円ショップで収納ケース見つけたし、プリンターの紙詰まりがまた起きたみたい",
+"kind": "filler"
+},
+{
+"id": "f1352",
+"text": "Tom said the croissants at the bakery were amazing this morning",
+"kind": "filler"
+},
+{
+"id": "f1370",
+"text": "anyway Jenny said the leaves are turning red last night",
+"kind": "filler"
+},
+{
+"id": "f1554",
+"text": "like, on the weekend they played an old song on the radio",
+"kind": "filler"
+},
+{
+"id": "f0610",
+"text": "ていうか、伊藤さんが最近公園で犬の散歩してる人が多かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0070",
+"text": "あのー、山本さんがおとといドラッグストアでティッシュ買ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0091",
+"text": "あのー、昼過ぎにエクセルの関数がうまく動かないんだって",
+"kind": "filler"
+},
+{
+"id": "f0813",
+"text": "なんか、鈴木くんがさっきまで眠くて仕方ないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0149",
+"text": "うちの兄が最近セミがうるさかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1141",
+"text": "昨日の夜コンビニの新しいスイーツ食べてみたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0870",
+"text": "まあ、バスが全然来なかったし、スーパーで卵が安かったよ",
+"kind": "filler"
+},
+{
+"id": "f1191",
+"text": "最近野球の試合、九回で逆転したんだってらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1032",
+"text": "今日百円ショップで収納ケース見つけたわ",
+"kind": "filler"
+},
+{
+"id": "f1688",
+"text": "oh and there was a line at the copier, and I'm so sleepy",
+"kind": "filler"
+},
+{
+"id": "f1606",
+"text": "my neighbor said that quiz show was hilarious last night",
+"kind": "filler"
+},
+{
+"id": "f1426",
+"text": "anyway our manager said they played an old song on the radio yesterday",
+"kind": "filler"
+},
+{
+"id": "f1625",
+"text": "oh and I found storage boxes at the dollar store, and the cherry blossoms are almost out",
+"kind": "filler"
+},
+{
+"id": "f1419",
+"text": "anyway on the weekend eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f1901",
+"text": "um, I made way too much fried chicken, and there was a marathon downtown",
+"kind": "filler"
+},
+{
+"id": "f1796",
+"text": "so our manager said my keyboard is acting up yesterday",
+"kind": "filler"
+},
+{
+"id": "f1715",
+"text": "on the weekend the printer jammed again",
+"kind": "filler"
+},
+{
+"id": "f0431",
+"text": "そういえば、バスが全然来なかったし、なんか甘いもの食べたいなあ",
+"kind": "filler"
+},
+{
+"id": "f1701",
+"text": "oh and yesterday there was a line at the copier",
+"kind": "filler"
+},
+{
+"id": "f1176",
+"text": "昼過ぎに駅の階段で転びそうになったかも",
+"kind": "filler"
+},
+{
+"id": "f1080",
+"text": "先輩が昨日の夜なんか甘いもの食べたいって言ってた",
+"kind": "filler"
+},
+{
+"id": "q29_r0",
+"text": "Sarah said she can grab the children from school on Wednesday",
+"kind": "relevant"
+},
+{
+"id": "f1099",
+"text": "妹が朝から漫画の新刊が出てたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0311",
+"text": "おとといお味噌汁の味がちょっと薄かったの",
+"kind": "filler"
+},
+{
+"id": "f1891",
+"text": "this morning my inbox is out of control",
+"kind": "filler"
+},
+{
+"id": "f0202",
+"text": "えーと、今日テレビのクイズ番組おもしろかった",
+"kind": "filler"
+},
+{
+"id": "q47_n1",
+"text": "調子に乗って食べすぎた",
+"kind": "hard_negative"
+},
+{
+"id": "q48_n1",
+"text": "目標の売上まであと少しです",
+"kind": "hard_negative"
+},
+{
+"id": "f0523",
+"text": "そういえば、隣の人がさっきまで風が冷たくなってきたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0961",
+"text": "まあ、駅の階段で転びそうになったし、日差しが強くて暑かったんだよね",
+"kind": "filler"
+},
+{
+"id": "f0537",
+"text": "ていうか、あの子が昨日の夜雲がすごく低くて雨が降りそうって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1636",
+"text": "oh and Lisa said the cherry blossoms are almost out this morning",
+"kind": "filler"
+},
+{
+"id": "f0039",
+"text": "あのー、パン屋さんのクロワッサンが美味しかったし、公園で犬の散歩してる人が多かったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0326",
+"text": "お味噌汁の味がちょっと薄かったし、パン屋さんのクロワッサンが美味しかった",
+"kind": "filler"
+},
+{
+"id": "q20_n0",
+"text": "保険の営業の人からまた電話あった",
+"kind": "hard_negative"
+},
+{
+"id": "q06_n1",
+"text": "見積もりの書類、会社に置いてきちゃった",
+"kind": "hard_negative"
+},
+{
+"id": "f1266",
+"text": "鈴木くんが朝からコーヒー豆を新しいのに変えたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0015",
+"text": "あのー、お父さんが今朝植木に水やるの忘れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1941",
+"text": "um, my keyboard is acting up, and I cleaned the fish tank",
+"kind": "filler"
+},
+{
+"id": "f0097",
+"text": "あのー、昼過ぎに漫画の新刊が出てたんだって",
+"kind": "filler"
+},
+{
+"id": "f1265",
+"text": "鈴木くんが昨日の夜ドラマの続きが気になって寝られなかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0175",
+"text": "えーと、さっきまで駅の階段で転びそうになったね",
+"kind": "filler"
+},
+{
+"id": "f1092",
+"text": "妹がさっきあくびが止まらないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1553",
+"text": "like, on the weekend the news was all about the typhoon",
+"kind": "filler"
+},
+{
+"id": "f0499",
+"text": "そういえば、朝からメールの返信がたまってるらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0526",
+"text": "そういえば、隣の人が最近メールの返信がたまってるって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0129",
+"text": "あの子がこの前なんか甘いもの食べたいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1613",
+"text": "my roommate said eggs were on sale at the supermarket yesterday",
+"kind": "filler"
+},
+{
+"id": "f0035",
+"text": "あのー、ドラッグストアでティッシュ買ったし、パン屋さんのクロワッサンが美味しかったわ",
+"kind": "filler"
+},
+{
+"id": "f0050",
+"text": "あのー、今朝サッカーの代表戦、引き分けだったね",
+"kind": "filler"
+},
+{
+"id": "f0873",
+"text": "まあ、プリンターの紙詰まりがまた起きたし、眠くて仕方ないみたい",
+"kind": "filler"
+},
+{
+"id": "f1024",
+"text": "今日コピー機の前で行列ができてたわ",
+"kind": "filler"
+},
+{
+"id": "f1734",
+"text": "so I couldn't stop watching that drama, and the train was delayed again",
+"kind": "filler"
+},
+{
+"id": "f1056",
+"text": "今朝紅葉がきれいだったよ",
+"kind": "filler"
+},
+{
+"id": "f1892",
+"text": "this morning my keyboard is acting up",
+"kind": "filler"
+},
+{
+"id": "f1692",
+"text": "oh and there was a marathon downtown, and the weather forecast says it'll be sunny tomorrow",
+"kind": "filler"
+},
+{
+"id": "f1146",
+"text": "昨日の夜パン屋さんのクロワッサンが美味しかったの",
+"kind": "filler"
+},
+{
+"id": "f0982",
+"text": "ゲームのイベント周回してたし、肩こりがひどいって",
+"kind": "filler"
+},
+{
+"id": "f0946",
+"text": "まあ、百円ショップで収納ケース見つけたし、マラソン大会のボランティアしてたの",
+"kind": "filler"
+},
+{
+"id": "f0549",
+"text": "ていうか、お父さんが昨日の夜社内チャットの通知が多すぎるって言ってた",
+"kind": "filler"
+},
+{
+"id": "q40_r0",
+"text": "legal still needs to review the contract before we can sign it",
+"kind": "relevant"
+},
+{
+"id": "f0932",
+"text": "まあ、昼過ぎになんか甘いもの食べたいんだよね",
+"kind": "filler"
+},
+{
+"id": "f1228",
+"text": "眠くて仕方ないし、ラジオで懐かしい曲が流れてたわ",
+"kind": "filler"
+},
+{
+"id": "f1844",
+"text": "the croissants at the bakery were amazing, and my inbox is out of control",
+"kind": "filler"
+},
+{
+"id": "q27_n0",
+"text": "I already had lunch, sorry",
+"kind": "hard_negative"
+},
+{
+"id": "f1592",
+"text": "my bike chain came off, and the new manga volume came out",
+"kind": "filler"
+},
+{
+"id": "f0882",
+"text": "まあ、今日唐揚げ作りすぎちゃった",
+"kind": "filler"
+},
+{
+"id": "f0040",
+"text": "あのー、プリンターの紙詰まりがまた起きたし、雲がすごく低くて雨が降りそう",
+"kind": "filler"
+},
+{
+"id": "f1050",
+"text": "今朝日差しが強くて暑かった",
+"kind": "filler"
+},
+{
+"id": "f0559",
+"text": "ていうか、さっきあくびが止まらないかも",
+"kind": "filler"
+},
+{
+"id": "f0263",
+"text": "えーと、最近コーヒー豆を新しいのに変えたんだって",
+"kind": "filler"
+},
+{
+"id": "f0369",
+"text": "さっきまで植木に水やるの忘れてたよ",
+"kind": "filler"
+},
+{
+"id": "f1496",
+"text": "last night the soccer match ended in a draw",
+"kind": "filler"
+},
+{
+"id": "f1866",
+"text": "the other day the train was delayed again",
+"kind": "filler"
+},
+{
+"id": "f0365",
+"text": "さっきまでラジオで懐かしい曲が流れてたんだよね",
+"kind": "filler"
+},
+{
+"id": "f1331",
+"text": "Lisa said the cherry blossoms are almost out last night",
+"kind": "filler"
+},
+{
+"id": "f0272",
+"text": "えーと、桜がもうすぐ咲きそうし、ラジオで懐かしい曲が流れてたよ",
+"kind": "filler"
+},
+{
+"id": "f0274",
+"text": "えーと、桜がもうすぐ咲きそうし、駅の階段で転びそうになったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0950",
+"text": "まあ、紅葉がきれいだったし、ゲームのイベント周回してたね",
+"kind": "filler"
+},
+{
+"id": "f0863",
+"text": "まあ、ゲームのイベント周回してたし、カーテンを洗ったみたい",
+"kind": "filler"
+},
+{
+"id": "q27_n1",
+"text": "the meeting room on the fifth floor is booked all day",
+"kind": "hard_negative"
+},
+{
+"id": "f0320",
+"text": "おととい社内チャットの通知が多すぎるって",
+"kind": "filler"
+},
+{
+"id": "f1148",
+"text": "昨日の夜メールの返信がたまってるらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0953",
+"text": "まあ、鈴木くんがこの前カーテンを洗ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1445",
+"text": "anyway the spreadsheet formula keeps breaking, and the light bulb in my room burned out",
+"kind": "filler"
+},
+{
+"id": "f0099",
+"text": "あのー、最近植木に水やるの忘れてた",
+"kind": "filler"
+},
+{
+"id": "f1783",
+"text": "so my neighbor said the chat notifications never stop this morning",
+"kind": "filler"
+},
+{
+"id": "f1247",
+"text": "肩こりがひどいし、桜がもうすぐ咲きそうって",
+"kind": "filler"
+},
+{
+"id": "f1623",
+"text": "oh and I forgot to water the plants, and my shoulders are killing me",
+"kind": "filler"
+},
+{
+"id": "f0945",
+"text": "まあ、桜がもうすぐ咲きそうし、あくびが止まらないね",
+"kind": "filler"
+},
+{
+"id": "f1108",
+"text": "店長がこの前マラソン大会のボランティアしてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1273",
+"text": "隣の人が今日部屋の電球が切れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0923",
+"text": "まあ、抹茶のアイスが好きなんだよねし、唐揚げ作りすぎちゃったんだよね",
+"kind": "filler"
+},
+{
+"id": "f1640",
+"text": "oh and Tom said I made way too much fried chicken earlier",
+"kind": "filler"
+},
+{
+"id": "f0819",
+"text": "なんか、隣の人が今朝サッカーの代表戦、引き分けだったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0333",
+"text": "お父さんがさっきコンビニの新しいスイーツ食べてみたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0658",
+"text": "ていうか、百円ショップで収納ケース見つけたし、なんか甘いもの食べたいなあ",
+"kind": "filler"
+},
+{
+"id": "f0733",
+"text": "なんか、テレビのクイズ番組おもしろかったし、コーヒー豆を新しいのに変えたの",
+"kind": "filler"
+},
+{
+"id": "f1100",
+"text": "山本さんがおととい漫画の新刊が出てたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0543",
+"text": "ていうか、おとといエクセルの関数がうまく動かないね",
+"kind": "filler"
+},
+{
+"id": "f0031",
+"text": "あのー、ゲームのイベント周回してたし、肩こりがひどいんだよね",
+"kind": "filler"
+},
+{
+"id": "f0080",
+"text": "あのー、後輩が昨日の夜部屋の電球が切れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0602",
+"text": "ていうか、今朝コーヒー豆を新しいのに変えたよ",
+"kind": "filler"
+},
+{
+"id": "f0372",
+"text": "さっきまで肩こりがひどい",
+"kind": "filler"
+},
+{
+"id": "f0681",
+"text": "なんか、あくびが止まらないし、マラソン大会のボランティアしてたね",
+"kind": "filler"
+},
+{
+"id": "f1256",
+"text": "鈴木くんがおととい電車が人身事故で遅れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1077",
+"text": "先輩がさっきゲームのイベント周回してたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1112",
+"text": "店長が今朝ゲームのイベント周回してたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0061",
+"text": "あのー、先輩がおとといドラッグストアでティッシュ買ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0034",
+"text": "あのー、サッカーの代表戦、引き分けだったし、ドラマの続きが気になって寝られなかったね",
+"kind": "filler"
+},
+{
+"id": "f1371",
+"text": "anyway Jenny said the news was all about the typhoon the other day",
+"kind": "filler"
+},
+{
+"id": "f1374",
+"text": "anyway Lisa said my keyboard is acting up just now",
+"kind": "filler"
+},
+{
+"id": "f0935",
+"text": "まあ、昼過ぎにプリンターの紙詰まりがまた起きたね",
+"kind": "filler"
+},
+{
+"id": "f0402",
+"text": "そういえば、おとといパン屋さんのクロワッサンが美味しかったなあ",
+"kind": "filler"
+},
+{
+"id": "f1654",
+"text": "oh and just now the leaves are turning red",
+"kind": "filler"
+},
+{
+"id": "f1804",
+"text": "so the other day my bike chain came off",
+"kind": "filler"
+},
+{
+"id": "f1668",
+"text": "oh and that quiz show was hilarious, and the printer jammed again",
+"kind": "filler"
+},
+{
+"id": "f0364",
+"text": "さっきまでラジオで懐かしい曲が流れてたね",
+"kind": "filler"
+},
+{
+"id": "f0988",
+"text": "コーヒー豆を新しいのに変えたし、サッカーの代表戦、引き分けだったんだよね",
+"kind": "filler"
+},
+{
+"id": "f0900",
+"text": "まあ、先輩がさっき漫画の新刊が出てたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1160",
+"text": "昨日の夜電車が人身事故で遅れてたって",
+"kind": "filler"
+},
+{
+"id": "f0494",
+"text": "そういえば、朝からお味噌汁の味がちょっと薄かった",
+"kind": "filler"
+},
+{
+"id": "f1088",
+"text": "唐揚げ作りすぎちゃったし、動画を見てたら夜更かししちゃったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0662",
+"text": "ていうか、紅葉がきれいだったし、カーテンを洗ったよ",
+"kind": "filler"
+},
+{
+"id": "f0783",
+"text": "なんか、昼過ぎにエクセルの関数がうまく動かないかも",
+"kind": "filler"
+},
+{
+"id": "f1807",
+"text": "so the other day there was a marathon downtown",
+"kind": "filler"
+},
+{
+"id": "f0354",
+"text": "この前金魚の水槽を掃除したみたい",
+"kind": "filler"
+},
+{
+"id": "f0490",
+"text": "そういえば、最近バスが全然来なかった",
+"kind": "filler"
+},
+{
+"id": "f1631",
+"text": "oh and Jenny said it looked like it was going to rain yesterday",
+"kind": "filler"
+},
+{
+"id": "f1016",
+"text": "メールの返信がたまってるし、ドラマの続きが気になって寝られなかったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0186",
+"text": "えーと、コーヒー豆を新しいのに変えたし、あくびが止まらないって",
+"kind": "filler"
+},
+{
+"id": "f0392",
+"text": "そういえば、あの子が今日ニュースで台風のことやってたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0226",
+"text": "えーと、天気予報だと明日は晴れるらしいし、バスが全然来なかったんだよね",
+"kind": "filler"
+},
+{
+"id": "f1224",
+"text": "百円ショップで収納ケース見つけたし、金魚の水槽を掃除したんだよね",
+"kind": "filler"
+},
+{
+"id": "f0799",
+"text": "なんか、最近風が冷たくなってきたよ",
+"kind": "filler"
+},
+{
+"id": "f0664",
+"text": "ていうか、野球の試合、九回で逆転したんだってし、植木に水やるの忘れてたなあ",
+"kind": "filler"
+},
+{
+"id": "f1065",
+"text": "伊藤さんが今朝エクセルの関数がうまく動かないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1376",
+"text": "anyway Mike said I was grinding that game event last night",
+"kind": "filler"
+},
+{
+"id": "f1278",
+"text": "隣の人が最近パン屋さんのクロワッサンが美味しかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0513",
+"text": "そういえば、金魚の水槽を掃除したし、動画を見てたら夜更かししちゃったかも",
+"kind": "filler"
+},
+{
+"id": "f0225",
+"text": "えーと、天気予報だと明日は晴れるらしいし、お味噌汁の味がちょっと薄かったの",
+"kind": "filler"
+},
+{
+"id": "f0922",
+"text": "まあ、抹茶のアイスが好きなんだよねし、コンビニの新しいスイーツ食べてみたんだって",
+"kind": "filler"
+},
+{
+"id": "f1898",
+"text": "um, Alex said I couldn't stop watching that drama yesterday",
+"kind": "filler"
+},
+{
+"id": "f0708",
+"text": "なんか、この前肩こりがひどいね",
+"kind": "filler"
+},
+{
+"id": "f1127",
+"text": "後輩が昨日の夜コンビニの新しいスイーツ食べてみたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1622",
+"text": "oh and Alex said they played an old song on the radio the other day",
+"kind": "filler"
+},
+{
+"id": "f0231",
+"text": "えーと、妹がさっき漫画の新刊が出てたって言ってた",
+"kind": "filler"
+},
+{
+"id": "q28_n0",
+"text": "honestly I'm a bit afraid of flying",
+"kind": "hard_negative"
+},
+{
+"id": "f0307",
+"text": "えーと、高橋さんがこの前自転車のチェーンが外れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0247",
+"text": "えーと、後輩が最近エクセルの関数がうまく動かないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0462",
+"text": "そういえば、妹がおととい紅葉がきれいだったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0245",
+"text": "えーと、後輩が昨日の夜パン屋さんのクロワッサンが美味しかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1920",
+"text": "um, all afternoon the baseball game went into extra innings",
+"kind": "filler"
+},
+{
+"id": "f0125",
+"text": "あのー、高橋さんが昨日の夜電車が人身事故で遅れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "q11_r0",
+"text": "うちの車、車検が十一月で切れるから早めに予約しないと",
+"kind": "relevant"
+},
+{
+"id": "f1691",
+"text": "oh and there was a marathon downtown, and the bus never showed up",
+"kind": "filler"
+},
+{
+"id": "f0199",
+"text": "えーと、今日カーテンを洗ったみたい",
+"kind": "filler"
+},
+{
+"id": "f1307",
+"text": "I couldn't stop watching that drama, and the cherry blossoms are almost out",
+"kind": "filler"
+},
+{
+"id": "f1583",
+"text": "like, this morning there was a marathon downtown",
+"kind": "filler"
+},
+{
+"id": "f0533",
+"text": "そういえば、高橋さんが今朝部屋の電球が切れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1705",
+"text": "on the weekend eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f1648",
+"text": "oh and earlier the spreadsheet formula keeps breaking",
+"kind": "filler"
+},
+{
+"id": "f0989",
+"text": "コーヒー豆を新しいのに変えたし、社内チャットの通知が多すぎるかも",
+"kind": "filler"
+},
+{
+"id": "f1154",
+"text": "昨日の夜自転車のチェーンが外れたって",
+"kind": "filler"
+},
+{
+"id": "f0666",
+"text": "ていうか、鈴木くんがこの前電車が人身事故で遅れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0412",
+"text": "そういえば、この前風が冷たくなってきたって",
+"kind": "filler"
+},
+{
+"id": "f0009",
+"text": "あのー、おとといスーパーで卵が安かった",
+"kind": "filler"
+},
+{
+"id": "f1115",
+"text": "店長が昼過ぎにテレビのクイズ番組おもしろかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0912",
+"text": "まあ、山本さんが今日社内チャットの通知が多すぎるって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0003",
+"text": "あのー、あの子がおととい風が冷たくなってきたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1855",
+"text": "the new manga volume came out, and the croissants at the bakery were amazing",
+"kind": "filler"
+},
+{
+"id": "f0048",
+"text": "あのー、今日肩こりがひどいんだって",
+"kind": "filler"
+},
+{
+"id": "f1522",
+"text": "like, eggs were on sale at the supermarket, and I forgot to water the plants",
+"kind": "filler"
+},
+{
+"id": "f1911",
+"text": "um, Mike said my bike chain came off yesterday",
+"kind": "filler"
+},
+{
+"id": "f0143",
+"text": "うちの兄がさっきマラソン大会のボランティアしてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0796",
+"text": "なんか、最近ドラッグストアでティッシュ買ったね",
+"kind": "filler"
+},
+{
+"id": "f1663",
+"text": "oh and on the weekend I made way too much fried chicken",
+"kind": "filler"
+},
+{
+"id": "f1452",
+"text": "anyway this morning the new manga volume came out",
+"kind": "filler"
+},
+{
+"id": "f0450",
+"text": "そういえば、伊藤さんが最近コンビニの新しいスイーツ食べてみたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0338",
+"text": "お父さんが今朝雲がすごく低くて雨が降りそうって言ってた",
+"kind": "filler"
+},
+{
+"id": "q25_n0",
+"text": "映画館のポップコーンって高いよね",
+"kind": "hard_negative"
+},
+{
+"id": "f1902",
+"text": "um, I'm so sleepy, and I forgot to water the plants",
+"kind": "filler"
+},
+{
+"id": "f1157",
+"text": "昨日の夜野球の試合、九回で逆転したんだってって",
+"kind": "filler"
+},
+{
+"id": "f0588",
+"text": "ていうか、プリンターの紙詰まりがまた起きたし、天気予報だと明日は晴れるらしいんだよね",
+"kind": "filler"
+},
+{
+"id": "f1514",
+"text": "like, all afternoon I found storage boxes at the dollar store",
+"kind": "filler"
+},
+{
+"id": "f0785",
+"text": "なんか、昼過ぎにコンビニの新しいスイーツ食べてみたかも",
+"kind": "filler"
+},
+{
+"id": "f1276",
+"text": "隣の人が昨日の夜カーテンを洗ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0850",
+"text": "まあ、この前唐揚げ作りすぎちゃったんだって",
+"kind": "filler"
+},
+{
+"id": "f1173",
+"text": "昼過ぎに野球の試合、九回で逆転したんだってわ",
+"kind": "filler"
+},
+{
+"id": "f1849",
+"text": "the light bulb in my room burned out, and the weather forecast says it'll be sunny tomorrow",
+"kind": "filler"
+},
+{
+"id": "f1499",
+"text": "like, Alex said matcha ice cream is the best yesterday",
+"kind": "filler"
+},
+{
+"id": "f0717",
+"text": "なんか、さっきまで眠くて仕方ないなあ",
+"kind": "filler"
+},
+{
+"id": "f1473",
+"text": "it was really humid outside, and the croissants at the bakery were amazing",
+"kind": "filler"
+},
+{
+"id": "f1161",
+"text": "昨日の夜風が冷たくなってきたよ",
+"kind": "filler"
+},
+{
+"id": "q22_n1",
+"text": "車の運転って最近してないなあ",
+"kind": "hard_negative"
+},
+{
+"id": "f1225",
+"text": "眠くて仕方ないし、お味噌汁の味がちょっと薄かった",
+"kind": "filler"
+},
+{
+"id": "f1990",
+"text": "yesterday it was really humid outside",
+"kind": "filler"
+},
+{
+"id": "f1576",
+"text": "like, there was a line at the copier, and the new manga volume came out",
+"kind": "filler"
+},
+{
+"id": "f0765",
+"text": "なんか、公園で犬の散歩してる人が多かったし、ニュースで台風のことやってたわ",
+"kind": "filler"
+},
+{
+"id": "f0617",
+"text": "ていうか、妹がこの前日差しが強くて暑かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1703",
+"text": "on the weekend I switched to a new coffee brand",
+"kind": "filler"
+},
+{
+"id": "f1135",
+"text": "日差しが強くて暑かったし、コンビニの新しいスイーツ食べてみたの",
+"kind": "filler"
+},
+{
+"id": "f0596",
+"text": "ていうか、今日植木に水やるの忘れてたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0889",
+"text": "まあ、今朝ドラッグストアでティッシュ買ったなあ",
+"kind": "filler"
+},
+{
+"id": "f1347",
+"text": "Tom said I found storage boxes at the dollar store this morning",
+"kind": "filler"
+},
+{
+"id": "f0520",
+"text": "そういえば、隣の人がおととい野球の試合、九回で逆転したんだってって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0930",
+"text": "まあ、昨日の夜金魚の水槽を掃除したの",
+"kind": "filler"
+},
+{
+"id": "f0014",
+"text": "あのー、お父さんが今朝お味噌汁の味がちょっと薄かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0784",
+"text": "なんか、昼過ぎにコピー機の前で行列ができてたね",
+"kind": "filler"
+},
+{
+"id": "f0938",
+"text": "まあ、最近あくびが止まらないんだよね",
+"kind": "filler"
+},
+{
+"id": "f0232",
+"text": "えーと、妹が今朝コーヒー豆を新しいのに変えたって言ってた",
+"kind": "filler"
+},
+{
+"id": "q38_n1",
+"text": "business trips always mess up my sleep",
+"kind": "hard_negative"
+},
+{
+"id": "f0572",
+"text": "ていうか、さっき植木に水やるの忘れてたなあ",
+"kind": "filler"
+},
+{
+"id": "f1438",
+"text": "anyway the other day I made way too much fried chicken",
+"kind": "filler"
+},
+{
+"id": "f1658",
+"text": "oh and my brother said the miso soup was a little bland all afternoon",
+"kind": "filler"
+},
+{
+"id": "q11_n0",
+"text": "車のタイヤ、そろそろ冬用に替えないとね",
+"kind": "hard_negative"
+},
+{
+"id": "f0104",
+"text": "あのー、朝から風が冷たくなってきた",
+"kind": "filler"
+},
+{
+"id": "f1823",
+"text": "so yesterday the cherry blossoms are almost out",
+"kind": "filler"
+},
+{
+"id": "f0986",
+"text": "コンビニの新しいスイーツ食べてみたし、天気予報だと明日は晴れるらしいんだよね",
+"kind": "filler"
+},
+{
+"id": "f1508",
+"text": "like, Lisa said the light bulb in my room burned out last night",
+"kind": "filler"
+},
+{
+"id": "f0460",
+"text": "そういえば、天気予報だと明日は晴れるらしいし、ニュースで台風のことやってたよ",
+"kind": "filler"
+},
+{
+"id": "f0489",
+"text": "そういえば、昼過ぎに日差しが強くて暑かったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1539",
+"text": "like, my brother said the leaves are turning red last night",
+"kind": "filler"
+},
+{
+"id": "f1933",
+"text": "um, just now they played an old song on the radio",
+"kind": "filler"
+},
+{
+"id": "f0211",
+"text": "えーと、今朝ゲームのイベント周回してたの",
+"kind": "filler"
+},
+{
+"id": "q17_n0",
+"text": "結婚して何年になるっけ、うちら",
+"kind": "hard_negative"
+},
+{
+"id": "f1712",
+"text": "on the weekend the convenience store has a new dessert",
+"kind": "filler"
+},
+{
+"id": "q40_n0",
+"text": "my phone contract ends in March",
+"kind": "hard_negative"
+},
+{
+"id": "f0672",
+"text": "ていうか、隣の人がさっきあくびが止まらないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0012",
+"text": "あのー、おとといラジオで懐かしい曲が流れてたみたい",
+"kind": "filler"
+},
+{
+"id": "f0939",
+"text": "まあ、最近ニュースで台風のことやってたんだよね",
+"kind": "filler"
+},
+{
+"id": "f1965",
+"text": "um, the new guy said the new manga volume came out last night",
+"kind": "filler"
+},
+{
+"id": "f1064",
+"text": "伊藤さんがさっきコーヒー豆を新しいのに変えたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0683",
+"text": "なんか、あの子が今日雲がすごく低くて雨が降りそうって言ってた",
+"kind": "filler"
+},
+{
+"id": "q21_r0",
+"text": "えーとあのー例の資料なんですけどあさってまでに出してもらえれば大丈夫です",
+"kind": "relevant"
+},
+{
+"id": "f1294",
+"text": "高橋さんが今日ニュースで台風のことやってたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1652",
+"text": "oh and just now my inbox is out of control",
+"kind": "filler"
+},
+{
+"id": "f0720",
+"text": "なんか、さっきまで駅の階段で転びそうになったんだよね",
+"kind": "filler"
+},
+{
+"id": "f1071",
+"text": "伊藤さんが朝からメールの返信がたまってるって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0229",
+"text": "えーと、妹がこの前肩こりがひどいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0016",
+"text": "あのー、この前スーパーで卵が安かったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1694",
+"text": "oh and this morning the cicadas were so loud",
+"kind": "filler"
+},
+{
+"id": "f0847",
+"text": "まあ、お父さんがさっき漫画の新刊が出てたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1391",
+"text": "anyway earlier the chat notifications never stop",
+"kind": "filler"
+},
+{
+"id": "q17_r0",
+"text": "健太のとこ、式は六月の第二土曜日に決まったんだって",
+"kind": "relevant"
+},
+{
+"id": "f0555",
+"text": "ていうか、この前メールの返信がたまってるなあ",
+"kind": "filler"
+},
+{
+"id": "f0578",
+"text": "ていうか、コンビニの新しいスイーツ食べてみたし、お味噌汁の味がちょっと薄かったなあ",
+"kind": "filler"
+},
+{
+"id": "f1338",
+"text": "Mike said matcha ice cream is the best the other day",
+"kind": "filler"
+},
+{
+"id": "f0160",
+"text": "えーと、お父さんが朝から抹茶のアイスが好きなんだよねって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0952",
+"text": "まあ、鈴木くんがこの前なんか甘いもの食べたいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0209",
+"text": "えーと、今日雲がすごく低くて雨が降りそう",
+"kind": "filler"
+},
+{
+"id": "f0981",
+"text": "ゲームのイベント周回してたし、バスが全然来なかったんだよね",
+"kind": "filler"
+},
+{
+"id": "f1382",
+"text": "anyway Tom said the new manga volume came out on the weekend",
+"kind": "filler"
+},
+{
+"id": "f0079",
+"text": "あのー、後輩が今朝百円ショップで収納ケース見つけたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1195",
+"text": "最近電車が人身事故で遅れてたんだって",
+"kind": "filler"
+},
+{
+"id": "f1910",
+"text": "um, Mike said my bike chain came off on the weekend",
+"kind": "filler"
+},
+{
+"id": "f1797",
+"text": "so the baseball game went into extra innings, and they played an old song on the radio",
+"kind": "filler"
+},
+{
+"id": "f1565",
+"text": "like, the new guy said it looked like it was going to rain all afternoon",
+"kind": "filler"
+},
+{
+"id": "q46_n0",
+"text": "体調管理アプリ入れてみた",
+"kind": "hard_negative"
+},
+{
+"id": "f1101",
+"text": "山本さんがこの前自転車のチェーンが外れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1879",
+"text": "the weather forecast says it'll be sunny tomorrow, and I made way too much fried chicken",
+"kind": "filler"
+},
+{
+"id": "f0917",
+"text": "まあ、後輩がさっきまで漫画の新刊が出てたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1646",
+"text": "oh and earlier my shoulders are killing me",
+"kind": "filler"
+},
+{
+"id": "f0138",
+"text": "あの子が最近カーテンを洗ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1322",
+"text": "Jenny said my bike chain came off on the weekend",
+"kind": "filler"
+},
+{
+"id": "f0942",
+"text": "まあ、朝からメールの返信がたまってるみたい",
+"kind": "filler"
+},
+{
+"id": "f1296",
+"text": "高橋さんが今朝漫画の新刊が出てたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1923",
+"text": "um, it looked like it was going to rain, and the leaves are turning red",
+"kind": "filler"
+},
+{
+"id": "f0669",
+"text": "ていうか、鈴木くんが昼過ぎに自転車のチェーンが外れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1380",
+"text": "anyway Tom said the bus never showed up earlier",
+"kind": "filler"
+},
+{
+"id": "f1476",
+"text": "just now I'm so sleepy",
+"kind": "filler"
+},
+{
+"id": "q06_n0",
+"text": "引っ越し先の近くにスーパーあるといいね",
+"kind": "hard_negative"
+},
+{
+"id": "f1306",
+"text": "Alex said there was a marathon downtown yesterday",
+"kind": "filler"
+},
+{
+"id": "f0271",
+"text": "えーと、朝から駅の階段で転びそうになったって",
+"kind": "filler"
+},
+{
+"id": "f0644",
+"text": "ていうか、最近ゲームのイベント周回してたんだよね",
+"kind": "filler"
+},
+{
+"id": "f0421",
+"text": "そういえば、さっきメールの返信がたまってるって",
+"kind": "filler"
+},
+{
+"id": "f1643",
+"text": "oh and all afternoon the convenience store has a new dessert",
+"kind": "filler"
+},
+{
+"id": "f1662",
+"text": "oh and my shoulders are killing me, and the light bulb in my room burned out",
+"kind": "filler"
+},
+{
+"id": "f0663",
+"text": "ていうか、部屋の電球が切れたし、肩こりがひどいんだよね",
+"kind": "filler"
+},
+{
+"id": "f1991",
+"text": "yesterday my inbox is out of control",
+"kind": "filler"
+},
+{
+"id": "f0631",
+"text": "ていうか、後輩が朝からバスが全然来なかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1429",
+"text": "anyway the miso soup was a little bland, and the train was delayed again",
+"kind": "filler"
+},
+{
+"id": "f1420",
+"text": "anyway on the weekend my shoulders are killing me",
+"kind": "filler"
+},
+{
+"id": "f1874",
+"text": "the spreadsheet formula keeps breaking, and the baseball game went into extra innings",
+"kind": "filler"
+},
+{
+"id": "f1978",
+"text": "um, this morning I was grinding that game event",
+"kind": "filler"
+},
+{
+"id": "f1334",
+"text": "Lisa said the spreadsheet formula keeps breaking this morning",
+"kind": "filler"
+},
+{
+"id": "f0096",
+"text": "あのー、昼過ぎにマラソン大会のボランティアしてたって",
+"kind": "filler"
+},
+{
+"id": "q21_n1",
+"text": "締め切り前ってなんで部屋の掃除したくなるんだろう",
+"kind": "hard_negative"
+},
+{
+"id": "f0791",
+"text": "なんか、昼過ぎに紅葉がきれいだったみたい",
+"kind": "filler"
+},
+{
+"id": "f0629",
+"text": "ていうか、後輩が今日プリンターの紙詰まりがまた起きたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1356",
+"text": "all afternoon eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f1232",
+"text": "社内チャットの通知が多すぎるし、ニュースで台風のことやってたね",
+"kind": "filler"
+},
+{
+"id": "f1542",
+"text": "like, my roommate said I forgot to water the plants the other day",
+"kind": "filler"
+},
+{
+"id": "f1697",
+"text": "oh and yesterday I'm craving something sweet",
+"kind": "filler"
+},
+{
+"id": "f0246",
+"text": "えーと、後輩が昨日の夜動画を見てたら夜更かししちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1721",
+"text": "our manager said my inbox is out of control last night",
+"kind": "filler"
+},
+{
+"id": "f0482",
+"text": "そういえば、昨日の夜サッカーの代表戦、引き分けだったなあ",
+"kind": "filler"
+},
+{
+"id": "f0929",
+"text": "まあ、昨日の夜公園で犬の散歩してる人が多かったんだよね",
+"kind": "filler"
+},
+{
+"id": "f0217",
+"text": "えーと、伊藤さんが今朝自転車のチェーンが外れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1134",
+"text": "抹茶のアイスが好きなんだよねし、電車が人身事故で遅れてたんだって",
+"kind": "filler"
+},
+{
+"id": "f1765",
+"text": "so last night my keyboard is acting up",
+"kind": "filler"
+},
+{
+"id": "f1997",
+"text": "yesterday the leaves are turning red",
+"kind": "filler"
+},
+{
+"id": "f1635",
+"text": "oh and Lisa said my keyboard is acting up this morning",
+"kind": "filler"
+},
+{
+"id": "f1414",
+"text": "anyway my neighbor said they played an old song on the radio all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1706",
+"text": "on the weekend matcha ice cream is the best",
+"kind": "filler"
+},
+{
+"id": "f0500",
+"text": "そういえば、朝から公園で犬の散歩してる人が多かったんだって",
+"kind": "filler"
+},
+{
+"id": "f1835",
+"text": "the chat notifications never stop, and the cherry blossoms are almost out",
+"kind": "filler"
+},
+{
+"id": "f1204",
+"text": "朝から動画を見てたら夜更かししちゃったんだって",
+"kind": "filler"
+},
+{
+"id": "f0022",
+"text": "あのー、さっきまで部屋の電球が切れたわ",
+"kind": "filler"
+},
+{
+"id": "f1673",
+"text": "oh and the leaves are turning red, and the news was all about the typhoon",
+"kind": "filler"
+},
+{
+"id": "f1934",
+"text": "um, last night I made way too much fried chicken",
+"kind": "filler"
+},
+{
+"id": "f1756",
+"text": "so earlier my inbox is out of control",
+"kind": "filler"
+},
+{
+"id": "f0047",
+"text": "あのー、今日漫画の新刊が出てたんだよね",
+"kind": "filler"
+},
+{
+"id": "f0324",
+"text": "おととい雲がすごく低くて雨が降りそうんだよね",
+"kind": "filler"
+},
+{
+"id": "f0250",
+"text": "えーと、日差しが強くて暑かったし、百円ショップで収納ケース見つけたの",
+"kind": "filler"
+},
+{
+"id": "f0294",
+"text": "えーと、隣の人が朝から眠くて仕方ないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0455",
+"text": "そういえば、先輩が最近ゲームのイベント周回してたって言ってた",
+"kind": "filler"
+},
+{
+"id": "q32_r0",
+"text": "the landlord finally sent a plumber and the kitchen sink isn't dripping anymore",
+"kind": "relevant"
+},
+{
+"id": "f0564",
+"text": "ていうか、さっきまで抹茶のアイスが好きなんだよねって",
+"kind": "filler"
+},
+{
+"id": "f0074",
+"text": "あのー、山本さんが昨日の夜紅葉がきれいだったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0820",
+"text": "なんか、隣の人が今朝部屋の電球が切れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0993",
+"text": "セミがうるさかったし、あくびが止まらないらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0743",
+"text": "なんか、今日キーボードの調子が悪いわ",
+"kind": "filler"
+},
+{
+"id": "q46_n1",
+"text": "休みの日は家でごろごろしたい",
+"kind": "hard_negative"
+},
+{
+"id": "f1475",
+"text": "just now I couldn't stop watching that drama",
+"kind": "filler"
+},
+{
+"id": "f0495",
+"text": "そういえば、朝からカーテンを洗ったみたい",
+"kind": "filler"
+},
+{
+"id": "f1283",
+"text": "電車が人身事故で遅れてたし、自転車のチェーンが外れたんだよね",
+"kind": "filler"
+},
+{
+"id": "f1647",
+"text": "oh and earlier the leaves are turning red",
+"kind": "filler"
+},
+{
+"id": "f1396",
+"text": "anyway just now the croissants at the bakery were amazing",
+"kind": "filler"
+},
+{
+"id": "f0675",
+"text": "ていうか、雲がすごく低くて雨が降りそうし、コーヒー豆を新しいのに変えたわ",
+"kind": "filler"
+},
+{
+"id": "f0162",
+"text": "えーと、この前サッカーの代表戦、引き分けだったんだよね",
+"kind": "filler"
+},
+{
+"id": "f1852",
+"text": "the new guy said it looked like it was going to rain on the weekend",
+"kind": "filler"
+},
+{
+"id": "f0676",
+"text": "ていうか、風が冷たくなってきたし、セミがうるさかったみたい",
+"kind": "filler"
+},
+{
+"id": "f0682",
+"text": "なんか、あの子がこの前なんか甘いもの食べたいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1093",
+"text": "妹が今朝天気予報だと明日は晴れるらしいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0619",
+"text": "ていうか、妹が最近ゲームのイベント周回してたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1169",
+"text": "昼過ぎに桜がもうすぐ咲きそう",
+"kind": "filler"
+},
+{
+"id": "f1215",
+"text": "桜がもうすぐ咲きそうし、日差しが強くて暑かったなあ",
+"kind": "filler"
+},
+{
+"id": "f0833",
+"text": "なんか甘いもの食べたいし、駅の階段で転びそうになったの",
+"kind": "filler"
+},
+{
+"id": "f0704",
+"text": "なんか、この前バスが全然来なかった",
+"kind": "filler"
+},
+{
+"id": "f0977",
+"text": "キーボードの調子が悪いし、肩こりがひどいんだよね",
+"kind": "filler"
+},
+{
+"id": "f1975",
+"text": "um, there was a line at the copier, and the convenience store has a new dessert",
+"kind": "filler"
+},
+{
+"id": "f1505",
+"text": "like, I'm craving something sweet, and they played an old song on the radio",
+"kind": "filler"
+},
+{
+"id": "f1899",
+"text": "um, I forgot to water the plants, and I cleaned the fish tank",
+"kind": "filler"
+},
+{
+"id": "f0548",
+"text": "ていうか、お味噌汁の味がちょっと薄かったし、金魚の水槽を掃除したわ",
+"kind": "filler"
+},
+{
+"id": "f1492",
+"text": "last night it looked like it was going to rain",
+"kind": "filler"
+},
+{
+"id": "f0695",
+"text": "なんか、おととい漫画の新刊が出てたんだよね",
+"kind": "filler"
+},
+{
+"id": "f1340",
+"text": "Mike said the light bulb in my room burned out earlier",
+"kind": "filler"
+},
+{
+"id": "f1084",
+"text": "公園で犬の散歩してる人が多かったし、風が冷たくなってきた",
+"kind": "filler"
+},
+{
+"id": "f1752",
+"text": "so all afternoon the new manga volume came out",
+"kind": "filler"
+},
+{
+"id": "f1010",
+"text": "マラソン大会のボランティアしてたし、ドラッグストアでティッシュ買った",
+"kind": "filler"
+},
+{
+"id": "f0420",
+"text": "そういえば、さっきパン屋さんのクロワッサンが美味しかったって",
+"kind": "filler"
+},
+{
+"id": "f1709",
+"text": "on the weekend the bus never showed up",
+"kind": "filler"
+},
+{
+"id": "f0746",
+"text": "なんか、今日マラソン大会のボランティアしてたの",
+"kind": "filler"
+},
+{
+"id": "f0984",
+"text": "コピー機の前で行列ができてたし、雲がすごく低くて雨が降りそうって",
+"kind": "filler"
+},
+{
+"id": "f1644",
+"text": "oh and all afternoon the printer jammed again",
+"kind": "filler"
+},
+{
+"id": "f0131",
+"text": "あの子がこの前金魚の水槽を掃除したって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1822",
+"text": "so yesterday I'm so sleepy",
+"kind": "filler"
+},
+{
+"id": "f1006",
+"text": "ニュースで台風のことやってたし、駅の階段で転びそうになったかも",
+"kind": "filler"
+},
+{
+"id": "f0060",
+"text": "あのー、伊藤さんが朝からエクセルの関数がうまく動かないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0112",
+"text": "あのー、紅葉がきれいだったし、なんか甘いもの食べたいなあ",
+"kind": "filler"
+},
+{
+"id": "f1798",
+"text": "so the cherry blossoms are almost out, and the baseball game went into extra innings",
+"kind": "filler"
+},
+{
+"id": "f1633",
+"text": "oh and Lisa said I switched to a new coffee brand the other day",
+"kind": "filler"
+},
+{
+"id": "f1355",
+"text": "all afternoon I'm craving something sweet",
+"kind": "filler"
+},
+{
+"id": "f1596",
+"text": "my brother said I made way too much fried chicken just now",
+"kind": "filler"
+},
+{
+"id": "f1163",
+"text": "昼過ぎになんか甘いもの食べたいんだって",
+"kind": "filler"
+},
+{
+"id": "f1008",
+"text": "プリンターの紙詰まりがまた起きたし、エクセルの関数がうまく動かないかも",
+"kind": "filler"
+},
+{
+"id": "f0088",
+"text": "あのー、昨日の夜自転車のチェーンが外れたみたい",
+"kind": "filler"
+},
+{
+"id": "f0736",
+"text": "なんか、ニュースで台風のことやってたし、天気予報だと明日は晴れるらしいらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0053",
+"text": "あのー、今朝社内チャットの通知が多すぎるよ",
+"kind": "filler"
+},
+{
+"id": "f1585",
+"text": "like, yesterday it looked like it was going to rain",
+"kind": "filler"
+},
+{
+"id": "f1733",
+"text": "so I cleaned the fish tank, and there was a marathon downtown",
+"kind": "filler"
+},
+{
+"id": "q18_n0",
+"text": "ゴミ袋がもうなくなりそう",
+"kind": "hard_negative"
+},
+{
+"id": "f0637",
+"text": "ていうか、昨日の夜金魚の水槽を掃除したみたい",
+"kind": "filler"
+},
+{
+"id": "f1442",
+"text": "anyway the other day the news was all about the typhoon",
+"kind": "filler"
+},
+{
+"id": "f1928",
+"text": "um, just now eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f1809",
+"text": "so the train was delayed again, and my shoulders are killing me",
+"kind": "filler"
+},
+{
+"id": "q24_r0",
+"text": "今度来た部長、話しやすくていい人そうだったよ",
+"kind": "relevant"
+},
+{
+"id": "f0312",
+"text": "おとといキーボードの調子が悪いって",
+"kind": "filler"
+},
+{
+"id": "f1004",
+"text": "ニュースで台風のことやってたし、動画を見てたら夜更かししちゃったよ",
+"kind": "filler"
+},
+{
+"id": "f0472",
+"text": "そういえば、店長がさっきまで動画を見てたら夜更かししちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0401",
+"text": "そういえば、おとといバスが全然来なかったって",
+"kind": "filler"
+},
+{
+"id": "f1428",
+"text": "anyway the croissants at the bakery were amazing, and I was grinding that game event",
+"kind": "filler"
+},
+{
+"id": "f0645",
+"text": "ていうか、最近ラジオで懐かしい曲が流れてたよ",
+"kind": "filler"
+},
+{
+"id": "f0219",
+"text": "えーと、伊藤さんが昼過ぎに唐揚げ作りすぎちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0301",
+"text": "えーと、電車が人身事故で遅れてたし、桜がもうすぐ咲きそうらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1716",
+"text": "on the weekend the weather forecast says it'll be sunny tomorrow",
+"kind": "filler"
+},
+{
+"id": "q46_r0",
+"text": "佐藤さん、昨日から熱があって会社休んでるらしいよ",
+"kind": "relevant"
+},
+{
+"id": "f1218",
+"text": "漫画の新刊が出てたし、セミがうるさかったよ",
+"kind": "filler"
+},
+{
+"id": "f1279",
+"text": "隣の人が最近日差しが強くて暑かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0167",
+"text": "えーと、この前ラジオで懐かしい曲が流れてたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0155",
+"text": "えーと、おとといニュースで台風のことやってたんだよね",
+"kind": "filler"
+},
+{
+"id": "f0463",
+"text": "そういえば、妹がこの前ニュースで台風のことやってたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1714",
+"text": "on the weekend the miso soup was a little bland",
+"kind": "filler"
+},
+{
+"id": "f0120",
+"text": "あのー、鈴木くんが昨日の夜ゲームのイベント周回してたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1805",
+"text": "so the other day the baseball game went into extra innings",
+"kind": "filler"
+},
+{
+"id": "f1166",
+"text": "昼過ぎにニュースで台風のことやってたんだよね",
+"kind": "filler"
+},
+{
+"id": "f0996",
+"text": "テレビのクイズ番組おもしろかったし、桜がもうすぐ咲きそうの",
+"kind": "filler"
+},
+{
+"id": "f0291",
+"text": "えーと、隣の人が昨日の夜ゲームのイベント周回してたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0297",
+"text": "えーと、雲がすごく低くて雨が降りそうし、日差しが強くて暑かったね",
+"kind": "filler"
+},
+{
+"id": "f1277",
+"text": "隣の人が昼過ぎにマラソン大会のボランティアしてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1123",
+"text": "後輩がさっき漫画の新刊が出てたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0075",
+"text": "あのー、店長がさっきまで社内チャットの通知が多すぎるって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0628",
+"text": "ていうか、後輩がさっきまでバスが全然来なかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0156",
+"text": "えーと、おとといパン屋さんのクロワッサンが美味しかったみたい",
+"kind": "filler"
+},
+{
+"id": "f0506",
+"text": "そういえば、漫画の新刊が出てたし、セミがうるさかったの",
+"kind": "filler"
+},
+{
+"id": "f1889",
+"text": "this morning it was really humid outside",
+"kind": "filler"
+},
+{
+"id": "f1464",
+"text": "earlier my inbox is out of control",
+"kind": "filler"
+},
+{
+"id": "f1884",
+"text": "they played an old song on the radio, and the miso soup was a little bland",
+"kind": "filler"
+},
+{
+"id": "f0423",
+"text": "そういえば、エクセルの関数がうまく動かないし、天気予報だと明日は晴れるらしいかも",
+"kind": "filler"
+},
+{
+"id": "f0425",
+"text": "そういえば、コーヒー豆を新しいのに変えたし、桜がもうすぐ咲きそうんだって",
+"kind": "filler"
+},
+{
+"id": "f0025",
+"text": "あのー、さっき抹茶のアイスが好きなんだよねみたい",
+"kind": "filler"
+},
+{
+"id": "f1794",
+"text": "so our manager said I made way too much fried chicken all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1180",
+"text": "最近サッカーの代表戦、引き分けだったよ",
+"kind": "filler"
+},
+{
+"id": "f1260",
+"text": "鈴木くんがさっき駅の階段で転びそうになったって言ってた",
+"kind": "filler"
+},
+{
+"id": "q20_n1",
+"text": "パスポートの更新ってどこでやるんだっけ",
+"kind": "hard_negative"
+},
+{
+"id": "f0105",
+"text": "あのー、朝から駅の階段で転びそうになったわ",
+"kind": "filler"
+},
+{
+"id": "f0590",
+"text": "ていうか、マラソン大会のボランティアしてたし、スーパーで卵が安かったみたい",
+"kind": "filler"
+},
+{
+"id": "f0171",
+"text": "えーと、さっきまであくびが止まらないんだって",
+"kind": "filler"
+},
+{
+"id": "f1367",
+"text": "anyway I switched to a new coffee brand, and the bus never showed up",
+"kind": "filler"
+},
+{
+"id": "f0163",
+"text": "えーと、この前スーパーで卵が安かったね",
+"kind": "filler"
+},
+{
+"id": "f1887",
+"text": "this morning I couldn't stop watching that drama",
+"kind": "filler"
+},
+{
+"id": "f0295",
+"text": "えーと、隣の人が朝から風が冷たくなってきたって言ってた",
+"kind": "filler"
+},
+{
+"id": "q20_r0",
+"text": "自動車保険の更新案内が来てて、今月末までに手続きしないと",
+"kind": "relevant"
+},
+{
+"id": "f0260",
+"text": "えーと、昼過ぎに金魚の水槽を掃除したって",
+"kind": "filler"
+},
+{
+"id": "f0558",
+"text": "ていうか、この前駅の階段で転びそうになったって",
+"kind": "filler"
+},
+{
+"id": "f0601",
+"text": "ていうか、今朝コピー機の前で行列ができてたの",
+"kind": "filler"
+},
+{
+"id": "f0169",
+"text": "えーと、この前植木に水やるの忘れてたかも",
+"kind": "filler"
+},
+{
+"id": "f1517",
+"text": "like, all afternoon the bus never showed up",
+"kind": "filler"
+},
+{
+"id": "f0955",
+"text": "まあ、隣の人が今日ゲームのイベント周回してたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1888",
+"text": "this morning I found storage boxes at the dollar store",
+"kind": "filler"
+},
+{
+"id": "f0903",
+"text": "まあ、公園で犬の散歩してる人が多かったし、駅の階段で転びそうになったわ",
+"kind": "filler"
+},
+{
+"id": "f1527",
+"text": "like, just now the soccer match ended in a draw",
+"kind": "filler"
+},
+{
+"id": "q30_n0",
+"text": "the login page design looks a bit dated",
+"kind": "hard_negative"
+},
+{
+"id": "q39_n1",
+"text": "I started running again in April",
+"kind": "hard_negative"
+},
+{
+"id": "f1287",
+"text": "風が冷たくなってきたし、社内チャットの通知が多すぎるんだよね",
+"kind": "filler"
+},
+{
+"id": "f1614",
+"text": "my roommate said it was really humid outside this morning",
+"kind": "filler"
+},
+{
+"id": "f1677",
+"text": "oh and the new guy said the bus never showed up this morning",
+"kind": "filler"
+},
+{
+"id": "f0877",
+"text": "まあ、メールの返信がたまってるし、ラジオで懐かしい曲が流れてたかも",
+"kind": "filler"
+},
+{
+"id": "f1048",
+"text": "今朝マラソン大会のボランティアしてたみたい",
+"kind": "filler"
+},
+{
+"id": "f1252",
+"text": "部屋の電球が切れたし、コーヒー豆を新しいのに変えたよ",
+"kind": "filler"
+},
+{
+"id": "f1405",
+"text": "anyway my brother said matcha ice cream is the best last night",
+"kind": "filler"
+},
+{
+"id": "f1722",
+"text": "our manager said my keyboard is acting up earlier",
+"kind": "filler"
+},
+{
+"id": "q08_r0",
+"text": "じゃあ今回はリリースを二週間延ばすってことで決定にしましょう",
+"kind": "relevant"
+},
+{
+"id": "f1022",
+"text": "今日ゲームのイベント周回してたの",
+"kind": "filler"
+},
+{
+"id": "f0503",
+"text": "そういえば、朝から部屋の電球が切れたかも",
+"kind": "filler"
+},
+{
+"id": "f0351",
+"text": "この前マラソン大会のボランティアしてた",
+"kind": "filler"
+},
+{
+"id": "f1055",
+"text": "今朝眠くて仕方ないよ",
+"kind": "filler"
+},
+{
+"id": "f0748",
+"text": "なんか、今日日差しが強くて暑かったわ",
+"kind": "filler"
+},
+{
+"id": "f1114",
+"text": "店長が昨日の夜日差しが強くて暑かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0108",
+"text": "あのー、百円ショップで収納ケース見つけたし、自転車のチェーンが外れたよ",
+"kind": "filler"
+},
+{
+"id": "f1199",
+"text": "朝からなんか甘いもの食べたいね",
+"kind": "filler"
+},
+{
+"id": "f0032",
+"text": "あのー、ゲームのイベント周回してたし、自転車のチェーンが外れたって",
+"kind": "filler"
+},
+{
+"id": "f0152",
+"text": "えーと、うちの兄がこの前ラジオで懐かしい曲が流れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1259",
+"text": "鈴木くんがさっきキーボードの調子が悪いって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1963",
+"text": "um, the new guy said I couldn't stop watching that drama the other day",
+"kind": "filler"
+},
+{
+"id": "f1904",
+"text": "um, Jenny said the soccer match ended in a draw just now",
+"kind": "filler"
+},
+{
+"id": "f0289",
+"text": "えーと、隣の人が今日スーパーで卵が安かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1319",
+"text": "I switched to a new coffee brand, and I'm so sleepy",
+"kind": "filler"
+},
+{
+"id": "f1107",
+"text": "店長がおととい部屋の電球が切れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1766",
+"text": "so last night my shoulders are killing me",
+"kind": "filler"
+},
+{
+"id": "f0958",
+"text": "まあ、雲がすごく低くて雨が降りそうし、百円ショップで収納ケース見つけたよ",
+"kind": "filler"
+},
+{
+"id": "f1732",
+"text": "so I cleaned the fish tank, and matcha ice cream is the best",
+"kind": "filler"
+},
+{
+"id": "f0302",
+"text": "えーと、風が冷たくなってきたし、社内チャットの通知が多すぎるんだよね",
+"kind": "filler"
+},
+{
+"id": "f0891",
+"text": "まあ、今朝唐揚げ作りすぎちゃったんだって",
+"kind": "filler"
+},
+{
+"id": "f0021",
+"text": "あのー、さっきまで眠くて仕方ないって",
+"kind": "filler"
+},
+{
+"id": "f0265",
+"text": "えーと、最近電車が人身事故で遅れてた",
+"kind": "filler"
+},
+{
+"id": "f0640",
+"text": "ていうか、昼過ぎにサッカーの代表戦、引き分けだった",
+"kind": "filler"
+},
+{
+"id": "f0268",
+"text": "えーと、朝からテレビのクイズ番組おもしろかったって",
+"kind": "filler"
+},
+{
+"id": "f1490",
+"text": "last night I'm so sleepy",
+"kind": "filler"
+},
+{
+"id": "f0705",
+"text": "なんか、この前プリンターの紙詰まりがまた起きたかも",
+"kind": "filler"
+},
+{
+"id": "f0373",
+"text": "さっきまで野球の試合、九回で逆転したんだってらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1815",
+"text": "so this morning the chat notifications never stop",
+"kind": "filler"
+},
+{
+"id": "f0102",
+"text": "あのー、朝からゲームのイベント周回してたの",
+"kind": "filler"
+},
+{
+"id": "f0218",
+"text": "えーと、伊藤さんが今朝部屋の電球が切れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1656",
+"text": "oh and my bike chain came off, and the spreadsheet formula keeps breaking",
+"kind": "filler"
+},
+{
+"id": "f0113",
+"text": "あのー、紅葉がきれいだったし、コーヒー豆を新しいのに変えたね",
+"kind": "filler"
+},
+{
+"id": "f0874",
+"text": "まあ、プリンターの紙詰まりがまた起きたし、肩こりがひどいって",
+"kind": "filler"
+},
+{
+"id": "q09_n1",
+"text": "修理に出してたカメラ戻ってきたよ",
+"kind": "hard_negative"
+},
+{
+"id": "f1682",
+"text": "oh and the other day the spreadsheet formula keeps breaking",
+"kind": "filler"
+},
+{
+"id": "f1360",
+"text": "all afternoon the bus never showed up",
+"kind": "filler"
+},
+{
+"id": "f1094",
+"text": "妹が昼過ぎにキーボードの調子が悪いって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1816",
+"text": "so this morning the leaves are turning red",
+"kind": "filler"
+},
+{
+"id": "f0782",
+"text": "なんか、昨日の夜部屋の電球が切れたわ",
+"kind": "filler"
+},
+{
+"id": "f1392",
+"text": "anyway it was really humid outside, and I'm so sleepy",
+"kind": "filler"
+},
+{
+"id": "f0157",
+"text": "えーと、おととい抹茶のアイスが好きなんだよねね",
+"kind": "filler"
+},
+{
+"id": "f1237",
+"text": "社内チャットの通知が多すぎるし、漫画の新刊が出てた",
+"kind": "filler"
+},
+{
+"id": "f1372",
+"text": "anyway Lisa said I switched to a new coffee brand this morning",
+"kind": "filler"
+},
+{
+"id": "f0146",
+"text": "うちの兄が今朝プリンターの紙詰まりがまた起きたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1019",
+"text": "ラジオで懐かしい曲が流れてたし、百円ショップで収納ケース見つけたよ",
+"kind": "filler"
+},
+{
+"id": "f1437",
+"text": "anyway the new manga volume came out, and there was a marathon downtown",
+"kind": "filler"
+},
+{
+"id": "f1263",
+"text": "鈴木くんが今朝部屋の電球が切れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1025",
+"text": "今日コーヒー豆を新しいのに変えたよ",
+"kind": "filler"
+},
+{
+"id": "f0426",
+"text": "そういえば、サッカーの代表戦、引き分けだったし、お味噌汁の味がちょっと薄かったかも",
+"kind": "filler"
+},
+{
+"id": "f1223",
+"text": "百円ショップで収納ケース見つけたし、紅葉がきれいだったんだよね",
+"kind": "filler"
+},
+{
+"id": "f1030",
+"text": "今日抹茶のアイスが好きなんだよねんだよね",
+"kind": "filler"
+},
+{
+"id": "f0440",
+"text": "そういえば、今日肩こりがひどいって",
+"kind": "filler"
+},
+{
+"id": "f0910",
+"text": "まあ、妹がさっきドラマの続きが気になって寝られなかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1586",
+"text": "like, yesterday the leaves are turning red",
+"kind": "filler"
+},
+{
+"id": "f1962",
+"text": "um, the miso soup was a little bland, and the new manga volume came out",
+"kind": "filler"
+},
+{
+"id": "f1593",
+"text": "my bike chain came off, and the train was delayed again",
+"kind": "filler"
+},
+{
+"id": "f0536",
+"text": "ていうか、あの子が昨日の夜漫画の新刊が出てたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0978",
+"text": "キーボードの調子が悪いし、部屋の電球が切れたみたい",
+"kind": "filler"
+},
+{
+"id": "q34_r0",
+"text": "the recruiter called and they want me back for a final round next week",
+"kind": "relevant"
+},
+{
+"id": "f0818",
+"text": "なんか、隣の人がさっき雲がすごく低くて雨が降りそうって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0435",
+"text": "そういえば、メールの返信がたまってるし、眠くて仕方ないかも",
+"kind": "filler"
+},
+{
+"id": "f1940",
+"text": "um, my brother said the train was delayed again yesterday",
+"kind": "filler"
+},
+{
+"id": "f1900",
+"text": "um, I forgot to water the plants, and I made way too much fried chicken",
+"kind": "filler"
+},
+{
+"id": "f0164",
+"text": "えーと、この前テレビのクイズ番組おもしろかったなあ",
+"kind": "filler"
+},
+{
+"id": "f0830",
+"text": "なんか甘いもの食べたいし、スーパーで卵が安かったの",
+"kind": "filler"
+},
+{
+"id": "f0121",
+"text": "あのー、電車が人身事故で遅れてたし、コーヒー豆を新しいのに変えた",
+"kind": "filler"
+},
+{
+"id": "f1882",
+"text": "there was a line at the copier, and the spreadsheet formula keeps breaking",
+"kind": "filler"
+},
+{
+"id": "f0029",
+"text": "あのー、カーテンを洗ったし、コンビニの新しいスイーツ食べてみた",
+"kind": "filler"
+},
+{
+"id": "f1229",
+"text": "眠くて仕方ないし、金魚の水槽を掃除したね",
+"kind": "filler"
+},
+{
+"id": "f0793",
+"text": "なんか、最近コピー機の前で行列ができてたね",
+"kind": "filler"
+},
+{
+"id": "f1368",
+"text": "anyway I was grinding that game event, and the train was delayed again",
+"kind": "filler"
+},
+{
+"id": "f1431",
+"text": "anyway the new guy said that quiz show was hilarious all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1140",
+"text": "昨日の夜ゲームのイベント周回してたみたい",
+"kind": "filler"
+},
+{
+"id": "f0142",
+"text": "うちの兄がさっきキーボードの調子が悪いって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0509",
+"text": "そういえば、社内チャットの通知が多すぎるし、お味噌汁の味がちょっと薄かった",
+"kind": "filler"
+},
+{
+"id": "f1679",
+"text": "oh and the other day eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f1424",
+"text": "anyway our manager said the cherry blossoms are almost out on the weekend",
+"kind": "filler"
+},
+{
+"id": "f1621",
+"text": "oh and Alex said the leaves are turning red just now",
+"kind": "filler"
+},
+{
+"id": "f1750",
+"text": "so all afternoon I'm craving something sweet",
+"kind": "filler"
+},
+{
+"id": "f1984",
+"text": "um, yesterday the cherry blossoms are almost out",
+"kind": "filler"
+},
+{
+"id": "f0954",
+"text": "まあ、鈴木くんが最近野球の試合、九回で逆転したんだってって言ってた",
+"kind": "filler"
+},
+{
+"id": "q29_n1",
+"text": "Wednesday is always my busiest day",
+"kind": "hard_negative"
+},
+{
+"id": "f1814",
+"text": "so this morning it looked like it was going to rain",
+"kind": "filler"
+},
+{
+"id": "f0432",
+"text": "そういえば、バスが全然来なかったし、動画を見てたら夜更かししちゃったよ",
+"kind": "filler"
+},
+{
+"id": "f1184",
+"text": "最近植木に水やるの忘れてたわ",
+"kind": "filler"
+},
+{
+"id": "f0518",
+"text": "そういえば、鈴木くんが昼過ぎに駅の階段で転びそうになったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1378",
+"text": "anyway Mike said the chat notifications never stop earlier",
+"kind": "filler"
+},
+{
+"id": "f1257",
+"text": "鈴木くんがこの前ニュースで台風のことやってたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1051",
+"text": "今朝日差しが強くて暑かったかも",
+"kind": "filler"
+},
+{
+"id": "f1061",
+"text": "今朝風が冷たくなってきたんだよね",
+"kind": "filler"
+},
+{
+"id": "f1153",
+"text": "昨日の夜桜がもうすぐ咲きそうよ",
+"kind": "filler"
+},
+{
+"id": "f0897",
+"text": "まあ、伊藤さんがさっき天気予報だと明日は晴れるらしいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1436",
+"text": "anyway the new guy said the spreadsheet formula keeps breaking last night",
+"kind": "filler"
+},
+{
+"id": "f0622",
+"text": "ていうか、店長がさっき風が冷たくなってきたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1171",
+"text": "昼過ぎに植木に水やるの忘れてたかも",
+"kind": "filler"
+},
+{
+"id": "f1208",
+"text": "朝から百円ショップで収納ケース見つけたって",
+"kind": "filler"
+},
+{
+"id": "f0963",
+"text": "まあ、高橋さんが今日百円ショップで収納ケース見つけたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0834",
+"text": "まあ、あの子がこの前抹茶のアイスが好きなんだよねって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0880",
+"text": "まあ、ラジオで懐かしい曲が流れてたし、キーボードの調子が悪いわ",
+"kind": "filler"
+},
+{
+"id": "f1723",
+"text": "our manager said my shoulders are killing me this morning",
+"kind": "filler"
+},
+{
+"id": "f1268",
+"text": "隣の人がおとといバスが全然来なかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0331",
+"text": "お父さんがさっきまでセミがうるさかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0205",
+"text": "えーと、今日唐揚げ作りすぎちゃったなあ",
+"kind": "filler"
+},
+{
+"id": "f1198",
+"text": "朝からお味噌汁の味がちょっと薄かったなあ",
+"kind": "filler"
+},
+{
+"id": "f1597",
+"text": "my brother said my inbox is out of control last night",
+"kind": "filler"
+},
+{
+"id": "f1730",
+"text": "so Alex said it looked like it was going to rain all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1960",
+"text": "um, the croissants at the bakery were amazing, and the bus never showed up",
+"kind": "filler"
+},
+{
+"id": "f1791",
+"text": "so on the weekend the cherry blossoms are almost out",
+"kind": "filler"
+},
+{
+"id": "f0838",
+"text": "まあ、うちの兄が昨日の夜肩こりがひどいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0212",
+"text": "えーと、今朝ニュースで台風のことやってたかも",
+"kind": "filler"
+},
+{
+"id": "f1859",
+"text": "the other day I was grinding that game event",
+"kind": "filler"
+},
+{
+"id": "f0346",
+"text": "この前あくびが止まらないの",
+"kind": "filler"
+},
+{
+"id": "f0994",
+"text": "テレビのクイズ番組おもしろかったし、ドラマの続きが気になって寝られなかったなあ",
+"kind": "filler"
+},
+{
+"id": "f1470",
+"text": "earlier the new manga volume came out",
+"kind": "filler"
+},
+{
+"id": "f1072",
+"text": "伊藤さんが朝からラジオで懐かしい曲が流れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1159",
+"text": "昨日の夜金魚の水槽を掃除したの",
+"kind": "filler"
+},
+{
+"id": "f0805",
+"text": "なんか、社内チャットの通知が多すぎるし、ドラマの続きが気になって寝られなかった",
+"kind": "filler"
+},
+{
+"id": "f1418",
+"text": "anyway on the weekend I switched to a new coffee brand",
+"kind": "filler"
+},
+{
+"id": "f1335",
+"text": "Mike said I cleaned the fish tank on the weekend",
+"kind": "filler"
+},
+{
+"id": "f0764",
+"text": "なんか、先輩が最近カーテンを洗ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0786",
+"text": "なんか、昼過ぎにコンビニの新しいスイーツ食べてみたよ",
+"kind": "filler"
+},
+{
+"id": "f0101",
+"text": "あのー、最近野球の試合、九回で逆転したんだってみたい",
+"kind": "filler"
+},
+{
+"id": "f1742",
+"text": "so Lisa said they played an old song on the radio this morning",
+"kind": "filler"
+},
+{
+"id": "f1412",
+"text": "anyway my neighbor said the soccer match ended in a draw yesterday",
+"kind": "filler"
+},
+{
+"id": "f1897",
+"text": "this morning they played an old song on the radio",
+"kind": "filler"
+},
+{
+"id": "f1776",
+"text": "so my inbox is out of control, and the cherry blossoms are almost out",
+"kind": "filler"
+},
+{
+"id": "f0861",
+"text": "まあ、なんか甘いもの食べたいし、桜がもうすぐ咲きそうかも",
+"kind": "filler"
+},
+{
+"id": "f0757",
+"text": "なんか、伊藤さんが昨日の夜自転車のチェーンが外れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1993",
+"text": "yesterday the bus never showed up",
+"kind": "filler"
+},
+{
+"id": "f1676",
+"text": "oh and the new guy said matcha ice cream is the best just now",
+"kind": "filler"
+},
+{
+"id": "f1566",
+"text": "like, the new guy said my inbox is out of control on the weekend",
+"kind": "filler"
+},
+{
+"id": "f0728",
+"text": "なんか、コピー機の前で行列ができてたし、お味噌汁の味がちょっと薄かったね",
+"kind": "filler"
+},
+{
+"id": "f0742",
+"text": "なんか、マラソン大会のボランティアしてたし、ニュースで台風のことやってたわ",
+"kind": "filler"
+},
+{
+"id": "f0240",
+"text": "えーと、店長がこの前キーボードの調子が悪いって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1456",
+"text": "anyway yesterday the news was all about the typhoon",
+"kind": "filler"
+},
+{
+"id": "f1124",
+"text": "後輩がさっき部屋の電球が切れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1704",
+"text": "on the weekend I'm craving something sweet",
+"kind": "filler"
+},
+{
+"id": "f1498",
+"text": "like, Alex said I'm so sleepy last night",
+"kind": "filler"
+},
+{
+"id": "f1638",
+"text": "oh and Lisa said they played an old song on the radio all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1607",
+"text": "my neighbor said the cicadas were so loud yesterday",
+"kind": "filler"
+},
+{
+"id": "f0203",
+"text": "えーと、今日ドラマの続きが気になって寝られなかったね",
+"kind": "filler"
+},
+{
+"id": "f0960",
+"text": "まあ、駅の階段で転びそうになったし、メールの返信がたまってるみたい",
+"kind": "filler"
+},
+{
+"id": "f0019",
+"text": "あのー、さっきまでプリンターの紙詰まりがまた起きたの",
+"kind": "filler"
+},
+{
+"id": "f1348",
+"text": "Tom said I found storage boxes at the dollar store yesterday",
+"kind": "filler"
+},
+{
+"id": "f1477",
+"text": "just now eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "q50_n1",
+"text": "予算会議の資料まだできてない",
+"kind": "hard_negative"
+},
+{
+"id": "f0077",
+"text": "あのー、後輩がおととい部屋の電球が切れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1435",
+"text": "anyway the new guy said the new manga volume came out this morning",
+"kind": "filler"
+},
+{
+"id": "f1515",
+"text": "like, all afternoon I'm craving something sweet",
+"kind": "filler"
+},
+{
+"id": "f1564",
+"text": "like, the miso soup was a little bland, and my bike chain came off",
+"kind": "filler"
+},
+{
+"id": "f0444",
+"text": "そういえば、今朝部屋の電球が切れたね",
+"kind": "filler"
+},
+{
+"id": "f1488",
+"text": "last night I found storage boxes at the dollar store",
+"kind": "filler"
+},
+{
+"id": "f0069",
+"text": "あのー、妹が朝からテレビのクイズ番組おもしろかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1012",
+"text": "マラソン大会のボランティアしてたし、漫画の新刊が出てたの",
+"kind": "filler"
+},
+{
+"id": "q26_n1",
+"text": "I really need to budget better for groceries",
+"kind": "hard_negative"
+},
+{
+"id": "f0391",
+"text": "さっき駅の階段で転びそうになったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1605",
+"text": "my neighbor said my bike chain came off earlier",
+"kind": "filler"
+},
+{
+"id": "f0340",
+"text": "お父さんが昼過ぎに自転車のチェーンが外れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0058",
+"text": "あのー、伊藤さんが今日バスが全然来なかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0244",
+"text": "えーと、店長が昼過ぎにテレビのクイズ番組おもしろかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0347",
+"text": "この前カーテンを洗ったわ",
+"kind": "filler"
+},
+{
+"id": "f0140",
+"text": "うちの兄がこの前バスが全然来なかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0197",
+"text": "えーと、メールの返信がたまってるし、部屋の電球が切れたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1950",
+"text": "um, on the weekend my keyboard is acting up",
+"kind": "filler"
+},
+{
+"id": "f0341",
+"text": "お父さんが昼過ぎに駅の階段で転びそうになったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1588",
+"text": "matcha ice cream is the best, and I'm craving something sweet",
+"kind": "filler"
+},
+{
+"id": "f1181",
+"text": "最近ドラマの続きが気になって寝られなかったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0890",
+"text": "まあ、今朝ドラマの続きが気になって寝られなかったんだって",
+"kind": "filler"
+},
+{
+"id": "f0041",
+"text": "あのー、マラソン大会のボランティアしてたし、ドラッグストアでティッシュ買ったんだって",
+"kind": "filler"
+},
+{
+"id": "f0959",
+"text": "まあ、電車が人身事故で遅れてたし、マラソン大会のボランティアしてたよ",
+"kind": "filler"
+},
+{
+"id": "f0707",
+"text": "なんか、この前社内チャットの通知が多すぎるなあ",
+"kind": "filler"
+},
+{
+"id": "f0036",
+"text": "あのー、ドラマの続きが気になって寝られなかったし、なんか甘いもの食べたい",
+"kind": "filler"
+},
+{
+"id": "f0443",
+"text": "そういえば、今朝肩こりがひどいらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0528",
+"text": "そういえば、雲がすごく低くて雨が降りそうし、抹茶のアイスが好きなんだよねね",
+"kind": "filler"
+},
+{
+"id": "f0580",
+"text": "ていうか、コーヒー豆を新しいのに変えたし、社内チャットの通知が多すぎる",
+"kind": "filler"
+},
+{
+"id": "f1369",
+"text": "anyway I'm so sleepy, and the printer jammed again",
+"kind": "filler"
+},
+{
+"id": "f0267",
+"text": "えーと、朝からコピー機の前で行列ができてたの",
+"kind": "filler"
+},
+{
+"id": "f1272",
+"text": "隣の人が今日自転車のチェーンが外れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0383",
+"text": "さっき公園で犬の散歩してる人が多かったんだよね",
+"kind": "filler"
+},
+{
+"id": "f1053",
+"text": "今朝漫画の新刊が出てたみたい",
+"kind": "filler"
+},
+{
+"id": "f1927",
+"text": "um, just now I forgot to water the plants",
+"kind": "filler"
+},
+{
+"id": "f0927",
+"text": "まあ、日差しが強くて暑かったし、百円ショップで収納ケース見つけたね",
+"kind": "filler"
+},
+{
+"id": "f1168",
+"text": "昼過ぎに天気予報だと明日は晴れるらしいみたい",
+"kind": "filler"
+},
+{
+"id": "f1826",
+"text": "so yesterday there was a line at the copier",
+"kind": "filler"
+},
+{
+"id": "f0151",
+"text": "えーと、あの子が昼過ぎに金魚の水槽を掃除したって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1959",
+"text": "um, the cicadas were so loud, and I'm craving something sweet",
+"kind": "filler"
+},
+{
+"id": "f1906",
+"text": "um, Lisa said matcha ice cream is the best last night",
+"kind": "filler"
+},
+{
+"id": "f0139",
+"text": "うちの兄がおとといバスが全然来なかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1858",
+"text": "the other day I switched to a new coffee brand",
+"kind": "filler"
+},
+{
+"id": "f0934",
+"text": "まあ、昼過ぎにプリンターの紙詰まりがまた起きたなあ",
+"kind": "filler"
+},
+{
+"id": "f0553",
+"text": "ていうか、この前スーパーで卵が安かったんだよね",
+"kind": "filler"
+},
+{
+"id": "f0759",
+"text": "なんか、先輩がおとといドラッグストアでティッシュ買ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0709",
+"text": "なんか、この前自転車のチェーンが外れたんだよね",
+"kind": "filler"
+},
+{
+"id": "f0835",
+"text": "まあ、うちの兄がおととい日差しが強くて暑かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1861",
+"text": "the other day my inbox is out of control",
+"kind": "filler"
+},
+{
+"id": "q06_r0",
+"text": "引っ越し業者さん、全部込みで十二万円って言ってたよ",
+"kind": "relevant"
+},
+{
+"id": "f0394",
+"text": "そういえば、あの子が今朝マラソン大会のボランティアしてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0552",
+"text": "ていうか、この前コーヒー豆を新しいのに変えたわ",
+"kind": "filler"
+},
+{
+"id": "f0255",
+"text": "えーと、昼過ぎにドラッグストアでティッシュ買ったらしいよ",
+"kind": "filler"
+},
+{
+"id": "q48_n0",
+"text": "今年もあっという間だったね",
+"kind": "hard_negative"
+},
+{
+"id": "f1469",
+"text": "earlier the miso soup was a little bland",
+"kind": "filler"
+},
+{
+"id": "f0319",
+"text": "おととい眠くて仕方ないわ",
+"kind": "filler"
+},
+{
+"id": "f1033",
+"text": "今日百円ショップで収納ケース見つけたんだって",
+"kind": "filler"
+},
+{
+"id": "f0273",
+"text": "えーと、桜がもうすぐ咲きそうし、唐揚げ作りすぎちゃった",
+"kind": "filler"
+},
+{
+"id": "f1128",
+"text": "後輩が昨日の夜マラソン大会のボランティアしてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1907",
+"text": "um, Lisa said the spreadsheet formula keeps breaking on the weekend",
+"kind": "filler"
+},
+{
+"id": "f0457",
+"text": "そういえば、動画を見てたら夜更かししちゃったし、テレビのクイズ番組おもしろかったんだって",
+"kind": "filler"
+},
+{
+"id": "f1103",
+"text": "山本さんがさっきまでカーテンを洗ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0529",
+"text": "そういえば、電車が人身事故で遅れてたし、唐揚げ作りすぎちゃったね",
+"kind": "filler"
+},
+{
+"id": "f0843",
+"text": "まあ、おととい公園で犬の散歩してる人が多かったみたい",
+"kind": "filler"
+},
+{
+"id": "f0119",
+"text": "あのー、鈴木くんが今日コピー機の前で行列ができてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1690",
+"text": "oh and there was a line at the copier, and the spreadsheet formula keeps breaking",
+"kind": "filler"
+},
+{
+"id": "f0385",
+"text": "さっき桜がもうすぐ咲きそうかも",
+"kind": "filler"
+},
+{
+"id": "f1487",
+"text": "just now there was a line at the copier",
+"kind": "filler"
+},
+{
+"id": "f0878",
+"text": "まあ、メールの返信がたまってるし、動画を見てたら夜更かししちゃったよ",
+"kind": "filler"
+},
+{
+"id": "f1609",
+"text": "my neighbor said the miso soup was a little bland this morning",
+"kind": "filler"
+},
+{
+"id": "f0812",
+"text": "なんか、野球の試合、九回で逆転したんだってし、セミがうるさかったんだって",
+"kind": "filler"
+},
+{
+"id": "f0544",
+"text": "ていうか、おとといラジオで懐かしい曲が流れてたわ",
+"kind": "filler"
+},
+{
+"id": "f1664",
+"text": "oh and on the weekend I'm so sleepy",
+"kind": "filler"
+},
+{
+"id": "f0447",
+"text": "そういえば、伊藤さんが今日ドラッグストアでティッシュ買ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1292",
+"text": "高橋さんがさっき野球の試合、九回で逆転したんだってって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0803",
+"text": "なんか、漫画の新刊が出てたし、風が冷たくなってきたね",
+"kind": "filler"
+},
+{
+"id": "f0054",
+"text": "あのー、伊藤さんがおとといエクセルの関数がうまく動かないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0626",
+"text": "ていうか、店長が昨日の夜セミがうるさかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1702",
+"text": "on the weekend I cleaned the fish tank",
+"kind": "filler"
+},
+{
+"id": "q10_r0",
+"text": "今日の晩ごはんはさ、久しぶりにカレーが食べたいな",
+"kind": "relevant"
+},
+{
+"id": "f0702",
+"text": "なんか、この前エクセルの関数がうまく動かないんだって",
+"kind": "filler"
+},
+{
+"id": "f1986",
+"text": "um, yesterday the printer jammed again",
+"kind": "filler"
+},
+{
+"id": "q26_n0",
+"text": "the budget meeting got moved again",
+"kind": "hard_negative"
+},
+{
+"id": "f0866",
+"text": "まあ、スーパーで卵が安かったし、あくびが止まらないんだって",
+"kind": "filler"
+},
+{
+"id": "f1082",
+"text": "先輩が最近電車が人身事故で遅れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1700",
+"text": "oh and yesterday that quiz show was hilarious",
+"kind": "filler"
+},
+{
+"id": "f1350",
+"text": "Tom said my inbox is out of control the other day",
+"kind": "filler"
+},
+{
+"id": "f1895",
+"text": "this morning the light bulb in my room burned out",
+"kind": "filler"
+},
+{
+"id": "f1670",
+"text": "oh and the chat notifications never stop, and I'm craving something sweet",
+"kind": "filler"
+},
+{
+"id": "f0055",
+"text": "あのー、伊藤さんがこの前なんか甘いもの食べたいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1226",
+"text": "眠くて仕方ないし、キーボードの調子が悪いなあ",
+"kind": "filler"
+},
+{
+"id": "f1641",
+"text": "oh and Tom said eggs were on sale at the supermarket earlier",
+"kind": "filler"
+},
+{
+"id": "f0569",
+"text": "ていうか、さっきまで風が冷たくなってきたなあ",
+"kind": "filler"
+},
+{
+"id": "f1571",
+"text": "like, the other day the croissants at the bakery were amazing",
+"kind": "filler"
+},
+{
+"id": "f1383",
+"text": "anyway Tom said the train was delayed again the other day",
+"kind": "filler"
+},
+{
+"id": "q01_n0",
+"text": "歯医者ってほんと苦手なんだよね、あの削る音がさ",
+"kind": "hard_negative"
+},
+{
+"id": "f0117",
+"text": "あのー、鈴木くんがさっきスーパーで卵が安かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0591",
+"text": "ていうか、マラソン大会のボランティアしてたし、漫画の新刊が出てたみたい",
+"kind": "filler"
+},
+{
+"id": "f0721",
+"text": "なんか、さっきコーヒー豆を新しいのに変えた",
+"kind": "filler"
+},
+{
+"id": "f0677",
+"text": "ていうか、風が冷たくなってきたし、電車が人身事故で遅れてたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0990",
+"text": "サッカーの代表戦、引き分けだったし、動画を見てたら夜更かししちゃったの",
+"kind": "filler"
+},
+{
+"id": "f0470",
+"text": "そういえば、山本さんが最近コピー機の前で行列ができてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0965",
+"text": "エクセルの関数がうまく動かないし、なんか甘いもの食べたいね",
+"kind": "filler"
+},
+{
+"id": "f0871",
+"text": "まあ、バスが全然来なかったし、セミがうるさかったね",
+"kind": "filler"
+},
+{
+"id": "f1090",
+"text": "天気予報だと明日は晴れるらしいし、自転車のチェーンが外れたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0502",
+"text": "そういえば、朝から日差しが強くて暑かったみたい",
+"kind": "filler"
+},
+{
+"id": "f0481",
+"text": "そういえば、昨日の夜なんか甘いもの食べたいかも",
+"kind": "filler"
+},
+{
+"id": "f1121",
+"text": "後輩がさっきまでキーボードの調子が悪いって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1366",
+"text": "anyway I couldn't stop watching that drama, and I was grinding that game event",
+"kind": "filler"
+},
+{
+"id": "q31_n1",
+"text": "my schedule is packed this week",
+"kind": "hard_negative"
+},
+{
+"id": "f1971",
+"text": "um, the other day the weather forecast says it'll be sunny tomorrow",
+"kind": "filler"
+},
+{
+"id": "f1459",
+"text": "earlier I was grinding that game event",
+"kind": "filler"
+},
+{
+"id": "f1194",
+"text": "最近電車が人身事故で遅れてた",
+"kind": "filler"
+},
+{
+"id": "f0605",
+"text": "ていうか、伊藤さんがさっきまでドラマの続きが気になって寝られなかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0895",
+"text": "まあ、今朝金魚の水槽を掃除したの",
+"kind": "filler"
+},
+{
+"id": "f0327",
+"text": "お味噌汁の味がちょっと薄かったし、公園で犬の散歩してる人が多かった",
+"kind": "filler"
+},
+{
+"id": "f0290",
+"text": "えーと、隣の人が今日肩こりがひどいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0497",
+"text": "そういえば、朝からドラッグストアでティッシュ買ったんだよね",
+"kind": "filler"
+},
+{
+"id": "f1848",
+"text": "the light bulb in my room burned out, and I forgot to water the plants",
+"kind": "filler"
+},
+{
+"id": "f0252",
+"text": "えーと、昨日の夜バスが全然来なかったって",
+"kind": "filler"
+},
+{
+"id": "f1377",
+"text": "anyway Mike said it looked like it was going to rain the other day",
+"kind": "filler"
+},
+{
+"id": "f0836",
+"text": "まあ、うちの兄がさっきまで駅の階段で転びそうになったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1303",
+"text": "Alex said it looked like it was going to rain earlier",
+"kind": "filler"
+},
+{
+"id": "f0948",
+"text": "まあ、社内チャットの通知が多すぎるし、桜がもうすぐ咲きそうね",
+"kind": "filler"
+},
+{
+"id": "f1650",
+"text": "oh and it was really humid outside, and the chat notifications never stop",
+"kind": "filler"
+},
+{
+"id": "f0393",
+"text": "そういえば、あの子が今日公園で犬の散歩してる人が多かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0128",
+"text": "あの子がおととい自転車のチェーンが外れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0679",
+"text": "ていうか、高橋さんがさっきエクセルの関数がうまく動かないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1908",
+"text": "um, Lisa said there was a marathon downtown just now",
+"kind": "filler"
+},
+{
+"id": "f1401",
+"text": "anyway last night the new manga volume came out",
+"kind": "filler"
+},
+{
+"id": "f0367",
+"text": "さっきまで抹茶のアイスが好きなんだよねなあ",
+"kind": "filler"
+},
+{
+"id": "f1398",
+"text": "anyway just now the train was delayed again",
+"kind": "filler"
+},
+{
+"id": "f0100",
+"text": "あのー、最近眠くて仕方ないわ",
+"kind": "filler"
+},
+{
+"id": "f1612",
+"text": "my roommate said I switched to a new coffee brand last night",
+"kind": "filler"
+},
+{
+"id": "f0344",
+"text": "お父さんが最近雲がすごく低くて雨が降りそうって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1333",
+"text": "Lisa said the new manga volume came out just now",
+"kind": "filler"
+},
+{
+"id": "f0715",
+"text": "なんか、さっきまでニュースで台風のことやってたね",
+"kind": "filler"
+},
+{
+"id": "f1275",
+"text": "隣の人が今朝雲がすごく低くて雨が降りそうって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0794",
+"text": "なんか、最近コーヒー豆を新しいのに変えたなあ",
+"kind": "filler"
+},
+{
+"id": "f1075",
+"text": "先輩がこの前カーテンを洗ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0452",
+"text": "そういえば、先輩がさっきエクセルの関数がうまく動かないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1953",
+"text": "um, our manager said the train was delayed again yesterday",
+"kind": "filler"
+},
+{
+"id": "f0700",
+"text": "なんか、お父さんが昨日の夜社内チャットの通知が多すぎるって言ってた",
+"kind": "filler"
+},
+{
+"id": "q12_r0",
+"text": "こないだ立て替えた五千円、給料日に返すって言ってたよ",
+"kind": "relevant"
+},
+{
+"id": "f1021",
+"text": "今日あくびが止まらないわ",
+"kind": "filler"
+},
+{
+"id": "f1207",
+"text": "朝から日差しが強くて暑かったんだよね",
+"kind": "filler"
+},
+{
+"id": "f0556",
+"text": "ていうか、この前唐揚げ作りすぎちゃったって",
+"kind": "filler"
+},
+{
+"id": "f1472",
+"text": "it was really humid outside, and the bus never showed up",
+"kind": "filler"
+},
+{
+"id": "f1467",
+"text": "earlier the cicadas were so loud",
+"kind": "filler"
+},
+{
+"id": "f0397",
+"text": "そういえば、うちの兄が今朝雲がすごく低くて雨が降りそうって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1711",
+"text": "on the weekend the cicadas were so loud",
+"kind": "filler"
+},
+{
+"id": "f1543",
+"text": "like, my roommate said I switched to a new coffee brand all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1992",
+"text": "yesterday my keyboard is acting up",
+"kind": "filler"
+},
+{
+"id": "f0936",
+"text": "まあ、昼過ぎに漫画の新刊が出てた",
+"kind": "filler"
+},
+{
+"id": "f0723",
+"text": "なんか、さっき日差しが強くて暑かった",
+"kind": "filler"
+},
+{
+"id": "f1556",
+"text": "like, our manager said that quiz show was hilarious the other day",
+"kind": "filler"
+},
+{
+"id": "f1120",
+"text": "後輩がこの前唐揚げ作りすぎちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0630",
+"text": "ていうか、後輩が昼過ぎにメールの返信がたまってるって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0451",
+"text": "そういえば、伊藤さんが朝からお味噌汁の味がちょっと薄かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1404",
+"text": "anyway last night they played an old song on the radio",
+"kind": "filler"
+},
+{
+"id": "f1513",
+"text": "like, Tom said the light bulb in my room burned out this morning",
+"kind": "filler"
+},
+{
+"id": "f1718",
+"text": "our manager said I forgot to water the plants last night",
+"kind": "filler"
+},
+{
+"id": "f1325",
+"text": "Jenny said the miso soup was a little bland the other day",
+"kind": "filler"
+},
+{
+"id": "f1693",
+"text": "oh and they played an old song on the radio, and the news was all about the typhoon",
+"kind": "filler"
+},
+{
+"id": "f1179",
+"text": "最近コピー機の前で行列ができてたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1837",
+"text": "the cherry blossoms are almost out, and the croissants at the bakery were amazing",
+"kind": "filler"
+},
+{
+"id": "f0688",
+"text": "なんか、うちの兄がさっきまでコピー機の前で行列ができてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1627",
+"text": "oh and I switched to a new coffee brand, and the bus never showed up",
+"kind": "filler"
+},
+{
+"id": "f1005",
+"text": "ニュースで台風のことやってたし、紅葉がきれいだったわ",
+"kind": "filler"
+},
+{
+"id": "f0281",
+"text": "えーと、野球の試合、九回で逆転したんだってし、ドラッグストアでティッシュ買ったなあ",
+"kind": "filler"
+},
+{
+"id": "f0228",
+"text": "えーと、天気予報だと明日は晴れるらしいし、風が冷たくなってきたって",
+"kind": "filler"
+},
+{
+"id": "f0085",
+"text": "あのー、昨日の夜日差しが強くて暑かったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0642",
+"text": "ていうか、昼過ぎに漫画の新刊が出てたの",
+"kind": "filler"
+},
+{
+"id": "f0476",
+"text": "そういえば、後輩がさっきスーパーで卵が安かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1057",
+"text": "今朝肩こりがひどいわ",
+"kind": "filler"
+},
+{
+"id": "f1555",
+"text": "like, our manager said I found storage boxes at the dollar store this morning",
+"kind": "filler"
+},
+{
+"id": "f1834",
+"text": "the bus never showed up, and matcha ice cream is the best",
+"kind": "filler"
+},
+{
+"id": "f0801",
+"text": "なんか、朝から自転車のチェーンが外れたんだって",
+"kind": "filler"
+},
+{
+"id": "q28_n1",
+"text": "London is so expensive these days",
+"kind": "hard_negative"
+},
+{
+"id": "f0667",
+"text": "ていうか、鈴木くんがさっきまで植木に水やるの忘れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0696",
+"text": "なんか、おととい社内チャットの通知が多すぎるかも",
+"kind": "filler"
+},
+{
+"id": "f0653",
+"text": "ていうか、朝から野球の試合、九回で逆転したんだって",
+"kind": "filler"
+},
+{
+"id": "f0179",
+"text": "えーと、さっき抹茶のアイスが好きなんだよねって",
+"kind": "filler"
+},
+{
+"id": "f0042",
+"text": "あのー、メールの返信がたまってるし、あくびが止まらないらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1408",
+"text": "anyway my neighbor said I found storage boxes at the dollar store earlier",
+"kind": "filler"
+},
+{
+"id": "f0898",
+"text": "まあ、伊藤さんがさっき部屋の電球が切れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1041",
+"text": "今朝あくびが止まらないね",
+"kind": "filler"
+},
+{
+"id": "f1541",
+"text": "like, my neighbor said my shoulders are killing me just now",
+"kind": "filler"
+},
+{
+"id": "f1250",
+"text": "自転車のチェーンが外れたし、コピー機の前で行列ができてたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1318",
+"text": "I made way too much fried chicken, and the croissants at the bakery were amazing",
+"kind": "filler"
+},
+{
+"id": "f0905",
+"text": "まあ、天気予報だと明日は晴れるらしいし、ドラマの続きが気になって寝られなかったよ",
+"kind": "filler"
+},
+{
+"id": "f1651",
+"text": "oh and it was really humid outside, and the light bulb in my room burned out",
+"kind": "filler"
+},
+{
+"id": "f0116",
+"text": "あのー、鈴木くんがさっきまでドラッグストアでティッシュ買ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0193",
+"text": "えーと、ドラッグストアでティッシュ買ったし、カーテンを洗ったみたい",
+"kind": "filler"
+},
+{
+"id": "f1747",
+"text": "so Tom said it looked like it was going to rain on the weekend",
+"kind": "filler"
+},
+{
+"id": "f0804",
+"text": "なんか、社内チャットの通知が多すぎるし、カーテンを洗ったよ",
+"kind": "filler"
+},
+{
+"id": "f1243",
+"text": "紅葉がきれいだったし、ラジオで懐かしい曲が流れてたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0446",
+"text": "そういえば、伊藤さんがさっき唐揚げ作りすぎちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0560",
+"text": "ていうか、さっきまでキーボードの調子が悪いって",
+"kind": "filler"
+},
+{
+"id": "f1584",
+"text": "like, yesterday I'm so sleepy",
+"kind": "filler"
+},
+{
+"id": "f1416",
+"text": "anyway my shoulders are killing me, and the bus never showed up",
+"kind": "filler"
+},
+{
+"id": "f1935",
+"text": "um, last night the news was all about the typhoon",
+"kind": "filler"
+},
+{
+"id": "f0280",
+"text": "えーと、自転車のチェーンが外れたし、コンビニの新しいスイーツ食べてみたかも",
+"kind": "filler"
+},
+{
+"id": "q03_r0",
+"text": "車のキーなら玄関の靴箱の上のトレーに入れといたよ",
+"kind": "relevant"
+},
+{
+"id": "f1921",
+"text": "um, all afternoon the croissants at the bakery were amazing",
+"kind": "filler"
+},
+{
+"id": "f1211",
+"text": "朝から電車が人身事故で遅れてたみたい",
+"kind": "filler"
+},
+{
+"id": "f1410",
+"text": "anyway my neighbor said the bus never showed up the other day",
+"kind": "filler"
+},
+{
+"id": "f0498",
+"text": "そういえば、朝からバスが全然来なかったなあ",
+"kind": "filler"
+},
+{
+"id": "f1865",
+"text": "the other day the news was all about the typhoon",
+"kind": "filler"
+},
+{
+"id": "f0002",
+"text": "あのー、あくびが止まらないし、公園で犬の散歩してる人が多かったかも",
+"kind": "filler"
+},
+{
+"id": "f0334",
+"text": "お父さんが今日テレビのクイズ番組おもしろかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1449",
+"text": "anyway this morning I switched to a new coffee brand",
+"kind": "filler"
+},
+{
+"id": "f1079",
+"text": "先輩が今朝キーボードの調子が悪いって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1484",
+"text": "just now the printer jammed again",
+"kind": "filler"
+},
+{
+"id": "f0532",
+"text": "そういえば、高橋さんが今朝お味噌汁の味がちょっと薄かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0570",
+"text": "ていうか、さっきパン屋さんのクロワッサンが美味しかったね",
+"kind": "filler"
+},
+{
+"id": "f1619",
+"text": "my shoulders are killing me, and they played an old song on the radio",
+"kind": "filler"
+},
+{
+"id": "f0995",
+"text": "テレビのクイズ番組おもしろかったし、唐揚げ作りすぎちゃったんだよね",
+"kind": "filler"
+},
+{
+"id": "f0754",
+"text": "なんか、今朝マラソン大会のボランティアしてたよ",
+"kind": "filler"
+},
+{
+"id": "f0589",
+"text": "ていうか、プリンターの紙詰まりがまた起きたし、社内チャットの通知が多すぎる",
+"kind": "filler"
+},
+{
+"id": "f1532",
+"text": "like, matcha ice cream is the best, and my inbox is out of control",
+"kind": "filler"
+},
+{
+"id": "f1628",
+"text": "oh and I'm craving something sweet, and it was really humid outside",
+"kind": "filler"
+},
+{
+"id": "f0565",
+"text": "ていうか、さっきまで桜がもうすぐ咲きそうね",
+"kind": "filler"
+},
+{
+"id": "f1381",
+"text": "anyway Tom said the miso soup was a little bland this morning",
+"kind": "filler"
+},
+{
+"id": "f0810",
+"text": "なんか、部屋の電球が切れたし、漫画の新刊が出てたみたい",
+"kind": "filler"
+},
+{
+"id": "f1316",
+"text": "I made way too much fried chicken, and it looked like it was going to rain",
+"kind": "filler"
+},
+{
+"id": "f1946",
+"text": "um, on the weekend I couldn't stop watching that drama",
+"kind": "filler"
+},
+{
+"id": "f1493",
+"text": "last night matcha ice cream is the best",
+"kind": "filler"
+},
+{
+"id": "f0888",
+"text": "まあ、今朝スーパーで卵が安かったって",
+"kind": "filler"
+},
+{
+"id": "f0328",
+"text": "お味噌汁の味がちょっと薄かったし、自転車のチェーンが外れた",
+"kind": "filler"
+},
+{
+"id": "q15_r0",
+"text": "ミケのワクチン、動物病院で来月の三日に打つことになったよ",
+"kind": "relevant"
+},
+{
+"id": "f0825",
+"text": "なんか、電車が人身事故で遅れてたし、セミがうるさかった",
+"kind": "filler"
+},
+{
+"id": "q31_r0",
+"text": "I'm going to hit the gym Monday, Wednesday and Friday mornings before work",
+"kind": "relevant"
+},
+{
+"id": "f0057",
+"text": "あのー、伊藤さんがさっきまで植木に水やるの忘れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1642",
+"text": "oh and all afternoon I was grinding that game event",
+"kind": "filler"
+},
+{
+"id": "f1474",
+"text": "it was really humid outside, and the printer jammed again",
+"kind": "filler"
+},
+{
+"id": "f0170",
+"text": "えーと、この前金魚の水槽を掃除したみたい",
+"kind": "filler"
+},
+{
+"id": "f1386",
+"text": "anyway all afternoon I'm craving something sweet",
+"kind": "filler"
+},
+{
+"id": "f1589",
+"text": "my bike chain came off, and I couldn't stop watching that drama",
+"kind": "filler"
+},
+{
+"id": "f1308",
+"text": "I couldn't stop watching that drama, and the cicadas were so loud",
+"kind": "filler"
+},
+{
+"id": "f1026",
+"text": "今日ドラマの続きが気になって寝られなかったかも",
+"kind": "filler"
+},
+{
+"id": "q02_r0",
+"text": "来月の沖縄だけどさ、飛行機は那覇行きの朝の便でいいかな",
+"kind": "relevant"
+},
+{
+"id": "f1552",
+"text": "like, on the weekend my shoulders are killing me",
+"kind": "filler"
+},
+{
+"id": "f1389",
+"text": "anyway earlier my keyboard is acting up",
+"kind": "filler"
+},
+{
+"id": "f1244",
+"text": "紅葉がきれいだったし、社内チャットの通知が多すぎるの",
+"kind": "filler"
+},
+{
+"id": "f0652",
+"text": "ていうか、朝から漫画の新刊が出てたの",
+"kind": "filler"
+},
+{
+"id": "f0237",
+"text": "えーと、山本さんがさっきまでコーヒー豆を新しいのに変えたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1510",
+"text": "like, Mike said the convenience store has a new dessert all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1595",
+"text": "my brother said I made way too much fried chicken earlier",
+"kind": "filler"
+},
+{
+"id": "f0573",
+"text": "ていうか、さっき百円ショップで収納ケース見つけたわ",
+"kind": "filler"
+},
+{
+"id": "f1661",
+"text": "oh and my roommate said it was really humid outside just now",
+"kind": "filler"
+},
+{
+"id": "f0395",
+"text": "そういえば、あの子が最近自転車のチェーンが外れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0530",
+"text": "そういえば、風が冷たくなってきたし、セミがうるさかったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1042",
+"text": "今朝ゲームのイベント周回してたって",
+"kind": "filler"
+},
+{
+"id": "f0661",
+"text": "ていうか、社内チャットの通知が多すぎるし、マラソン大会のボランティアしてたの",
+"kind": "filler"
+},
+{
+"id": "f0028",
+"text": "あのー、さっき肩こりがひどいなあ",
+"kind": "filler"
+},
+{
+"id": "f1995",
+"text": "yesterday the cicadas were so loud",
+"kind": "filler"
+},
+{
+"id": "f1362",
+"text": "all afternoon the train was delayed again",
+"kind": "filler"
+},
+{
+"id": "f0215",
+"text": "えーと、伊藤さんがさっきゲームのイベント周回してたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0737",
+"text": "なんか、バスが全然来なかったし、メールの返信がたまってるの",
+"kind": "filler"
+},
+{
+"id": "f0583",
+"text": "ていうか、バスが全然来なかったし、カーテンを洗ったって",
+"kind": "filler"
+},
+{
+"id": "f1977",
+"text": "um, this morning I couldn't stop watching that drama",
+"kind": "filler"
+},
+{
+"id": "f0309",
+"text": "えーと、高橋さんが最近肩こりがひどいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0136",
+"text": "あの子が昼過ぎにあくびが止まらないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1165",
+"text": "昼過ぎにスーパーで卵が安かったかも",
+"kind": "filler"
+},
+{
+"id": "q12_n0",
+"text": "銀行のアプリで振り込むのって手数料かかる？",
+"kind": "hard_negative"
+},
+{
+"id": "f1686",
+"text": "oh and the weather forecast says it'll be sunny tomorrow, and the light bulb in my room burned out",
+"kind": "filler"
+},
+{
+"id": "f0363",
+"text": "さっきまでマラソン大会のボランティアしてたね",
+"kind": "filler"
+},
+{
+"id": "f1087",
+"text": "唐揚げ作りすぎちゃったし、プリンターの紙詰まりがまた起きたなあ",
+"kind": "filler"
+},
+{
+"id": "f0584",
+"text": "ていうか、バスが全然来なかったし、コーヒー豆を新しいのに変えたかも",
+"kind": "filler"
+},
+{
+"id": "f1951",
+"text": "um, our manager said eggs were on sale at the supermarket yesterday",
+"kind": "filler"
+},
+{
+"id": "f0771",
+"text": "なんか、店長がさっきゲームのイベント周回してたって言ってた",
+"kind": "filler"
+},
+{
+"id": "q33_n0",
+"text": "we're out of pasta, can you pick some up",
+"kind": "hard_negative"
+},
+{
+"id": "f1880",
+"text": "the weather forecast says it'll be sunny tomorrow, and the cherry blossoms are almost out",
+"kind": "filler"
+},
+{
+"id": "f0477",
+"text": "そういえば、後輩が今日プリンターの紙詰まりがまた起きたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0381",
+"text": "さっきドラマの続きが気になって寝られなかったなあ",
+"kind": "filler"
+},
+{
+"id": "f0795",
+"text": "なんか、最近テレビのクイズ番組おもしろかったね",
+"kind": "filler"
+},
+{
+"id": "f1432",
+"text": "anyway the new guy said the baseball game went into extra innings yesterday",
+"kind": "filler"
+},
+{
+"id": "f0598",
+"text": "ていうか、今日駅の階段で転びそうになったなあ",
+"kind": "filler"
+},
+{
+"id": "f1269",
+"text": "隣の人がこの前公園で犬の散歩してる人が多かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1831",
+"text": "the baseball game went into extra innings, and it looked like it was going to rain",
+"kind": "filler"
+},
+{
+"id": "f1162",
+"text": "昨日の夜駅の階段で転びそうになったんだよね",
+"kind": "filler"
+},
+{
+"id": "f0612",
+"text": "ていうか、先輩が今日眠くて仕方ないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1745",
+"text": "so Tom said I switched to a new coffee brand this morning",
+"kind": "filler"
+},
+{
+"id": "f0178",
+"text": "えーと、さっき公園で犬の散歩してる人が多かったの",
+"kind": "filler"
+},
+{
+"id": "f1987",
+"text": "um, yesterday they played an old song on the radio",
+"kind": "filler"
+},
+{
+"id": "f0254",
+"text": "えーと、昼過ぎにコンビニの新しいスイーツ食べてみたわ",
+"kind": "filler"
+},
+{
+"id": "f0257",
+"text": "えーと、昼過ぎにドラマの続きが気になって寝られなかったわ",
+"kind": "filler"
+},
+{
+"id": "f1388",
+"text": "anyway earlier I found storage boxes at the dollar store",
+"kind": "filler"
+},
+{
+"id": "f1841",
+"text": "the convenience store has a new dessert, and the news was all about the typhoon",
+"kind": "filler"
+},
+{
+"id": "f1353",
+"text": "Tom said the leaves are turning red last night",
+"kind": "filler"
+},
+{
+"id": "f0999",
+"text": "ドラマの続きが気になって寝られなかったし、サッカーの代表戦、引き分けだったって",
+"kind": "filler"
+},
+{
+"id": "f1847",
+"text": "the light bulb in my room burned out, and I couldn't stop watching that drama",
+"kind": "filler"
+},
+{
+"id": "f0026",
+"text": "あのー、さっき桜がもうすぐ咲きそうかも",
+"kind": "filler"
+},
+{
+"id": "f1363",
+"text": "all afternoon the weather forecast says it'll be sunny tomorrow",
+"kind": "filler"
+},
+{
+"id": "f1444",
+"text": "anyway the printer jammed again, and I made way too much fried chicken",
+"kind": "filler"
+},
+{
+"id": "f1980",
+"text": "um, this morning they played an old song on the radio",
+"kind": "filler"
+},
+{
+"id": "f1753",
+"text": "so earlier I made way too much fried chicken",
+"kind": "filler"
+},
+{
+"id": "f0678",
+"text": "ていうか、駅の階段で転びそうになったし、パン屋さんのクロワッサンが美味しかったって",
+"kind": "filler"
+},
+{
+"id": "f0409",
+"text": "そういえば、この前お味噌汁の味がちょっと薄かったね",
+"kind": "filler"
+},
+{
+"id": "f0563",
+"text": "ていうか、さっきまでマラソン大会のボランティアしてたわ",
+"kind": "filler"
+},
+{
+"id": "f0798",
+"text": "なんか、最近雲がすごく低くて雨が降りそうんだって",
+"kind": "filler"
+},
+{
+"id": "f1591",
+"text": "my bike chain came off, and my inbox is out of control",
+"kind": "filler"
+},
+{
+"id": "f0740",
+"text": "なんか、パン屋さんのクロワッサンが美味しかったし、プリンターの紙詰まりがまた起きたね",
+"kind": "filler"
+},
+{
+"id": "f1699",
+"text": "oh and yesterday matcha ice cream is the best",
+"kind": "filler"
+},
+{
+"id": "f0545",
+"text": "ていうか、おととい眠くて仕方ないの",
+"kind": "filler"
+},
+{
+"id": "f1035",
+"text": "今日雲がすごく低くて雨が降りそうかも",
+"kind": "filler"
+},
+{
+"id": "f1587",
+"text": "like, yesterday the printer jammed again",
+"kind": "filler"
+},
+{
+"id": "f0253",
+"text": "えーと、昨日の夜メールの返信がたまってるらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1060",
+"text": "今朝電車が人身事故で遅れてたよ",
+"kind": "filler"
+},
+{
+"id": "f0920",
+"text": "まあ、後輩が昼過ぎにニュースで台風のことやってたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0638",
+"text": "ていうか、昼過ぎにエクセルの関数がうまく動かない",
+"kind": "filler"
+},
+{
+"id": "f0913",
+"text": "まあ、山本さんが昨日の夜植木に水やるの忘れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1582",
+"text": "like, this morning the train was delayed again",
+"kind": "filler"
+},
+{
+"id": "f1867",
+"text": "the other day the weather forecast says it'll be sunny tomorrow",
+"kind": "filler"
+},
+{
+"id": "q14_r0",
+"text": "ネットのパスワード変えたから、新しいのは冷蔵庫に貼っといたよ",
+"kind": "relevant"
+},
+{
+"id": "f1400",
+"text": "anyway last night the cicadas were so loud",
+"kind": "filler"
+},
+{
+"id": "f1491",
+"text": "last night eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "f0300",
+"text": "えーと、電車が人身事故で遅れてたし、唐揚げ作りすぎちゃった",
+"kind": "filler"
+},
+{
+"id": "f1397",
+"text": "anyway just now the news was all about the typhoon",
+"kind": "filler"
+},
+{
+"id": "f0597",
+"text": "ていうか、今日自転車のチェーンが外れたわ",
+"kind": "filler"
+},
+{
+"id": "f0832",
+"text": "なんか甘いもの食べたいし、電車が人身事故で遅れてたらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0072",
+"text": "あのー、山本さんが今朝天気予報だと明日は晴れるらしいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1918",
+"text": "um, all afternoon I made way too much fried chicken",
+"kind": "filler"
+},
+{
+"id": "f0454",
+"text": "そういえば、先輩が昨日の夜カーテンを洗ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1894",
+"text": "this morning the convenience store has a new dessert",
+"kind": "filler"
+},
+{
+"id": "f1119",
+"text": "店長が朝から百円ショップで収納ケース見つけたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1039",
+"text": "今日駅の階段で転びそうになったんだよね",
+"kind": "filler"
+},
+{
+"id": "f0817",
+"text": "なんか、鈴木くんが最近野球の試合、九回で逆転したんだってって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1961",
+"text": "um, the light bulb in my room burned out, and the weather forecast says it'll be sunny tomorrow",
+"kind": "filler"
+},
+{
+"id": "f0641",
+"text": "ていうか、昼過ぎに動画を見てたら夜更かししちゃったよ",
+"kind": "filler"
+},
+{
+"id": "f1451",
+"text": "anyway this morning it was really humid outside",
+"kind": "filler"
+},
+{
+"id": "f0504",
+"text": "そういえば、朝から雲がすごく低くて雨が降りそうみたい",
+"kind": "filler"
+},
+{
+"id": "f0909",
+"text": "まあ、妹がさっきまで電車が人身事故で遅れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0001",
+"text": "あくびが止まらないし、マラソン大会のボランティアしてたんだよね",
+"kind": "filler"
+},
+{
+"id": "f1624",
+"text": "oh and I found storage boxes at the dollar store, and that quiz show was hilarious",
+"kind": "filler"
+},
+{
+"id": "f1067",
+"text": "伊藤さんが昼過ぎにドラッグストアでティッシュ買ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1193",
+"text": "最近雲がすごく低くて雨が降りそうって",
+"kind": "filler"
+},
+{
+"id": "f1736",
+"text": "so Jenny said I'm so sleepy all afternoon",
+"kind": "filler"
+},
+{
+"id": "f0145",
+"text": "うちの兄が今日百円ショップで収納ケース見つけたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0439",
+"text": "そういえば、今日メールの返信がたまってるかも",
+"kind": "filler"
+},
+{
+"id": "q28_r0",
+"text": "the London flight departs at nine forty from Haneda terminal three",
+"kind": "relevant"
+},
+{
+"id": "f1827",
+"text": "that quiz show was hilarious, and the baseball game went into extra innings",
+"kind": "filler"
+},
+{
+"id": "f1234",
+"text": "社内チャットの通知が多すぎるし、メールの返信がたまってるかも",
+"kind": "filler"
+},
+{
+"id": "q47_r0",
+"text": "洗濯機が脱水のときにガタガタすごい音するんだよね",
+"kind": "relevant"
+},
+{
+"id": "f1387",
+"text": "anyway all afternoon the cicadas were so loud",
+"kind": "filler"
+},
+{
+"id": "f1002",
+"text": "ニュースで台風のことやってたし、カーテンを洗ったみたい",
+"kind": "filler"
+},
+{
+"id": "f0976",
+"text": "キーボードの調子が悪いし、社内チャットの通知が多すぎるみたい",
+"kind": "filler"
+},
+{
+"id": "f1762",
+"text": "so it looked like it was going to rain, and there was a marathon downtown",
+"kind": "filler"
+},
+{
+"id": "f1216",
+"text": "植木に水やるの忘れてたし、プリンターの紙詰まりがまた起きたの",
+"kind": "filler"
+},
+{
+"id": "f1305",
+"text": "Alex said the croissants at the bakery were amazing on the weekend",
+"kind": "filler"
+},
+{
+"id": "f1359",
+"text": "all afternoon the baseball game went into extra innings",
+"kind": "filler"
+},
+{
+"id": "f1063",
+"text": "伊藤さんがさっきまで日差しが強くて暑かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0098",
+"text": "あのー、最近セミがうるさかったの",
+"kind": "filler"
+},
+{
+"id": "f1972",
+"text": "um, the other day there was a line at the copier",
+"kind": "filler"
+},
+{
+"id": "f0474",
+"text": "そういえば、店長が昼過ぎに百円ショップで収納ケース見つけたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0124",
+"text": "あのー、高橋さんがさっき金魚の水槽を掃除したって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1819",
+"text": "so this morning there was a marathon downtown",
+"kind": "filler"
+},
+{
+"id": "f0919",
+"text": "まあ、後輩が今朝風が冷たくなってきたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0275",
+"text": "えーと、桜がもうすぐ咲きそうし、駅の階段で転びそうになったわ",
+"kind": "filler"
+},
+{
+"id": "f0106",
+"text": "あのー、桜がもうすぐ咲きそうし、唐揚げ作りすぎちゃったよ",
+"kind": "filler"
+},
+{
+"id": "f1735",
+"text": "so I switched to a new coffee brand, and the new manga volume came out",
+"kind": "filler"
+},
+{
+"id": "f1915",
+"text": "um, Tom said the light bulb in my room burned out all afternoon",
+"kind": "filler"
+},
+{
+"id": "f0368",
+"text": "さっきまで桜がもうすぐ咲きそうんだよね",
+"kind": "filler"
+},
+{
+"id": "f1667",
+"text": "oh and our manager said the bus never showed up on the weekend",
+"kind": "filler"
+},
+{
+"id": "f1925",
+"text": "um, it was really humid outside, and my keyboard is acting up",
+"kind": "filler"
+},
+{
+"id": "f1862",
+"text": "the other day the baseball game went into extra innings",
+"kind": "filler"
+},
+{
+"id": "q24_n1",
+"text": "新しいパソコンまだ届かないんだけど",
+"kind": "hard_negative"
+},
+{
+"id": "f0033",
+"text": "あのー、コンビニの新しいスイーツ食べてみたし、社内チャットの通知が多すぎるの",
+"kind": "filler"
+},
+{
+"id": "f1557",
+"text": "like, that quiz show was hilarious, and I cleaned the fish tank",
+"kind": "filler"
+},
+{
+"id": "f1695",
+"text": "oh and this morning the spreadsheet formula keeps breaking",
+"kind": "filler"
+},
+{
+"id": "f0865",
+"text": "まあ、コーヒー豆を新しいのに変えたし、パン屋さんのクロワッサンが美味しかったんだって",
+"kind": "filler"
+},
+{
+"id": "f0940",
+"text": "まあ、最近日差しが強くて暑かったかも",
+"kind": "filler"
+},
+{
+"id": "f0586",
+"text": "ていうか、パン屋さんのクロワッサンが美味しかったし、あくびが止まらないらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1534",
+"text": "like, matcha ice cream is the best, and the croissants at the bakery were amazing",
+"kind": "filler"
+},
+{
+"id": "f1379",
+"text": "anyway Tom said I'm craving something sweet earlier",
+"kind": "filler"
+},
+{
+"id": "f1864",
+"text": "the other day the new manga volume came out",
+"kind": "filler"
+},
+{
+"id": "f0650",
+"text": "ていうか、朝から動画を見てたら夜更かししちゃったよ",
+"kind": "filler"
+},
+{
+"id": "f1328",
+"text": "Lisa said my inbox is out of control yesterday",
+"kind": "filler"
+},
+{
+"id": "f1302",
+"text": "Alex said I switched to a new coffee brand just now",
+"kind": "filler"
+},
+{
+"id": "f0911",
+"text": "まあ、妹が朝からメールの返信がたまってるって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1274",
+"text": "隣の人が今朝パン屋さんのクロワッサンが美味しかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0972",
+"text": "キーボードの調子が悪いし、パン屋さんのクロワッサンが美味しかったんだよね",
+"kind": "filler"
+},
+{
+"id": "f1457",
+"text": "earlier I cleaned the fish tank",
+"kind": "filler"
+},
+{
+"id": "f1873",
+"text": "the spreadsheet formula keeps breaking, and I'm craving something sweet",
+"kind": "filler"
+},
+{
+"id": "f0306",
+"text": "えーと、高橋さんがこの前サッカーの代表戦、引き分けだったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1512",
+"text": "like, Tom said the cicadas were so loud all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1538",
+"text": "like, my brother said the baseball game went into extra innings just now",
+"kind": "filler"
+},
+{
+"id": "f1771",
+"text": "so my brother said my shoulders are killing me this morning",
+"kind": "filler"
+},
+{
+"id": "f0831",
+"text": "なんか甘いもの食べたいし、桜がもうすぐ咲きそうの",
+"kind": "filler"
+},
+{
+"id": "f0359",
+"text": "さっきまでサッカーの代表戦、引き分けだったんだって",
+"kind": "filler"
+},
+{
+"id": "f1828",
+"text": "that quiz show was hilarious, and the weather forecast says it'll be sunny tomorrow",
+"kind": "filler"
+},
+{
+"id": "f1812",
+"text": "so this morning I cleaned the fish tank",
+"kind": "filler"
+},
+{
+"id": "q04_n0",
+"text": "田中さんって来月で異動するらしいよ",
+"kind": "hard_negative"
+},
+{
+"id": "f1821",
+"text": "so yesterday I'm craving something sweet",
+"kind": "filler"
+},
+{
+"id": "f1299",
+"text": "高橋さんが朝から野球の試合、九回で逆転したんだってって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0342",
+"text": "お父さんが最近コーヒー豆を新しいのに変えたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1421",
+"text": "anyway on the weekend the printer jammed again",
+"kind": "filler"
+},
+{
+"id": "f1187",
+"text": "最近眠くて仕方ないんだって",
+"kind": "filler"
+},
+{
+"id": "f1665",
+"text": "oh and on the weekend the chat notifications never stop",
+"kind": "filler"
+},
+{
+"id": "f1329",
+"text": "Lisa said my keyboard is acting up yesterday",
+"kind": "filler"
+},
+{
+"id": "f1590",
+"text": "my bike chain came off, and I was grinding that game event",
+"kind": "filler"
+},
+{
+"id": "f0970",
+"text": "カーテンを洗ったし、サッカーの代表戦、引き分けだった",
+"kind": "filler"
+},
+{
+"id": "f1142",
+"text": "昨日の夜サッカーの代表戦、引き分けだったよ",
+"kind": "filler"
+},
+{
+"id": "f1594",
+"text": "my brother said I couldn't stop watching that drama on the weekend",
+"kind": "filler"
+},
+{
+"id": "f0321",
+"text": "おととい肩こりがひどいの",
+"kind": "filler"
+},
+{
+"id": "f0318",
+"text": "おととい桜がもうすぐ咲きそうって",
+"kind": "filler"
+},
+{
+"id": "f1320",
+"text": "I switched to a new coffee brand, and they played an old song on the radio",
+"kind": "filler"
+},
+{
+"id": "f0766",
+"text": "なんか、動画を見てたら夜更かししちゃったし、抹茶のアイスが好きなんだよね",
+"kind": "filler"
+},
+{
+"id": "q23_n1",
+"text": "お店のレビュー見たら星三つだった",
+"kind": "hard_negative"
+},
+{
+"id": "q22_r0",
+"text": "車はね駅の裏のコインパーキングに入れてあるから",
+"kind": "relevant"
+},
+{
+"id": "f1947",
+"text": "um, on the weekend I switched to a new coffee brand",
+"kind": "filler"
+},
+{
+"id": "f0238",
+"text": "えーと、山本さんが昨日の夜抹茶のアイスが好きなんだよねって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0694",
+"text": "なんか、おととい抹茶のアイスが好きなんだよねよ",
+"kind": "filler"
+},
+{
+"id": "f1746",
+"text": "so Tom said eggs were on sale at the supermarket last night",
+"kind": "filler"
+},
+{
+"id": "f0848",
+"text": "まあ、お父さんが今朝金魚の水槽を掃除したって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1799",
+"text": "so the convenience store has a new dessert, and the bus never showed up",
+"kind": "filler"
+},
+{
+"id": "f1147",
+"text": "昨日の夜メールの返信がたまってるなあ",
+"kind": "filler"
+},
+{
+"id": "f0018",
+"text": "あのー、この前駅の階段で転びそうになったよ",
+"kind": "filler"
+},
+{
+"id": "f0542",
+"text": "ていうか、うちの兄が朝からエクセルの関数がうまく動かないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1183",
+"text": "最近抹茶のアイスが好きなんだよねわ",
+"kind": "filler"
+},
+{
+"id": "q19_n1",
+"text": "契約社員の更新って来年だっけ",
+"kind": "hard_negative"
+},
+{
+"id": "f0370",
+"text": "さっきまで眠くて仕方ないかも",
+"kind": "filler"
+},
+{
+"id": "f0860",
+"text": "まあ、さっき風が冷たくなってきたんだよね",
+"kind": "filler"
+},
+{
+"id": "f1262",
+"text": "鈴木くんが今朝エクセルの関数がうまく動かないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1427",
+"text": "anyway the convenience store has a new dessert, and the chat notifications never stop",
+"kind": "filler"
+},
+{
+"id": "f1220",
+"text": "百円ショップで収納ケース見つけたし、セミがうるさかったわ",
+"kind": "filler"
+},
+{
+"id": "f0147",
+"text": "うちの兄が今朝ラジオで懐かしい曲が流れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1497",
+"text": "like, Alex said I forgot to water the plants all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1125",
+"text": "後輩が今日唐揚げ作りすぎちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1136",
+"text": "日差しが強くて暑かったし、植木に水やるの忘れてたって",
+"kind": "filler"
+},
+{
+"id": "f0844",
+"text": "まあ、おととい天気予報だと明日は晴れるらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1038",
+"text": "今日駅の階段で転びそうになったんだって",
+"kind": "filler"
+},
+{
+"id": "f0387",
+"text": "さっき植木に水やるの忘れてたんだって",
+"kind": "filler"
+},
+{
+"id": "f0350",
+"text": "この前ドラッグストアでティッシュ買ったって",
+"kind": "filler"
+},
+{
+"id": "f1402",
+"text": "anyway last night the soccer match ended in a draw",
+"kind": "filler"
+},
+{
+"id": "f0979",
+"text": "キーボードの調子が悪いし、駅の階段で転びそうになったらしいよ",
+"kind": "filler"
+},
+{
+"id": "f0983",
+"text": "コピー機の前で行列ができてたし、お味噌汁の味がちょっと薄かったって",
+"kind": "filler"
+},
+{
+"id": "f0380",
+"text": "さっきドラッグストアでティッシュ買ったかも",
+"kind": "filler"
+},
+{
+"id": "f0750",
+"text": "なんか、今日風が冷たくなってきたって",
+"kind": "filler"
+},
+{
+"id": "f0411",
+"text": "そういえば、この前自転車のチェーンが外れたんだって",
+"kind": "filler"
+},
+{
+"id": "f0266",
+"text": "えーと、朝からあくびが止まらないよ",
+"kind": "filler"
+},
+{
+"id": "f0276",
+"text": "えーと、植木に水やるの忘れてたし、天気予報だと明日は晴れるらしいわ",
+"kind": "filler"
+},
+{
+"id": "f1143",
+"text": "昨日の夜スーパーで卵が安かったね",
+"kind": "filler"
+},
+{
+"id": "f0251",
+"text": "えーと、昨日の夜テレビのクイズ番組おもしろかったって",
+"kind": "filler"
+},
+{
+"id": "f0886",
+"text": "まあ、今朝カーテンを洗ったかも",
+"kind": "filler"
+},
+{
+"id": "f0283",
+"text": "えーと、鈴木くんが今日金魚の水槽を掃除したって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0258",
+"text": "えーと、昼過ぎにニュースで台風のことやってたみたい",
+"kind": "filler"
+},
+{
+"id": "f1255",
+"text": "鈴木くんがおととい部屋の電球が切れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1073",
+"text": "伊藤さんが朝から眠くて仕方ないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1486",
+"text": "just now the train was delayed again",
+"kind": "filler"
+},
+{
+"id": "f1683",
+"text": "oh and the soccer match ended in a draw, and the miso soup was a little bland",
+"kind": "filler"
+},
+{
+"id": "f0768",
+"text": "なんか、妹がさっきコピー機の前で行列ができてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0315",
+"text": "おとといニュースで台風のことやってたんだよね",
+"kind": "filler"
+},
+{
+"id": "f1481",
+"text": "just now the cicadas were so loud",
+"kind": "filler"
+},
+{
+"id": "f0461",
+"text": "そういえば、天気予報だと明日は晴れるらしいし、漫画の新刊が出てたなあ",
+"kind": "filler"
+},
+{
+"id": "f1175",
+"text": "昼過ぎに電車が人身事故で遅れてたなあ",
+"kind": "filler"
+},
+{
+"id": "f1748",
+"text": "so Tom said it looked like it was going to rain this morning",
+"kind": "filler"
+},
+{
+"id": "f0161",
+"text": "えーと、この前あくびが止まらないんだって",
+"kind": "filler"
+},
+{
+"id": "f0064",
+"text": "あのー、天気予報だと明日は晴れるらしいし、キーボードの調子が悪いかも",
+"kind": "filler"
+},
+{
+"id": "f0056",
+"text": "あのー、伊藤さんがこの前エクセルの関数がうまく動かないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1118",
+"text": "店長が最近植木に水やるの忘れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0624",
+"text": "ていうか、店長が今朝桜がもうすぐ咲きそうって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0643",
+"text": "ていうか、昼過ぎに金魚の水槽を掃除したみたい",
+"kind": "filler"
+},
+{
+"id": "f1696",
+"text": "oh and yesterday I found storage boxes at the dollar store",
+"kind": "filler"
+},
+{
+"id": "f0908",
+"text": "まあ、妹がこの前プリンターの紙詰まりがまた起きたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1516",
+"text": "like, all afternoon my shoulders are killing me",
+"kind": "filler"
+},
+{
+"id": "f1011",
+"text": "マラソン大会のボランティアしてたし、日差しが強くて暑かったって",
+"kind": "filler"
+},
+{
+"id": "f1779",
+"text": "so my keyboard is acting up, and I found storage boxes at the dollar store",
+"kind": "filler"
+},
+{
+"id": "f1932",
+"text": "um, just now there was a line at the copier",
+"kind": "filler"
+},
+{
+"id": "f1151",
+"text": "昨日の夜公園で犬の散歩してる人が多かったよ",
+"kind": "filler"
+},
+{
+"id": "f0007",
+"text": "あのー、うちの兄がおとといカーテンを洗ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1843",
+"text": "the croissants at the bakery were amazing, and I'm so sleepy",
+"kind": "filler"
+},
+{
+"id": "f1930",
+"text": "um, just now the news was all about the typhoon",
+"kind": "filler"
+},
+{
+"id": "f1192",
+"text": "最近金魚の水槽を掃除したんだって",
+"kind": "filler"
+},
+{
+"id": "f1384",
+"text": "anyway Tom said there was a marathon downtown on the weekend",
+"kind": "filler"
+},
+{
+"id": "f1599",
+"text": "my brother said the light bulb in my room burned out just now",
+"kind": "filler"
+},
+{
+"id": "f0413",
+"text": "そういえば、さっきまでキーボードの調子が悪いの",
+"kind": "filler"
+},
+{
+"id": "f1528",
+"text": "like, last night I was grinding that game event",
+"kind": "filler"
+},
+{
+"id": "f0418",
+"text": "そういえば、さっきドラッグストアでティッシュ買ったみたい",
+"kind": "filler"
+},
+{
+"id": "f0111",
+"text": "あのー、社内チャットの通知が多すぎるし、セミがうるさかったみたい",
+"kind": "filler"
+},
+{
+"id": "f0842",
+"text": "まあ、おとといラジオで懐かしい曲が流れてたわ",
+"kind": "filler"
+},
+{
+"id": "f0670",
+"text": "ていうか、鈴木くんが朝からドラッグストアでティッシュ買ったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0243",
+"text": "えーと、店長が昨日の夜桜がもうすぐ咲きそうって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0335",
+"text": "お父さんが今日パン屋さんのクロワッサンが美味しかったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0761",
+"text": "なんか、先輩がこの前肩こりがひどいって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1952",
+"text": "um, our manager said the news was all about the typhoon this morning",
+"kind": "filler"
+},
+{
+"id": "f0414",
+"text": "そういえば、さっきまでコピー機の前で行列ができてたんだよね",
+"kind": "filler"
+},
+{
+"id": "f1007",
+"text": "パン屋さんのクロワッサンが美味しかったし、天気予報だと明日は晴れるらしい",
+"kind": "filler"
+},
+{
+"id": "f0144",
+"text": "うちの兄が今日唐揚げ作りすぎちゃったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0985",
+"text": "コンビニの新しいスイーツ食べてみたし、ドラマの続きが気になって寝られなかったなあ",
+"kind": "filler"
+},
+{
+"id": "f0249",
+"text": "えーと、日差しが強くて暑かったし、コピー機の前で行列ができてたんだって",
+"kind": "filler"
+},
+{
+"id": "f0004",
+"text": "あのー、あの子がさっきまで電車が人身事故で遅れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "q25_r0",
+"text": "昨日観た映画、最後泣いちゃった、すごく良かった",
+"kind": "relevant"
+},
+{
+"id": "f0221",
+"text": "えーと、先輩が今朝百円ショップで収納ケース見つけたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1494",
+"text": "last night my keyboard is acting up",
+"kind": "filler"
+},
+{
+"id": "f1973",
+"text": "um, the weather forecast says it'll be sunny tomorrow, and I forgot to water the plants",
+"kind": "filler"
+},
+{
+"id": "f1453",
+"text": "anyway this morning there was a marathon downtown",
+"kind": "filler"
+},
+{
+"id": "f0876",
+"text": "まあ、マラソン大会のボランティアしてたし、肩こりがひどいんだって",
+"kind": "filler"
+},
+{
+"id": "f1407",
+"text": "anyway my brother said the printer jammed again the other day",
+"kind": "filler"
+},
+{
+"id": "f1507",
+"text": "like, Lisa said my bike chain came off all afternoon",
+"kind": "filler"
+},
+{
+"id": "f1602",
+"text": "my inbox is out of control, and the miso soup was a little bland",
+"kind": "filler"
+},
+{
+"id": "f1209",
+"text": "朝から眠くて仕方ないんだって",
+"kind": "filler"
+},
+{
+"id": "f0741",
+"text": "なんか、プリンターの紙詰まりがまた起きたし、電車が人身事故で遅れてたわ",
+"kind": "filler"
+},
+{
+"id": "f1281",
+"text": "電車が人身事故で遅れてたし、テレビのクイズ番組おもしろかったって",
+"kind": "filler"
+},
+{
+"id": "f0264",
+"text": "えーと、最近抹茶のアイスが好きなんだよねなあ",
+"kind": "filler"
+},
+{
+"id": "f1548",
+"text": "like, my shoulders are killing me, and the miso soup was a little bland",
+"kind": "filler"
+},
+{
+"id": "f1480",
+"text": "just now the bus never showed up",
+"kind": "filler"
+},
+{
+"id": "q38_n0",
+"text": "ホテルの朝ごはん美味しかったね",
+"kind": "hard_negative"
+},
+{
+"id": "f1945",
+"text": "um, my roommate said the train was delayed again the other day",
+"kind": "filler"
+},
+{
+"id": "f0013",
+"text": "あのー、おととい動画を見てたら夜更かししちゃったの",
+"kind": "filler"
+},
+{
+"id": "f1113",
+"text": "店長が今朝部屋の電球が切れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0177",
+"text": "えーと、さっきマラソン大会のボランティアしてたって",
+"kind": "filler"
+},
+{
+"id": "f0134",
+"text": "あの子が今朝ニュースで台風のことやってたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1979",
+"text": "um, this morning it looked like it was going to rain",
+"kind": "filler"
+},
+{
+"id": "f1526",
+"text": "like, just now the miso soup was a little bland",
+"kind": "filler"
+},
+{
+"id": "f1919",
+"text": "um, all afternoon matcha ice cream is the best",
+"kind": "filler"
+},
+{
+"id": "f0883",
+"text": "まあ、今日唐揚げ作りすぎちゃったかも",
+"kind": "filler"
+},
+{
+"id": "q50_r0",
+"text": "夏休みの家族旅行、全部で三十万くらいに抑えたいね",
+"kind": "relevant"
+},
+{
+"id": "f1285",
+"text": "風が冷たくなってきたし、ゲームのイベント周回してたわ",
+"kind": "filler"
+},
+{
+"id": "f0137",
+"text": "あの子が昼過ぎにニュースで台風のことやってたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1311",
+"text": "I forgot to water the plants, and the soccer match ended in a draw",
+"kind": "filler"
+},
+{
+"id": "f0712",
+"text": "なんか、さっきなんか甘いもの食べたいんだって",
+"kind": "filler"
+},
+{
+"id": "f0227",
+"text": "えーと、天気予報だと明日は晴れるらしいし、唐揚げ作りすぎちゃったんだよね",
+"kind": "filler"
+},
+{
+"id": "f1202",
+"text": "朝からセミがうるさかった",
+"kind": "filler"
+},
+{
+"id": "f0904",
+"text": "まあ、唐揚げ作りすぎちゃったし、テレビのクイズ番組おもしろかったみたい",
+"kind": "filler"
+},
+{
+"id": "f0962",
+"text": "まあ、駅の階段で転びそうになったし、電車が人身事故で遅れてたね",
+"kind": "filler"
+},
+{
+"id": "f1989",
+"text": "yesterday eggs were on sale at the supermarket",
+"kind": "filler"
+},
+{
+"id": "q36_n0",
+"text": "the server room is way too cold",
+"kind": "hard_negative"
+},
+{
+"id": "f1443",
+"text": "anyway the other day they played an old song on the radio",
+"kind": "filler"
+},
+{
+"id": "q23_r0",
+"text": "金曜の飲み会、駅前の焼き鳥屋さんで七時からね",
+"kind": "relevant"
+},
+{
+"id": "f0292",
+"text": "えーと、隣の人が昼過ぎに雲がすごく低くて雨が降りそうって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1394",
+"text": "anyway just now I made way too much fried chicken",
+"kind": "filler"
+},
+{
+"id": "f1857",
+"text": "the other day I found storage boxes at the dollar store",
+"kind": "filler"
+},
+{
+"id": "f0534",
+"text": "そういえば、高橋さんが朝からエクセルの関数がうまく動かないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0657",
+"text": "ていうか、桜がもうすぐ咲きそうし、漫画の新刊が出てたって",
+"kind": "filler"
+},
+{
+"id": "f0479",
+"text": "そういえば、後輩が朝から電車が人身事故で遅れてたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1454",
+"text": "anyway yesterday I couldn't stop watching that drama",
+"kind": "filler"
+},
+{
+"id": "f0325",
+"text": "おととい電車が人身事故で遅れてたなあ",
+"kind": "filler"
+},
+{
+"id": "f0823",
+"text": "なんか、雲がすごく低くて雨が降りそうし、あくびが止まらないかも",
+"kind": "filler"
+},
+{
+"id": "f0485",
+"text": "そういえば、昼過ぎにニュースで台風のことやってたみたい",
+"kind": "filler"
+},
+{
+"id": "f1447",
+"text": "anyway there was a line at the copier, and the croissants at the bakery were amazing",
+"kind": "filler"
+},
+{
+"id": "f0382",
+"text": "さっきマラソン大会のボランティアしてたわ",
+"kind": "filler"
+},
+{
+"id": "f0535",
+"text": "ていうか、あくびが止まらないし、コーヒー豆を新しいのに変えたね",
+"kind": "filler"
+},
+{
+"id": "f1049",
+"text": "今朝マラソン大会のボランティアしてたらしいよ",
+"kind": "filler"
+},
+{
+"id": "q24_n0",
+"text": "部長に有給の申請出すの忘れてた",
+"kind": "hard_negative"
+},
+{
+"id": "f1728",
+"text": "our manager said there was a marathon downtown yesterday",
+"kind": "filler"
+},
+{
+"id": "f0270",
+"text": "えーと、朝から金魚の水槽を掃除したなあ",
+"kind": "filler"
+},
+{
+"id": "f0214",
+"text": "えーと、今朝部屋の電球が切れたみたい",
+"kind": "filler"
+},
+{
+"id": "f0562",
+"text": "ていうか、さっきまでコンビニの新しいスイーツ食べてみたわ",
+"kind": "filler"
+},
+{
+"id": "f1138",
+"text": "日差しが強くて暑かったし、金魚の水槽を掃除したらしいよ",
+"kind": "filler"
+},
+{
+"id": "f1560",
+"text": "like, the chat notifications never stop, and I switched to a new coffee brand",
+"kind": "filler"
+},
+{
+"id": "f0758",
+"text": "なんか、伊藤さんが昼過ぎにニュースで台風のことやってたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0937",
+"text": "まあ、昼過ぎに風が冷たくなってきたよ",
+"kind": "filler"
+},
+{
+"id": "f1544",
+"text": "like, my roommate said it was really humid outside the other day",
+"kind": "filler"
+},
+{
+"id": "f1802",
+"text": "so the other day I couldn't stop watching that drama",
+"kind": "filler"
+},
+{
+"id": "f0557",
+"text": "ていうか、この前電車が人身事故で遅れてたみたい",
+"kind": "filler"
+},
+{
+"id": "f0304",
+"text": "えーと、駅の階段で転びそうになったし、唐揚げ作りすぎちゃったみたい",
+"kind": "filler"
+},
+{
+"id": "f0062",
+"text": "あのー、先輩が今朝自転車のチェーンが外れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1793",
+"text": "so on the weekend there was a marathon downtown",
+"kind": "filler"
+},
+{
+"id": "f1411",
+"text": "anyway my neighbor said the bus never showed up this morning",
+"kind": "filler"
+},
+{
+"id": "f0174",
+"text": "えーと、さっきまで風が冷たくなってきたの",
+"kind": "filler"
+},
+{
+"id": "f1801",
+"text": "so the news was all about the typhoon, and the light bulb in my room burned out",
+"kind": "filler"
+},
+{
+"id": "f0345",
+"text": "お父さんが朝からコーヒー豆を新しいのに変えたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1227",
+"text": "眠くて仕方ないし、サッカーの代表戦、引き分けだったわ",
+"kind": "filler"
+},
+{
+"id": "f1573",
+"text": "like, the train was delayed again, and the convenience store has a new dessert",
+"kind": "filler"
+},
+{
+"id": "f1649",
+"text": "oh and eggs were on sale at the supermarket, and the news was all about the typhoon",
+"kind": "filler"
+},
+{
+"id": "f0575",
+"text": "ていうか、エクセルの関数がうまく動かないし、植木に水やるの忘れてたね",
+"kind": "filler"
+},
+{
+"id": "f0800",
+"text": "なんか、朝からカーテンを洗ったんだよね",
+"kind": "filler"
+},
+{
+"id": "f0010",
+"text": "あのー、おとといテレビのクイズ番組おもしろかったの",
+"kind": "filler"
+},
+{
+"id": "f1066",
+"text": "伊藤さんが今朝金魚の水槽を掃除したって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0234",
+"text": "えーと、山本さんがおとといゲームのイベント周回してたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0854",
+"text": "まあ、さっきまでテレビのクイズ番組おもしろかったね",
+"kind": "filler"
+},
+{
+"id": "q39_n0",
+"text": "we're hiring two more engineers this year",
+"kind": "hard_negative"
+},
+{
+"id": "f0389",
+"text": "さっき電車が人身事故で遅れてたって",
+"kind": "filler"
+},
+{
+"id": "f0540",
+"text": "ていうか、うちの兄がさっき漫画の新刊が出てたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1126",
+"text": "後輩が今朝スーパーで卵が安かったって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1239",
+"text": "紅葉がきれいだったし、セミがうるさかったかも",
+"kind": "filler"
+},
+{
+"id": "f1172",
+"text": "昼過ぎに肩こりがひどいんだって",
+"kind": "filler"
+},
+{
+"id": "f0126",
+"text": "あのー、高橋さんが最近ゲームのイベント周回してたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0082",
+"text": "あのー、抹茶のアイスが好きなんだよねし、駅の階段で転びそうになったかも",
+"kind": "filler"
+},
+{
+"id": "f1535",
+"text": "like, my bike chain came off, and the convenience store has a new dessert",
+"kind": "filler"
+},
+{
+"id": "f0282",
+"text": "えーと、鈴木くんがさっきまでエクセルの関数がうまく動かないって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0887",
+"text": "まあ、今朝サッカーの代表戦、引き分けだったね",
+"kind": "filler"
+},
+{
+"id": "f1422",
+"text": "anyway on the weekend there was a marathon downtown",
+"kind": "filler"
+},
+{
+"id": "f0660",
+"text": "ていうか、社内チャットの通知が多すぎるし、セミがうるさかったよ",
+"kind": "filler"
+},
+{
+"id": "f1440",
+"text": "anyway the other day my keyboard is acting up",
+"kind": "filler"
+},
+{
+"id": "f1778",
+"text": "so my inbox is out of control, and the weather forecast says it'll be sunny tomorrow",
+"kind": "filler"
+},
+{
+"id": "f1097",
+"text": "妹が最近自転車のチェーンが外れたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f0339",
+"text": "お父さんが昼過ぎにプリンターの紙詰まりがまた起きたって言ってた",
+"kind": "filler"
+},
+{
+"id": "f1000",
+"text": "ドラマの続きが気になって寝られなかったし、日差しが強くて暑かったんだよね",
+"kind": "filler"
+},
+{
+"id": "f0166",
+"text": "えーと、この前メールの返信がたまってるんだって",
+"kind": "filler"
+}
+]
+}
