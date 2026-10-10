@@ -160,8 +160,11 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 | `jvmTest/…/ViewModelTest` | 一時ファイルの実 `LocalStore` + 一時ディレクトリの音声 + テストディスパッチャで、日付移動・変更時の再読み込み・周期更新・再試行・検索→該当日へ移動・受信途絶の警告、容量表示と保持期間の確認・適用・空き容量警告、「削除」入力による全削除、確認付きの日単位削除、削除済み音声の発話が再生されないこと、設定の保存、オンボーディングのステップ・同意必須・権限要求 |
 | `jvmTest/…/GapAlertEvaluatorTest` | 実 DB 上で途絶アラートの判定・通知文・設定の反映 |
 | `jvmTest/…/AppUiTest` | Skia でヘッドレス描画し、(1) タイムライン→再生→検索→結果を開く→状態→おやすみ時間の切り替え→ストレージ（「削除」を入力して全削除）、(2) オンボーディング（同意しないと次へ進めない→通知許可→モデルのダウンロード選択→はじめる→タブ画面→説明をもう一度）を操作。スクリーンショットを `composeApp/build/screenshots/` に出力 |
+| `androidApp/src/androidTest/…/PlaybackTest` | エミュレータ上の実アプリで、実際の AAC を MediaPlayer が指定位置から再生すること、検索 → 結果を 1 タップ → 発話の位置から再生されることを確認（CI `emulator.yml`、[android-phone.md §6.1](android-phone.md#61-実機なしlinux--ci)） |
 
-共通ロジックのテスト: `shared/core-pipeline` の `AudioRetentionPolicyTest`（未処理・最近の音声は消さない、無期限は何も消さない）と `StorageManagerTest`（一時ディレクトリ + 実 `LocalStore`）、`shared/core-db` の `StorageQueriesTest`（削除の連鎖・FTS・設定・マイグレーションの冪等性）。
+共通ロジックのテスト: `shared/core-pipeline` の `AudioRetentionPolicyTest`（未処理・最近の音声は消さない、無期限は何も消さない）と `StorageManagerTest`（一時ディレクトリ + 実 `LocalStore`）、`shared/core-db` の `StorageQueriesTest`（削除の連鎖・FTS・設定・マイグレーションの冪等性）。実 SQLite を使うテストは `src/sqliteTest` にあり、JVM・iOS シミュレータ・Android 端末（composeApp の `GapAlertEvaluatorTest` は JVM と iOS シミュレータのみ）で実行される（[04-dev-environment.md §6](../04-dev-environment.md#6-ci-での自動確認実機なし)）。
+
+検索のスニペット（一致箇所を `[` `]` で囲んだ文字列）は core-db の `highlightSnippet` が作る。40 文字を超える発話は最初の一致の前後で切り詰め、切った側に `…` を付ける。検索速度は [04-dev-environment.md §5](../04-dev-environment.md#5-検索の性能ベンチマーク23) のベンチマークで確認する。
 
 ## 5. 未対応・今後
 

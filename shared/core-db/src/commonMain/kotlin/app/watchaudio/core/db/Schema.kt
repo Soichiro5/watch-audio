@@ -79,4 +79,11 @@ internal val MIGRATIONS: List<List<String>> = listOf(
         WHERE audio_path IS NOT NULL AND audio_purged_at IS NULL
         """,
     ),
+    // 4: search speed (#23). The LIKE fallback for 1-2 character queries scans this index
+    // newest-first and filters on text without reading the table; it also serves every
+    // start_at range query the old index did.
+    listOf(
+        "CREATE INDEX idx_segment_start_text ON transcript_segment(start_at, text)",
+        "DROP INDEX idx_segment_start_at",
+    ),
 )
