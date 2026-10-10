@@ -66,4 +66,6 @@ data class StoreStats(
     val segments: Int,
     val audioBytes: Long,
     val recordedMs: Long,
+    /** When the phone last stored a chunk (`received_at`), or null if there are none. */
+    val lastReceivedAt: Long? = null,
 )

@@ -116,8 +116,40 @@ class LocalStoreTest {
         assertEquals(2, stats.chunks)
         assertEquals(1, stats.pendingChunks)
         assertEquals(300_000, stats.recordedMs)
+        assertEquals(0, stats.lastReceivedAt)
         assertEquals(listOf("silent"), store.read { chunksBetween(400_000, 500_000) }.map { it.id })
         assertNull(store.read { chunk("missing") })
+    }
+
+    @Test
+    fun emptyStats() = runTest {
+        val stats = store.read { stats() }
+        assertEquals(0, stats.chunks)
+        assertNull(stats.lastReceivedAt)
+        assertNull(store.read { lastChunkBefore() })
+    }
+
+    @Test
+    fun lastChunkBefore() = runTest {
+        store.transaction {
+            insertChunk(manifest("a", 0), "a.m4a", 10)
+            insertChunk(manifest("b", 300_000), "b.m4a", 20)
+        }
+        assertEquals("b", store.read { lastChunkBefore() }!!.id)
+        assertEquals("a", store.read { lastChunkBefore(300_000) }!!.id)
+        assertNull(store.read { lastChunkBefore(0) })
+        assertEquals(20, store.read { stats() }.lastReceivedAt)
+    }
+
+    @Test
+    fun changesCountCommittedWritesOnly() = runTest {
+        assertEquals(0, store.changes.value)
+        store.transaction { insertChunk(manifest("a", 0), "a.m4a", 0) }
+        assertEquals(1, store.changes.value)
+        store.read { stats() }
+        assertEquals(1, store.changes.value)
+        runCatching { store.transaction { error("rolled back") } }
+        assertEquals(1, store.changes.value)
     }
 
     @Test

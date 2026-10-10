@@ -68,6 +68,13 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
             buildList { while (st.step()) add(st.toChunk()) }
         }
 
+    /** The chunk that started last before [at] (the newest chunk by default), if any. */
+    fun lastChunkBefore(at: Long = Long.MAX_VALUE): ChunkRecord? =
+        db.prepare("SELECT $CHUNK_COLUMNS FROM audio_chunk WHERE started_at < ? ORDER BY started_at DESC LIMIT 1").use { st ->
+            st.bindLong(1, at)
+            if (st.step()) st.toChunk() else null
+        }
+
     /** Chunks waiting for transcription (new or retryable failures), oldest first. */
     fun pendingChunks(limit: Int, maxAttempts: Int): List<ChunkRecord> =
         db.prepare(
@@ -171,7 +178,8 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
             (SELECT COUNT(*) FROM audio_chunk WHERE state = 'FAILED'),
             (SELECT COUNT(*) FROM transcript_segment),
             (SELECT COALESCE(SUM(size_bytes), 0) FROM audio_chunk),
-            (SELECT COALESCE(SUM(ended_at - started_at), 0) FROM audio_chunk WHERE audio_path IS NOT NULL)
+            (SELECT COALESCE(SUM(ended_at - started_at), 0) FROM audio_chunk WHERE audio_path IS NOT NULL),
+            (SELECT MAX(received_at) FROM audio_chunk)
         """.trimIndent(),
     ).use { st ->
         st.step()
@@ -183,6 +191,7 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
             segments = st.getInt(4),
             audioBytes = st.getLong(5),
             recordedMs = st.getLong(6),
+            lastReceivedAt = if (st.isNull(7)) null else st.getLong(7),
         )
     }
 
