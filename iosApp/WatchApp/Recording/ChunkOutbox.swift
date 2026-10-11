@@ -44,7 +44,9 @@ struct OutboxItem: Sendable {
 ///     recording/<id>.m4a, recording/<id>.json   chunk being recorded (InProgressChunk)
 ///     outbox/<id>.m4a, outbox/<id>.json         closed chunk + manifest; deleted on final ACK
 ///
-/// Everything is plain files, so the queue survives relaunches and reboots.
+/// Everything is plain files, so the queue survives relaunches and reboots. The directories are
+/// excluded from backups and use the `completeUntilFirstUserAuthentication` protection class
+/// (LocalDataProtection), so the outbox keeps working while the watch is locked.
 struct ChunkOutbox: Sendable {
     let root: URL
     let recordingDirectory: URL
@@ -54,8 +56,8 @@ struct ChunkOutbox: Sendable {
         self.root = root
         recordingDirectory = root.appending(path: "recording")
         outboxDirectory = root.appending(path: "outbox")
-        for directory in [recordingDirectory, outboxDirectory] {
-            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        for directory in [root, recordingDirectory, outboxDirectory] {
+            try? LocalDataProtection.prepare(directory: directory)
         }
     }
 

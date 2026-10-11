@@ -34,10 +34,7 @@ import platform.BackgroundTasks.BGProcessingTaskRequest
 import platform.BackgroundTasks.BGTask
 import platform.BackgroundTasks.BGTaskScheduler
 import platform.Foundation.NSApplicationSupportDirectory
-import platform.Foundation.NSNumber
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
-import platform.Foundation.NSURL
-import platform.Foundation.NSURLIsExcludedFromBackupKey
 import platform.Foundation.NSUserDomainMask
 import platform.UIKit.UIApplication
 import platform.UIKit.UIBackgroundTaskInvalid
@@ -47,7 +44,8 @@ import platform.UIKit.UIBackgroundTaskInvalid
  *
  * Owns the local database, the audio archive, the [Ingestor] (chunks from the Apple Watch via
  * WatchConnectivity) and the [TranscriptionPipeline] (Speech framework, on device). Everything is
- * stored under Application Support/WatchAudio, which is excluded from iCloud/iTunes backups:
+ * stored under Application Support/WatchAudio, which is excluded from iCloud/computer backups and
+ * uses the `CompleteUntilFirstUserAuthentication` protection class ([LocalDataDirectory]):
  * nothing leaves the phone.
  *
  * Threading: [start] and [setAppActive] are called on the main thread; [ingest] from any thread.
@@ -78,14 +76,12 @@ object IosAppGraph {
     /** For the shared Compose UI; valid after [start]. */
     val services: AppServices get() = appServices
 
-    /** Application Support/WatchAudio (created on first use, excluded from backup). */
+    /** Application Support/WatchAudio (created on first use, excluded from backup, protected). */
     val rootDirectory: String by lazy {
         val base = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, true)
             .first() as String
         val root = "$base/WatchAudio"
-        SystemFileSystem.createDirectories(Path(root))
-        // A directory's flag also covers everything inside it.
-        NSURL.fileURLWithPath(root).setResourceValue(NSNumber(bool = true), NSURLIsExcludedFromBackupKey, null)
+        LocalDataDirectory.prepare(root)
         root
     }
 
@@ -96,6 +92,13 @@ object IosAppGraph {
         return inbox
     }
 
+    /** Audio archive (paths in the database are relative to it). */
+    internal val audioDirectory: String by lazy {
+        val audio = "$rootDirectory/audio"
+        LocalDataDirectory.prepare(audio)
+        audio
+    }
+
     /**
      * Opens the database and registers the background task. Call once from the app's `init`
      * (BGTaskScheduler requires registration before launch finishes). Idempotent.
@@ -104,8 +107,7 @@ object IosAppGraph {
         if (started) return
         started = true
         this.transcriber = transcriber
-        val audioRoot = "$rootDirectory/audio"
-        SystemFileSystem.createDirectories(Path(audioRoot))
+        val audioRoot = audioDirectory
         cleanInbox()
         store = LocalStore.open("$rootDirectory/${LocalStore.FILE_NAME}")
         ingestor = Ingestor(store, Path(audioRoot))

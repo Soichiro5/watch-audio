@@ -46,6 +46,19 @@ final class ChunkOutboxTests: XCTestCase {
 
     // MARK: - Outbox files
 
+    func testOutboxDirectoriesAreExcludedFromBackupAndProtected() throws {
+        // #76: chunks waiting for the iPhone never go into an iCloud / computer backup.
+        for directory in [root!, outbox.recordingDirectory, outbox.outboxDirectory] {
+            let values = try directory.resourceValues(forKeys: [.isExcludedFromBackupKey])
+            XCTAssertEqual(values.isExcludedFromBackup, true, directory.lastPathComponent)
+            // The simulator has no Data Protection; compare the class only when it is reported.
+            let attributes = try FileManager.default.attributesOfItem(atPath: directory.path(percentEncoded: false))
+            if let protection = attributes[.protectionKey] as? FileProtectionType {
+                XCTAssertEqual(protection, .completeUntilFirstUserAuthentication, directory.lastPathComponent)
+            }
+        }
+    }
+
     func testCommittedChunksArePendingOldestFirst() throws {
         try commit("b", startedAt: 2_000)
         try commit("a", startedAt: 1_000)
