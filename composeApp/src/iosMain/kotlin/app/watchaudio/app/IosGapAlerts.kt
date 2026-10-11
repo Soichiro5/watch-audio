@@ -1,6 +1,8 @@
 package app.watchaudio.app
 
 import app.watchaudio.app.alert.GapAlertEvaluator
+import app.watchaudio.core.pipeline.DiagnosticEvents
+import app.watchaudio.core.pipeline.Diagnostics
 import kotlin.time.Clock
 import platform.UserNotifications.UNMutableNotificationContent
 import platform.UserNotifications.UNNotificationRequest
@@ -17,7 +19,10 @@ import platform.UserNotifications.UNUserNotificationCenter
  * The notification is only shown while the app is in the background (no
  * `UNUserNotificationCenterDelegate`); in the foreground the status tab shows the warning.
  */
-internal class IosGapAlerts(private val evaluator: GapAlertEvaluator) {
+internal class IosGapAlerts(
+    private val evaluator: GapAlertEvaluator,
+    private val diagnostics: Diagnostics = Diagnostics.NONE,
+) {
     private val center: UNUserNotificationCenter get() = UNUserNotificationCenter.currentNotificationCenter()
 
     /**
@@ -40,6 +45,7 @@ internal class IosGapAlerts(private val evaluator: GapAlertEvaluator) {
         content.setSound(UNNotificationSound.defaultSound())
         val trigger = UNTimeIntervalNotificationTrigger.triggerWithTimeInterval((at - now) / 1000.0, repeats = false)
         center.addNotificationRequest(UNNotificationRequest.requestWithIdentifier(NOTIFICATION_ID, content, trigger), null)
+        diagnostics.log(DiagnosticEvents.GAP_ALERT_SCHEDULED, "at=$at last_received_at=$lastReceivedAt")
     }
 
     private companion object {

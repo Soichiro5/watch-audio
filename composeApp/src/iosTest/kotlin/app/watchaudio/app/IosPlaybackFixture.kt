@@ -2,6 +2,7 @@ package app.watchaudio.app
 
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.db.NewSegment
+import app.watchaudio.core.pipeline.DiagnosticsLog
 import app.watchaudio.core.pipeline.Ingestor
 import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.platform.sha256Of
@@ -71,6 +72,7 @@ class IosPlaybackFixture {
         onRequestTranscription = {},
         onPrepareModel = {},
         onGapAlertSettingsChanged = {},
+        diagnostics = DiagnosticsLog(dir.resolve(DiagnosticsLog.FILE_NAME)),
     )
 
     fun close() {

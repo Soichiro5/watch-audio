@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Only the diagnostics export (#77) is shareable: a copy of the event log that the user sends
+    from the share sheet. Recordings and transcripts are never under this path.
+-->
+<paths>
+    <cache-path name="diagnostics" path="diagnostics-export/" />
+</paths>

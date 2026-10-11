@@ -2,6 +2,9 @@ package app.watchaudio.app
 
 import app.watchaudio.app.alert.GapAlertEvaluator
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.DiagnosticEvents
+import app.watchaudio.core.pipeline.DiagnosticsLog
+import app.watchaudio.core.pipeline.DiagnosticsPipelineObserver
 import app.watchaudio.core.pipeline.Ingestor
 import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.pipeline.TranscriptionPipeline
@@ -9,9 +12,13 @@ import app.watchaudio.core.protocol.AckStatus
 import app.watchaudio.core.protocol.ChunkAck
 import app.watchaudio.core.protocol.decodeManifest
 import app.watchaudio.core.protocol.toJson
+import app.watchaudio.core.platform.platformName
 import kotlin.concurrent.Volatile
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.resume
+import kotlin.experimental.ExperimentalNativeApi
+import kotlin.native.ReportUnhandledExceptionHook
+import kotlin.native.setUnhandledExceptionHook
 import kotlin.time.Clock
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
@@ -34,6 +41,7 @@ import platform.BackgroundTasks.BGProcessingTaskRequest
 import platform.BackgroundTasks.BGTask
 import platform.BackgroundTasks.BGTaskScheduler
 import platform.Foundation.NSApplicationSupportDirectory
+import platform.Foundation.NSBundle
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSUserDomainMask
 import platform.UIKit.UIApplication
@@ -47,6 +55,8 @@ import platform.UIKit.UIBackgroundTaskInvalid
  * stored under Application Support/WatchAudio, which is excluded from iCloud/computer backups and
  * uses the `CompleteUntilFirstUserAuthentication` protection class ([LocalDataDirectory]):
  * nothing leaves the phone.
+ * The diagnostics log (#77) is `diagnostics/diagnostics.csv` there; it leaves only through the
+ * user's export ([IosAppServices.exportDiagnostics]).
  *
  * Threading: [start] and [setAppActive] are called on the main thread; [ingest] from any thread.
  * Internal state is only mutated on the main dispatcher.
@@ -72,6 +82,7 @@ object IosAppGraph {
     private lateinit var storage: StorageManager
     private lateinit var appServices: IosAppServices
     private lateinit var gapAlerts: IosGapAlerts
+    private lateinit var diagnostics: DiagnosticsLog
 
     /** For the shared Compose UI; valid after [start]. */
     val services: AppServices get() = appServices
@@ -107,13 +118,16 @@ object IosAppGraph {
         if (started) return
         started = true
         this.transcriber = transcriber
+        diagnostics = DiagnosticsLog(Path("$rootDirectory/diagnostics/${DiagnosticsLog.FILE_NAME}"))
+        recordUncaughtExceptions(diagnostics)
+        diagnostics.log(DiagnosticEvents.APP_START, "version=${appVersion()} os=${platformName()}")
         val audioRoot = audioDirectory
         cleanInbox()
         store = LocalStore.open("$rootDirectory/${LocalStore.FILE_NAME}")
         ingestor = Ingestor(store, Path(audioRoot))
         pipeline = TranscriptionPipeline(store, Path(audioRoot), IosTranscriberAdapter(transcriber))
         storage = StorageManager(store, Path(audioRoot), IosStorageEnvironment(rootDirectory))
-        gapAlerts = IosGapAlerts(GapAlertEvaluator(store))
+        gapAlerts = IosGapAlerts(GapAlertEvaluator(store), diagnostics)
         appServices = IosAppServices(
             store,
             audioRoot,
@@ -122,6 +136,7 @@ object IosAppGraph {
             onRequestTranscription = ::requestTranscription,
             onPrepareModel = ::prepareModel,
             onGapAlertSettingsChanged = { scope.launch { runCatching { gapAlerts.reschedule(chunkArrived = false) } } },
+            diagnostics = diagnostics,
         )
         BGTaskScheduler.sharedScheduler.registerForTaskWithIdentifier(PROCESSING_TASK_ID, null) { task ->
             if (task != null) scope.launch { runBackgroundTask(task) }
@@ -178,6 +193,7 @@ object IosAppGraph {
             decodeManifest(manifestJson)
         } catch (e: Exception) {
             file?.let(::deleteQuietly)
+            diagnostics.log(DiagnosticEvents.CHUNK_REJECTED, "reason=malformed_manifest error=${DiagnosticsLog.typeName(e)}")
             val chunkId = chunkIdOf(manifestJson) ?: return null
             return ChunkAck(chunkId = chunkId, status = AckStatus.REJECTED, detail = e.message?.take(200)).toJson()
         }
@@ -185,9 +201,19 @@ object IosAppGraph {
             ingestor.ingest(manifest, file)
         } catch (e: Exception) {
             file?.let(::deleteQuietly)
+            diagnostics.log(
+                DiagnosticEvents.CHUNK_REJECTED,
+                "chunk=${manifest.chunkId} reason=ingest_failed error=${DiagnosticsLog.typeName(e)}",
+            )
             status.update { it.copy(message = "取り込みに失敗: ${e.message}") }
             return null
         }
+        // The ACK itself is sent by the Swift receiver (WatchConnectivity).
+        diagnostics.log(
+            DiagnosticEvents.CHUNK_RECEIVED,
+            "chunk=${manifest.chunkId} status=${ack.status} audio_ms=${manifest.durationMs} " +
+                "bytes=${manifest.audio?.sizeBytes ?: 0}${ack.detail?.let { " detail=$it" }.orEmpty()}",
+        )
         if (!ack.status.isFinal) file?.let(::deleteQuietly) // corrupt/rejected: the watch resends
         if (ack.status == AckStatus.STORED) {
             status.update { it.copy(lastChunkReceivedAt = Clock.System.now().toEpochMilliseconds()) }
@@ -217,20 +243,21 @@ object IosAppGraph {
         foregroundRun = scope.launch {
             do {
                 rerunRequested = false
-                runPipeline(shouldContinue = { appActive })
+                runPipeline("foreground", shouldContinue = { appActive })
             } while (rerunRequested && appActive)
         }
     }
 
     private suspend fun runBackgroundTask(task: BGTask) {
         val flag = ExpirationFlag()
-        val job = scope.launch { runPipeline(shouldContinue = { !flag.expired }) }
+        val job = scope.launch { runPipeline("bgtask", shouldContinue = { !flag.expired }) }
         task.expirationHandler = {
             // Stop between chunks if possible; cancel the running chunk so we finish in time.
             flag.expired = true
             job.cancel()
         }
         job.join()
+        if (flag.expired) diagnostics.log(DiagnosticEvents.WORKER_STOP, "worker=bgtask expired=true")
         task.setTaskCompletedWithSuccess(!flag.expired)
         if (flag.expired) scheduleBackgroundProcessing()
     }
@@ -239,22 +266,30 @@ object IosAppGraph {
      * Serialized: at most one pipeline run (foreground or BGTask) at a time. Transcribes, then
      * applies the audio retention setting (only transcribed audio is ever deleted, #33).
      */
-    private suspend fun runPipeline(shouldContinue: () -> Boolean) = runLock.withLock {
-        // Without the model every chunk would fail and use up its retry attempts.
-        if (ensureModel()) transcribePending(shouldContinue)
-        applyRetention(shouldContinue)
+    private suspend fun runPipeline(worker: String, shouldContinue: () -> Boolean) = runLock.withLock {
+        diagnostics.log(DiagnosticEvents.WORKER_START, "worker=$worker")
+        var summary = ""
+        try {
+            // Without the model every chunk would fail and use up its retry attempts.
+            summary = if (ensureModel()) transcribePending(shouldContinue) else " skipped=model_not_ready"
+            applyRetention(shouldContinue)
+        } finally {
+            diagnostics.log(DiagnosticEvents.WORKER_STOP, "worker=$worker$summary")
+        }
     }
 
-    private suspend fun transcribePending(shouldContinue: () -> Boolean) {
+    /** @return the run's counts for the `worker_stop` line. */
+    private suspend fun transcribePending(shouldContinue: () -> Boolean): String {
         status.update { it.copy(transcribing = true) }
         try {
             // Chunks left TRANSCRIBING by a cancelled or killed run go back into the queue.
             pipeline.recoverInterrupted()
-            val result = pipeline.processPending(shouldContinue = shouldContinue)
+            val result = pipeline.processPending(DiagnosticsPipelineObserver(diagnostics), shouldContinue)
             if (result.failed > 0) {
                 // Re-check the model next time (the OS may have removed it).
                 status.update { it.copy(asrModel = ModelState.Unknown, message = "文字起こしに失敗したチャンク: ${result.failed}") }
             }
+            return " transcribed=${result.transcribed} failed=${result.failed}"
         } finally {
             status.update { it.copy(transcribing = false) }
         }
@@ -271,10 +306,14 @@ object IosAppGraph {
 
     private suspend fun applyRetention(shouldContinue: () -> Boolean) {
         try {
-            storage.applyRetention(shouldContinue)
+            val purged = storage.applyRetention(shouldContinue)
+            if (purged.purgedChunks > 0) {
+                diagnostics.log(DiagnosticEvents.RETENTION_PURGE, "chunks=${purged.purgedChunks} bytes=${purged.freedBytes}")
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            diagnostics.log(DiagnosticEvents.RETENTION_PURGE, "failed=true error=${DiagnosticsLog.typeName(e)}")
             status.update { it.copy(message = "古い音声の削除に失敗: ${e.message}") }
         }
     }
@@ -283,7 +322,14 @@ object IosAppGraph {
     private suspend fun ensureModel(): Boolean {
         if (status.value.asrModel == ModelState.Ready) return true
         status.update { it.copy(asrModel = ModelState.Downloading(progress = 0f)) }
+        diagnostics.log(DiagnosticEvents.MODEL_DOWNLOAD_START, "os_managed=true")
         val error = suspendCancellableCoroutine { cont -> transcriber.prepareModel { cont.resume(it) } }
+        if (error == null) {
+            diagnostics.log(DiagnosticEvents.MODEL_READY, "ready=true")
+        } else {
+            // The OS's description of the asset failure; it holds nothing about the user.
+            diagnostics.log(DiagnosticEvents.MODEL_DOWNLOAD_FAILED, "message=${error.take(200)}")
+        }
         status.update { it.copy(asrModel = if (error == null) ModelState.Ready else ModelState.Failed(error)) }
         return error == null
     }
@@ -305,6 +351,23 @@ object IosAppGraph {
     private fun deleteQuietly(path: Path) {
         runCatching { SystemFileSystem.delete(path, mustExist = false) }
     }
+
+    /**
+     * Writes a crash line (types and top frames, no messages) for Kotlin exceptions nobody caught,
+     * then lets the previous hook (normally: terminate) run. Objective-C/Swift crashes are left to
+     * the OS crash reports (Settings > Privacy > Analytics, Xcode Organizer).
+     */
+    @OptIn(ExperimentalNativeApi::class)
+    private fun recordUncaughtExceptions(log: DiagnosticsLog) {
+        var previous: ReportUnhandledExceptionHook? = null
+        previous = setUnhandledExceptionHook { throwable ->
+            runCatching { log.recordCrash("kotlin", throwable) }
+            previous?.invoke(throwable)
+        }
+    }
+
+    private fun appVersion(): String =
+        NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleShortVersionString") as? String ?: "?"
 
     private fun chunkIdOf(json: String): String? = runCatching {
         Json.parseToJsonElement(json).jsonObject["chunkId"]?.jsonPrimitive?.contentOrNull
