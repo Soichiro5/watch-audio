@@ -121,6 +121,9 @@
 -keep,allowobfuscation class app.watchaudio.core.db.SearchHit {
   public app.watchaudio.core.db.SegmentRecord getSegment();
 }
+-keep,allowobfuscation interface app.watchaudio.core.db.SearchQueries {
+  public static java.util.List search$default(app.watchaudio.core.db.SearchQueries, java.lang.String, int, int, java.lang.Object);
+}
 -keep,allowobfuscation class app.watchaudio.core.db.SegmentRecord {
   public java.lang.String getChunkId();
   public java.lang.String getText();
@@ -128,7 +131,6 @@
 -keep,allowobfuscation class app.watchaudio.core.db.StoreTransaction {
   public app.watchaudio.core.db.ChunkRecord chunk(java.lang.String);
   public void saveTranscript(java.lang.String, java.util.List, java.lang.String);
-  public static java.util.List search$default(app.watchaudio.core.db.StoreTransaction, java.lang.String, int, int, java.lang.Object);
   public java.util.List segmentsBetween(long, long);
 }
 -keep,allowobfuscation class app.watchaudio.core.pipeline.AsrModelSpec$Companion {
