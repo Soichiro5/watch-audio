@@ -7,7 +7,6 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(projects.shared.coreModel)
-            implementation(libs.ktor.client.core)
         }
     }
 }

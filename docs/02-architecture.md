@@ -1,95 +1,126 @@
 # 02. 全体構成（アーキテクチャ）
 
+> 現在のゴール（[03-roadmap.md](03-roadmap.md)）は「装着中は常時録音 → スマホでオンデバイス文字起こし → 端末内に蓄積」。この文書は**実装済みの構成**を基本に書き、AI 要約・チャット・意味検索・体調・場所など後回し（P2）の部分は「将来（P2）」と明記して区別する。
+
 ## 1. 設計方針
 
-1. **ローカルファースト / サーバーレス** — 音声・文字起こし・索引はすべて端末内。外部送信は「ユーザーが設定した AI プロバイダへのテキスト」と「OS のジオコーディング」のみ。
-2. **Watch は薄く、スマホが頭脳** — Watch は「録音・Mark・チャンク化・転送」に専念し、重い処理（ASR・埋め込み・LLM）はスマホで後追い実行する。
-3. **ロジック共有、プラットフォーム固有部はアダプタ** — ドメイン/データ/パイプライン/AI クライアントは Kotlin Multiplatform で 1 本化。録音・ASR・Health・セキュアストレージなど OS 依存部は `expect/actual` かインターフェース経由で差し替える。
-4. **劣化動作（Graceful degradation）** — HRV がない、AI キーがない、オフライン等でも、録音・文字起こし・検索は必ず動く。
+1. **ローカルのみ / サーバーレス** — 音声・文字起こし・索引はすべて端末内。現時点のネットワーク利用は**文字起こしモデルのダウンロードだけ**（Android: sherpa-onnx の GitHub Releases から `HttpURLConnection` で取得、iOS: Speech のモデルは OS が `AssetInventory` で導入）。Watch → スマホの転送も端末間の直接接続のみ（Wear OS は `Node.isNearby` のノードへ `ChannelClient` / `MessageClient`。`DataClient` のクラウド同期経路は使わない）。将来（P2）の AI 機能で外部の LLM に送る場合も、送るのはテキストだけで、ユーザーが明示的に設定したときに限る。
+2. **Watch は薄く、スマホが頭脳** — Watch は「録音・Mark・チャンク化・転送」に専念し、重い処理（ASR）はスマホで後追い実行する。
+3. **ロジック共有、プラットフォーム固有部はアダプタ** — 転送プロトコル・DB・取り込み・文字起こしパイプライン・スマホ UI は Kotlin Multiplatform で 1 本化。ASR・ストレージ情報・再生・権限など OS 依存部はインターフェース（`Transcriber`, `StorageEnvironment`, `AppServices`）か `expect/actual`（`core-platform`）で差し替える。`if (platform)` の分岐は書かない。
+4. **劣化動作（Graceful degradation）** — モデルが未準備、Watch が未接続などでも、受信済みのデータの保存・閲覧・検索は動く（文字起こしはモデルが揃ってから追いつく）。
 
-## 2. 技術スタック選定
+## 2. 技術スタック
 
-| レイヤ | 採用 | 理由 |
+| レイヤ | 採用 | 理由・実装 |
 | --- | --- | --- |
-| スマホ共通ロジック | **Kotlin Multiplatform (KMP)** | パイプラインは iOS の `BGProcessingTask` や Android の WorkManager から **UI なしで** 起動される。KMP は iOS ではネイティブフレームワークとして Swift から直接呼べるため、Flutter/RN のような「バックグラウンドでエンジンを立てる」問題がない。さらに **Wear OS アプリ（Kotlin）とチャンク形式・同期プロトコルのコードを共有**できる |
-| スマホ UI | **Compose Multiplatform** | Android/iOS で UI を 1 本化。iOS 固有画面が必要なら SwiftUI を部分的に混在可能 |
-| watchOS アプリ | **SwiftUI + AVFoundation**（ネイティブ必須） | watchOS はクロスプラットフォーム FW 非対応 |
-| Wear OS アプリ | **Kotlin + Compose for Wear OS** | 前景サービス・Ongoing Activity・Data Layer はネイティブ API |
-| DB | **SQLDelight + SQLite（FTS5 trigram）** | KMP 対応。trigram トークナイザで日本語の部分一致検索が可能 |
-| ベクトル検索 | 埋め込みを int8 BLOB で保存し総当たり cosine | 依存を増やさず十分高速。規模が増えたら sqlite-vec 等へ移行 |
-| 埋め込みモデル | multilingual-e5-small（ONNX, int8）を ONNX Runtime で実行 | 日英対応・軽量。M0 スパイクで最終決定 |
+| スマホ共通ロジック | **Kotlin Multiplatform (KMP)** | パイプラインは iOS の `BGProcessingTask` や Android の WorkManager から **UI なしで** 起動される。KMP は iOS ではネイティブフレームワーク（`ComposeApp`）として Swift から直接呼べるため、Flutter/RN のような「バックグラウンドでエンジンを立てる」問題がない。さらに **Wear OS アプリ（Kotlin）とチャンク形式・転送プロトコルのコードを共有**できる |
+| スマホ UI | **Compose Multiplatform** | Android/iOS で UI を 1 本化（`composeApp`）。画面は ViewModel（`androidx.lifecycle` の KMP 版）+ `AppServices` インターフェース経由でプラットフォームの機能を使う |
+| watchOS アプリ | **SwiftUI + AVFoundation**（ネイティブ必須） | watchOS はクロスプラットフォーム FW 非対応。プロトコルは `iosApp/Shared/ChunkProtocol.swift` に Swift で再実装し、`shared/core-protocol/testdata/*.json` のテストベクタで互換性を確認 |
+| Wear OS アプリ | **Kotlin + Compose for Wear OS** | 前景サービス・Ongoing Activity・Data Layer（`ChannelClient` / `MessageClient`）はネイティブ API |
+| DB | **SQLite（`androidx.sqlite` の `BundledSQLiteDriver`）+ FTS5 trigram** | 全プラットフォームで同じ SQLite（FTS5 入り）を同梱する。SQL は `LocalStore` に手書きし、スキーマは `core-db` の `Schema.kt`（`MIGRATIONS`、`PRAGMA user_version` で管理、**追記のみ**）。trigram トークナイザで日本語の部分一致検索ができる。ORM やコード生成（SQLDelight・Room など）は使わない |
+| ファイル・時刻 | kotlinx-io（`Path` / `SystemFileSystem`）、kotlinx-datetime、kotlinx-serialization（manifest / ACK の JSON） | 共通コードからファイル操作・タイムゾーン計算・JSON を扱うため |
 | ASR | iOS: `SpeechAnalyzer`/`SpeechTranscriber`（iOS 26+）<br>Android: sherpa-onnx + ReazonSpeech Zipformer（int8）+ Silero VAD | iOS はモデルが OS 管理でアプリが軽い。Android は日本語対応の高速 OSS。M0-5 の精度比較で Zipformer を採用（モデルは初回にダウンロード、[実装メモ](impl/android-phone.md)） |
-| HTTP / LLM | Ktor Client + 自前の Provider 抽象 | OpenAI 互換 / Anthropic / Gemini を BYOK で直接呼ぶ |
-| DI / 非同期 | Koin、Kotlin Coroutines / Flow | KMP 定番 |
-| 秘密情報 | iOS Keychain（device-only）/ Android Keystore + EncryptedFile | API キー保管 |
-| Health（Phase 2） | HealthKit / Health Connect | 読み取りのみ |
-| CI | GitHub Actions（Android/Wear: ubuntu、iOS/watchOS: macOS） | |
+| DI | **手書きの composition root**（DI ライブラリは使わない） | Android スマホ: `AppGraph`（`androidApp`）、iOS: `IosAppGraph`（`composeApp/iosMain`）、Wear OS: `AppGraph`（`wearApp/WearApp.kt`）。グラフが小さく、Worker・Service・BGTask から UI なしで同じオブジェクトに届けばよいため |
+| 非同期 | Kotlin Coroutines / Flow | KMP 定番 |
+| バックグラウンド処理 | Android: WorkManager、iOS: `BGProcessingTask` | 文字起こし・保持期間の適用・途絶チェック |
+| ネットワーク | 専用の HTTP クライアントは使わない | 通信はモデルのダウンロードだけ（Android は `HttpURLConnection`、iOS は OS 管理）。AI 機能（P2）の HTTP クライアントは P2 で決める |
+| CI | GitHub Actions（`android.yml` / `emulator.yml`: ubuntu、`ios.yml`: macOS、`deliver.yml`: `main` で APK を保存） | |
+| 将来（P2） | 埋め込み（multilingual-e5-small, ONNX）によるベクトル検索、BYOK の LLM（要約・チャット）と API キー保管（Keychain / Keystore）、HealthKit / Health Connect | M0-6 で埋め込みモデルを比較済み（[spikes](spikes/m0-6-embedding-desktop.md)）。採用ライブラリは着手時に決める |
 
 **代替案**: Flutter（UI 開発速度は高いが、iOS バックグラウンド処理と Wear OS 連携でネイティブ実装比率が高くなる）。チームが Dart に強い場合のみ再検討。
 
-**最小 OS**: iOS 26 / watchOS 26（SpeechAnalyzer 利用のため）、Android 10 (API 29) / Wear OS 4 以上を想定。
+**最小 OS**: iOS 26 / watchOS 26（SpeechAnalyzer 利用のため）、Android 10 (API 29) / Wear OS 4（API 33）以上。
 
 ## 3. システム全体図
 
 ```mermaid
 flowchart LR
   subgraph Watch["⌚ Watch (watchOS / Wear OS)"]
-    REC[Recorder<br>16kHz mono AAC] --> SEG[Chunker<br>5分ごと + 無音判定]
+    REC[Recorder<br>16kHz mono AAC 24kbps] --> SEG[Chunker<br>約 5 分ごと + 無音チャンク判定]
     MARK[Mark ボタン] --> MAN
-    LOC[Location<br>録音中のみ・Phase2] --> MAN
     SEG --> MAN[Chunk + Manifest]
-    MAN --> Q[Transfer Queue<br>受領確認まで保持]
+    MAN --> Q[Outbox<br>ACK まで保持・再送]
   end
 
-  Q -- "WatchConnectivity / Data Layer" --> ING
+  Q -- "WatchConnectivity / Data Layer（直接接続のみ）" --> ING
+  ING -- ACK --> Q
 
   subgraph Phone["📱 Phone (iOS / Android) — KMP shared"]
-    ING[Ingestor] --> AUD[(Audio Files)]
-    ING --> DB[(SQLite<br>FTS5 + Vectors)]
-    ING --> JOB[Job Scheduler<br>BGProcessingTask / WorkManager]
-    JOB --> VAD[VAD] --> ASR[ASR<br>SpeechAnalyzer / sherpa-onnx] --> DB
-    JOB --> EMB[Embedding<br>ONNX Runtime] --> DB
-    JOB --> REV[1 時間ごとの要約 / 1 日の振り返り / 記憶（事実の抽出）] --> DB
-    HEALTH[HealthKit / Health Connect<br>Phase2] --> CTX[Context Builder<br>体調・場所ラベル]
-    CTX --> REV
-    UI[Compose MP UI<br>ホーム / 日別タイムライン / 検索 / チャット / 設定] --> DB
-    CHAT[チャット（RAG）] --> DB
-    UI --> CHAT
+    ING[Ingestor<br>サイズ・SHA-256 検証] --> AUD[(Audio Files<br>audio/yyyy/MM/dd)]
+    ING --> DB[(SQLite<br>FTS5 trigram)]
+    ING --> JOB[Job Scheduler<br>WorkManager / BGProcessingTask]
+    JOB --> PIPE[TranscriptionPipeline<br>境界の連結・リトライ] --> ASR[Transcriber<br>sherpa-onnx + VAD / SpeechAnalyzer] --> DB
+    JOB --> RET[StorageManager<br>音声の保持期間] --> AUD
+    UI[Compose MP UI<br>日別タイムライン / 検索 / 状態 / オンボーディング] --> DB
+    UI --> AUD
   end
 
-  REV -- "テキストのみ (BYOK)" --> LLM[(AI Provider<br>OpenAI / Anthropic / Gemini / Custom)]
-  CHAT -- "テキストのみ (BYOK)" --> LLM
+  MODEL[(モデル配布元<br>GitHub Releases / OS)] -. "モデルのダウンロードのみ" .-> ASR
 ```
+
+将来（P2）は、文字起こしの後に「埋め込み → ベクトル検索」「1 時間ごとの要約・1 日の振り返り・記憶の抽出」「チャット（RAG）」を追加する（§6.4・§6.5）。
 
 ## 4. リポジトリ構成（モノレポ）
 
+`settings.gradle.kts` に含まれる Gradle モジュールと、その他のディレクトリ。構成の整理（`core-search` / `core-ai` の扱いなど）は #49 で行う。
+
 ```
 watch-audio/
-├── docs/                      # 調査・設計・ロードマップ
-├── shared/                    # KMP: 全プラットフォーム共通ロジック
-│   ├── core-model/            #   エンティティ・値オブジェクト
-│   ├── core-protocol/         #   チャンク/マニフェスト形式、転送プロトコル（Wear OS とも共有）
-│   ├── core-db/               #   SQLDelight スキーマ、Repository
-│   ├── core-pipeline/         #   取り込み → VAD → ASR → 埋め込み → AI レビューのジョブ
-│   ├── core-search/           #   FTS + ベクトルのハイブリッド検索
-│   ├── core-ai/               #   LLM Provider 抽象、プロンプト、RAG
-│   ├── core-platform/         #   expect/actual: Transcriber, Embedder, SecureStore, HealthSource, Geocoder
-│   └── feature-*/             #   画面ごとの ViewModel（ホーム・日別タイムライン・検索・チャット・設定）
-├── composeApp/                # Compose Multiplatform UI（Android/iOS 共通）
-├── androidApp/                # Android スマホアプリ（エントリ、WorkManager、Data Layer 受信）
-├── wearApp/                   # Wear OS アプリ（録音 FGS、Ongoing Activity、Data Layer 送信）
-└── iosApp/                    # Xcode プロジェクト
-    ├── iosApp/                #   iOS ホスト（Compose 埋め込み、BGTask、WatchConnectivity 受信、Speech）
-    └── WatchApp/              #   watchOS アプリ（SwiftUI、録音、WatchConnectivity 送信）
+├── build-logic/               # Gradle の convention plugin（KMP ライブラリ共通設定、SQLite テストを JVM/Android/iOS で動かす設定）
+├── gradle/libs.versions.toml  # 依存バージョンのカタログ
+├── shared/                    # KMP: 共通ロジック
+│   ├── core-model/            #   共通の値オブジェクト（TimeRange）
+│   ├── core-protocol/         #   ChunkManifest / ChunkAck / ChunkFrame（Wear OS・スマホ共通。testdata/ は Swift 側と共有）
+│   ├── core-platform/         #   expect/actual: SHA-256、IoDispatcher など
+│   ├── core-db/               #   LocalStore（手書き SQL）、Schema.kt のマイグレーション、FTS5 検索
+│   ├── core-pipeline/         #   Ingestor、TranscriptionPipeline、Transcriber、発話区間の切り出し、境界の連結、StorageManager
+│   ├── core-search/           #   中身のない仮モジュール（将来のハイブリッド検索用。現在の検索は core-db の FTS5）
+│   └── core-ai/               #   中身のない仮モジュール（将来の AI 機能用、P2）
+├── composeApp/                # スマホ UI（Compose MP、Android/iOS 共通）、AppServices、ViewModel。iosMain に IosAppGraph と Swift とのブリッジ
+├── androidApp/                # Android スマホアプリ（AppGraph、Data Layer 受信、sherpa-onnx 文字起こし、モデル配信、WorkManager）
+├── wearApp/                   # Wear OS アプリ（録音の前景サービス、Outbox、ChannelClient 送信、Tile・コンプリケーション）
+├── iosApp/                    # XcodeGen プロジェクト（project.yml）
+│   ├── iosApp/                #   iOS ホスト（Compose 埋め込み、WatchConnectivity 受信、SpeechAnalyzer）
+│   ├── WatchApp/              #   watchOS アプリ（SwiftUI、録音、WatchConnectivity 送信）
+│   ├── Shared/                #   ChunkProtocol.swift など、Watch・iPhone・テストで共有する Swift コード
+│   └── ProtocolTests/         #   Swift のプロトコル互換テスト（Kotlin と同じテストベクタ）
+├── tools/
+│   ├── harness/               #   実機なしの通し検証（Watch シミュレータ → 取り込み → sherpa-onnx → SQLite、Gradle モジュール）
+│   ├── test-audio/            #   検証用の日本語会話音声セットの生成（Python）
+│   └── roadmap-view/          #   Issue ダッシュボードの生成（Python）
+├── spikes/                    # 技術検証のスクリプトと結果（ASR・埋め込みのベンチマーク）
+└── docs/                      # 調査・設計・ロードマップ・開発環境・impl/（プラットフォーム別の実装メモ）・spikes/
 ```
 
-## 5. データモデル（概要）
+## 5. データモデル
+
+### 5.1 実装済みのテーブル
+
+スキーマの正は `shared/core-db/src/commonMain/kotlin/app/watchaudio/core/db/Schema.kt`（マイグレーションは追記のみ）。DB ファイルは `watch-audio.db`、音声ファイルは音声ルート（`audio/`）の下の `yyyy/MM/dd/<chunkId>.<拡張子>`（UTC の日付）に置き、DB にはルートからの相対パスを保存する。録音セッションは独立したテーブルを持たず、`audio_chunk.session_id` でまとめる。
 
 ```mermaid
 erDiagram
-  RECORDING_SESSION ||--o{ AUDIO_CHUNK : has
   AUDIO_CHUNK ||--o{ TRANSCRIPT_SEGMENT : transcribed_into
-  RECORDING_SESSION ||--o{ MARK : has
+  AUDIO_CHUNK ||--o{ MARK : has
+  TRANSCRIPT_SEGMENT ||--|| SEGMENT_FTS : indexed_by
+```
+
+| テーブル | 主なカラム |
+| --- | --- |
+| `audio_chunk` | id（UUID、Watch 採番）, session_id, device_id, source（watchos/wearos…）, started_at, ended_at, time_zone, audio_path（相対。無音チャンクは NULL）, codec, size_bytes, sha256, end_reason（rotation/mark/user_stop/charging/off_body/…）, state（received/transcribing/transcribed/failed/no_audio）, attempts, last_error, received_at, manifest_json, audio_purged_at（保持期間で音声を削除した時刻。文字起こしは残る） |
+| `mark` | chunk_id, at（PK は両方） |
+| `transcript_segment` | id, chunk_id, start_at, end_at, text, lang, engine |
+| `segment_fts` | FTS5(trigram) の contentless 仮想テーブル（本文 + 改行 2 つをトリガで索引。語彙 `segment_fts_terms` で 1〜2 文字の検索にも使う。マイグレーション 5、#72） |
+| `app_setting` | key, value（音声の保持期間・通知設定など。`CREATE TABLE IF NOT EXISTS` で冪等に作成） |
+
+時刻はすべてエポックミリ秒。
+
+### 5.2 将来（P2）のテーブル（構想、未実装）
+
+AI 要約・チャット・意味検索・体調/場所に着手するときに、マイグレーションを追記して作る。名前とカラムは構想段階。
+
+```mermaid
+erDiagram
   TRANSCRIPT_SEGMENT ||--o| SEGMENT_EMBEDDING : has
   HOUR_REVIEW ||--o{ HIGHLIGHT : produces
   HIGHLIGHT }o--o{ TRANSCRIPT_SEGMENT : cites
@@ -103,33 +134,29 @@ erDiagram
 
 | テーブル | 主なカラム |
 | --- | --- |
-| `recording_session` | id, device, started_at, ended_at, end_reason(user/interrupt/battery) |
-| `audio_chunk` | id(UUID, Watch 採番), session_id, start_at, duration_ms, file_path, codec, silent_ranges, state(received/transcribing/transcribed/failed/no_audio), audio_purged_at（保持期間で音声を削除した時刻。文字起こしは残る） |
-| `transcript_segment` | id, chunk_id, start_at, end_at, text, lang, confidence |
-| `segment_fts` | FTS5(trigram) 仮想テーブル（contentless。本文 + 改行 2 つを索引し、語彙 `segment_fts_terms` で 1〜2 文字の検索にも使う。#72） |
 | `segment_embedding` | segment_id, model_id, vector(int8 BLOB), scale |
-| `mark` | id, session_id, at |
 | `hour_review` | day, hour, density_score, summary, state, provider, model |
 | `highlight` | id, hour_review_id, title, body, cited_segment_ids |
 | `daily_reflection` | day, body |
 | `memory_fact` | id, kind(person/preference/plan/…), text, active, source_segment_ids |
 | `chat_thread` / `chat_message` | role, content, cited_segment_ids |
-| `context_label`（Phase 2） | kind(body/place/activity), start_at, end_at, label, confidence |
-| `app_setting` | key, value（音声の保持期間など。`CREATE TABLE IF NOT EXISTS` で冪等に作成） |
+| `context_label` | kind(body/place/activity), start_at, end_at, label, confidence |
 
 ## 6. 主要フロー
 
 ### 6.1 録音（Watch）
 
-- **開始**: ユーザーが Watch アプリでタップ（前景）。watchOS は `AVAudioSession(.record)` + background audio、Wear OS は `foregroundServiceType=microphone` の前景サービス + Ongoing Activity。
-- **エンコード**: 16kHz / mono / AAC-LC 約 24〜32kbps（8 時間 ≈ 90〜115MB）。
-- **チャンク化**: 5 分ごと（Mark/停止/正時で即時クローズ）にファイルをローテーション。各チャンクに `manifest.json`（UUID、開始時刻、長さ、Mark 時刻、無音区間、デバイス情報、ハッシュ）を付与。
-- **無音スキップ**: RMS エネルギーで「確実に無音」と判断した区間のみ音声を捨て、タイムライン上の区間は manifest に残す。
-- **割り込み**: 電話/Siri で停止した場合は終了理由を記録し、復帰時にユーザーへ再開を促す通知/ハプティクス。
+詳細は [impl/wearos.md](impl/wearos.md)・[impl/ios-watchos.md](impl/ios-watchos.md)。
+
+- **開始**: ユーザーが Watch アプリでタップ（前景）。watchOS は `AVAudioSession(.record)` + background audio、Wear OS は `foregroundServiceType=microphone` の前景サービス + Ongoing Activity。一度 ON にすると、充電・非装着（Wear OS のみ検出）・電池残量低下・容量不足・割り込みで一時停止し、条件が解けたら自動で再開する（watchOS の充電後の再開はアプリが前面に戻ったとき）。
+- **エンコード**: 16kHz / mono / AAC-LC 24kbps（.m4a、1 時間 ≈ 10.8MB）。
+- **チャンク化**: 約 5 分ごと（停止・一時停止でも閉じる。watchOS は Mark でも閉じる）にファイルをローテーション。各チャンクに manifest（`ChunkManifest`: チャンク UUID、セッション ID、デバイス ID、開始時刻、長さ、タイムゾーン、Mark のオフセット、音声ファイルの形式・サイズ・SHA-256、終了理由）を付ける。
+- **無音スキップ**: 1 秒ごとのレベル（Wear OS: ピーク、watchOS: 平均・ピーク）がチャンク全体で一度もしきい値を超えなかった場合だけ「確実に無音」として音声を捨て、`audio` なしの manifest で時間範囲だけを送る（タイムライン上は無音区間として残る）。
+- **割り込み・停止**: 終了理由（`interruption` / `charging` / `off_body` / `low_battery` / `terminated` など）を manifest に記録し、欠損の理由としてタイムラインに出す。予期しない停止は Watch 上で通知/ハプティクスを出す。
 
 ### 6.2 転送（Watch → Phone）
 
-- **iOS**: `WCSession.transferFile(_:metadata:)`。Phone 側で保存完了後、`sendMessage`/`transferUserInfo` で ACK → Watch がファイル削除。
+- **iOS**: `WCSession.transferFile(_:metadata:)`（無音チャンクは `transferUserInfo`）。Phone 側で保存完了後、`transferUserInfo` で ACK → Watch がファイル削除。
 - **Android**: `ChannelClient` でファイルストリーム送信（`ChunkFrame`: 4 byte 長 + manifest JSON + 音声）→ Phone 側で保存・ハッシュ検証後に `MessageClient` で ACK。直接接続（`isNearby`）のノードとだけやり取りし、Data Layer のクラウド経路は使わない。フレームが壊れている・転送が途切れた場合は ACK を返さず、Watch の再送に任せる。
 - **冪等性**: チャンク UUID で重複受信を無視。ACK 未着のチャンクは Watch 側で再送キューに残す。
 - **プロトコル定義**は `shared/core-protocol` に置き、Wear OS とスマホ側で同一コードを使う（watchOS 側は同仕様を Swift で実装し、テストベクタで互換性を保証）。
@@ -137,12 +164,13 @@ erDiagram
 ### 6.3 処理パイプライン（Phone）
 
 ```
-received → vad → transcribed → embedded → (hour closed) reviewed → (day closed) reflected
-                                                            ↘ memory extraction
+received → transcribing → transcribed
+                       ↘ failed（リトライ上限まで再試行）
+no_audio（無音チャンク。文字起こししない）
 ```
 
-- ジョブはべき等・再開可能（各チャンクの `state` で進捗管理）。
-- iOS: 前景時は即時処理、バックグラウンドは `BGProcessingTask`（充電中に大量処理）+ `BGAppRefreshTask`（少量）。
+- ジョブはべき等・再開可能（各チャンクの `state` で進捗管理）。将来（P2）は文字起こしの後に埋め込み・要約などの段を追加する。
+- iOS: 前景時は即時処理、バックグラウンドは `BGProcessingTask`（充電中、`requiresExternalPower = true`）。
 - Android: WorkManager。チャンク受信ごとに unique な 1 回限りジョブ（実行中なら後続を 1 つだけ追加）、保険として充電中に 6 時間ごとの定期ジョブ。プロセス起動時に中断チャンクを再キュー（詳細は [docs/impl/android-phone.md](impl/android-phone.md)）。
 - 音声の保持期間ポリシー（#33）: 文字起こし完了済みのチャンクのみ削除対象。文字起こしの後に同じバックグラウンド処理（Android `TranscriptionWorker`、iOS `BGProcessingTask` / 前面実行）で `StorageManager.applyRetention()` を実行する。詳細は §9.3。
 - 文字起こしエンジンは共通インターフェース `Transcriber`（`core-pipeline`）の裏に置く。入力は「音声パーツ（ファイル + 範囲 `[fromMs, toMs)`）のリスト」で、エンジンはそれを連結した 1 本の録音として認識し、連結先頭からの相対時刻で発話を返す（各パーツはちょうど `toMs - fromMs` の長さにする。ファイルが短ければ無音で埋める）。実装: Android = sherpa-onnx（各ファイルを `MediaCodec` でデコードして PCM を連結）、iOS = SpeechAnalyzer（Swift 側で一時 CAF ファイルに連結）、JVM ハーネス = sherpa-onnx（ffmpeg でデコード）。
@@ -182,19 +210,25 @@ Watch は発話に関係なく約 5 分ごとにチャンクを区切るので�
 
 **残る制約**:
 
-- 境界付近の発話が 30 秒より長い、または隣が別セッション・別デバイス（ハンドオフ）・ギャップ（停止や割り込み）の場合は連結しない。隣が `FAILED` のまま、または音声が削除済みの場合も単体で認識する。
+- 境界付近の発話が 30 秒より長い、または隣が別セッション・別デバイス・ギャップ（停止や割り込み）の場合は連結しない。隣が `FAILED` のまま、または音声が削除済みの場合も単体で認識する。
 - 境界をまたぐ発話をタップして再生すると、属するチャンクの音声の終わりで止まる（次のチャンクへ続けて再生しない）。
 - 連結の判定は保存済みセグメント（VAD / SpeechTranscriber の結果）に依存する。境界直前の発話を VAD が取りこぼした場合（0.25 秒未満など）は連結されない。
 - 隣のチャンクの境界付近のセグメントは後から書き換わる（タイムライン・検索結果がそのぶん変わる）。
 
-### 6.4 検索・チャット（RAG）
+### 6.4 検索
+
+実装済み: `transcript_segment` の FTS5（trigram）によるキーワードの部分一致検索。trigram は 3 文字未満の語を引けないので、1〜2 文字の検索は `idx_segment_start_text` を新しい順に走査する `LIKE` で補う（#23、性能は §8）。
+
+#### 将来（P2）: 意味検索とチャット（RAG）
 
 1. クエリを埋め込み → ベクトル上位 K 件 + FTS5 上位 K 件を RRF（Reciprocal Rank Fusion）で統合。
 2. 日付/時間帯フィルタ（「先週の火曜」など）は LLM の関数呼び出しで抽出（AI 未設定時は UI フィルタ）。
 3. 前後の文脈セグメント + 関連記憶 + 1 時間ごとの要約をコンテキストにして LLM へ。
 4. 回答中の引用 `[seg:123]` を UI で原文・音声再生へのリンクに変換。
 
-### 6.5 AI プロバイダ（BYOK）
+### 6.5 将来（P2）: AI プロバイダ（BYOK）
+
+未実装の構想。HTTP クライアントや SDK は着手時に決める。
 
 ```kotlin
 interface LlmProvider {
@@ -214,9 +248,9 @@ interface LlmProvider {
 | 項目 | 方針 |
 | --- | --- |
 | 保存 | アプリサンドボックス内。iOS は `Application Support/WatchAudio`（ファイル保護は既定の `CompleteUntilFirstUserAuthentication`。ロック中の BGTask からも読める）、Android は内部ストレージ（`files/`） |
-| バックアップ | MVP では OS バックアップ対象外（データを端末外に出さないため）。Phase 2 で E2E 暗号化バックアップを提供 |
-| API キー | Keychain（`ThisDeviceOnly`）/ Android Keystore |
-| 外部送信 | AI プロバイダ（テキストのみ）、OS ジオコーダ（Phase 2）。解析 SDK・広告 SDK は入れない |
+| バックアップ | OS バックアップの対象外（データを端末外に出さないため）。Android / Wear OS は `allowBackup=false` とバックアップ除外ルール、iOS は保存先に `NSURLIsExcludedFromBackupKey`。E2E 暗号化バックアップは後続フェーズ（#40） |
+| API キー | 現在は扱わない。将来（P2）の BYOK では Keychain（`ThisDeviceOnly`）/ Android Keystore にだけ保存する |
+| 外部送信 | なし（ネットワーク利用は文字起こしモデルのダウンロードのみ）。将来（P2）に AI プロバイダ（テキストのみ、ユーザーが設定した場合）、OS ジオコーダを検討。解析 SDK・広告 SDK は入れない |
 | 同意 | 初回オンボーディングで「録音対象者への告知」の注意喚起。Watch に録音中インジケータを常時表示 |
 | 削除 | 「この日のデータを削除」（その日に始まったチャンクの音声・文字起こし・マーク）と「すべてのデータを削除」（全録音・文字起こし・音声ファイル。DB は `VACUUM` で縮める）。どちらもアプリ内の確認ステップ必須（全削除は「削除」と入力）。システムダイアログは使わない。AI 設定・API キーは実装時に全削除の対象に加える |
 
@@ -230,32 +264,20 @@ interface LlmProvider {
 | 検索応答 | 1 年分のデータで 300ms 以内（#68 以降の発話単位で 1 年 320 万セグメントの JVM ベンチマークで最悪 p95 約 100ms: [04 §5](04-dev-environment.md#5-検索の性能ベンチマーク23-72)。実機は未計測） |
 | ストレージ | 8h/日で 1 日 ≈ 120MB 以下（音声）|
 
-## 9. 24 時間連続録音の設計
+## 9. 常時録音（装着中）の設計
 
-テーマ「常に起動しっぱなしで 24 時間録音し、会話をすべて残す」を満たすための設計。
+現在のゴール（[03-roadmap.md](03-roadmap.md)）は「**装着中は常に録音**し、充電中・就寝中（外している間）は止まってよい」。プロダクトのテーマ（[01 §2](01-research.md#2-作るべきものプロダクト定義)）の「24 時間録音」のうち、Watch を外している時間の欠損は許容し、代わりに「止まったことに気づける」「欠損の理由が分かる」ことを重視する。
 
-### 9.1 録音ソースのハンドオフ
+### 9.1 録音ソース: Watch のみ（スマホ録音へのハンドオフは採用しない）
 
-```mermaid
-stateDiagram-v2
-  [*] --> WatchRecording: Watch で開始
-  WatchRecording --> PhoneRecording: Watch 充電開始 / 非装着 / 電池残量が閾値以下 / Watch 録音停止を検知
-  PhoneRecording --> WatchRecording: Watch 装着・充電完了・録音再開
-  WatchRecording --> Gap: 両方とも録音できない
-  PhoneRecording --> Gap: スマホ側も停止（OS による終了など）
-  Gap --> WatchRecording: ユーザーが再開
-  Gap --> PhoneRecording: ユーザーが再開
-```
-
-- **主ソースは Watch**（常に身につけていて口元に近い）。**スマホは補助ソース**として、Watch が録れない時間を埋める。
-- スマホ録音: iOS は background audio（録音中はオレンジのインジケータ）、Android は `microphone` 前景サービス。どちらも**アプリが前景にある間に開始**しておく必要があるので、「24 時間モード」を ON にした時点でスマホ側も待機状態にしておく。
-- 切り替えの合図: Watch → スマホに「充電開始/非装着/停止」のイベントを送る。スマホ側はチャンクの到着が途絶えたことでも検知する。
-- 両方が同時に録っている時間帯は、品質のよい方（Watch 優先）を正とし、もう一方は破棄する。
+- **録音するのは Watch だけ**。Watch が充電中・非装着の間は録音しない（終了理由 `charging` / `off_body` を記録し、タイムラインには理由付きの欠損として出す）。条件が解けたら Watch 側で自動再開する（§6.1）。
+- 以前は、Watch の充電中・非装着時にスマホのマイクで録音を引き継ぐ「ハンドオフ」を計画していた（#42）。**採用しない**（#42 は not planned でクローズ）。理由: 「充電中・就寝中は止まってよい」とゴールを変えたため不要になった。あわせて、スマホ側に常駐の録音（iOS の background audio、Android の `microphone` 前景サービス）と、2 台が同時に録った区間の重複解消が要らなくなり、電池・プライバシー・実装の負担を避けられる。
+- 録音ソースの種類は manifest の `source`（`watchos` / `wearos` / `ios` / `android`）として残してあるが、現在スマホは録音しない。
 
 ### 9.2 連続性の監視
 
-- スマホ側で「最後にチャンクが届いた時刻」を監視し、N 分（既定 10 分）途絶えたらローカル通知を出す。
-- タイムラインに**欠損区間とその理由**（充電中・割り込み・電池切れ・OS による終了・ユーザー停止）を表示する。
+- スマホ側で「最後にチャンクが届いた時刻」を監視し、10 分を超えて途絶えたらローカル通知を出す（#43）。最新チャンクが停止理由付き（ユーザー停止・充電・非装着など）で終わっている場合は通知しない。おやすみ時間（既定 23:00–7:00）は通知を終了時刻まで遅らせる。Android は WorkManager の定期チェック、iOS は予約通知（[impl/phone-ui.md](impl/phone-ui.md) §1.5）。
+- タイムラインに**欠損区間とその理由**（充電中・非装着・割り込み・電池切れ・OS による終了・ユーザー停止）を表示する。
 - 1 日ごとの「録音カバー率」（録れていた時間 ÷ 24h）を計測し、改善の指標にする。
 
 ### 9.3 データ量の見積もり
@@ -291,4 +313,4 @@ stateDiagram-v2
 | --- | --- | --- |
 | 録音開始 | アプリ前景からのみ | アプリ前景からのみ（Android 14+）。再起動後に自動開始できない |
 | 割り込み後の自動再開 | 不確実（M0-3 で検証） | AudioFocus / 同時録音の扱いを M0-4 で検証 |
-| 電池（24h） | 約 4%/時（既存の Watch 録音アプリの公開値からの推定）→ 1 日 1 回の充電の間はスマホがカバー | 機種差大（M0-4 で検証） |
+| 電池（24h） | 約 4%/時（既存の Watch 録音アプリの公開値からの推定）。充電中は録音しない（§9.1） | 機種差大（M0-4 で検証） |
