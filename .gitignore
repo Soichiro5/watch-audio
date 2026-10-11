@@ -21,3 +21,6 @@ iosApp/Configuration/Local.xcconfig
 
 # Agent worktrees (local only)
 .claude/worktrees/
+
+# Python (tools/)
+__pycache__/
