@@ -173,6 +173,23 @@ adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
 adb pull /data/local/tmp/watchaudio-screenshots
 ```
 
+### 6.3 どの変更でどのワークフローが動くか（#92）
+
+PR の CI 待ちを減らすため、変更したファイルに関係するワークフローだけを動かす。`workflow_dispatch` からはいつでも手動で全部動かせる。
+
+| 変更したファイル | `android.yml` | `emulator.yml` | `ios.yml` | `deliver.yml`（main のみ） |
+| --- | --- | --- | --- | --- |
+| ドキュメントだけ（`docs/**`、`**/*.md`、Issue / PR テンプレート、`tools/roadmap-view/**`、`research/**`、`spikes/**`） | 動かない | 動かない | 動かない | 動かない |
+| iOS 専用（`iosApp/**`、`src/iosMain`・`src/iosTest`、iOS 用スクリプト） | 動く | 動かない | 動く | 動く |
+| Android 専用（`androidApp/**`、`wearApp/**`、`src/androidMain`・`androidHostTest`・`androidDeviceTest`、Android 用スクリプト） | 動く | 動く | 動かない | 動く |
+| JVM 専用（`src/jvmMain`・`src/jvmTest`） | 動く | 動かない | 動かない | 動く |
+| 共通コード（`src/commonMain` など）・Gradle の設定・`build-logic/**` | 動く | 動く | 動く | 動く |
+
+- `android.yml` と `deliver.yml` は除外リスト（`paths-ignore`）。ドキュメント以外の変更では必ず動く。
+- `emulator.yml` と `ios.yml` は対象リスト（`paths`）に除外（`!`）を足している。除外は後ろに書いたものが優先されるので、新しい除外は対象リストより後ろに書く。
+- 新しいスクリプトを `.github/scripts/` に足すときは、片方のプラットフォーム専用なら、もう片方のワークフローの除外に追加する。
+- フォルダ構成を変えるとき（#49）は、上の表のパスもあわせて直す。
+
 ## 7. CI の設定と成果物の扱い（公開リポジトリ）
 
 リポジトリは公開なので、CI のログと成果物（artifact）は GitHub にログインした人なら誰でも見られる・ダウンロードできる（#79）。
