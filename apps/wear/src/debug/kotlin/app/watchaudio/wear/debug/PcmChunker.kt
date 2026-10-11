@@ -1,6 +1,6 @@
 package app.watchaudio.wear.debug
 
-import app.watchaudio.wear.recording.AudioFormat
+import app.watchaudio.core.protocol.RecordingFormat
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.abs
@@ -22,7 +22,7 @@ interface ChunkSink {
 /**
  * Writes a 16 kHz mono PCM stream into chunk files the way the microphone recorder does: a new
  * file every [chunkDurationMs] of audio (the size-based rotation of `MediaRecorder` amounts to
- * [AudioFormat.CHUNK_DURATION_MS]), the peak level since the previous poll (like
+ * [RecordingFormat.CURRENT.chunkDurationMs]), the peak level since the previous poll (like
  * `MediaRecorder.getMaxAmplitude()`), and the audio position as the clock.
  *
  * Called from one writer thread; [positionMs] and [pollPeak] may be read from any thread.
@@ -30,7 +30,7 @@ interface ChunkSink {
 class PcmChunker(
     private val sink: ChunkSink,
     private val events: Events,
-    chunkDurationMs: Long = AudioFormat.CHUNK_DURATION_MS,
+    chunkDurationMs: Long = RecordingFormat.CURRENT.chunkDurationMs,
 ) {
     interface Events {
         /** The current file is full: the file for the next chunk, or null to stop. */
@@ -40,7 +40,7 @@ class PcmChunker(
         fun rotated(positionMs: Long)
     }
 
-    private val chunkSamples = chunkDurationMs * AudioFormat.SAMPLE_RATE_HZ / 1000
+    private val chunkSamples = chunkDurationMs * RecordingFormat.CURRENT.sampleRateHz / 1000
     private var samplesInChunk = 0L
     private val peak = AtomicInteger(0)
 
@@ -49,7 +49,7 @@ class PcmChunker(
         private set
 
     /** Audio written so far, in ms. */
-    val positionMs: Long get() = positionSamples * 1000 / AudioFormat.SAMPLE_RATE_HZ
+    val positionMs: Long get() = positionSamples * 1000 / RecordingFormat.CURRENT.sampleRateHz
 
     fun start(file: File) = sink.open(file)
 

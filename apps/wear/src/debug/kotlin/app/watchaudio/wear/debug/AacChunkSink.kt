@@ -4,7 +4,7 @@ import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.media.MediaMuxer
-import app.watchaudio.wear.recording.AudioFormat
+import app.watchaudio.core.protocol.RecordingFormat
 import java.io.File
 import java.nio.ByteOrder
 
@@ -24,9 +24,9 @@ class AacChunkSink : ChunkSink {
 
     override fun open(file: File) {
         check(codec == null) { "previous file not closed" }
-        val format = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, AudioFormat.SAMPLE_RATE_HZ, AudioFormat.CHANNELS).apply {
+        val format = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, RecordingFormat.CURRENT.sampleRateHz, RecordingFormat.CURRENT.channels).apply {
             setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
-            setInteger(MediaFormat.KEY_BIT_RATE, AudioFormat.BITRATE_BPS)
+            setInteger(MediaFormat.KEY_BIT_RATE, RecordingFormat.CURRENT.bitrateBps)
             setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, MAX_INPUT_BYTES)
         }
         val c = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
@@ -122,7 +122,7 @@ class AacChunkSink : ChunkSink {
         }
     }
 
-    private fun presentationUs(samples: Long) = samples * 1_000_000 / AudioFormat.SAMPLE_RATE_HZ
+    private fun presentationUs(samples: Long) = samples * 1_000_000 / RecordingFormat.CURRENT.sampleRateHz
 
     private companion object {
         const val TIMEOUT_US = 10_000L

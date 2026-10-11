@@ -29,7 +29,7 @@ Apple Watch で装着中ずっと録音 → WatchConnectivity で iPhone へ（�
 | 〃 | `IosGapAlerts.kt` | 録音の途絶アラート（#43）のローカル通知の予約・取り消し |
 | 〃 | `IosSpeechTranscriber.kt` | Swift 実装を受けるコールバック型インターフェースと共通 `Transcriber` へのアダプタ |
 | 〃 | `MainViewController.kt` | Compose UI のエントリ（Swift から引数なしで呼ぶ） |
-| テスト | `apps/ios/Tests/ProtocolTests/ChunkProtocolTests.swift` | Swift プロトコル実装を Kotlin のテストベクタ（`shared/protocol/testdata/*.json`）で検証 |
+| テスト | `apps/ios/Tests/ProtocolTests/ChunkProtocolTests.swift` | Swift プロトコル実装と録音形式（`RecordingFormat.current`）を Kotlin のテストベクタ（`shared/protocol/testdata/*.json`）で検証 |
 | 〃 | `apps/ios/Tests/WatchLogicTests/RecorderPolicyTests.swift` | 停止理由（充電・低電池・ストレージ不足・割り込み・ユーザー停止・レコーダー停止）の判定、ヒステリシス、自動再開、通知、無音判定、停止理由がマニフェストの `endReason` に書かれること（#15） |
 | 〃 | `apps/ios/Tests/WatchLogicTests/ChunkOutboxTests.swift` | 送信キュー: 最終 ACK で削除、CORRUPT で再送（上限つき）、REJECTED は保持、ACK が無ければ 15 分後に再送、送信中は二重送信しない、再起動後も残り再送される、強制終了からの復旧（#17） |
 | 〃 | `apps/ios/Tests/SpeechTests/SpeechTranscriptionTests.swift` | シミュレータで SpeechTranscriber（ja_JP）が既知の日本語音声（16 kHz AAC）を時刻付きで文字起こしできるか（#21）。使えなければ理由を記録してスキップ |
@@ -77,7 +77,7 @@ sequenceDiagram
 
 ## 4. watchOS 録音
 
-- **形式**: AAC-LC 16 kHz mono 24 kbps（`ChunkAudioFormat`、約 10.8 MB/時）。`AVAudioSession(.record)` + `UIBackgroundModes: audio` で画面消灯中も継続（M0-3 で確認済みの方式）。
+- **形式**: AAC-LC 16 kHz mono 24 kbps、5 分チャンク（`SharedSwift/RecordingFormat.swift` の `RecordingFormat.current`。Kotlin の `RecordingFormat.CURRENT` と同じ値であることを `shared/protocol/testdata/recording-format.json` で両側からテストする。`ChunkAudioFormat` はそれを `AVAudioRecorder` の設定に変換するだけ。約 10.8 MB/時）。`AVAudioSession(.record)` + `UIBackgroundModes: audio` で画面消灯中も継続（M0-3 で確認済みの方式）。
 - **ローテーション**: 5 分ごと。次のファイルの `record()` を開始してから前のファイルを `stop()` する（数 ms 重なるが欠けない）。2 本同時に開けなかった場合は stop → start にフォールバックし、診断ログに `rotate_fallback` を残す。
 - **Mark**: 現在チャンクにオフセットを記録してチャンクを閉じる（`endReason = mark`）。マークした瞬間が早く iPhone に届く。
 - **無音判定**: `isMeteringEnabled = true` にして 1 秒ごとに `updateMeters()` → `averagePower` / `peakPower` をサンプリング。チャンク全体で一度も閾値（平均 −50 dBFS / ピーク −35 dBFS）を超えず、かつサンプルがチャンク長の 80% 以上取れていた場合のみ「確実に無音」とし、音声を削除して manifest のみ送る。サンプル不足（タイマーが止まっていた等）の場合は音声を残す（安全側）。閾値は実機で要調整。

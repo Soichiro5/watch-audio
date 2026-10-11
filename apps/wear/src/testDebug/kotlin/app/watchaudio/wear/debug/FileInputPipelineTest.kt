@@ -1,10 +1,11 @@
 package app.watchaudio.wear.debug
 
+import app.watchaudio.core.platform.sha256Of
 import app.watchaudio.core.protocol.AudioCodec
 import app.watchaudio.core.protocol.ChunkEndReason
+import app.watchaudio.core.protocol.RecordingFormat
 import app.watchaudio.core.protocol.SourcePlatform
 import app.watchaudio.wear.outbox.Outbox
-import app.watchaudio.wear.recording.AudioFormat
 import app.watchaudio.wear.recording.ChunkFinalizer
 import app.watchaudio.wear.recording.ChunkJournal
 import app.watchaudio.wear.recording.ChunkTracker
@@ -17,6 +18,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.io.files.Path
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -30,7 +32,7 @@ import org.junit.rules.TemporaryFolder
 class FileInputPipelineTest {
     @get:Rule val tmp = TemporaryFolder()
 
-    private val rate = AudioFormat.SAMPLE_RATE_HZ
+    private val rate = RecordingFormat.CURRENT.sampleRateHz
 
     /**
      * Tone until 4:58, quiet room until 10:00, tone until 12:30. The quiet part starts a little
@@ -63,7 +65,7 @@ class FileInputPipelineTest {
             assertEquals(AudioCodec.AAC, audio.codec)
             assertEquals(seconds * rate * 2, audio.sizeBytes, "sample-exact chunk boundaries")
             val file = File(run.outbox.dir, audio.fileName)
-            assertEquals(ChunkFinalizer.sha256Hex(file), audio.sha256)
+            assertEquals(sha256Of(Path(file.path)), audio.sha256)
         }
         assertEquals(pcmSha256(0, 300L * rate), first.audio!!.sha256, "first chunk holds exactly the first 5 minutes")
         assertEquals(pcmSha256(600L * rate, 750L * rate), last.audio!!.sha256, "last chunk holds 10:00–12:30")
@@ -161,7 +163,7 @@ class FileInputPipelineTest {
 
             val marks = ArrayDeque(marksAtMs.sorted())
             var nextPollMs = SilenceDetector.POLL_INTERVAL_MS
-            val buffer = ShortArray(AudioFormat.SAMPLE_RATE_HZ / 10)
+            val buffer = ShortArray(RecordingFormat.CURRENT.sampleRateHz / 10)
             source.use {
                 while (true) {
                     val n = it.read(buffer)

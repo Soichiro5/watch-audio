@@ -14,7 +14,7 @@
 | `WearPrefs` | `WearPrefs.kt` | `deviceId`（インストールごとに固定の UUID）、`armed`（ユーザーが録音 ON にしているか）、送信 ON/OFF、最終 ACK 時刻 |
 | `RecordingService` | `recording/` | `microphone` 前景サービス + Ongoing Activity。イベントを `RecorderPolicy` に渡し、結果（録音 / 一時停止 / 停止）を適用する |
 | `RecorderInput` | `recording/` | 録音入力のインターフェース（ファイル開始・ローテーション通知・ピーク値・時計）。本番は常に `ChunkRecorder`（マイク）。debug ビルドだけ音声ファイルに差し替えられる（§11） |
-| `ChunkRecorder` | `recording/` | `MediaRecorder` ラッパ（`RecorderInput` の本番実装）。AAC-LC 16 kHz mono 24 kbps、`setNextOutputFile` による無音ギャップなしのローテーション |
+| `ChunkRecorder` | `recording/` | `MediaRecorder` ラッパ（`RecorderInput` の本番実装）。`RecordingFormat.CURRENT`（AAC-LC 16 kHz mono 24 kbps）、`setNextOutputFile` による無音ギャップなしのローテーション |
 | **`ChunkTracker`** | `recording/` | 録音中チャンクの記帳（Mark・無音統計・ローテーション時の次チャンクへの引き継ぎと開始時刻の連結） |
 | **`RecorderPolicy` / `InterruptionBackoff`** | `recording/RecorderPolicy.kt` | 状態機械（§3）。優先順位・猶予・ヒステリシス・アラート判定・リトライ間隔 |
 | **`SilenceDetector`** | `recording/` | `getMaxAmplitude()` の 1 秒ごとのピーク値から「チャンク全体が確実に無音か」を判定 |
@@ -35,13 +35,13 @@
 
 ## 2. 録音とチャンク
 
-- **形式**: AAC-LC / 16 kHz / mono / 24 kbps、MPEG-4（`.m4a`）。プロトコルの `AudioCodec.AAC`。
-- **チャンク長**: 約 5 分。`setNextOutputFile` はファイルサイズ上限（`setMaxFileSize`）でしか機能しないため、`24 kbps × 300 s ≈ 900 KB` をサイズ上限にしている。上限が近づく（`MAX_FILESIZE_APPROACHING`）と次のファイルを渡し、エンコーダが切り替えた瞬間（`NEXT_OUTPUT_FILE_STARTED`）を正確な境界とする。
+- **形式**: AAC-LC / 16 kHz / mono / 24 kbps、MPEG-4（`.m4a`）。プロトコルの `AudioCodec.AAC`。値は `shared/protocol` の `RecordingFormat.CURRENT`（watchOS と共通。両側が `shared/protocol/testdata/recording-format.json` と一致することをテストする）から取る。
+- **チャンク長**: 約 5 分。`setNextOutputFile` はファイルサイズ上限（`setMaxFileSize`）でしか機能しないため、`24 kbps × 300 s ≈ 900 KB`（`ChunkRecorder.CHUNK_BYTES`）をサイズ上限にしている。上限が近づく（`MAX_FILESIZE_APPROACHING`）と次のファイルを渡し、エンコーダが切り替えた瞬間（`NEXT_OUTPUT_FILE_STARTED`）を正確な境界とする。
 - **時刻**: 最初のチャンクは `start()` 直後の壁時計。以降のチャンクの `startedAtEpochMs` は「前チャンクの開始 + `elapsedRealtime` で測った長さ」で求めるので、連続するチャンクは隙間も重なりもなくつながる（壁時計の補正の影響を受けない）。
 - **ID**: `chunkId` はチャンクごとの UUID。`sessionId` は録音開始ごとの UUID（一時停止→再開でも新しいセッション。manifest の定義「開始から、理由を問わず停止するまで」に従う）。`deviceId` はインストールごとに固定。
 - **Mark**: 現在のチャンク先頭からのオフセット（ms）として `markOffsetsMs` に記録する。チャンクは区切らない。
 - **ジャーナル**: 録音中のチャンクは `files/recording/<id>.m4a` と `<id>.journal.json`（開始時刻・Mark・無音統計・最終生存時刻）。ジャーナルは開始時・Mark 時・30 秒ごとに書き換える。
-- **確定**: チャンクを閉じたら SHA-256（`java.security.MessageDigest`）とサイズを計算し、音声を `files/outbox/<id>.m4a` へ移動 → manifest を `files/outbox/<id>.json` に**最後に**原子的に書く（`.tmp` → rename）。
+- **確定**: チャンクを閉じたら SHA-256（`shared/platform` の `sha256Of`。スマホ側の検証と同じ実装）とサイズを計算し、音声を `files/outbox/<id>.m4a` へ移動 → manifest を `files/outbox/<id>.json` に**最後に**原子的に書く（`.tmp` → rename）。
 - **プロセスが死んだ場合**: 次にプロセスが起動したとき（`WearApp.onCreate`。録音中のレコーダーは存在し得ないタイミング）にジャーナルが残っていれば `endReason = TERMINATED` で確定する。長さは最終生存時刻（30 秒ごと）まで。`MediaRecorder` が `stop()` されないと MP4 の `moov` が書かれず再生できないため、その場合は音声を捨てて **`durationMs = 0` の manifest**（欠損の開始位置と理由だけを伝える）にする。`audio == null` で長さがあると、スマホ側では「無音区間」と解釈されてしまうため。→ 最悪でも失うのは録音中の 1 チャンク（≤ 5 分）。
 
 ### 2.1 無音スキップ
@@ -225,7 +225,7 @@ sequenceDiagram
 | `DebugAudioInput` | 入力の切り替え（`recorderInputFactory` をファイル入力 ⇔ マイク）、入力ファイルの置き場所 |
 | `FileRecorderInput` / `FilePlayback` | `RecorderInput` のファイル版。書き込みスレッドで読み込み → 指定速度でペース配分 → エンコード。一時停止（充電・非装着など）からの再開は前回の続きから再生する |
 | `WavPcmSource` / `MediaPcmSource` / `PcmConverter` | 16-bit WAV を直接読む / それ以外（m4a, mp3, ogg, flac など）は `MediaExtractor` + `MediaCodec` でデコード。チャンネル平均と線形補間で 16 kHz mono に変換 |
-| `PcmChunker` / `AacChunkSink` | 音声 5 分（`AudioFormat.CHUNK_DURATION_MS`）ごとにファイルを切り替え、`MediaCodec`（AAC-LC）+ `MediaMuxer` で本番と同じ形式の `.m4a` を書く。前回のポーリング以降のピーク値（`getMaxAmplitude()` 相当）を返す |
+| `PcmChunker` / `AacChunkSink` | 音声 5 分（`RecordingFormat.CURRENT.chunkDurationMs`）ごとにファイルを切り替え、`MediaCodec`（AAC-LC）+ `MediaMuxer` で本番と同じ形式の `.m4a` を書く。前回のポーリング以降のピーク値（`getMaxAmplitude()` 相当）を返す |
 
 - **時計**: ファイル入力の時計は「再生した音声の長さ」。チャンクの長さ・Mark のオフセットは倍速でも音声上の正確な値になる。レベルのポーリングも音声 1 秒ごと（実時間では `1 秒 ÷ 速度`）に行うので、無音判定の条件（カバレッジ 80 % 以上）は本番と同じ。
 - **時刻**: 最初のチャンクの `startedAtEpochMs` は開始時の壁時計、以降は本番と同じく「前チャンクの開始 + 長さ」。倍速では実際の時刻より先に進む（1 時間分の音声を 10 倍速 = 実時間 6 分で流すと、終わりの時刻は実際より約 54 分先になる）。

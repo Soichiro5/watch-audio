@@ -74,9 +74,24 @@ final class ChunkOutboxTests: XCTestCase {
         XCTAssertEqual(audio.sha256, try FileDigest.sha256Hex(of: audioURL))
         XCTAssertEqual(audio.codec, .aac)
         XCTAssertEqual(audio.sampleRateHz, 16_000)
+        XCTAssertEqual(audio.channels, 1)
+        XCTAssertEqual(audio.bitrateBps, 24_000)
         XCTAssertNil(pending.last?.audioURL, "a silent chunk is sent as a manifest only")
         XCTAssertNil(pending.last?.manifest.audio)
         XCTAssertEqual(files(in: outbox.recordingDirectory), [], "nothing is left in recording/")
+    }
+
+    /// The recorder encodes the shared format (shared/protocol/testdata/recording-format.json).
+    func testRecorderSettingsFollowTheSharedRecordingFormat() {
+        let format = RecordingFormat.current
+        let settings = ChunkAudioFormat.recorderSettings
+        XCTAssertEqual(ChunkAudioFormat.format, format)
+        XCTAssertEqual(format.codec, .aac, "recorderSettings only records AAC")
+        XCTAssertEqual(settings[AVFormatIDKey] as? AudioFormatID, kAudioFormatMPEG4AAC)
+        XCTAssertEqual(settings[AVSampleRateKey] as? Int, format.sampleRateHz)
+        XCTAssertEqual(settings[AVNumberOfChannelsKey] as? Int, format.channels)
+        XCTAssertEqual(settings[AVEncoderBitRateKey] as? Int, format.bitrateBps)
+        XCTAssertEqual(ChunkAudioFormat.fileExtension, "m4a")
     }
 
     func testMarksAreClampedToTheChunk() throws {

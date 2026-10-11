@@ -1,10 +1,10 @@
 package app.watchaudio.wear.debug
 
-import app.watchaudio.wear.recording.AudioFormat
+import app.watchaudio.core.protocol.RecordingFormat
 import java.io.Closeable
 import kotlin.math.roundToInt
 
-/** 16-bit PCM at [AudioFormat.SAMPLE_RATE_HZ], mono: what the microphone would capture. */
+/** 16-bit PCM at [RecordingFormat.CURRENT.sampleRateHz], mono: what the microphone would capture. */
 interface MonoPcmSource : Closeable {
     /** Fills [buffer] with up to `buffer.size` samples; returns the count, or -1 at the end. */
     fun read(buffer: ShortArray): Int
@@ -22,12 +22,12 @@ interface MonoPcmSource : Closeable {
 }
 
 /**
- * Converts interleaved 16-bit PCM of any rate and channel count to [AudioFormat.SAMPLE_RATE_HZ]
+ * Converts interleaved 16-bit PCM of any rate and channel count to [RecordingFormat.CURRENT.sampleRateHz]
  * mono: channels are averaged and the rate is changed by streaming linear interpolation (no
  * low-pass filter; good enough to drive the recorder pipeline). Feed consecutive blocks; the
  * output equals converting the concatenation in one go.
  */
-class PcmConverter(val sampleRate: Int, val channels: Int, private val targetRate: Int = AudioFormat.SAMPLE_RATE_HZ) {
+class PcmConverter(val sampleRate: Int, val channels: Int, private val targetRate: Int = RecordingFormat.CURRENT.sampleRateHz) {
     init {
         require(sampleRate > 0 && channels > 0) { "invalid PCM format $sampleRate Hz x $channels" }
     }

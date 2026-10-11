@@ -45,4 +45,21 @@ internal object TestVectors {
   "status": "stored"
 }
 """
+
+    const val RECORDING_FORMAT: String = """{
+  "codec": "aac",
+  "sampleRateHz": 16000,
+  "channels": 1,
+  "bitrateBps": 24000,
+  "chunkDurationMs": 300000
+}
+"""
+
+    /** Every constant above by its file name in testdata/ (checked against the files in jvmTest). */
+    val FILES: Map<String, String> = mapOf(
+        "manifest-v1.json" to MANIFEST_V1,
+        "manifest-v1-silent.json" to MANIFEST_V1_SILENT,
+        "ack-v1.json" to ACK_V1,
+        "recording-format.json" to RECORDING_FORMAT,
+    )
 }

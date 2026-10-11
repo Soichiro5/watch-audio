@@ -1,0 +1,7 @@
+{
+  "codec": "aac",
+  "sampleRateHz": 16000,
+  "channels": 1,
+  "bitrateBps": 24000,
+  "chunkDurationMs": 300000
+}

@@ -5,8 +5,8 @@ import android.os.SystemClock
 import java.io.File
 
 /**
- * Audio input of [RecordingService]: captures audio into AAC chunk files ([AudioFormat]) with
- * gapless rotation and reports the peak level for silence detection.
+ * Audio input of [RecordingService]: captures audio into AAC chunk files (`RecordingFormat.CURRENT`
+ * in shared/protocol) with gapless rotation and reports the peak level for silence detection.
  *
  * Production always uses the microphone ([ChunkRecorder]). Debug builds can substitute an audio
  * file so the rest of the pipeline (journal, rotation, silence, manifest, outbox) runs on known

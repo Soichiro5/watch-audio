@@ -1,20 +1,22 @@
 import AVFoundation
 import Foundation
 
-/// Encoding used for every chunk (AAC-LC, 16 kHz mono, 24 kbps ≈ 10.8 MB/hour).
+/// AVFoundation side of the shared `RecordingFormat.current` used for every chunk
+/// (AAC-LC, 16 kHz mono, 24 kbps ≈ 10.8 MB/hour).
 enum ChunkAudioFormat {
-    static let sampleRateHz = 16_000
-    static let channels = 1
-    static let bitrateBps = 24_000
-    static let fileExtension = "m4a"
+    static let format = RecordingFormat.current
+    static var sampleRateHz: Int { format.sampleRateHz }
+    static var fileExtension: String { format.codec.fileExtension }
 
-    /// AVAudioRecorder settings (built on demand: `[String: Any]` is not Sendable).
+    /// AVAudioRecorder settings (built on demand: `[String: Any]` is not Sendable). The format ID
+    /// is AAC because `format.codec` is `.aac` (checked in ChunkOutboxTests); recording Opus would
+    /// also need a different container (AVAudioRecorder does not write Ogg).
     static var recorderSettings: [String: Any] {
         [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: sampleRateHz,
-            AVNumberOfChannelsKey: channels,
-            AVEncoderBitRateKey: bitrateBps,
+            AVSampleRateKey: format.sampleRateHz,
+            AVNumberOfChannelsKey: format.channels,
+            AVEncoderBitRateKey: format.bitrateBps,
         ]
     }
 }
@@ -91,12 +93,8 @@ struct ChunkOutbox: Sendable {
             let target = outboxDirectory.appending(path: fileName)
             try? fileManager.removeItem(at: target)
             try fileManager.moveItem(at: source, to: target)
-            audio = AudioFile(
+            audio = ChunkAudioFormat.format.audioFile(
                 fileName: fileName,
-                codec: .aac,
-                sampleRateHz: ChunkAudioFormat.sampleRateHz,
-                channels: ChunkAudioFormat.channels,
-                bitrateBps: ChunkAudioFormat.bitrateBps,
                 sizeBytes: size,
                 sha256: try FileDigest.sha256Hex(of: target)
             )

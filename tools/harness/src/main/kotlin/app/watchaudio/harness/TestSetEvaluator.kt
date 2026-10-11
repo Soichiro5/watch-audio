@@ -9,16 +9,18 @@ import app.watchaudio.core.pipeline.SegmentFilter
 import app.watchaudio.core.pipeline.TranscriptionPipeline
 import app.watchaudio.core.pipeline.VadSettings
 import app.watchaudio.core.protocol.AckStatus
+import app.watchaudio.core.protocol.RecordingFormat
 import java.io.File
 import kotlinx.io.files.Path
 
 /**
  * Runs each recording of a test set (tools/test-audio) through the device-free pipeline —
- * [WatchSimulator] (5 min AAC 24 kbps chunks, silent chunks dropped) → [Ingestor] →
+ * [WatchSimulator] (chunks in [format], by default the watches' 5 min AAC 24 kbps; silent chunks
+ * dropped) → [Ingestor] →
  * [TranscriptionPipeline] with [SherpaTranscriber] — and scores the stored transcript.
  *
  * As a diagnostic it also transcribes every ground-truth utterance on its own (cut from the
- * same AAC-coded audio, without VAD), which separates segmentation problems from acoustic ones.
+ * same coded audio, without VAD), which separates segmentation problems from acoustic ones.
  *
  * Speech is found and cut with [vadSettings] and the results filtered with [segmentFilter] (the
  * app's settings and filter unless overridden). Each recording's stored segments are listed with
@@ -27,7 +29,7 @@ import kotlinx.io.files.Path
 class TestSetEvaluator(
     private val models: File,
     private val workDir: File,
-    private val chunkSeconds: Int = 300,
+    private val format: RecordingFormat = RecordingFormat.CURRENT,
     private val vadSettings: VadSettings = VadSettings.DEFAULT,
     private val segmentFilter: SegmentFilter = FalsePositiveFilter.DEFAULT,
 ) {
@@ -45,9 +47,15 @@ class TestSetEvaluator(
         /** Median and longest stored segment, i.e. recognizer input (padding included), in seconds. */
         val medianSegmentSeconds: Double,
         val maxSegmentSeconds: Double,
+        /** Size of the stored (non-silent) chunk files and the recording time they cover. */
+        val audioBytes: Long = 0,
+        val audioMs: Long = 0,
     ) {
         val audioSeconds get() = recording.durationMs / 1000.0
         val rtf get() = transcribeSeconds / audioSeconds
+
+        /** Stored audio per hour of recording, in MB (10^6 bytes); null without stored audio. */
+        val megabytesPerHour: Double? get() = if (audioMs == 0L) null else audioBytes / 1e6 * 3_600_000 / audioMs
     }
 
     /**
@@ -63,9 +71,10 @@ class TestSetEvaluator(
                 evaluate(File(manifestFile.absoluteFile.parentFile, recording.audio), recording, transcriber).also {
                     File(workDir, "${recording.id}/row.md").writeText(markdownRow(it))
                     println(
-                        "%s: CER %.1f%% (oracle segmentation %.1f%%), missed %d/%d, segments median %.1fs max %.1fs, %d chunks (%d silent), ASR %.0fs (RTF %.3f)".format(
+                        "%s: CER %.1f%% (oracle segmentation %.1f%%), missed %d/%d, segments median %.1fs max %.1fs, %d chunks (%d silent), audio %d bytes / %d ms (%.2f MB/h), ASR %.0fs (RTF %.3f)".format(
                             recording.id, it.score.cer * 100, it.oracleCer * 100, it.score.missed, it.score.utterances,
-                            it.medianSegmentSeconds, it.maxSegmentSeconds, it.chunks, it.silentChunks, it.transcribeSeconds, it.rtf,
+                            it.medianSegmentSeconds, it.maxSegmentSeconds, it.chunks, it.silentChunks,
+                            it.audioBytes, it.audioMs, it.megabytesPerHour ?: 0.0, it.transcribeSeconds, it.rtf,
                         ),
                     )
                 }
@@ -78,7 +87,7 @@ class TestSetEvaluator(
         val start = START_EPOCH_MS
         val samples = Ffmpeg.decode(audio)
         val outbox = File(dir, "outbox")
-        val chunks = WatchSimulator(outbox, chunkSeconds = chunkSeconds).record(samples, start, sessionId = recording.id)
+        val chunks = WatchSimulator(outbox, format).record(samples, start, sessionId = recording.id)
         val oracle = oracleHypotheses(samples, recording, transcriber, dir)
         return LocalStore.open(File(dir, LocalStore.FILE_NAME).path).use { store ->
             val audioRoot = Path(File(dir, "audio").path)
@@ -107,14 +116,18 @@ class TestSetEvaluator(
                 },
             )
             val lengths = hypotheses.map { (it.endMs - it.startMs) / 1000.0 }.sorted().ifEmpty { listOf(0.0) }
-            Result(recording, score, oracleScore.cer, chunks.size, silent, transcribeSeconds, lengths[lengths.size / 2], lengths.last())
+            val withAudio = chunks.mapNotNull { c -> c.manifest.audio?.let { it.sizeBytes to c.manifest.durationMs } }
+            Result(
+                recording, score, oracleScore.cer, chunks.size, silent, transcribeSeconds, lengths[lengths.size / 2], lengths.last(),
+                audioBytes = withAudio.sumOf { it.first }, audioMs = withAudio.sumOf { it.second },
+            )
         }
     }
 
     /** Each ground-truth utterance (± the pipeline's segment padding) recognized alone. */
     private fun oracleHypotheses(samples: FloatArray, recording: TestRecording, transcriber: SherpaTranscriber, dir: File): List<Hypothesis> {
-        val coded = File(dir, "oracle.m4a")
-        Ffmpeg.encodeAac(samples, coded, BITRATE_BPS)
+        val coded = File(dir, "oracle.${format.codec.fileExtension}")
+        Ffmpeg.encode(samples, coded, format)
         val audio = Ffmpeg.decode(coded)
         coded.delete()
         val perMs = AsrSettings.SAMPLE_RATE / 1000
@@ -142,7 +155,6 @@ class TestSetEvaluator(
 
     companion object {
         const val START_EPOCH_MS = 1_791_622_800_000L
-        private const val BITRATE_BPS = 24_000
 
         private val OTHERS = setOf("partner", "phone")
 

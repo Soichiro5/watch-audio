@@ -42,7 +42,7 @@ private final class ActiveChunk {
 @Observable
 final class RecorderController {
     enum Config {
-        static let chunkDuration: TimeInterval = 300
+        static let chunkDuration = TimeInterval(RecordingFormat.current.chunkDurationMs) / 1000
         static let tickSeconds: Double = 1
         static let statusEveryTicks = 30
         static let batteryLogEveryTicks = 300

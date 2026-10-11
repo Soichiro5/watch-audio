@@ -1,6 +1,8 @@
 package app.watchaudio.harness
 
 import app.watchaudio.core.pipeline.AsrSettings
+import app.watchaudio.core.protocol.AudioCodec
+import app.watchaudio.core.protocol.RecordingFormat
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
@@ -17,9 +19,18 @@ object Ffmpeg {
         return FloatArray(buffer.remaining()).also(buffer::get)
     }
 
-    /** Encodes float PCM to AAC-LC in an .m4a container, like the watch apps do. */
-    fun encodeAac(samples: FloatArray, output: File, bitrateBps: Int) {
+    /**
+     * Encodes float PCM at [SAMPLE_RATE] in [format]: AAC-LC in .m4a (ffmpeg's native `aac`
+     * encoder) like the watch apps, or Opus in .ogg (`libopus`, for codec comparisons). These are
+     * not the watches' platform encoders (Wear OS MediaCodec, watchOS AVAudioRecorder), so sizes
+     * and quality approximate theirs.
+     */
+    fun encode(samples: FloatArray, output: File, format: RecordingFormat) {
         val pcm = File.createTempFile("pcm", ".f32").apply { deleteOnExit() }
+        val codec = when (format.codec) {
+            AudioCodec.AAC -> listOf("-c:a", "aac", "-movflags", "+faststart")
+            AudioCodec.OPUS -> listOf("-c:a", "libopus")
+        }
         try {
             ByteBuffer.allocate(samples.size * 4).order(ByteOrder.LITTLE_ENDIAN).apply {
                 asFloatBuffer().put(samples)
@@ -27,7 +38,8 @@ object Ffmpeg {
             }
             run(
                 "-f", "f32le", "-ac", "1", "-ar", "$SAMPLE_RATE", "-i", pcm.path,
-                "-c:a", "aac", "-b:a", "$bitrateBps", "-movflags", "+faststart", "-y", output.path,
+                "-ac", "${format.channels}", "-ar", "${format.sampleRateHz}", *codec.toTypedArray(),
+                "-b:a", "${format.bitrateBps}", "-y", output.path,
             )
         } finally {
             pcm.delete()

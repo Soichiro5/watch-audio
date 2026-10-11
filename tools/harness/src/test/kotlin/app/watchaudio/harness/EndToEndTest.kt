@@ -9,6 +9,7 @@ import app.watchaudio.core.pipeline.TimedText
 import app.watchaudio.core.pipeline.Transcriber
 import app.watchaudio.core.pipeline.TranscriptionPipeline
 import app.watchaudio.core.protocol.AckStatus
+import app.watchaudio.core.protocol.RecordingFormat
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -44,7 +45,7 @@ class EndToEndTest {
             val speech = (1..5).map { Ffmpeg.decode(File(testWavs, "$it.wav")) }.reduce { a, b -> a + gap + b }
             val samples = speech + FloatArray(20 * Ffmpeg.SAMPLE_RATE)
             val start = 1_791_622_800_000L
-            val chunks = WatchSimulator(File(dir, "outbox"), chunkSeconds = 15).record(samples, start)
+            val chunks = WatchSimulator(File(dir, "outbox"), RecordingFormat.CURRENT.copy(chunkDurationMs = 15_000)).record(samples, start)
             assertTrue(chunks.last().manifest.audio == null, "trailing silence should not be stored as audio")
 
             LocalStore.open(File(dir, "db.sqlite").path).use { store ->
@@ -111,7 +112,7 @@ class EndToEndTest {
         val dir = Files.createTempDirectory("boundary").toFile()
         try {
             val start = 1_791_622_800_000L
-            val chunks = WatchSimulator(File(dir, "outbox"), chunkSeconds = chunkSeconds).record(samples, start)
+            val chunks = WatchSimulator(File(dir, "outbox"), RecordingFormat.CURRENT.copy(chunkDurationMs = chunkSeconds * 1000L)).record(samples, start)
             return LocalStore.open(File(dir, "db.sqlite").path).use { store ->
                 val audioRoot = Path(File(dir, "audio").path)
                 val ingestor = Ingestor(store, audioRoot)

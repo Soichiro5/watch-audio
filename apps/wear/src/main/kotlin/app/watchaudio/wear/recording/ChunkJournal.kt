@@ -1,5 +1,6 @@
 package app.watchaudio.wear.recording
 
+import app.watchaudio.core.protocol.RecordingFormat
 import java.io.File
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -36,7 +37,8 @@ data class ChunkJournal(
     )
 
     companion object {
-        const val AUDIO_EXTENSION = "m4a"
+        /** Extension of the recorded files (`m4a` for [RecordingFormat.CURRENT]). */
+        val AUDIO_EXTENSION: String = RecordingFormat.CURRENT.codec.fileExtension
 
         fun audioFileName(chunkId: String) = "$chunkId.$AUDIO_EXTENSION"
     }

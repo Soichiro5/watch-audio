@@ -2,6 +2,8 @@ package app.watchaudio.harness
 
 import app.watchaudio.core.pipeline.FalsePositiveFilter
 import app.watchaudio.core.pipeline.VadSettings
+import app.watchaudio.core.protocol.AudioCodec
+import app.watchaudio.core.protocol.RecordingFormat
 import java.io.File
 import java.lang.reflect.Modifier
 import kotlin.test.Test
@@ -69,6 +71,16 @@ class EvaluateArgsTest {
     }
 
     @Test
+    fun formatOptionsOverrideTheRecordingFormat() {
+        assertEquals(RecordingFormat.CURRENT, EvaluateArgs.parse(listOf("m.json", "out")).format)
+        val args = EvaluateArgs.parse(listOf("m.json", "out", "--format", "codec=opus,bitrateBps=16000", "--format=chunkDurationMs=60000", "day"))
+        assertEquals(RecordingFormat.CURRENT.copy(codec = AudioCodec.OPUS, bitrateBps = 16_000, chunkDurationMs = 60_000), args.format)
+        assertEquals(setOf("day"), args.recordings)
+        val names = RecordingFormat::class.java.declaredFields.filterNot { Modifier.isStatic(it.modifiers) }.map { it.name }.toSet()
+        assertEquals(names, FORMAT_OPTIONS.keys)
+    }
+
+    @Test
     fun badInputIsReported() {
         assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json")) }
         assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--vad")) }
@@ -79,6 +91,9 @@ class EvaluateArgsTest {
         assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--filter")) }
         assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--filter", "threshold=1")) }
         assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--filter", "shortTextMaxChars=two")) }
+        assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--format", "codec=mp3")) }
+        assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--format", "bitrateBps=0")) }
+        assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--format")) }
     }
 
     private fun property(settings: VadSettings, name: String): Any =
