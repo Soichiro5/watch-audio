@@ -100,7 +100,7 @@ Epic: [#2](https://github.com/Soichiro5/watch-audio/issues/2)
 | [M1-9 (#43)](https://github.com/Soichiro5/watch-audio/issues/43) | 録音の連続性監視とアラート（欠損区間の可視化） | M1-5/M1-6, M1-7 |
 | [M1-10 (#41)](https://github.com/Soichiro5/watch-audio/issues/41) | Watch のコンプリケーション / Tiles（ワンタップ録音開始・再開） | M1-3, M1-4 |
 
-**完了条件**: 両 OS で「Watch で録音 → スマホに届く → タイムラインで再生できる」。24 時間モードで録音カバー率 95% 以上、停止は 10 分以内に通知。
+**完了条件**: 両 OS で「Watch で録音 → スマホに届く → タイムラインで再生できる」。装着中（充電中・就寝中を除く）の録音カバー率 95% 以上、途絶は 10 分以内に通知（実機の確認は #59・#60）。
 
 ## M2: 文字起こしと検索
 
