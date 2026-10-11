@@ -189,8 +189,10 @@ adb logcat -d | grep -E "[A-Z_]+_CHECK"
 # Mac: Swift のテスト（cd iosApp && xcodegen generate の後）
 .github/scripts/xcode-test.sh SwiftUnitTests "Swift unit tests"
 .github/scripts/make-ja-speech.sh build/ja-speech && .github/scripts/xcode-test.sh SpeechTests "SpeechTranscriber"
-ERASE_SIMULATOR=1 .github/scripts/xcode-test.sh PlaybackTests "Playback in the iOS app"
+UNINSTALL_APP=app.watchaudio .github/scripts/xcode-test.sh PlaybackTests "Playback in the iOS app"
 ```
+
+`ios.yml` のシミュレータは 1 ジョブの中で使い回す（#92）。Kotlin のテスト（自分でシミュレータを起動・終了する）の後に `boot-simulators.sh` が iPhone と Apple Watch の起動をバックグラウンドで始め、初回起動のデータ移行（1〜2 分）を Xcode のビルドと重ねる。各ステップ（`simulator-smoke.sh`・`watch-complication-smoke.sh`・`xcode-test.sh`）は同じ端末（`simulator-udid.sh` が選ぶ最新ランタイムの iPhone / Apple Watch）の起動完了を待ち、終わってもシャットダウンしない。アプリがホストのテスト（Speech・Playback）は、起動確認で入れたアプリが残っているとテストバンドルを読み込めないため、端末を消去（`ERASE_SIMULATOR=1`、再起動でデータ移行がやり直しになる）する代わりにアプリをアンインストールしてから（`UNINSTALL_APP`）実行する。アンインストールでアプリのコンテナとデータ・権限の状態は消去と同じく初期化される。
 
 Swift のテストを Linux で実行する手段はない（Xcode が必要）。変更したら CI（macOS、10 倍課金）で確認する前に、Kotlin 側は上のクロスコンパイル、Swift 側は差分の読み直しで型・並行性のエラーを潰しておく。
 
