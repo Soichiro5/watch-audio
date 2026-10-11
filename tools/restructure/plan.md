@@ -206,3 +206,4 @@ db885c9 + この準備の PR の内容を使い捨てのクローンで移動し
 - `--dry-run` と実行の結果が一致し、2 回目の実行で何も変わらない（冪等）。
 - リンク検査 0 件、Local-only チェック（テスト 33 件と本体）が通る。
 - Gradle の設定（`help`・`projects`）、JVM と Android ホストの単体テスト、アプリの単体テスト、ハーネスのテスト（モデルなしでスキップ）、`assembleDebug`（APK 名 `android-debug.apk` / `wear-debug.apk`）、iOS 向けのクロスコンパイルが通る。
+- `internal` の JVM 名が `playingPositionMs$android` になり、書き換えた `proguard-release-test.pro` と一致する（`javap`）。KMP ライブラリの Android namespace は `app.watchaudio.core.*` と `app.watchaudio.composeapp` のまま（中間マニフェストの `package`）。
