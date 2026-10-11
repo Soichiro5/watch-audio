@@ -172,12 +172,33 @@ adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
 adb pull /data/local/tmp/watchaudio-screenshots
 ```
 
-## 7. 実機検証の手順
+## 7. CI の設定と成果物の扱い（公開リポジトリ）
+
+リポジトリは公開なので、CI のログと成果物（artifact）は GitHub にログインした人なら誰でも見られる・ダウンロードできる（#79）。
+
+- **ランナーは固定**: Linux は `ubuntu-24.04`（`ubuntu-latest` の Ubuntu 26 への切り替えで壊れないように）、macOS は `macos-26`。新しいイメージへは、全ジョブが通ることを PR で確かめてから移る。
+- **権限は最小**: 各 workflow は `permissions: contents: read`。書き込みが必要なジョブを足すときは、そのジョブにだけ付ける。`pull_request_target` は使わない（fork の PR に secret が渡るため）。
+- **外部アクションは SHA で固定**し、`.github/dependabot.yml` が週 1 回まとめて更新 PR を出す。
+- **秘密情報**: 必要になったら GitHub Actions の Secrets に置き、ログに出さない（加工して出力すると伏せ字を回避してしまうので注意）。現時点で secret を使う workflow はない。
+
+成果物の中身（どれも実データ・個人データ・秘密情報を含まない）:
+
+| 成果物 | workflow | 中身 | 保持 |
+| --- | --- | --- | --- |
+| `debug-apks` / `watch-audio-android-<sha>` | android.yml / deliver.yml | debug 署名の APK（スマホ・Wear OS）。API キーは入っていない。モデルは同梱せず初回にダウンロード | 7 / 30 日 |
+| `ui-screenshots` | android.yml | JVM の UI テストが描いた画面（テスト用の合成データ） | 30 日 |
+| `logcat-phone` / `logcat-wear` | emulator.yml | エミュレータの logcat・計装テストのレポート（合成音声・テスト用 DB のみ。文字起こし本文はテスト音声の正解文） | 7 日 |
+| `screenshots-phone` / `screenshots-wear` | emulator.yml | エミュレータのスクリーンショット | 30 日 |
+| `xcodebuild-logs` / `simulator-smoke` | ios.yml | ビルドログ、シミュレータのスクリーンショットとアプリログ | 7 日 |
+
+成果物を Issue の証跡として参照する場合、保持期間を過ぎると消える点に注意する（コメントには数値・ログ行を本文として残す）。
+
+## 8. 実機検証の手順
 
 - M0-3 / M0-4 電池計測: [docs/spikes/m0-3-m0-4-battery-protocol.md](spikes/m0-3-m0-4-battery-protocol.md)
 - Wear OS 録音アプリ（常時録音・転送）の手動テスト: [docs/impl/wearos.md §10](impl/wearos.md#10-実機での手動テスト-チェックリスト)
 
-## 8. 検証データの扱い
+## 9. 検証データの扱い
 
 - 録音検証では、**参加者全員に録音・文字起こしの目的を説明し同意を得る**。
 - 実際の会話音声はリポジトリにコミットしない（個人情報）。評価用の正解テキストと集計結果のみ共有する。
