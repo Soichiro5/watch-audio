@@ -67,7 +67,6 @@ dependencies {
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.play.services.wearable)
     implementation(libs.sherpa.onnx.android)
-    implementation(libs.commons.compress)
 
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.junit)
