@@ -13,13 +13,13 @@ import androidx.work.testing.TestDriver
 import androidx.work.testing.WorkManagerTestInitHelper
 import app.watchaudio.android.work.AndroidDeviceConditions
 import app.watchaudio.android.work.TranscriptionScheduler
-import app.watchaudio.app.settings.updateSettings
 import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.pipeline.DeviceConditions
 import app.watchaudio.core.pipeline.DiagnosticEvents
 import app.watchaudio.core.pipeline.PolicyGatedTranscription
 import app.watchaudio.core.pipeline.ProcessingPolicy
 import app.watchaudio.core.pipeline.ThermalLevel
+import app.watchaudio.core.settings.updateSettings
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger

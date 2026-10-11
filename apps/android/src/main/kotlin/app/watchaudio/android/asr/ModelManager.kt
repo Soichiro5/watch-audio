@@ -9,7 +9,7 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import app.watchaudio.app.ModelState
+import app.watchaudio.core.pipeline.ModelState
 import app.watchaudio.core.pipeline.DiagnosticEvents
 import app.watchaudio.core.pipeline.Diagnostics
 import app.watchaudio.core.pipeline.DiagnosticsLog

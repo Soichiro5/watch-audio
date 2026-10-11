@@ -17,8 +17,9 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import app.watchaudio.android.MainActivity
-import app.watchaudio.app.alert.GapAlertEvaluator
-import app.watchaudio.app.logic.GapAlertDecision
+import app.watchaudio.app.alert.GapAlertText
+import app.watchaudio.core.alert.GapAlertDecision
+import app.watchaudio.core.alert.GapAlertEvaluator
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.DiagnosticEvents
 import app.watchaudio.core.pipeline.Diagnostics
@@ -93,7 +94,7 @@ class GapAlertMonitor(
         }
         notifications.createNotificationChannel(
             NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_HIGH)
-                .setName(evaluator.channelName)
+                .setName(GapAlertText.channelName)
                 .build(),
         )
         val openApp = PendingIntent.getActivity(
@@ -102,10 +103,10 @@ class GapAlertMonitor(
             Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val text = evaluator.message(lastReceivedAt)
+        val text = GapAlertText.message(lastReceivedAt)
         val notification = NotificationCompat.Builder(app, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setContentTitle(evaluator.title)
+            .setContentTitle(GapAlertText.title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setCategory(NotificationCompat.CATEGORY_STATUS)

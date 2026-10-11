@@ -3,10 +3,10 @@ package app.watchaudio.app.state
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.watchaudio.app.AppServices
-import app.watchaudio.app.logic.QuietHours
-import app.watchaudio.app.settings.AppSettings
-import app.watchaudio.app.settings.loadSettings
-import app.watchaudio.app.settings.updateSettings
+import app.watchaudio.core.alert.QuietHours
+import app.watchaudio.core.settings.AppSettings
+import app.watchaudio.core.settings.loadSettings
+import app.watchaudio.core.settings.updateSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted

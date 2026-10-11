@@ -1,20 +1,16 @@
-package app.watchaudio.app.alert
+package app.watchaudio.core.alert
 
-import app.watchaudio.app.Strings
-import app.watchaudio.app.logic.GapAlertDecision
-import app.watchaudio.app.logic.formatClock
-import app.watchaudio.app.logic.gapAlertAt
-import app.watchaudio.app.logic.gapAlertDecision
-import app.watchaudio.app.settings.AppSettings
-import app.watchaudio.app.settings.updateSettings
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.protocol.ChunkEndReason
+import app.watchaudio.core.settings.AppSettings
+import app.watchaudio.core.settings.updateSettings
 import kotlinx.datetime.TimeZone
 
 /**
  * Applies the gap alert rules (#43) to what is in the [store]: the newest chunk's end reason,
  * when a chunk last arrived and the user's settings. Platforms only deliver the notification:
  * Android checks [decide] from WorkManager, iOS schedules a local notification at [alertAt].
+ * The notification's texts are UI strings (`GapAlertText` in `shared/ui`).
  */
 class GapAlertEvaluator(
     private val store: LocalStore,
@@ -46,12 +42,6 @@ class GapAlertEvaluator(
     suspend fun markShown(lastReceivedAt: Long) {
         store.updateSettings { it.copy(gapAlertShownFor = lastReceivedAt) }
     }
-
-    /** Notification text: 「録音が届いていません（最後の受信: HH:mm）。…」 */
-    fun message(lastReceivedAt: Long): String = Strings.gapAlert(formatClock(lastReceivedAt, timeZone()))
-
-    val title: String get() = Strings.GAP_ALERT_TITLE
-    val channelName: String get() = Strings.GAP_ALERT_CHANNEL
 
     private suspend fun snapshot(): Snapshot = store.read {
         Snapshot(lastChunkBefore()?.endReason, lastReceivedAt(), AppSettings.fromEntries(settings()))

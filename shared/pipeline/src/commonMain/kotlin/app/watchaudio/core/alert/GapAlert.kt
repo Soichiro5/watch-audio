@@ -1,4 +1,4 @@
-package app.watchaudio.app.logic
+package app.watchaudio.core.alert
 
 import app.watchaudio.core.protocol.ChunkEndReason
 import kotlin.time.Instant
@@ -9,6 +9,12 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
+
+/** Timing of the gap alert (#43). */
+object GapAlertTiming {
+    /** No chunk for this long while the watch should be recording raises a warning. */
+    const val SILENCE_MS = 10 * 60_000L
+}
 
 /**
  * Daily local time window in which no gap alert is shown (e.g. while sleeping).
@@ -77,7 +83,7 @@ fun gapAlertAt(
     lastReceivedAt: Long?,
     settings: GapAlertSettings,
     timeZone: TimeZone,
-    silenceMs: Long = Thresholds.ARRIVAL_WARNING_MS,
+    silenceMs: Long = GapAlertTiming.SILENCE_MS,
 ): Long? {
     if (!settings.enabled || lastEndReason == null || lastReceivedAt == null || lastEndReason.startsGap) return null
     return settings.quietHours.endOf(lastReceivedAt + silenceMs, timeZone)
@@ -106,7 +112,7 @@ fun gapAlertDecision(
     settings: GapAlertSettings,
     timeZone: TimeZone,
     alertedFor: Long? = null,
-    silenceMs: Long = Thresholds.ARRIVAL_WARNING_MS,
+    silenceMs: Long = GapAlertTiming.SILENCE_MS,
 ): GapAlertDecision {
     if (lastReceivedAt == null || lastReceivedAt == alertedFor) return GapAlertDecision.None
     val dueAt = gapAlertAt(lastEndReason, lastReceivedAt, settings, timeZone, silenceMs) ?: return GapAlertDecision.None

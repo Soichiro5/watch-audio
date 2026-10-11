@@ -33,21 +33,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.watchaudio.app.ModelSetup
-import app.watchaudio.app.ModelState
 import app.watchaudio.app.Strings
 import app.watchaudio.app.logic.ArrivalState
 import app.watchaudio.app.logic.Thresholds
-import app.watchaudio.app.logic.GapAlertSettings
-import app.watchaudio.app.logic.QuietHours
 import app.watchaudio.app.logic.formatAgo
-import app.watchaudio.app.logic.formatMinuteOfDay
-import app.watchaudio.app.settings.AppSettings
 import app.watchaudio.app.logic.formatClock
 import app.watchaudio.app.logic.formatHours
+import app.watchaudio.app.logic.formatMinuteOfDay
 import app.watchaudio.app.state.DiagnosticsExport
 import app.watchaudio.app.state.StatusUiState
+import app.watchaudio.core.alert.GapAlertSettings
+import app.watchaudio.core.alert.QuietHours
 import app.watchaudio.core.db.StoreStats
+import app.watchaudio.core.pipeline.ModelState
 import app.watchaudio.core.pipeline.ProcessingPolicy
+import app.watchaudio.core.settings.AppSettings
 import kotlinx.datetime.TimeZone
 
 @Composable

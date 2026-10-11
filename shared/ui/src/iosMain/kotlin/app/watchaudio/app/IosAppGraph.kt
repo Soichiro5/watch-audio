@@ -1,7 +1,6 @@
 package app.watchaudio.app
 
-import app.watchaudio.app.alert.GapAlertEvaluator
-import app.watchaudio.app.settings.loadSettings
+import app.watchaudio.core.alert.GapAlertEvaluator
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.DiagnosticEvents
 import app.watchaudio.core.pipeline.DiagnosticsLog
@@ -12,11 +11,12 @@ import app.watchaudio.core.pipeline.ProcessingDecision
 import app.watchaudio.core.pipeline.ProcessingPolicy
 import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.pipeline.TranscriptionPipeline
+import app.watchaudio.core.platform.platformName
 import app.watchaudio.core.protocol.AckStatus
 import app.watchaudio.core.protocol.ChunkAck
 import app.watchaudio.core.protocol.decodeManifest
 import app.watchaudio.core.protocol.toJson
-import app.watchaudio.core.platform.platformName
+import app.watchaudio.core.settings.loadSettings
 import kotlin.concurrent.Volatile
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.resume

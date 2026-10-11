@@ -6,8 +6,8 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import app.watchaudio.android.AppGraph
-import app.watchaudio.app.ModelState
-import app.watchaudio.app.settings.loadSettings
+import app.watchaudio.core.pipeline.ModelState
+import app.watchaudio.core.settings.loadSettings
 import app.watchaudio.core.pipeline.DiagnosticEvents
 import app.watchaudio.core.pipeline.Diagnostics
 import app.watchaudio.core.pipeline.DiagnosticsLog

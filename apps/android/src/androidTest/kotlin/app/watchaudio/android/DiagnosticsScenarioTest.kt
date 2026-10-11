@@ -11,12 +11,12 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import app.watchaudio.app.Strings
-import app.watchaudio.app.settings.updateSettings
 import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.pipeline.DiagnosticEvents
 import app.watchaudio.core.protocol.AckStatus
 import app.watchaudio.core.protocol.ChunkFrame
 import app.watchaudio.core.protocol.TransferPaths
+import app.watchaudio.core.settings.updateSettings
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.time.Instant

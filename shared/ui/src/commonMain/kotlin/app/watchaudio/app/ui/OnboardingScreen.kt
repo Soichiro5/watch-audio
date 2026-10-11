@@ -29,11 +29,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.watchaudio.app.AppPermission
 import app.watchaudio.app.ModelSetup
-import app.watchaudio.app.ModelState
 import app.watchaudio.app.PermissionStatus
 import app.watchaudio.app.Strings
 import app.watchaudio.app.state.OnboardingStep
 import app.watchaudio.app.state.OnboardingUiState
+import app.watchaudio.core.pipeline.ModelState
 
 /** The first-run flow (#32): one page per [OnboardingStep], with back / next at the bottom. */
 @Composable

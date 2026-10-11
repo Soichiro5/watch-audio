@@ -9,10 +9,10 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import app.watchaudio.android.work.TranscriptionScheduler
-import app.watchaudio.app.ModelState
 import app.watchaudio.app.Strings
-import app.watchaudio.app.settings.updateSettings
 import app.watchaudio.core.db.ChunkState
+import app.watchaudio.core.pipeline.ModelState
+import app.watchaudio.core.settings.updateSettings
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

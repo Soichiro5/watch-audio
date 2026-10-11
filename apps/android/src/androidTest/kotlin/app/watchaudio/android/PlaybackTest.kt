@@ -10,7 +10,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.watchaudio.app.Strings
 import app.watchaudio.app.logic.formatClock
-import app.watchaudio.app.settings.updateSettings
+import app.watchaudio.core.settings.updateSettings
 import kotlin.random.Random
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone

@@ -10,7 +10,7 @@ import app.watchaudio.android.asr.ModelManager
 import app.watchaudio.android.transfer.ChunkReceiver
 import app.watchaudio.android.work.AndroidDeviceConditions
 import app.watchaudio.android.work.TranscriptionScheduler
-import app.watchaudio.app.settings.loadSettings
+import app.watchaudio.core.settings.loadSettings
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.DeviceConditions
 import app.watchaudio.core.pipeline.DiagnosticsLog
