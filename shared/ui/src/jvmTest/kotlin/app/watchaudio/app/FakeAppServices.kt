@@ -10,7 +10,7 @@ import kotlinx.io.files.Path
 /**
  * [AppServices] over a real [LocalStore] with no platform behind it: playback, transcription
  * and model downloads are only recorded, while [storage] really deletes (audio under [audioRoot]).
- * For tests, previews and as a stand-in host until a platform implementation is wired in.
+ * Test double for the JVM view model and UI tests; it is not shipped in the apps.
  */
 class FakeAppServices(
     override val store: LocalStore,
@@ -89,11 +89,5 @@ class FakeAppServices(
         diagnosticsExports++
         diagnosticsExportFailure?.let { throw it }
         return diagnosticsExportResult
-    }
-
-    companion object {
-        /** Opens (or creates) the regular database in [dataDir]. */
-        fun open(dataDir: String): FakeAppServices =
-            FakeAppServices(LocalStore.open("$dataDir/${LocalStore.FILE_NAME}"), audioRoot = dataDir)
     }
 }

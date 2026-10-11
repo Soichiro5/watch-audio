@@ -5,7 +5,6 @@ plugins {
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            api(projects.shared.model)
             api(projects.shared.protocol)
             api(projects.shared.platform)
             api(libs.androidx.sqlite)

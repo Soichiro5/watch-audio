@@ -76,7 +76,6 @@ watch-audio/
 │       ├── SharedSwift/       #   ChunkProtocol.swift など、Watch・iPhone・テストで共有する Swift コード
 │       └── Tests/             #   Swift のテスト（ProtocolTests・WatchLogicTests・SpeechTests・PlaybackTests）
 ├── shared/                    # KMP: 共通ロジック（Gradle: :shared:<名前>）
-│   ├── model/                 #   共通の値オブジェクト（TimeRange）
 │   ├── protocol/              #   ChunkManifest / ChunkAck / ChunkFrame（Wear OS・スマホ共通。testdata/ は Swift 側と共有）
 │   ├── platform/              #   expect/actual: SHA-256、IoDispatcher など
 │   ├── db/                    #   LocalStore（手書き SQL）、Schema.kt のマイグレーション、FTS5 検索

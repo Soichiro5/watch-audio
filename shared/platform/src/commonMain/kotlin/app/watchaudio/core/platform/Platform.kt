@@ -3,8 +3,9 @@ package app.watchaudio.core.platform
 import kotlinx.coroutines.CoroutineDispatcher
 
 /**
- * Home of the OS-specific adapters (Transcriber, SecureStore, ...). Each adapter is declared
- * here and implemented per platform.
+ * OS name and version for diagnostics (e.g. "Android 15"). This module holds the small
+ * expect/actual primitives the shared modules need ([IoDispatcher], [Sha256], [PlatformLock]);
+ * larger adapters such as `Transcriber` are interfaces in the modules that use them.
  */
 expect fun platformName(): String
 

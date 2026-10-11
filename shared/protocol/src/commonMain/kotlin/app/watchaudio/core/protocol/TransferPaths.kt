@@ -11,7 +11,4 @@ object TransferPaths {
 
     /** Message from the phone with a [ChunkAck] JSON payload. */
     const val ACK_MESSAGE = "/watch-audio/ack"
-
-    /** Message from the watch asking the phone to resend ACKs it may have lost (no payload). */
-    const val SYNC_REQUEST_MESSAGE = "/watch-audio/sync"
 }

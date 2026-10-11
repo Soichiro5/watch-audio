@@ -28,16 +28,10 @@ class WearPrefs(context: Context) {
         get() = prefs.getLong(KEY_LAST_ACK, 0L)
         set(value) = prefs.edit { putLong(KEY_LAST_ACK, value) }
 
-    /** Last mode shown to the user, for the tile/complication when the process is not running. */
-    var lastStatus: String
-        get() = prefs.getString(KEY_LAST_STATUS, "") ?: ""
-        set(value) = prefs.edit { putString(KEY_LAST_STATUS, value) }
-
     private companion object {
         const val KEY_DEVICE_ID = "device_id"
         const val KEY_ARMED = "armed"
         const val KEY_UPLOAD_ENABLED = "upload_enabled"
         const val KEY_LAST_ACK = "last_ack_at"
-        const val KEY_LAST_STATUS = "last_status"
     }
 }

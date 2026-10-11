@@ -257,7 +257,7 @@ Watch が無くても、ADB 経由の Wear OS エミュレータとスマホエ�
 ## 7. 既知の制限・TODO
 
 - **実機での動作確認は未実施**（#61）。エミュレータ（CI、§6.1）では起動・再生・MediaCodec デコード + sherpa-onnx AAR での文字起こし・モデル待ち・強制終了からの再開・充電時の定期ジョブ（WorkManager のテストドライバ）・電池と発熱の方針（同、端末の状態は差し替え）・途絶通知の表示を確認している（この開発環境には KVM がないため手元では動かせない）。Data Layer 受信、実機の速度・発熱、Doze 中の WorkManager の挙動、方針の目標値（電池消費 1 日 3% 以下）は実機で確認が必要。
-- `TransferPaths.SYNC_REQUEST_MESSAGE`（Watch からの ACK 再送依頼）は未対応。ペイロードがなく対象チャンクが分からないため、現状は Watch がチャンクを再送 → `DUPLICATE` ACK で回復する。必要なら chunkId 一覧をペイロードに持たせる仕様にする。
+- Watch からの ACK 再送依頼はない（送る側も受ける側もなかった定数 `SYNC_REQUEST_MESSAGE` は #133 で削除）。ACK を失ったときは Watch がチャンクを再送 → `DUPLICATE` ACK で回復する。必要になったら chunkId 一覧をペイロードに持たせるメッセージとして、Swift 側・testdata と合わせて追加する。
 - モデルの取得元は外部（Hugging Face の個人リポジトリと k2-fsa の GitHub Release）に依存している。コミット固定 + SHA-256 検証なので内容が差し替わることはないが、公開が取り下げられると取得できなくなる。その場合は `ModelManifest` と `tools/harness/download-models.sh` の URL を自前の配布先（このリポジトリの GitHub Release 等）に差し替える（ハッシュはそのまま）。
 - `ModelDownloadWorker` の通知には進捗を出していない（状態は `AppServices.status` で UI に出す）。Android 13+ で通知権限がないと通知は表示されないが、ダウンロードは続く。
 - 録音の途絶アラートは WorkManager の精度に依存する（タイマーは Doze で遅れうる、定期チェックは最短 15 分）。厳密な時刻が必要なら `AlarmManager` を検討。実機での確認（Watch の録音を強制停止 → 10〜25 分以内に通知）が必要。

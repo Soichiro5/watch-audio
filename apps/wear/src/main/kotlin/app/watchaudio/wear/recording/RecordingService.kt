@@ -249,7 +249,6 @@ class RecordingService : LifecycleService(), RecorderInput.Listener {
         if (target == mode) return
         mode = target
         RecorderStore.update { it.copy(mode = target, sessionStartedAtEpochMs = sessionStartedAtEpochMs) }
-        graph.prefs.lastStatus = target.statusKey()
         if (inForeground) graph.alerts.updateOngoing(target, sessionStartedAtEpochMs)
         StatusSurfaces.refresh(this)
         graph.log("mode", target.statusKey())
@@ -457,7 +456,6 @@ class RecordingService : LifecycleService(), RecorderInput.Listener {
         stopMonitors()
         handler.removeCallbacksAndMessages(null)
         RecorderStore.update { it.copy(serviceRunning = false, mode = RecorderMode.Stopped) }
-        graph.prefs.lastStatus = RecorderMode.Stopped.statusKey()
         StatusSurfaces.refresh(this)
         super.onDestroy()
     }

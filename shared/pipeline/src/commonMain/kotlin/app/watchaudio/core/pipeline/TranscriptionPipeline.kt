@@ -129,11 +129,8 @@ class TranscriptionPipeline(
     interface Observer {
         fun started(chunkId: String) {}
 
-        /** [transcribed] is false when the attempt failed (see `markFailed`). */
-        fun finished(chunkId: String, transcribed: Boolean) {}
-
-        /** Called instead of the two-argument [finished] (which it calls by default), with timings. */
-        fun finished(outcome: ChunkOutcome) = finished(outcome.chunkId, outcome.transcribed)
+        /** [ChunkOutcome.transcribed] is false when the attempt failed (see `markFailed`). */
+        fun finished(outcome: ChunkOutcome) {}
 
         companion object {
             val NONE: Observer = object : Observer {}

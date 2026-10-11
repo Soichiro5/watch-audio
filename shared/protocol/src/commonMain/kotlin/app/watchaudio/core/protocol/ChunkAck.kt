@@ -9,12 +9,20 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class ChunkAck(
+    /** Same version as the manifest format ([ChunkManifest.SCHEMA_VERSION]). */
     val schemaVersion: Int = ChunkManifest.SCHEMA_VERSION,
+    /** The [ChunkManifest.chunkId] this receipt is for. */
     val chunkId: String,
+    /** Outcome of the ingest. */
     val status: AckStatus,
+    /** Short reason for a non-final status (e.g. a size or hash mismatch), for diagnostics. */
     val detail: String? = null,
 )
 
+/**
+ * Outcome of ingesting one chunk on the phone. [isFinal] tells the watch whether it may delete
+ * its copy (true) or must keep the chunk queued and resend it (false).
+ */
 @Serializable
 enum class AckStatus(val isFinal: Boolean) {
     /** Stored for the first time. */

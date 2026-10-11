@@ -9,10 +9,14 @@ val ProtocolJson: Json = Json {
     explicitNulls = false
 }
 
+/** Encodes this manifest with [ProtocolJson]. */
 fun ChunkManifest.toJson(): String = ProtocolJson.encodeToString(ChunkManifest.serializer(), this)
 
+/** Encodes this ACK with [ProtocolJson]. */
 fun ChunkAck.toJson(): String = ProtocolJson.encodeToString(ChunkAck.serializer(), this)
 
+/** Decodes a manifest; throws [IllegalArgumentException] when [json] is malformed. */
 fun decodeManifest(json: String): ChunkManifest = ProtocolJson.decodeFromString(ChunkManifest.serializer(), json)
 
+/** Decodes an ACK; throws [IllegalArgumentException] when [json] is malformed. */
 fun decodeAck(json: String): ChunkAck = ProtocolJson.decodeFromString(ChunkAck.serializer(), json)

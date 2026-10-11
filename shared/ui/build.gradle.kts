@@ -15,7 +15,6 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(projects.shared.model)
             implementation(projects.shared.protocol)
             implementation(projects.shared.platform)
             // AppServices exposes LocalStore, so hosts need shared/db on their classpath too.

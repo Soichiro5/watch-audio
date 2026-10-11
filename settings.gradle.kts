@@ -23,8 +23,7 @@ dependencyResolutionManagement {
     }
 }
 
-// Shared Kotlin Multiplatform logic (phone: Android + iOS; model and protocol also used by Wear OS)
-include(":shared:model")
+// Shared Kotlin Multiplatform logic (phone: Android + iOS; protocol also used by Wear OS)
 include(":shared:protocol")
 include(":shared:platform")
 include(":shared:db")

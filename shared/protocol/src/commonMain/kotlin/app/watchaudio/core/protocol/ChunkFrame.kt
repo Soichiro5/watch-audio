@@ -5,8 +5,10 @@ package app.watchaudio.core.protocol
  * manifest JSON, then the raw audio bytes until end of stream.
  */
 object ChunkFrame {
+    /** Upper bound for the manifest JSON; a larger length prefix is treated as malformed. */
     const val MAX_MANIFEST_BYTES = 64 * 1024
 
+    /** The length prefix and manifest JSON that precede the audio bytes. */
     fun header(manifest: ChunkManifest): ByteArray {
         val json = manifest.toJson().encodeToByteArray()
         require(json.size <= MAX_MANIFEST_BYTES) { "manifest too large: ${json.size} bytes" }
