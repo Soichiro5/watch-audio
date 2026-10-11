@@ -79,40 +79,72 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 
 正解テキスト付きの日本語会話（オフライン TTS）を Watch 録音を模して加工した検証用音声セットと、それをハーネスに流して条件ごとの CER・検出漏れ・処理時間を出す `evaluate` コマンドがある（#56）。生成手順・条件・ライセンス・結果は [docs/test-audio.md](test-audio.md)。
 
-## 5. 検索の性能ベンチマーク（#23）
+## 5. 検索の性能ベンチマーク（#23, #72）
 
-1 年分相当（約 50 万セグメント）の日本語の文字起こしを決定的に生成し（仕事・家庭・用事の語彙を組み合わせた会話文、5 分チャンク × 約 10 発話）、`StoreTransaction.search` の応答時間を測る。通常の `jvmTest` には含めない（データ投入に約 30 秒かかるため）。
+1 年分相当の日本語の文字起こしを決定的に生成し、`StoreTransaction.search` の応答時間を測る。通常の `jvmTest` には含めない（1 年分の投入に数分かかるため）。
 
 ```bash
-./gradlew --max-workers=2 :shared:core-db:jvmBenchmark                       # 50 万セグメント、各クエリ 40 回
-./gradlew --max-workers=2 :shared:core-db:jvmBenchmark -Pbenchmark.segments=50000 -Pbenchmark.rounds=5   # 手早く試す
+./gradlew --max-workers=2 :shared:core-db:jvmBenchmark                       # 1 年分（320 万セグメント、約 1 GB）、各クエリ 40 回
+./gradlew --max-workers=2 :shared:core-db:jvmBenchmark -Pbenchmark.segments=50000 -Pbenchmark.rounds=5   # 手早く試す（約 17 MB）
+./gradlew --max-workers=2 :shared:core-db:jvmBenchmark -Pbenchmark.profile=sentences -Pbenchmark.segments=500000   # #23 の前提（長めのセグメント）
 ```
 
-- 対象クエリ: 3 文字以上（FTS5 trigram）は頻出語・フレーズ・まれな語・ヒットなし、2 文字以下（LIKE フォールバック）は頻出語・1 文字・まれな語・ヒットなし。いずれも上限 50 件・スニペット生成込み。
-- 出力: 標準出力に `SEARCH_BENCHMARK segments=… fts_p50_ms=… fts_p95_ms=… like_p50_ms=… like_p95_ms=… all_p95_ms=… max_ms=… target_ms=300 …` の 1 行（`key=value` 区切り）と、クエリ別の表（Markdown、`shared/core-db/build/reports/search-benchmark/summary.md`）。
-- 判定: どれか 1 つのクエリの p95 が 300 ms を超えるとテストが失敗する。
-- CI: `android.yml` の「Search benchmark (500k segments, target 300 ms)」ステップで毎回実行し、表をジョブサマリーに出す。
+1 年分の DB は約 1 GB になる。ディスクの空きが少ない環境では件数を減らして試し、1 年分は CI で確認する。
 
-計測例（クラウドの Linux、4 CPU、JVM 21。2026-10-10）:
+### 生成するデータ（`TranscriptGenerator`）
 
-| | FTS（3 文字以上）p50 / p95 | LIKE（2 文字以下）p50 / p95 | 最悪のクエリ p95 |
+| プロファイル | 内容 | 1 日（装着 16 時間）| 1 年 |
 | --- | --- | --- | --- |
-| 改善前 | 139 / 260 ms | 0.8 / 212 ms | 327 ms（2 文字・ヒットなし）、301 ms（「ミーティング」） |
-| 改善後 | 30 / 48 ms | 0.8 / 128 ms | 148 ms（2 文字・ヒットなし） |
+| `utterances`（既定、#72） | #68（PR #70）以降のパイプラインと同じ「話者交代の間で切った発話」単位。1 行あたり平均 11.8 文字・長さの中央値 1.75 秒。会話のあるチャンク（42%）に 70〜120 発話を詰め、残りのチャンクは 0〜12 発話 | 約 8,600 セグメント | 約 314 万 → **320 万**で測る |
+| `sentences`（#23） | 5 分チャンク × 約 10 発話、1 行 1〜3 文（約 30 文字） | 約 1,400 セグメント | 約 50 万 |
 
-改善内容（`StoreTransaction.search`、マイグレーション 4）:
+`utterances` の件数の根拠（[02 §9.3](02-architecture.md#93-データ量の見積もり)）: 装着 16 時間のうち発話は約 31%（約 5 時間、[M0-5 §5](spikes/m0-5-asr-desktop.md#5-1-日分の処理時間の見積もりスマホ)）。検証用音声セット（[test-audio.md](test-audio.md)）の会話は発話 24 分で 505 発話・688 文・約 8,000 文字、PR #70 の評価では保存されたセグメントの長さの中央値が clean 1.7 秒・wrist 1.9 秒で、ほぼ 1 文 = 1 セグメントになる。発話 1 時間あたり約 1,720 セグメント × 5 時間 = 1 日約 8,600。雑音のある条件（office・cafe・day など）では話者交代で切れず中央値 5〜10 秒なので、行数は少なくなる。静かな条件の値を上限として使う。
+
+チャンク ID は UUID、エンジン ID は実際と同じ長さにして、1 行あたりの容量もアプリと同じになるようにしている。
+
+### 対象クエリと出力
+
+- 対象クエリ: 3 文字以上（FTS5 trigram）は頻出語・フレーズ・まれな語・ヒットなし、2 文字以下は頻出語・1 文字・まれな語・ヒットなし。いずれも上限 50 件・スニペット生成込み。
+- 出力: 標準出力に `SEARCH_BENCHMARK profile=… segments=… days=… chars_per_segment=… median_segment_s=… db_mb=… bytes_per_segment=… fts_p50_ms=… fts_p95_ms=… like_p50_ms=… like_p95_ms=… all_p95_ms=… max_ms=… target_ms=300 …` の 1 行（`key=value` 区切り）と、クエリ別の表（Markdown、`shared/core-db/build/reports/search-benchmark/summary.md`）。`like_*` は 2 文字以下の経路（下記の通り LIKE と語彙の組み合わせ）。
+- 判定: どれか 1 つのクエリの p95 が 300 ms を超えるとテストが失敗する。
+- CI: `android.yml` の「Search benchmark (3.2M segments, target 300 ms)」ステップで毎回 1 年分（`-Pbenchmark.segments=3200000`）を実行し、表をジョブサマリーに出す。
+
+### 計測結果
+
+クラウドの Linux（4 CPU、JVM 21）と GitHub Actions の ubuntu-latest（4 CPU、JVM 21。PR #84 の [android.yml の実行](https://github.com/Soichiro5/watch-audio/actions/runs/38114188178)）。#23 は 2026-10-10、#72 は 2026-10-11。
+
+| データ | 対策 | FTS（3 文字以上）p50 / p95 | 2 文字以下 p50 / p95 | 最悪のクエリ p95 | DB |
+| --- | --- | --- | --- | --- | --- |
+| `sentences` 50 万 | #23 の改善前 | 139 / 260 ms | 0.8 / 212 ms | 327 ms（2 文字・ヒットなし） | - |
+| `sentences` 50 万 | #23 の改善後 | 30 / 48 ms | 0.8 / 128 ms | 148 ms（2 文字・ヒットなし） | 281 MB |
+| `utterances` 30 万 | #72 の改善前 | 7.2 / 13.5 ms | 1.0 / 49 ms | 62 ms（2 文字・まれ / ヒットなし） | 111 MB（371 B/行） |
+| `utterances` 30 万 | #72 の改善後 | 7.6 / 13.9 ms | 2.0 / 8.9 ms | 22 ms（「ミーティング」） | 101 MB（335 B/行） |
+| **`utterances` 320 万（1 年 384 日分、CI）** | #72 の改善後 | **56.6 / 98.2 ms** | **0.9 / 7.1 ms** | **101 ms（「ミーティング」）** | **1,018 MB（318 B/行）** |
+
+#72 の改善前の 2 文字以下の検索は全文を走査するので、件数に比例して 320 万行では 0.5〜0.7 秒になる見込みだった（30 万行で 62 ms）。
+
+### 改善内容
+
+#23（`StoreTransaction.search`、マイグレーション 4）:
 
 - FTS5 の `snippet()` は ORDER BY / LIMIT の前に**全ヒット行**で計算されるため、頻出語で検索時間の大半を占めていた。FTS ではセグメント ID だけを新しい順に並べて上位 50 件に絞り、スニペット（一致箇所の `[` `]` と前後の切り詰め）は返す行だけ Kotlin で作る（`highlightSnippet`）。
-- LIKE フォールバックは `(start_at, text)` の索引を新しい順に走査し、表本体を読まずに絞り込む（旧 `idx_segment_start_at` を置き換え。DB は 1 年分で約 60 MB 増える）。2 文字のヒットなし検索は全件走査になるため、これが最悪ケース。
 
-実機（中位機種）での値は未計測。スマホの CPU・ストレージは上の環境より遅いので、実機入手後に同じクエリで確認する。
+#72（マイグレーション 5）:
+
+- 2 文字以下の検索は、まず**新しい 20,000 セグメント**（発話 2 日分ほど）だけを LIKE で調べる。頻出語はここで 50 件そろう。
+- そろわなければ、trigram 索引の**語彙**（`fts5vocab` の instance テーブル `segment_fts_terms`）から「クエリで始まる trigram」を範囲検索し、そのセグメントを新しい順に返す。全文の走査はしない。ヒットなし・まれな語は数 ms で終わる。
+- 末尾の文字も必ずどれかの trigram の先頭になるよう、索引には本文の後ろに改行 2 つを付けて登録する。そのため FTS は本文を持たない contentless 表（`contentless_delete=1`、行 ID で削除）にした。
+- LIKE で全件を走査しなくなったので、#23 で追加した `(start_at, text)` の索引を `start_at` だけの索引に戻した（1 行あたり約 40 B、1 年で約 130 MB 減）。
+- 発話の行をまとめて「検索用の行」を作る案（隣り合う短いセグメントを保存時に結合）も試算したが、2 文字以下の全件走査は文字数に比例するため 1.5〜2 倍しか速くならず、本文の重複で DB が 2 割ほど増えるので採らなかった。
+
+実機（中位機種）での値は未計測（#61）。スマホの CPU・ストレージは上の環境より遅いので、実機入手後に同じクエリで確認する。
 
 ## 6. CI での自動確認（実機なし）
 
 | ワークフロー | ステップ | 確認できること | 証拠の場所 |
 | --- | --- | --- | --- |
 | `android.yml` | Unit tests | 共通ロジック（JVM・Android ホスト）。SQLite を使う core-db / Ingestor / パイプラインのテストは JVM で実行 | テスト結果 |
-| `android.yml` | Search benchmark | 50 万セグメントでの検索応答時間（§5） | ジョブサマリーの表と `SEARCH_BENCHMARK` 行 |
+| `android.yml` | Search benchmark | 1 年分（320 万セグメント）での検索応答時間と DB 容量（§5） | ジョブサマリーの表と `SEARCH_BENCHMARK` 行 |
 | `android.yml` | Unit tests（composeApp の `AppUiTest`） | 画面の描画（タイムライン・検索・状態・オンボーディング。権限拒否時の「設定を開く」#32 を含む） | 成果物 `ui-screenshots`（`composeApp/build/screenshots/*.png`） |
 | `android.yml` | Assemble release (R8) + debug input leak check | スマホ・Wear OS の release ビルド（R8 で縮小・難読化）が通る。Wear OS の debug 専用の音声ファイル入力（#57）が release に入っていない（`verifyReleaseDebugInput`）（#78） | ジョブサマリーの APK 一覧と `debug-input/release.txt` の内容 |
 | `emulator.yml`（phone / wear） | Install, launch and check for crashes | release ビルド（R8、CI で作る使い捨ての鍵で署名）→ debug ビルドの順に入れて起動し、15 秒後もクラッシュしていない（`launch-smoke.sh`。R8 の keep 漏れによる起動時のクラッシュを検出、#78） | ジョブサマリーの `LAUNCH_CHECK` 行、成果物 `logcat-*`（`logcat-release.txt` / `logcat.txt`） |

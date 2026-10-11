@@ -48,12 +48,13 @@ jobs:
       - name: "Unit tests (shared: JVM + Android host; phone and Wear OS app JVM tests)"
         run: ./gradlew jvmTest testAndroidHostTest :androidApp:testDebugUnitTest :wearApp:testDebugUnitTest
 
-      # #23: ~500k generated Japanese segments (a year of transcripts); fails if any query's
-      # p95 exceeds 300 ms. The numbers land in the job summary either way.
-      - name: "Search benchmark (500k segments, target 300 ms)"
+      # #23, #72: a year of generated Japanese utterances as the pipeline cuts them since #68
+      # (~3.2 million segments, ~1 GB); fails if any query's p95 exceeds 300 ms. The numbers land
+      # in the job summary either way.
+      - name: "Search benchmark (3.2M segments, target 300 ms)"
         run: |
           status=0
-          ./gradlew :shared:core-db:jvmBenchmark || status=$?
+          ./gradlew :shared:core-db:jvmBenchmark -Pbenchmark.segments=3200000 || status=$?
           cat shared/core-db/build/reports/search-benchmark/summary.md >> "$GITHUB_STEP_SUMMARY" || true
           exit $status
 

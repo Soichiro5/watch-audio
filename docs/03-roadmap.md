@@ -31,17 +31,17 @@
 | 転送プロトコル（#13） | ✅ クローズ | ChunkManifest / ChunkAck / フレーミング / テストベクタ |
 | ローカル DB・取り込み（#14） | ✅ クローズ | bundled SQLite + FTS5（日本語部分一致）、冪等な Ingestor。JVM・Android エミュレータ・iOS シミュレータでテスト |
 | Wear OS 録音・転送（#16, #18） | ✅ クローズ（実機確認は #59） | 常時録音、装着検出・充電で自動停止/再開、送信キュー + ACK。詳細: [impl/wearos.md](impl/wearos.md) |
-| watchOS 録音・転送（#15, #17） | 🟡 開発環境の証跡待ち | 停止理由の判定（`RecorderPolicy`）と送信キュー（`ChunkOutbox` / `ChunkSendTracker`）の Swift 単体テストを CI の iPhone シミュレータで実行（PR #67）。詳細: [impl/ios-watchos.md](impl/ios-watchos.md) |
-| 文字起こし（#20, #21, #22） | 🟡 開発環境の証跡待ち | 再開可能なパイプライン + WorkManager / BGProcessingTask、sherpa-onnx、SpeechAnalyzer。iOS シミュレータで SpeechTranscriber（ja_JP）を試すテスト（使えなければ理由を記録してスキップ）と、Swift の結果が DB に入るまでのテストを追加（PR #67、CI 確認待ち）。詳細: [impl/android-phone.md](impl/android-phone.md) |
+| watchOS 録音・転送（#15, #17） | ✅ クローズ（実機確認は #60） | 停止理由の判定（`RecorderPolicyTests` 15 件）と送信キュー（`ChunkOutboxTests` 13 件）を CI の iPhone シミュレータで実行。Apple Watch シミュレータで起動確認。詳細: [impl/ios-watchos.md](impl/ios-watchos.md) |
+| 文字起こし（#20, #21, #22） | ✅ クローズ（iOS の実際の認識は #60） | 再開可能なパイプライン + WorkManager / BGProcessingTask、sherpa-onnx（エミュレータで実モデル確認）、SpeechAnalyzer（シミュレータでは使えないため、Swift の結果が DB に入るまでを `IosTranscriberBridgeTest` で確認）。詳細: [impl/android-phone.md](impl/android-phone.md) |
 | 会話で文が抜け落ちる問題（#68） | ✅ クローズ | ASR 入力を 20 秒以下に制限し、話者交代の間で分割（clean の CER 53.8% → 15.0%、wrist 84.1% → 21.4%）。詳細: [test-audio.md](test-audio.md) §4 |
-| 雑音下の抜け落ち・セグメント増の影響（#71, #72） | 🟡 着手（P1） | 雑音で話者交代の間が埋まる会話の抜け落ち（#71）、発話区間の細分化でセグメント数が 5〜6 倍になる影響（検索性能・DB 容量）の確認（#72） |
-| 検索（#23） | ✅ クローズ（中位機種の実測は #61） | 50 万セグメントで p95 最大 150 ms 程度（目標 300 ms）。CI で毎回ベンチマーク |
-| スマホ UI・再生（#19, #25） | 🟡 Android は確認済み、iOS 待ち | 日別タイムライン・文字起こし・検索・1 タップ再生。Android エミュレータで実際のプレーヤーの再生位置を確認済み。iOS シミュレータの `IosPlaybackTest`（UI → 再生の準備）とアプリをホストにした `PlaybackTests`（実際に再生が進む）（PR #67）は CI 確認待ち。詳細: [impl/phone-ui.md](impl/phone-ui.md) |
+| 雑音下の抜け落ち・セグメント増の影響（#71, #72） | 🟡 #72 クローズ、#71 着手（P1） | 雑音で話者交代の間が埋まる会話の抜け落ち（#71）、発話区間の細分化でセグメント数が 5〜6 倍になる影響（検索性能・DB 容量）の確認（#72） |
+| 検索（#23, #72） | ✅ クローズ（中位機種の実測は #61） | #68 以降の発話単位で 1 年 320 万セグメント（DB 約 1 GB）でも p95 最大 約 150 ms（目標 300 ms）。1〜2 文字の検索は trigram 索引の語彙を使う。CI で毎回ベンチマーク |
+| スマホ UI・再生（#19, #25） | ✅ クローズ（実機確認は #60・#61） | 日別タイムライン・文字起こし・検索・1 タップ再生。Android エミュレータと iOS シミュレータで、実際のプレーヤーが指定位置から再生することを確認。詳細: [impl/phone-ui.md](impl/phone-ui.md) |
 | チャンク境界の発話分断（#45） | ✅ クローズ | 隣のチャンクの境界付近と連結して認識（[02 §6.3](02-architecture.md#63-処理パイプラインphone)） |
-| 録音途絶の通知・オンボーディング（#43, #32） | 🟡 開発環境の証跡待ち | 通知・権限画面のスクリーンショット、Watch 側のテスト。権限拒否画面に「設定を開く」ボタンを追加予定 |
-| Tile・コンプリケーション（#41） | 🟡 開発環境の証跡待ち | Wear OS は実装済み（エミュレータのスクリーンショット待ち）。watchOS は WidgetKit のコンプリケーション（録音中・一時停止・停止中、タップで開始/再開）を実装し、CI でレイアウトの描画とシミュレータでのタップ経路を確認。詳細: [impl/ios-watchos.md §14](impl/ios-watchos.md#14-コンプリケーション41) |
+| 録音途絶の通知・オンボーディング（#43, #32） | ✅ クローズ（実機確認は #59〜#61） | エミュレータで途絶通知の表示（`GAP_ALERT_CHECK`）、権限拒否 →「設定を開く」（`PERMISSION_CHECK`）、Watch 側の通知判定の単体テスト（Wear OS・watchOS） |
+| Tile・コンプリケーション（#41） | 🟡 PR #74 の CI 待ち | Wear OS はエミュレータで表示とタップを確認済み。watchOS は WidgetKit のコンプリケーション（録音中・一時停止・停止中、タップで開始/再開）を実装し、CI でレイアウトの描画とシミュレータでのタップ経路を確認。詳細: [impl/ios-watchos.md §14](impl/ios-watchos.md#14-コンプリケーション41) |
 | ストレージ管理（#33） | ✅ クローズ | 保持期間（既定は無期限、文字起こし済みの音声のみ削除）、容量の内訳・空き容量警告、日単位/全削除 |
-| モデル配布サイズ（#46） | 🟡 PR レビュー中 | 713 MB → 161 MB（int8 ファイルを個別取得、HTTP Range で途中再開、SHA-256 検証）。詳細: [impl/android-phone.md](impl/android-phone.md#31-ダウンロード受信のみ) |
+| モデル配布サイズ（#46） | ✅ クローズ | 713 MB → 161 MB（int8 ファイルを個別取得、HTTP Range で途中再開、SHA-256 検証）。詳細: [impl/android-phone.md](impl/android-phone.md#31-ダウンロード受信のみ) |
 | release ビルド・署名（#78） | 🟡 着手（P1） | Android: R8 の release ビルドを CI で毎回作成（Wear OS の debug 入力の混入検査を含む）、エミュレータで release の起動確認、署名は Actions の secret があるときだけ（[04 §7.1](04-dev-environment.md#71-android-の-release-ビルドと署名78)）。残り: release での文字起こしの確認、iOS / watchOS の Release 構成のビルド |
 
 ## 全体の流れ

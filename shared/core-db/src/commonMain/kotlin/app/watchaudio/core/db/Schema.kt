@@ -86,4 +86,35 @@ internal val MIGRATIONS: List<List<String>> = listOf(
         "CREATE INDEX idx_segment_start_text ON transcript_segment(start_at, text)",
         "DROP INDEX idx_segment_start_at",
     ),
+    // 5: search at the segment volume after #68 (#72: ~3 million short segments a year). Scanning
+    // every text for a 1-2 character query became too slow, so those queries read the trigram
+    // index instead: its vocabulary lists the trigrams that start with the query. Each text is
+    // indexed with two trailing newlines so that every occurrence, even at the end, starts a
+    // trigram. The index no longer matches the table's text, so it is contentless (rows are
+    // deleted by rowid). The (start_at, text) index is no longer needed for scans and goes back to
+    // start_at only, which saves ~40 bytes per segment.
+    listOf(
+        "DROP TRIGGER segment_ai",
+        "DROP TRIGGER segment_ad",
+        "DROP TABLE segment_fts",
+        """
+        CREATE VIRTUAL TABLE segment_fts USING fts5(
+            text, content='', contentless_delete=1, tokenize='trigram'
+        )
+        """,
+        "CREATE VIRTUAL TABLE segment_fts_terms USING fts5vocab(segment_fts, instance)",
+        "INSERT INTO segment_fts(rowid, text) SELECT id, text || char(10, 10) FROM transcript_segment",
+        """
+        CREATE TRIGGER segment_ai AFTER INSERT ON transcript_segment BEGIN
+            INSERT INTO segment_fts(rowid, text) VALUES (new.id, new.text || char(10, 10));
+        END
+        """,
+        """
+        CREATE TRIGGER segment_ad AFTER DELETE ON transcript_segment BEGIN
+            DELETE FROM segment_fts WHERE rowid = old.id;
+        END
+        """,
+        "CREATE INDEX idx_segment_start_at ON transcript_segment(start_at)",
+        "DROP INDEX idx_segment_start_text",
+    ),
 )
