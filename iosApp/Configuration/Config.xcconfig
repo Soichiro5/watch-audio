@@ -1,5 +1,8 @@
 // Per-developer signing settings. Override in Configuration/Local.xcconfig (git-ignored).
 TEAM_ID =
 BUNDLE_ID_PREFIX = app.watchaudio
+// App Group shared by the watch app and its complication (#41). Register it for your team on a
+// real device; unsigned CI builds ignore the entitlement.
+APP_GROUP_ID = group.$(BUNDLE_ID_PREFIX)
 
 #include? "Local.xcconfig"
