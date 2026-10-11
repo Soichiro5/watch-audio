@@ -38,9 +38,16 @@ object ChunkFrame {
      *
      * @throws IllegalArgumentException if the length prefix or the manifest is malformed.
      */
-    fun readManifest(readFully: (ByteArray) -> Unit): ChunkManifest {
+    fun readManifest(readFully: (ByteArray) -> Unit): ChunkManifest = decodeManifest(readManifestJson(readFully))
+
+    /**
+     * Reads a frame header and returns the manifest JSON undecoded, so that the receiver can
+     * answer a manifest it cannot decode (see [readManifest] for [readFully]).
+     *
+     * @throws IllegalArgumentException if the length prefix is malformed.
+     */
+    fun readManifestJson(readFully: (ByteArray) -> Unit): String {
         val prefix = ByteArray(4).also(readFully)
-        val json = ByteArray(manifestLength(prefix)).also(readFully)
-        return decodeManifest(json.decodeToString())
+        return ByteArray(manifestLength(prefix)).also(readFully).decodeToString()
     }
 }
