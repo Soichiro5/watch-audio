@@ -41,6 +41,7 @@
 | Tile・コンプリケーション（#41） | 🟡 開発環境の証跡待ち | Wear OS は実装済み（エミュレータのスクリーンショット待ち）、watchOS のコンプリケーションは未実装 |
 | ストレージ管理（#33） | ✅ クローズ | 保持期間（既定は無期限、文字起こし済みの音声のみ削除）、容量の内訳・空き容量警告、日単位/全削除 |
 | モデル配布サイズ（#46） | 🟡 PR レビュー中 | 713 MB → 161 MB（int8 ファイルを個別取得、HTTP Range で途中再開、SHA-256 検証）。詳細: [impl/android-phone.md](impl/android-phone.md#31-ダウンロード受信のみ) |
+| release ビルド・署名（#78） | 🟡 着手（P1） | Android: R8 の release ビルドを CI で毎回作成（Wear OS の debug 入力の混入検査を含む）、エミュレータで release の起動確認、署名は Actions の secret があるときだけ（[04 §7.1](04-dev-environment.md#71-android-の-release-ビルドと署名78)）。残り: release での文字起こしの確認、iOS / watchOS の Release 構成のビルド |
 
 ## 全体の流れ
 
@@ -96,11 +97,11 @@ Epic: [#2](https://github.com/Soichiro5/watch-audio/issues/2)
 | [M1-5 (#17)](https://github.com/Soichiro5/watch-audio/issues/17) | watchOS → iOS 転送（WatchConnectivity + ACK） | M1-2, M1-3 |
 | [M1-6 (#18)](https://github.com/Soichiro5/watch-audio/issues/18) | Wear OS → Android 転送（Data Layer + ACK） | M1-2, M1-4 |
 | [M1-7 (#19)](https://github.com/Soichiro5/watch-audio/issues/19) | 日別タイムラインと音声再生 UI（最小） | [M1-2 (#14)](https://github.com/Soichiro5/watch-audio/issues/14) |
-| [M1-8 (#42)](https://github.com/Soichiro5/watch-audio/issues/42) | スマホ録音へのハンドオフ（Watch 充電中・非装着時の 24h 継続） | M1-2, M1-3, M1-4 |
+| [M1-8 (#42)](https://github.com/Soichiro5/watch-audio/issues/42) | ~~スマホ録音へのハンドオフ（Watch 充電中・非装着時の 24h 継続）~~ 採用しない（not planned。充電中・就寝中は止まってよいため、[02 §9.1](02-architecture.md#91-録音ソース-watch-のみスマホ録音へのハンドオフは採用しない)） | M1-2, M1-3, M1-4 |
 | [M1-9 (#43)](https://github.com/Soichiro5/watch-audio/issues/43) | 録音の連続性監視とアラート（欠損区間の可視化） | M1-5/M1-6, M1-7 |
 | [M1-10 (#41)](https://github.com/Soichiro5/watch-audio/issues/41) | Watch のコンプリケーション / Tiles（ワンタップ録音開始・再開） | M1-3, M1-4 |
 
-**完了条件**: 両 OS で「Watch で録音 → スマホに届く → タイムラインで再生できる」。24 時間モードで録音カバー率 95% 以上、停止は 10 分以内に通知。
+**完了条件**: 両 OS で「Watch で録音 → スマホに届く → タイムラインで再生できる」。装着中（充電中・就寝中を除く）の録音カバー率 95% 以上、途絶は 10 分以内に通知（実機の確認は #59・#60）。
 
 ## M2: 文字起こしと検索
 
