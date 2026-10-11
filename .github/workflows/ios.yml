@@ -130,7 +130,11 @@ jobs:
           xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme iosApp \
             -configuration Debug -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build/DerivedData \
-            CODE_SIGNING_ALLOWED=NO build -quiet 2>&1 | tee xcodebuild-ios.log; exit ${PIPESTATUS[0]}
+            CODE_SIGNING_ALLOWED=NO build -quiet 2>&1 | tee xcodebuild-ios.log; test ${PIPESTATUS[0]} -eq 0
+          # The hosted test builds below add their test bundles to this app's PlugIns; the launch
+          # smoke installs this untouched copy of the app as built here.
+          mkdir -p build/launch-smoke
+          ditto build/DerivedData/Build/Products/Debug-iphonesimulator/WatchAudio.app build/launch-smoke/WatchAudio.app
 
       - name: Build watchOS app
         id: build-watch
@@ -180,11 +184,33 @@ jobs:
           xcrun simctl shutdown all || true # free the runner for the iPhone simulator
           exit $status
 
+      # #92: the iPhone's first boot (data migration, then 1-2 min until apps launch) overlaps the
+      # Swift test builds. The test steps build again (an up-to-date no-op when this succeeded) and
+      # report any build failure themselves.
+      - name: Build Swift tests (iPhone simulator boots meanwhile)
+        if: (success() || failure()) && steps.xcodegen.outcome == 'success'
+        continue-on-error: true
+        run: |
+          udid=$(.github/scripts/simulator-udid.sh iOS iPhone)
+          mkdir -p simulator-smoke
+          nohup xcrun simctl boot "$udid" > simulator-smoke/boot-ios.txt 2>&1 &
+          schemes=SwiftUnitTests
+          if [ "${{ steps.build-ios.outcome }}" = success ]; then schemes="$schemes SpeechTests PlaybackTests"; fi
+          status=0
+          for scheme in $schemes; do
+            SECONDS=0
+            xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme "$scheme" \
+              -destination "platform=iOS Simulator,id=$udid" -derivedDataPath build/DerivedData \
+              CODE_SIGNING_ALLOWED=NO OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES \
+              build-for-testing -quiet > "xcodebuild-build-$scheme.log" 2>&1 || { status=1; tail -n 40 "xcodebuild-build-$scheme.log"; }
+            echo "Timing: build-for-testing $scheme took ${SECONDS}s"
+          done
+          exit $status
+
       - name: Launch iOS app on an iPhone simulator
         if: (success() || failure()) && steps.build-ios.outcome == 'success'
         run: |
-          .github/scripts/simulator-smoke.sh iOS iPhone \
-            build/DerivedData/Build/Products/Debug-iphonesimulator/WatchAudio.app app.watchaudio
+          .github/scripts/simulator-smoke.sh iOS iPhone build/launch-smoke/WatchAudio.app app.watchaudio
 
       # Hostless Swift logic tests (no Kotlin build): the wire protocol vs. shared/core-protocol/testdata
       # (ProtocolTests), the watch recorder's stop reasons / state (#15) and send queue (#17)
