@@ -199,7 +199,7 @@ interface LlmProvider {
 | 項目 | 方針 |
 | --- | --- |
 | 保存 | アプリサンドボックス内。iOS は `Application Support/WatchAudio`（ファイル保護は既定の `CompleteUntilFirstUserAuthentication`。ロック中の BGTask からも読める）、Android は内部ストレージ（`files/`） |
-| バックアップ | MVP では OS バックアップ対象外（Auday と同方針）。Phase 2 で E2E 暗号化バックアップを提供 |
+| バックアップ | MVP では OS バックアップ対象外（データを端末外に出さないため）。Phase 2 で E2E 暗号化バックアップを提供 |
 | API キー | Keychain（`ThisDeviceOnly`）/ Android Keystore |
 | 外部送信 | AI プロバイダ（テキストのみ）、OS ジオコーダ（Phase 2）。解析 SDK・広告 SDK は入れない |
 | 同意 | 初回オンボーディングで「録音対象者への告知」の注意喚起。Watch に録音中インジケータを常時表示 |
@@ -268,4 +268,4 @@ stateDiagram-v2
 | --- | --- | --- |
 | 録音開始 | アプリ前景からのみ | アプリ前景からのみ（Android 14+）。再起動後に自動開始できない |
 | 割り込み後の自動再開 | 不確実（M0-3 で検証） | AudioFocus / 同時録音の扱いを M0-4 で検証 |
-| 電池（24h） | 約 4%/時（Auday 実測）→ 1 日 1 回の充電の間はスマホがカバー | 機種差大（M0-4 で検証） |
+| 電池（24h） | 約 4%/時（既存の Watch 録音アプリの公開値からの推定）→ 1 日 1 回の充電の間はスマホがカバー | 機種差大（M0-4 で検証） |
