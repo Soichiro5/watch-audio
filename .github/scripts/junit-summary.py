@@ -21,13 +21,18 @@ def main() -> None:
         suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
         for suite in suites:
             for case in suite.iter("testcase"):
-                if case.find("failure") is not None or case.find("error") is not None:
+                problem = case.find("failure")
+                if problem is None:
+                    problem = case.find("error")
+                message = ""
+                if problem is not None:
                     result = "failed"
+                    message = (problem.get("message") or (problem.text or "").strip().split("\n")[0])[:300]
                 elif case.find("skipped") is not None:
                     result = "skipped"
                 else:
                     result = "passed"
-                cases.append((case.get("classname", ""), case.get("name", ""), result, case.get("time", "")))
+                cases.append((case.get("classname", ""), case.get("name", ""), result, case.get("time", ""), message))
 
     print(f"### {title}\n")
     if not cases:
@@ -39,9 +44,16 @@ def main() -> None:
     print("<details><summary>Test cases</summary>\n")
     print("| Class | Test | Result | Time (s) |")
     print("| --- | --- | --- | ---: |")
-    for classname, name, result, time in cases:
+    for classname, name, result, time, _ in cases:
         print(f"| {classname} | {name} | {result} | {time} |")
     print("\n</details>\n")
+    failures = [c for c in cases if c[2] == "failed"]
+    if failures:
+        print("Failures:\n")
+        for classname, name, _, _, message in failures:
+            text = message.replace("|", "\\|").replace("\n", " ") or "(no message)"
+            print(f"- `{classname}.{name}`: {text}")
+        print()
 
 
 if __name__ == "__main__":
