@@ -51,15 +51,20 @@ class SherpaTranscriber(modelsDir: File, numThreads: Int = 2) : Transcriber, Aut
     override suspend fun transcribe(parts: List<AudioPart>): List<TimedText> = withContext(Dispatchers.Default) {
         val samples = concatenateParts(parts) { Ffmpeg.decode(File(it.file.toString())) }
         speechSpans(samples).mapNotNull { span ->
-            val stream = recognizer.createStream()
-            try {
-                stream.acceptWaveform(span.samples, AsrSettings.SAMPLE_RATE)
-                recognizer.decode(stream)
-                val text = recognizer.getResult(stream).text.trim()
-                if (text.isEmpty()) null else TimedText(span.startMs, span.endMs, text, lang = "ja")
-            } finally {
-                stream.release()
-            }
+            val text = recognize(span.samples)
+            if (text.isEmpty()) null else TimedText(span.startMs, span.endMs, text, lang = "ja")
+        }
+    }
+
+    /** Recognizes [samples] (16 kHz) as one utterance, without VAD. */
+    fun recognize(samples: FloatArray): String {
+        val stream = recognizer.createStream()
+        try {
+            stream.acceptWaveform(samples, AsrSettings.SAMPLE_RATE)
+            recognizer.decode(stream)
+            return recognizer.getResult(stream).text.trim()
+        } finally {
+            stream.release()
         }
     }
 

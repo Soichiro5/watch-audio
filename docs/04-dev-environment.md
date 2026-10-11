@@ -77,6 +77,8 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 ./gradlew :tools:harness:run --args="show /tmp/wa-data"
 ```
 
+正解テキスト付きの日本語会話（オフライン TTS）を Watch 録音を模して加工した検証用音声セットと、それをハーネスに流して条件ごとの CER・検出漏れ・処理時間を出す `evaluate` コマンドがある（#56）。生成手順・条件・ライセンス・結果は [docs/test-audio.md](test-audio.md)。
+
 ## 5. 検索の性能ベンチマーク（#23）
 
 1 年分相当（約 50 万セグメント）の日本語の文字起こしを決定的に生成し（仕事・家庭・用事の語彙を組み合わせた会話文、5 分チャンク × 約 10 発話）、`StoreTransaction.search` の応答時間を測る。通常の `jvmTest` には含めない（データ投入に約 30 秒かかるため）。
