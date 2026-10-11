@@ -244,8 +244,8 @@ private fun ModelCard(state: StatusUiState, onDownloadModel: (Boolean) -> Unit, 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        state.status.message?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        state.status.notice?.let {
+            Text(Strings.statusNotice(it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
