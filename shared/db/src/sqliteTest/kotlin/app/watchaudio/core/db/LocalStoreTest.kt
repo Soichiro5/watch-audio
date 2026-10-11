@@ -241,8 +241,8 @@ class LocalStoreTest {
     @Test
     fun upgradesOlderDatabasesToTheSearchIndex() = runTest {
         store.close()
-        assertEquals(5, MIGRATIONS.size)
-        for (version in listOf(1, 3, 4)) {
+        assertEquals(6, MIGRATIONS.size)
+        for (version in listOf(1, 3, 4, 5)) {
             val path = databaseAtVersion(version)
             LocalStore.open(path).use { upgraded ->
                 assertEquals("歯医者の[予約]", upgraded.read { search("予約") }.single().snippet)
@@ -254,7 +254,7 @@ class LocalStoreTest {
                 assertEquals(listOf("美容院の予約"), upgraded.read { search("予約", 50, recentSegments = 0) }.map { it.segment.text })
                 assertTrue(upgraded.read { search("歯医者") }.isEmpty())
             }
-            assertEquals(5 to listOf("idx_segment_start_at"), schemaOf(path), "from version $version")
+            assertEquals(6 to listOf("idx_segment_start_at"), schemaOf(path), "from version $version")
         }
     }
 

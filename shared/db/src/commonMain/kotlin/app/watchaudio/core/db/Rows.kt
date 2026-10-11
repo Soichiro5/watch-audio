@@ -8,13 +8,23 @@ import app.watchaudio.core.protocol.SourcePlatform
 // Column lists and their row mappers: the positions in each list and in its mapper must match,
 // so both live here. Every query that returns a record selects through these.
 
-/** Columns read by [toChunk], in order. */
+// Integer keys stay inside this module (#94): a chunk is known outside by its watch-assigned
+// UUID (audio_chunk.uuid, ChunkRecord.id, SegmentRecord.chunkId) and an engine by its name.
+
+/** Columns of `audio_chunk` read by [toChunk], in order. */
 internal const val CHUNK_COLUMNS =
-    "id, session_id, device_id, source, started_at, ended_at, time_zone, audio_path, end_reason, state, attempts, " +
+    "uuid, session_id, device_id, source, started_at, ended_at, time_zone, audio_path, end_reason, state, attempts, " +
         "last_error, size_bytes, audio_purged_at"
 
-/** Columns read by [toSegment], in order. */
-internal const val SEGMENT_COLUMNS = "id, chunk_id, start_at, end_at, text, lang, engine"
+/** Columns of [SEGMENTS] read by [toSegment], in order. */
+internal const val SEGMENT_COLUMNS = "s.id, c.uuid, s.start_at, s.end_at, s.text, s.lang, e.name"
+
+/**
+ * Segments (`s`) with their chunk (`c`) and engine (`e`), for [SEGMENT_COLUMNS]. Filter and sort
+ * on `s`; the joins are primary-key lookups per returned row.
+ */
+internal const val SEGMENTS =
+    "transcript_segment s JOIN audio_chunk c ON c.id = s.chunk_id JOIN engine e ON e.id = s.engine_id"
 
 /** SQL string literal of a state (`'RECEIVED'`), so queries spell states the way [ChunkState] does. */
 internal val ChunkState.sql: String get() = "'$name'"
@@ -45,6 +55,10 @@ internal fun SQLiteStatement.toSegment() = SegmentRecord(
     lang = if (isNull(5)) null else getText(5),
     engine = getText(6),
 )
+
+/** Integer key of the chunk with [uuid], or null if it is not stored. */
+internal fun SQLiteConnection.chunkKey(uuid: String): Long? =
+    queryOne("SELECT id FROM audio_chunk WHERE uuid = ?", uuid) { getLong(0) }
 
 /** Runs [sql] with [args] bound in order (String, Long, Int or null) and returns the rows mapped by [row]. */
 internal fun <T> SQLiteConnection.queryList(sql: String, vararg args: Any?, row: SQLiteStatement.() -> T): List<T> =

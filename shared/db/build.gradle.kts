@@ -38,6 +38,7 @@ tasks.register<Test>("jvmBenchmark") {
     providers.gradleProperty("benchmark.segments").orNull?.let { systemProperty("benchmark.segments", it) }
     providers.gradleProperty("benchmark.rounds").orNull?.let { systemProperty("benchmark.rounds", it) }
     providers.gradleProperty("benchmark.profile").orNull?.let { systemProperty("benchmark.profile", it) }
+    providers.gradleProperty("benchmark.keepDb").orNull?.let { systemProperty("benchmark.keepDb", it) }
     testLogging {
         showStandardStreams = true
         events("passed", "failed")

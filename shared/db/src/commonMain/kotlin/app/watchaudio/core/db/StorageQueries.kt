@@ -79,13 +79,13 @@ internal class StorageSql(private val db: SQLiteConnection) : StorageQueries {
 
     override fun markAudioPurged(ids: List<String>, at: Long): Int = ids.sumOf { id ->
         db.update(
-            "UPDATE audio_chunk SET audio_purged_at = ? WHERE id = ? AND state = ${ChunkState.TRANSCRIBED.sql} AND audio_purged_at IS NULL",
+            "UPDATE audio_chunk SET audio_purged_at = ? WHERE uuid = ? AND state = ${ChunkState.TRANSCRIBED.sql} AND audio_purged_at IS NULL",
             at,
             id,
         )
     }
 
-    override fun deleteChunks(ids: List<String>): Int = ids.sumOf { id -> db.update("DELETE FROM audio_chunk WHERE id = ?", id) }
+    override fun deleteChunks(ids: List<String>): Int = ids.sumOf { id -> db.update("DELETE FROM audio_chunk WHERE uuid = ?", id) }
 
     override fun deleteAllChunks(): Int = db.update("DELETE FROM audio_chunk")
 

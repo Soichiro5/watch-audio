@@ -9,7 +9,7 @@ interface SearchQueries {
      *
      * Shaped for a year of data (#23, #72, `:shared:db:jvmBenchmark`):
      * - 3+ characters: trigram FTS. Only segment ids are sorted; the [limit] newest rows are
-     *   loaded afterwards.
+     *   loaded afterwards (with their chunk UUID and engine name, [SEGMENTS]).
      * - 1-2 characters (too short for a trigram match): LIKE over the newest
      *   [SearchSql.SHORT_QUERY_RECENT_SEGMENTS] segments, which is enough for a frequent word. A
      *   rarer one is looked up in the trigram index's vocabulary (every trigram that starts with
@@ -31,10 +31,10 @@ internal class SearchSql(private val db: SQLiteConnection) : SearchQueries {
         val segments = if (q.length >= 3) {
             db.queryList(
                 """
-                SELECT $SEGMENT_COLUMNS FROM transcript_segment WHERE id IN (
-                    SELECT s.id FROM segment_fts JOIN transcript_segment s ON s.id = segment_fts.rowid
-                    WHERE segment_fts MATCH ? ORDER BY s.start_at DESC LIMIT ?
-                ) ORDER BY start_at DESC
+                SELECT $SEGMENT_COLUMNS FROM $SEGMENTS WHERE s.id IN (
+                    SELECT t.id FROM segment_fts JOIN transcript_segment t ON t.id = segment_fts.rowid
+                    WHERE segment_fts MATCH ? ORDER BY t.start_at DESC LIMIT ?
+                ) ORDER BY s.start_at DESC
                 """.trimIndent(),
                 "\"" + q.replace("\"", "\"\"") + "\"",
                 limit,
@@ -42,9 +42,11 @@ internal class SearchSql(private val db: SQLiteConnection) : SearchQueries {
         } else {
             val recent = db.queryList(
                 """
-                SELECT * FROM (
-                    SELECT $SEGMENT_COLUMNS FROM transcript_segment ORDER BY start_at DESC LIMIT $recentSegments
-                ) WHERE text LIKE ? ESCAPE '\' LIMIT ?
+                SELECT $SEGMENT_COLUMNS FROM $SEGMENTS WHERE s.id IN (
+                    SELECT id FROM (
+                        SELECT id, text FROM transcript_segment ORDER BY start_at DESC LIMIT $recentSegments
+                    ) WHERE text LIKE ? ESCAPE '\' LIMIT ?
+                ) ORDER BY s.start_at DESC
                 """.trimIndent(),
                 "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%",
                 limit,
@@ -56,9 +58,11 @@ internal class SearchSql(private val db: SQLiteConnection) : SearchQueries {
                 val prefix = q.lowercase()
                 db.queryList(
                     """
-                    SELECT $SEGMENT_COLUMNS FROM transcript_segment WHERE id IN (
-                        SELECT doc FROM segment_fts_terms WHERE term >= ? AND term < ?
-                    ) ORDER BY start_at DESC LIMIT ?
+                    SELECT $SEGMENT_COLUMNS FROM $SEGMENTS WHERE s.id IN (
+                        SELECT t.id FROM transcript_segment t WHERE t.id IN (
+                            SELECT doc FROM segment_fts_terms WHERE term >= ? AND term < ?
+                        ) ORDER BY t.start_at DESC LIMIT ?
+                    ) ORDER BY s.start_at DESC
                     """.trimIndent(),
                     prefix,
                     prefix + "􏿿",

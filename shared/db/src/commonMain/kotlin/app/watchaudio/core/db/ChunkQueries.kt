@@ -56,7 +56,7 @@ internal class ChunkSql(private val db: SQLiteConnection) : ChunkQueries {
         val inserted = db.update(
             """
             INSERT OR IGNORE INTO audio_chunk (
-                id, session_id, device_id, source, started_at, ended_at, time_zone,
+                uuid, session_id, device_id, source, started_at, ended_at, time_zone,
                 audio_path, codec, size_bytes, sha256, end_reason, state, received_at, manifest_json
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent(),
@@ -77,19 +77,16 @@ internal class ChunkSql(private val db: SQLiteConnection) : ChunkQueries {
             manifest.toJson(),
         ) > 0
         if (inserted) {
+            val key = db.chunkKey(manifest.chunkId)
             manifest.markOffsetsMs.forEach { offset ->
-                db.execute(
-                    "INSERT OR IGNORE INTO mark (chunk_id, at) VALUES (?, ?)",
-                    manifest.chunkId,
-                    manifest.startedAtEpochMs + offset,
-                )
+                db.execute("INSERT OR IGNORE INTO mark (chunk_id, at) VALUES (?, ?)", key, manifest.startedAtEpochMs + offset)
             }
         }
         return inserted
     }
 
     override fun chunk(id: String): ChunkRecord? =
-        db.queryOne("SELECT $CHUNK_COLUMNS FROM audio_chunk WHERE id = ?", id) { toChunk() }
+        db.queryOne("SELECT $CHUNK_COLUMNS FROM audio_chunk WHERE uuid = ?", id) { toChunk() }
 
     override fun chunksBetween(from: Long, to: Long): List<ChunkRecord> = db.queryList(
         "SELECT $CHUNK_COLUMNS FROM audio_chunk WHERE started_at < ? AND ended_at > ? ORDER BY started_at",
@@ -141,18 +138,18 @@ internal class ChunkSql(private val db: SQLiteConnection) : ChunkQueries {
 
     override fun markTranscribing(id: String) {
         db.execute(
-            "UPDATE audio_chunk SET state = ${ChunkState.TRANSCRIBING.sql}, attempts = attempts + 1, last_error = NULL WHERE id = ?",
+            "UPDATE audio_chunk SET state = ${ChunkState.TRANSCRIBING.sql}, attempts = attempts + 1, last_error = NULL WHERE uuid = ?",
             id,
         )
     }
 
     override fun markFailed(id: String, error: String) {
-        db.execute("UPDATE audio_chunk SET state = ${ChunkState.FAILED.sql}, last_error = ? WHERE id = ?", error.take(500), id)
+        db.execute("UPDATE audio_chunk SET state = ${ChunkState.FAILED.sql}, last_error = ? WHERE uuid = ?", error.take(500), id)
     }
 
     override fun requeueFailed(ids: List<String>): Int = ids.sumOf { id ->
         db.update(
-            "UPDATE audio_chunk SET state = ${ChunkState.RECEIVED.sql}, attempts = 0 WHERE id = ? AND state = ${ChunkState.FAILED.sql}",
+            "UPDATE audio_chunk SET state = ${ChunkState.RECEIVED.sql}, attempts = 0 WHERE uuid = ? AND state = ${ChunkState.FAILED.sql}",
             id,
         )
     }

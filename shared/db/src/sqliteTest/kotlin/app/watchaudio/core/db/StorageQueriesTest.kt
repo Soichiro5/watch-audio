@@ -88,6 +88,25 @@ class StorageQueriesTest {
     }
 
     @Test
+    fun compactKeepsSegmentsWithTheirChunks() = runTest {
+        repeat(4) { i ->
+            insert("c$i", i * 300_000L)
+            transcribe("c$i", "発話$i")
+        }
+        store.transaction { deleteChunks(listOf("c0", "c2")) }
+        store.compact()
+
+        assertEquals(
+            listOf("c1" to "発話1", "c3" to "発話3"),
+            store.read { segmentsBetween(0, Long.MAX_VALUE) }.map { it.chunkId to it.text },
+        )
+        insert("c4", 4 * 300_000L)
+        transcribe("c4", "発話4")
+        assertEquals(listOf("c4"), store.read { search("発話4") }.map { it.segment.chunkId })
+        assertEquals(setOf("test"), store.read { segmentsBetween(0, Long.MAX_VALUE) }.map { it.engine }.toSet())
+    }
+
+    @Test
     fun deleteAllKeepsSettingsAndCompacts() = runTest {
         repeat(200) { i ->
             insert("c$i", i * 300_000L)
