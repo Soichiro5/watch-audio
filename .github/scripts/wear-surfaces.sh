@@ -107,7 +107,8 @@ set_complication() {
 
 go_home() { adb shell input keyevent KEYCODE_HOME; sleep 2; }
 
-# Taps the tile button ("Start"/"Resume") found in the view hierarchy, else the lower middle of the screen.
+# Taps the tile button (action_start / action_resume / action_open in apps/wear strings.xml: 録音開始 / 再開 /
+# 開く, #144) found in the view hierarchy, else the lower middle of the screen.
 tap_tile_button() {
   local xy size
   dump_ui tile-ui
@@ -119,7 +120,7 @@ except OSError:
     sys.exit(0)
 for node in re.finditer(r'<node [^>]*>', xml):
     attrs = node.group(0)
-    if re.search(r'text="(Start|Resume|Open)"', attrs) or re.search(r'content-desc="(Start|Resume|Open)"', attrs):
+    if re.search(r'(text|content-desc)="(録音開始|再開|開く)"', attrs):
         b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', attrs)
         if b:
             x1, y1, x2, y2 = map(int, b.groups())
