@@ -37,9 +37,21 @@ data class AudioPart(val file: Path, val fromMs: Long, val toMs: Long) {
     val durationMs: Long get() = toMs - fromMs
 }
 
+/**
+ * One recognized utterance, times in ms. Besides the stored fields ([text], [lang]) it carries
+ * optional signals for a [SegmentFilter], null when the transcriber cannot tell:
+ *
+ * - [confidence]: the recognizer's own confidence in the text, 0..1;
+ * - [speechProbability]: the mean VAD speech probability (0..1) over the utterance's audio
+ *   (sherpa-onnx path: Silero, see [transcribeSpeech]).
+ *
+ * Neither is stored in the database.
+ */
 data class TimedText(
     val startMs: Long,
     val endMs: Long,
     val text: String,
     val lang: String? = null,
+    val confidence: Float? = null,
+    val speechProbability: Float? = null,
 )

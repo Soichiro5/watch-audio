@@ -18,12 +18,12 @@ package app.watchaudio.core.pipeline
  */
 fun speechSegments(
     probabilities: FloatArray,
-    windowSize: Int = AsrSettings.VAD_WINDOW_SIZE,
-    threshold: Float = AsrSettings.VAD_THRESHOLD,
-    negThreshold: Float = AsrSettings.VAD_NEG_THRESHOLD,
-    minSilenceSeconds: Float = AsrSettings.VAD_MIN_SILENCE_SECONDS,
-    minSpeechSeconds: Float = AsrSettings.VAD_MIN_SPEECH_SECONDS,
-    startBackWindows: Int = 2,
+    windowSize: Int = VadSettings.DEFAULT.windowSize,
+    threshold: Float = VadSettings.DEFAULT.threshold,
+    negThreshold: Float = VadSettings.DEFAULT.negThreshold,
+    minSilenceSeconds: Float = VadSettings.DEFAULT.minSilenceSeconds,
+    minSpeechSeconds: Float = VadSettings.DEFAULT.minSpeechSeconds,
+    startBackWindows: Int = VadSettings.DEFAULT.startBackWindows,
 ): List<Pair<Int, Int>> {
     val rate = AsrSettings.SAMPLE_RATE
     val minSilenceWindows = maxOf(1, (minSilenceSeconds * rate / windowSize).toInt())
@@ -61,3 +61,15 @@ fun speechSegments(
     if (start >= 0) close(if (silence >= 0) silence else probabilities.size)
     return segments
 }
+
+/** [speechSegments] with the window size and thresholds of [settings]. */
+fun speechSegments(probabilities: FloatArray, settings: VadSettings): List<Pair<Int, Int>> =
+    speechSegments(
+        probabilities,
+        windowSize = settings.windowSize,
+        threshold = settings.threshold,
+        negThreshold = settings.negThreshold,
+        minSilenceSeconds = settings.minSilenceSeconds,
+        minSpeechSeconds = settings.minSpeechSeconds,
+        startBackWindows = settings.startBackWindows,
+    )

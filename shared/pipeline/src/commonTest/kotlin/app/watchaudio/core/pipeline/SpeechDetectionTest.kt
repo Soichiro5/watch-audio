@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class SpeechDetectionTest {
-    private val window = AsrSettings.VAD_WINDOW_SIZE
+    private val window = VadSettings.DEFAULT.windowSize
 
     /** Probabilities built from runs of (value, windows). */
     private fun probs(vararg runs: Pair<Float, Int>): FloatArray =
