@@ -176,6 +176,7 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 | `retention_purge` | 保持期間による音声の削除（#33、`TranscriptionRun`） | `chunks=12 bytes=…` |
 | `model_download_*` / `model_ready` | `ModelManager`（開始・10% ごとの進捗・完了・失敗（HTTP ステータスなど）・準備完了） | `pct=30 bytes=…`、`error=java.io.IOException message=HTTP 404 for …` |
 | `gap_alert` / `gap_alert_blocked` | `GapAlertMonitor`（通知した / 通知が許可されておらず出せなかった） | `last_received_at=…` |
+| `storage_action_failed` / `diagnostics_export_failed` | 共通 UI の `StatusViewModel`（状態タブからの削除・診断ログの書き出しの失敗。画面には例外のメッセージを出さず決まった文言を出すので、エラーの種類はここで見る、#135）。`AppServices.diagnostics` 経由 | `action=delete_all error=java.io.IOException` |
 
 **書き出し**: 状態タブの「診断ログを書き出す」→ `AndroidAppServices.exportDiagnostics()` が `.1` と現在のファイルを 1 つの CSV（`cache/diagnostics-export/watch-audio-diagnostics-<日時>.csv`、前回の書き出しは削除）にまとめ、`FileProvider`（authority `app.watchaudio.diagnostics`、公開するのはこのディレクトリだけ）経由で共有シート（`ACTION_SEND`）を開く。ユーザーが選んだ共有先だけに読み取り権限が付く。**自動では送らない**。新しい権限・通信・SDK は追加していない。
 
