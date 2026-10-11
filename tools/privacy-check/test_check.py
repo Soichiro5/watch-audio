@@ -43,8 +43,8 @@ PHONE_BACKUP = f"<full-backup-content>{ALL_DOMAINS}</full-backup-content>"
 WEAR_RULES = (f"<data-extraction-rules><cloud-backup>{ALL_DOMAINS}</cloud-backup>"
               f"<device-transfer>{ALL_DOMAINS}</device-transfer></data-extraction-rules>")
 
-MODEL_DOWNLOADER = "androidApp/src/main/kotlin/app/watchaudio/android/asr/ModelDownloader.kt"
-MODEL_MANIFEST = "androidApp/src/main/kotlin/app/watchaudio/android/asr/ModelManifest.kt"
+MODEL_DOWNLOADER = "apps/android/src/main/kotlin/app/watchaudio/android/asr/ModelDownloader.kt"
+MODEL_MANIFEST = "apps/android/src/main/kotlin/app/watchaudio/android/asr/ModelManifest.kt"
 
 PROJECT_YML = """\
 name: WatchAudio
@@ -53,7 +53,7 @@ targets:
     type: application
     sources: [iosApp, Shared]
     info:
-      path: iosApp/Info.plist
+      path: apps/ios/Info.plist
       properties:
         CFBundleDisplayName: watch-audio  # trailing comment
         UIBackgroundModes: [processing]
@@ -65,7 +65,7 @@ targets:
   WatchApp:
     type: application
     info:
-      path: WatchApp/Info.plist
+      path: Watch/Info.plist
       properties:
         WKApplication: true
         UIBackgroundModes:
@@ -79,11 +79,11 @@ class FixtureRepo:
     def __init__(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
-        self.write("androidApp/src/main/AndroidManifest.xml", PHONE_MANIFEST)
-        self.write("androidApp/src/main/res/xml/data_extraction_rules.xml", PHONE_RULES)
-        self.write("androidApp/src/main/res/xml/backup_rules.xml", PHONE_BACKUP)
-        self.write("wearApp/src/main/AndroidManifest.xml", WEAR_MANIFEST)
-        self.write("wearApp/src/main/res/xml/data_extraction_rules.xml", WEAR_RULES)
+        self.write("apps/android/src/main/AndroidManifest.xml", PHONE_MANIFEST)
+        self.write("apps/android/src/main/res/xml/data_extraction_rules.xml", PHONE_RULES)
+        self.write("apps/android/src/main/res/xml/backup_rules.xml", PHONE_BACKUP)
+        self.write("apps/wear/src/main/AndroidManifest.xml", WEAR_MANIFEST)
+        self.write("apps/wear/src/main/res/xml/data_extraction_rules.xml", WEAR_RULES)
         self.write(MODEL_DOWNLOADER, """\
             import java.net.HttpURLConnection
             fun open(url: String) = URL(url).openConnection() as HttpURLConnection
@@ -93,17 +93,17 @@ class FixtureRepo:
             const val RELEASES = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models"
             """)
         # Test code is not shipped: a local fake server is fine there.
-        self.write("androidApp/src/test/kotlin/DownloaderTest.kt", """\
+        self.write("apps/android/src/test/kotlin/DownloaderTest.kt", """\
             val server = java.net.ServerSocket(0)
             val url = "http://127.0.0.1:${server.localPort}/model.onnx"
             """)
-        self.write("wearApp/src/main/kotlin/Uploader.kt", """\
+        self.write("apps/wear/src/main/kotlin/Uploader.kt", """\
             // DataClient is never used: items may sync through the cloud (see https://example.com).
             /* PutDataRequest /* nested */ HttpURLConnection */
             val channel = Wearable.getChannelClient(context)
             val path = "/watch-audio/chunk/" // "https://example.com" in a comment after a string
             """)
-        self.write("iosApp/WatchApp/Outbox.swift", """\
+        self.write("apps/ios/Watch/Outbox.swift", """\
             import Foundation
             let s = "a \\" quote" // URLSession in a comment
             """)
@@ -114,14 +114,14 @@ class FixtureRepo:
             [libraries]
             kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
             """)
-        self.write("androidApp/build.gradle.kts", """\
+        self.write("apps/android/build.gradle.kts", """\
             dependencies {
                 // firebase must never be added
                 implementation(libs.kotlinx.coroutines.core)
             }
             """)
-        self.write("spikes/bench/build.gradle.kts", 'dependencies { implementation("com.squareup.okhttp3:okhttp:4") }\n')
-        self.write("iosApp/project.yml", PROJECT_YML)
+        self.write("research/bench/build.gradle.kts", 'dependencies { implementation("com.squareup.okhttp3:okhttp:4") }\n')
+        self.write("apps/ios/project.yml", PROJECT_YML)
 
     def write(self, rel: str, content: str) -> Path:
         path = self.root / rel
@@ -169,7 +169,7 @@ class BaselineTest(FixtureTestCase):
                          {(path, api) for path, _, api, _ in report.network_sites})
 
     def test_stale_allow_list_entries_fail(self):
-        # The list of network call sites must stay accurate (docs/02 §7.2).
+        # The list of network call sites must stay accurate (docs/architecture/02 §7.2).
         self.repo.write(MODEL_DOWNLOADER, "import java.net.HttpURLConnection\n")
         self.repo.replace(MODEL_MANIFEST, "huggingface.co", "example.org")
         report = self.repo.run()
@@ -179,12 +179,12 @@ class BaselineTest(FixtureTestCase):
 
 class ManifestTest(FixtureTestCase):
     def test_internet_on_the_watch_fails(self):
-        self.repo.replace("wearApp/src/main/AndroidManifest.xml", "<application",
+        self.repo.replace("apps/wear/src/main/AndroidManifest.xml", "<application",
                           '<uses-permission android:name="android.permission.INTERNET" />\n<application')
-        self.assertViolation(self.repo.run(), "permissions", "android.permission.INTERNET is not in the wearApp")
+        self.assertViolation(self.repo.run(), "permissions", "android.permission.INTERNET is not in the apps/wear")
 
     def test_unexpected_phone_permission_in_any_source_set_fails(self):
-        self.repo.write("androidApp/src/debug/AndroidManifest.xml", """\
+        self.repo.write("apps/android/src/debug/AndroidManifest.xml", """\
             <manifest xmlns:android="http://schemas.android.com/apk/res/android">
                 <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
             </manifest>
@@ -192,35 +192,35 @@ class ManifestTest(FixtureTestCase):
         self.assertViolation(self.repo.run(), "permissions", "AD_ID")
 
     def test_allow_backup_true_fails(self):
-        self.repo.replace("androidApp/src/main/AndroidManifest.xml", 'allowBackup="false"', 'allowBackup="true"')
+        self.repo.replace("apps/android/src/main/AndroidManifest.xml", 'allowBackup="false"', 'allowBackup="true"')
         self.assertViolation(self.repo.run(), "backup", "allowBackup")
 
     def test_missing_data_extraction_rules_fails(self):
-        self.repo.replace("wearApp/src/main/AndroidManifest.xml",
+        self.repo.replace("apps/wear/src/main/AndroidManifest.xml",
                           'android:dataExtractionRules="@xml/data_extraction_rules"', "")
         self.assertViolation(self.repo.run(), "backup", "dataExtractionRules")
 
     def test_rules_must_exclude_every_domain(self):
-        self.repo.replace("androidApp/src/main/res/xml/data_extraction_rules.xml",
+        self.repo.replace("apps/android/src/main/res/xml/data_extraction_rules.xml",
                           '<exclude domain="database" path="." />', "")
         self.assertViolation(self.repo.run(), "backup", "<cloud-backup> must exclude whole domains: database")
 
     def test_partial_path_exclusion_does_not_count(self):
-        self.repo.replace("androidApp/src/main/res/xml/backup_rules.xml",
+        self.repo.replace("apps/android/src/main/res/xml/backup_rules.xml",
                           '<exclude domain="file" path="." />', '<exclude domain="file" path="cache" />')
         self.assertViolation(self.repo.run(), "backup", "<full-backup-content> must exclude whole domains: file")
 
     def test_watch_device_transfer_must_be_excluded(self):
-        self.repo.write("wearApp/src/main/res/xml/data_extraction_rules.xml", PHONE_RULES)
+        self.repo.write("apps/wear/src/main/res/xml/data_extraction_rules.xml", PHONE_RULES)
         self.assertViolation(self.repo.run(), "backup", "<device-transfer> section missing")
 
     def test_include_fails(self):
-        self.repo.replace("androidApp/src/main/res/xml/data_extraction_rules.xml", "</cloud-backup>",
+        self.repo.replace("apps/android/src/main/res/xml/data_extraction_rules.xml", "</cloud-backup>",
                           '<include domain="file" path="audio" /></cloud-backup>')
         self.assertViolation(self.repo.run(), "backup", "<include>")
 
     def test_cleartext_traffic_fails(self):
-        self.repo.replace("androidApp/src/main/AndroidManifest.xml", "<application",
+        self.repo.replace("apps/android/src/main/AndroidManifest.xml", "<application",
                           '<application android:usesCleartextTraffic="true"')
         self.assertViolation(self.repo.run(), "network", "usesCleartextTraffic")
 
@@ -233,19 +233,19 @@ class ManifestTest(FixtureTestCase):
                 <application android:allowBackup="false" android:dataExtractionRules="@xml/rules" />
             </manifest>
             """)
-        self.assertEqual([], self.repo.run(merged={"wearApp": merged}).violations)
+        self.assertEqual([], self.repo.run(merged={"apps/wear": merged}).violations)
         self.repo.replace("merged.xml", "WAKE_LOCK", "INTERNET")
-        self.assertViolation(self.repo.run(merged={"wearApp": merged}), "permissions",
-                             "merged manifest of wearApp requests android.permission.INTERNET")
+        self.assertViolation(self.repo.run(merged={"apps/wear": merged}), "permissions",
+                             "merged manifest of apps/wear requests android.permission.INTERNET")
 
 
 class SourceTest(FixtureTestCase):
     def test_data_client_on_the_watch_fails(self):
-        self.repo.write("wearApp/src/main/kotlin/Sync.kt", "val client = Wearable.getDataClient(context)\n")
+        self.repo.write("apps/wear/src/main/kotlin/Sync.kt", "val client = Wearable.getDataClient(context)\n")
         self.assertViolation(self.repo.run(), "network", "getDataClient")
 
     def test_network_api_outside_the_allow_list_fails(self):
-        self.repo.write("shared/core-pipeline/src/commonMain/kotlin/Upload.kt", """\
+        self.repo.write("shared/pipeline/src/commonMain/kotlin/Upload.kt", """\
             fun upload() {
                 val c = URL(endpoint).openConnection()
             }
@@ -254,29 +254,29 @@ class SourceTest(FixtureTestCase):
         self.assertViolation(report, "network", "Upload.kt:2: .openConnection(")
 
     def test_swift_url_session_fails(self):
-        self.repo.write("iosApp/iosApp/Sync.swift", "let task = URLSession.shared.dataTask(with: url)\n")
+        self.repo.write("apps/ios/App/Sync.swift", "let task = URLSession.shared.dataTask(with: url)\n")
         self.assertViolation(self.repo.run(), "network", "URLSession")
 
     def test_server_speech_recognition_fails(self):
-        self.repo.write("iosApp/iosApp/Asr.swift", "let r = SFSpeechURLRecognitionRequest(url: file)\n")
+        self.repo.write("apps/ios/App/Asr.swift", "let r = SFSpeechURLRecognitionRequest(url: file)\n")
         self.assertViolation(self.repo.run(), "network", "SFSpeechURLRecognitionRequest")
 
     def test_weak_file_protection_fails(self):
-        self.repo.write("iosApp/WatchApp/Files.swift", "try data.write(to: url, options: .noFileProtection)\n")
+        self.repo.write("apps/ios/Watch/Files.swift", "try data.write(to: url, options: .noFileProtection)\n")
         self.assertViolation(self.repo.run(), "network", ".noFileProtection")
 
     def test_unknown_url_fails(self):
-        self.repo.write("composeApp/src/commonMain/kotlin/Help.kt", 'const val HELP = "https://example.com/upload"\n')
+        self.repo.write("shared/ui/src/commonMain/kotlin/Help.kt", 'const val HELP = "https://example.com/upload"\n')
         self.assertViolation(self.repo.run(), "network", "URL https://example.com/upload")
 
     def test_allowed_api_in_another_file_fails(self):
-        self.repo.write("androidApp/src/main/kotlin/Other.kt", "import java.net.HttpURLConnection\n")
+        self.repo.write("apps/android/src/main/kotlin/Other.kt", "import java.net.HttpURLConnection\n")
         self.assertViolation(self.repo.run(), "network", "Other.kt:1: HttpURLConnection")
 
 
 class DependencyTest(FixtureTestCase):
     def test_declared_network_client_fails(self):
-        self.repo.replace("androidApp/build.gradle.kts", "implementation(libs.kotlinx.coroutines.core)",
+        self.repo.replace("apps/android/build.gradle.kts", "implementation(libs.kotlinx.coroutines.core)",
                           'implementation("com.squareup.okhttp3:okhttp:4.12.0")')
         self.assertViolation(self.repo.run(), "dependencies", "network client")
 
@@ -286,51 +286,51 @@ class DependencyTest(FixtureTestCase):
         self.assertViolation(self.repo.run(), "dependencies", "libs.versions.toml:5")
 
     def test_crash_reporter_plugin_fails(self):
-        self.repo.write("wearApp/build.gradle.kts", 'plugins { id("io.sentry.android.gradle") }\n')
+        self.repo.write("apps/wear/build.gradle.kts", 'plugins { id("io.sentry.android.gradle") }\n')
         self.assertViolation(self.repo.run(), "dependencies", "crash reporting")
 
     def test_resolved_dependencies(self):
         report_file = self.repo.write("deps.txt", """\
             releaseRuntimeClasspath - Runtime classpath of '/release'.
-            +--- project :composeApp
+            +--- project :shared:ui
             |    +--- androidx.core:core-ktx:1.19.1
             |    \\--- org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0 -> 1.11.0 (*)
             \\--- com.google.android.gms:play-services-wearable:20.0.1
             """)
-        self.assertEqual([], self.repo.run(resolved={"wearApp": report_file}).violations)
+        self.assertEqual([], self.repo.run(resolved={"apps/wear": report_file}).violations)
         self.repo.replace("deps.txt", "androidx.core:core-ktx:1.19.1", "io.sentry:sentry-android:8.0.0")
-        self.assertViolation(self.repo.run(resolved={"wearApp": report_file}), "dependencies",
+        self.assertViolation(self.repo.run(resolved={"apps/wear": report_file}), "dependencies",
                              "io.sentry:sentry-android")
 
     def test_empty_dependency_report_fails(self):
         report_file = self.repo.write("deps.txt", "BUILD FAILED\n")
-        self.assertViolation(self.repo.run(resolved={"androidApp": report_file}), "dependencies", "no dependencies")
+        self.assertViolation(self.repo.run(resolved={"apps/android": report_file}), "dependencies", "no dependencies")
 
 
 class IosTest(FixtureTestCase):
     def test_unexpected_info_key_fails(self):
-        self.repo.replace("iosApp/project.yml", "        WKApplication: true",
+        self.repo.replace("apps/ios/project.yml", "        WKApplication: true",
                           "        WKApplication: true\n        NSLocationWhenInUseUsageDescription: x")
         self.assertViolation(self.repo.run(), "ios", "NSLocationWhenInUseUsageDescription of WatchApp")
 
     def test_app_transport_security_exception_fails(self):
-        self.repo.replace("iosApp/project.yml", "        UIBackgroundModes: [processing]",
+        self.repo.replace("apps/ios/project.yml", "        UIBackgroundModes: [processing]",
                           "        UIBackgroundModes: [processing]\n        NSAppTransportSecurity:\n"
                           "          NSAllowsArbitraryLoads: true")
         self.assertViolation(self.repo.run(), "ios", "NSAppTransportSecurity")
 
     def test_unexpected_background_mode_fails(self):
-        self.repo.replace("iosApp/project.yml", "          - audio", "          - audio\n          - location")
+        self.repo.replace("apps/ios/project.yml", "          - audio", "          - audio\n          - location")
         self.assertViolation(self.repo.run(), "ios", "'location' of WatchApp")
 
     def test_entitlements_in_project_fail(self):
-        self.repo.replace("iosApp/project.yml", "  WatchApp:\n",
-                          "  WatchApp:\n    entitlements:\n      path: WatchApp/WatchApp.entitlements\n"
+        self.repo.replace("apps/ios/project.yml", "  WatchApp:\n",
+                          "  WatchApp:\n    entitlements:\n      path: Watch/WatchApp.entitlements\n"
                           "      properties:\n        com.apple.developer.icloud-services: [CloudDocuments]\n")
         self.assertViolation(self.repo.run(), "ios", "com.apple.developer.icloud-services")
 
     def test_committed_entitlements_file_fails(self):
-        self.repo.write("iosApp/iosApp/iosApp.entitlements", """\
+        self.repo.write("apps/ios/App/iosApp.entitlements", """\
             <?xml version="1.0" encoding="UTF-8"?>
             <plist version="1.0"><dict>
                 <key>com.apple.developer.ubiquity-kvstore-identifier</key><string>x</string>
@@ -359,7 +359,7 @@ class ParserTest(unittest.TestCase):
         self.assertEqual(["audio"], data["targets"]["WatchApp"]["info"]["properties"]["UIBackgroundModes"])
 
     def test_real_project_yml(self):
-        data = check.parse_simple_yaml((REPO_ROOT / "iosApp/project.yml").read_text(encoding="utf-8"))
+        data = check.parse_simple_yaml((REPO_ROOT / "apps/ios/project.yml").read_text(encoding="utf-8"))
         self.assertLessEqual({"iosApp", "WatchApp", "ProtocolTests"}, set(data["targets"]))
         self.assertEqual(["audio"], data["targets"]["WatchApp"]["info"]["properties"]["UIBackgroundModes"])
 

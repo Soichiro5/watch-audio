@@ -4,7 +4,7 @@
 #
 #   1. pushes the speech models and reference recordings (push-models.sh),
 #   2. installs, on a clean state, the release APK built with `-Pwatchaudio.testBuildType=release`
-#      (the shipped R8 setup plus keep rules for what the test calls, androidApp/proguard-release-test.pro)
+#      (the shipped R8 setup plus keep rules for what the test calls, apps/android/proguard-release-test.pro)
 #      and the instrumented test APK built for it (both signed with the job's throwaway key),
 #   3. runs ReleaseAsrTest: a known Japanese chunk is stored through the app's ingestor and the
 #      app's own WorkManager run transcribes it into its database with sherpa-onnx.
@@ -14,8 +14,8 @@
 set -uo pipefail
 
 RUNNER=app.watchaudio.test/androidx.test.runner.AndroidJUnitRunner
-APP_APK=androidApp/build/outputs/apk/release/androidApp-release.apk
-TEST_APK=androidApp/build/outputs/apk/androidTest/release/androidApp-release-androidTest.apk
+APP_APK=apps/android/build/outputs/apk/release/android-release.apk
+TEST_APK=apps/android/build/outputs/apk/androidTest/release/android-release-androidTest.apk
 OUT=release-asr
 mkdir -p "$OUT"
 

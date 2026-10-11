@@ -127,7 +127,7 @@ class TestSetEvaluator(private val models: File, private val workDir: File, priv
             "| 条件 | 音声 (分) | 発話数 | CER 全体 | CER 装着者 | CER 相手 | CER（正解区間で切った場合） | 検出漏れ | 発話外の誤認識 (文字) | チャンク (無音) | 文字起こし時間 (s) | RTF |\n" +
                 "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
 
-        /** One Markdown table row (Japanese headers in [TABLE_HEADER], for docs/test-audio.md). */
+        /** One Markdown table row (Japanese headers in [TABLE_HEADER], for docs/dev/test-audio.md). */
         fun markdownRow(r: Result): String {
             val s = r.score
             return "| %s | %.1f | %d | %s | %s | %s | %s | %s (%d) | %d | %d (%d) | %.0f | %.3f |\n".format(

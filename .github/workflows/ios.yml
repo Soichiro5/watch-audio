@@ -6,9 +6,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "iosApp/**"
+      - "apps/ios/**"
       - "shared/**"
-      - "composeApp/**"
       - "build-logic/**"
       - "gradle/**"
       - "*.gradle.kts"
@@ -30,9 +29,8 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "iosApp/**"
+      - "apps/ios/**"
       - "shared/**"
-      - "composeApp/**"
       - "build-logic/**"
       - "gradle/**"
       - "*.gradle.kts"
@@ -100,17 +98,17 @@ jobs:
       - name: Shared tests (iOS simulator)
         run: ./gradlew iosSimulatorArm64Test
 
-      # Lists every test that ran on the simulator, incl. the SQLite-backed core-db / Ingestor tests (#14).
+      # Lists every test that ran on the simulator, incl. the SQLite-backed shared/db / Ingestor tests (#14).
       - name: Shared test evidence (iOS simulator)
         if: success() || failure()
         run: |
           python3 .github/scripts/junit-summary.py "Shared Kotlin tests on the iOS simulator" \
             'shared/*/build/test-results/iosSimulatorArm64Test/*.xml' \
-            'composeApp/build/test-results/iosSimulatorArm64Test/*.xml' >> "$GITHUB_STEP_SUMMARY"
+            'shared/ui/build/test-results/iosSimulatorArm64Test/*.xml' >> "$GITHUB_STEP_SUMMARY"
           {
             echo "Playback checks on the iOS simulator (IosPlaybackTest, #19 / #25; the player is prepared, started= is informational):"
             echo '```'
-            grep -ho "PLAYBACK_CHECK[^<&]*" composeApp/build/test-results/iosSimulatorArm64Test/*.xml || echo "no PLAYBACK_CHECK lines"
+            grep -ho "PLAYBACK_CHECK[^<&]*" shared/ui/build/test-results/iosSimulatorArm64Test/*.xml || echo "no PLAYBACK_CHECK lines"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -120,14 +118,14 @@ jobs:
         if: success() || failure()
         run: |
           brew install xcodegen
-          cd iosApp && xcodegen generate
+          cd apps/ios && xcodegen generate
 
       # A fixed -derivedDataPath lets the launch smoke and hosted test steps below reuse these build products.
       - name: Build iOS app (embeds the watchOS app)
         id: build-ios
         if: (success() || failure()) && steps.xcodegen.outcome == 'success'
         run: |
-          xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme iosApp \
+          xcodebuild -project apps/ios/WatchAudio.xcodeproj -scheme iosApp \
             -configuration Debug -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO build -quiet 2>&1 | tee xcodebuild-ios.log; exit ${PIPESTATUS[0]}
@@ -136,7 +134,7 @@ jobs:
         id: build-watch
         if: (success() || failure()) && steps.xcodegen.outcome == 'success'
         run: |
-          xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme WatchApp \
+          xcodebuild -project apps/ios/WatchAudio.xcodeproj -scheme WatchApp \
             -configuration Debug -destination 'generic/platform=watchOS Simulator' \
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO build -quiet 2>&1 | tee xcodebuild-watch.log; exit ${PIPESTATUS[0]}
@@ -146,7 +144,7 @@ jobs:
       - name: watchOS Release build has no debug audio input
         if: (success() || failure()) && steps.build-watch.outcome == 'success'
         run: |
-          xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme WatchApp \
+          xcodebuild -project apps/ios/WatchAudio.xcodeproj -scheme WatchApp \
             -configuration Release -destination 'generic/platform=watchOS Simulator' \
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO build -quiet 2>&1 | tee xcodebuild-watch-release.log; test ${PIPESTATUS[0]} -eq 0
@@ -180,7 +178,7 @@ jobs:
           xcrun simctl shutdown all || true # free the runner for the iPhone simulator
           exit $status
 
-      # Hostless Swift logic tests (no Kotlin build): the wire protocol vs. shared/core-protocol/testdata
+      # Hostless Swift logic tests (no Kotlin build): the wire protocol vs. shared/protocol/testdata
       # (ProtocolTests), the watch recorder's stop reasons / state (#15) and send queue (#17)
       # (WatchLogicTests). Every test case is listed in the job summary.
       # Runs first on the iPhone (#92): xcode-test.sh boots it while these tests build, so the
@@ -262,8 +260,8 @@ jobs:
           name: kotlin-ios-test-results
           path: |
             shared/*/build/test-results/iosSimulatorArm64Test/
-            composeApp/build/test-results/iosSimulatorArm64Test/
-            composeApp/build/reports/tests/iosSimulatorArm64Test/
+            shared/ui/build/test-results/iosSimulatorArm64Test/
+            shared/ui/build/reports/tests/iosSimulatorArm64Test/
           if-no-files-found: ignore
           retention-days: 7
 
@@ -321,12 +319,12 @@ jobs:
         run: |
           xcodebuild -version
           brew install xcodegen
-          cd iosApp && xcodegen generate
+          cd apps/ios && xcodegen generate
 
       # The Xcode build phase links the Kotlin framework in its release flavour (iosArm64).
       - name: Build iOS app, Release, device (embeds the watchOS app)
         run: |
-          xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme iosApp \
+          xcodebuild -project apps/ios/WatchAudio.xcodeproj -scheme iosApp \
             -configuration Release -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO build -quiet 2>&1 | tee xcodebuild-ios-release.log; exit ${PIPESTATUS[0]}
@@ -334,7 +332,7 @@ jobs:
       - name: Build watchOS app, Release, device
         if: success() || failure()
         run: |
-          xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme WatchApp \
+          xcodebuild -project apps/ios/WatchAudio.xcodeproj -scheme WatchApp \
             -configuration Release -destination 'generic/platform=watchOS' \
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO build -quiet 2>&1 | tee xcodebuild-watch-release.log; exit ${PIPESTATUS[0]}

@@ -29,13 +29,13 @@
 
 | ドキュメント | 内容 |
 | --- | --- |
-| [docs/01-research.md](docs/01-research.md) | 市場環境・作るべきもの・実現性評価 |
-| [docs/02-architecture.md](docs/02-architecture.md) | 技術スタック・全体構成・データモデル・主要フロー |
-| [docs/03-roadmap.md](docs/03-roadmap.md) | 実装手順（マイルストーンと Issue 一覧） |
-| [docs/04-dev-environment.md](docs/04-dev-environment.md) | 開発・検証環境、ビルド手順、実機なしでの通し検証 |
-| [docs/spikes/](docs/spikes/) | 技術検証の結果（ASR・埋め込み・電池計測手順） |
-| [docs/impl/android-phone.md](docs/impl/android-phone.md) | Android スマホ側の実装（受信・ACK・オンデバイス文字起こし・モデル配信） |
-| [docs/impl/phone-ui.md](docs/impl/phone-ui.md) | スマホ UI（タイムライン・検索・状態画面）の実装メモ |
+| [docs/product/01-research.md](docs/product/01-research.md) | 市場環境・作るべきもの・実現性評価 |
+| [docs/architecture/02-architecture.md](docs/architecture/02-architecture.md) | 技術スタック・全体構成・データモデル・主要フロー |
+| [docs/product/03-roadmap.md](docs/product/03-roadmap.md) | 実装手順（マイルストーンと Issue 一覧） |
+| [docs/dev/04-dev-environment.md](docs/dev/04-dev-environment.md) | 開発・検証環境、ビルド手順、実機なしでの通し検証 |
+| [docs/research/](docs/research/) | 技術検証の結果（ASR・埋め込み・電池計測手順） |
+| [docs/platforms/android-phone.md](docs/platforms/android-phone.md) | Android スマホ側の実装（受信・ACK・オンデバイス文字起こし・モデル配信） |
+| [docs/platforms/phone-ui.md](docs/platforms/phone-ui.md) | スマホ UI（タイムライン・検索・状態画面）の実装メモ |
 
 ## 技術スタック
 
@@ -48,16 +48,19 @@
 ## リポジトリ構成
 
 ```
-shared/        Kotlin Multiplatform の共通ロジック（core-model, core-protocol, core-db, ...）
-composeApp/    スマホ UI（Compose Multiplatform、Android/iOS 共通）
-androidApp/    Android スマホアプリ
-wearApp/       Wear OS アプリ
-iosApp/        iOS アプリ + watchOS アプリ（XcodeGen: project.yml）
-build-logic/   Gradle の共通設定（convention plugin）
-tools/harness/ 実機なしの通し検証（Watch シミュレータ + sherpa-onnx、Linux/CI）
-tools/test-audio/ 検証用音声セットの生成（オフライン TTS の日本語会話 + Watch 録音を模した加工）
+apps/android/        Android スマホアプリ
+apps/wear/           Wear OS アプリ
+apps/ios/            iOS アプリ + watchOS アプリ（XcodeGen: project.yml）
+shared/              Kotlin Multiplatform の共通ロジック（model, protocol, platform, db, pipeline）
+shared/ui/           スマホ UI（Compose Multiplatform、Android/iOS 共通）
+build-logic/         Gradle の共通設定（convention plugin）
+tools/harness/       実機なしの通し検証（Watch シミュレータ + sherpa-onnx、Linux/CI）
+tools/test-audio/    検証用音声セットの生成（オフライン TTS の日本語会話 + Watch 録音を模した加工）
 tools/privacy-check/ 「データは端末内のみ」の CI チェック（権限・バックアップ・通信・依存の許可リスト）
-tools/roadmap-view/ Issue ダッシュボードの生成
+tools/check-links/   Markdown のリンク切れ検査（CI: links.yml）
+tools/roadmap-view/  Issue ダッシュボードの生成
+research/            技術検証のベンチマーク（ASR・埋め込み、Python）
+docs/                product（調査・ロードマップ）/ architecture / platforms / dev（開発環境）/ research（検証結果）
 ```
 
-ビルド手順は [docs/04-dev-environment.md](docs/04-dev-environment.md) を参照。
+ビルド手順は [docs/dev/04-dev-environment.md](docs/dev/04-dev-environment.md) を参照。

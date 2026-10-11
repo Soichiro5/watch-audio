@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerates androidApp/proguard-release-test.pro: keep rules for every class and member of the app
+# Regenerates apps/android/proguard-release-test.pro: keep rules for every class and member of the app
 # (our code and its libraries) that ReleaseAsrTest and its fixtures call, plus what the androidx.test
 # runner needs from the app's libraries (#78). The test APK of a minified build is linked against the
 # app's R8 output, so R8 must not remove what only the test uses. The rules are applied to the app
@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 ROOT=$PWD
 TEST_CLASSES="ReleaseAsrTest SpeechFixtures PlaybackFixtures Evidence TestAudio SeededChunk"
-OUT=androidApp/proguard-release-test.pro
+OUT=apps/android/proguard-release-test.pro
 
 SDK=${ANDROID_HOME:-$(sed -n 's/^sdk.dir=//p' local.properties 2>/dev/null)}
 R8=$SDK/cmdline-tools/latest/lib/r8.jar
@@ -26,7 +26,7 @@ trap 'rm -rf "$WORK"' EXIT
 # Runtime class jars of the app and of its androidTest APK, as R8 sees them.
 cat > "$WORK/classpath.init.gradle.kts" <<'EOF'
 allprojects {
-    if (path == ":androidApp") {
+    if (path == ":apps:android") {
         afterEvaluate {
             tasks.register("printReleaseTestClasspath") {
                 fun jars(name: String) = configurations.getByName(name).incoming.artifactView {
@@ -44,9 +44,9 @@ allprojects {
 }
 EOF
 ./gradlew --max-workers=2 --no-configuration-cache -q -Pwatchaudio.testBuildType=release -I "$WORK/classpath.init.gradle.kts" \
-  :androidApp:compileReleaseKotlin :androidApp:compileReleaseAndroidTestKotlin :androidApp:printReleaseTestClasspath > "$WORK/classpath.txt"
+  :apps:android:compileReleaseKotlin :apps:android:compileReleaseAndroidTestKotlin :apps:android:printReleaseTestClasspath > "$WORK/classpath.txt"
 
-KOTLINC=androidApp/build/intermediates/built_in_kotlinc
+KOTLINC=apps/android/build/intermediates/built_in_kotlinc
 (cd "$KOTLINC/release/compileReleaseKotlin/classes" && zip -qr "$WORK/app.jar" .)
 mkdir -p "$WORK/test"
 for c in $TEST_CLASSES; do
