@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs an Xcode test scheme (iosApp/project.yml) on the newest available iPhone simulator and
+# Runs an Xcode test scheme (apps/ios/project.yml) on the newest available iPhone simulator and
 # lists every test case, with skip reasons and failure messages, in the job summary.
 #
 # Usage: xcode-test.sh <scheme> <summary title> [extra xcodebuild build settings...]
@@ -38,7 +38,7 @@ xcrun simctl boot "$udid" > /dev/null 2>&1 &
 
 # Build and run separately so the log shows where the time goes.
 xcode() {
-  xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme "$scheme" \
+  xcodebuild -project apps/ios/WatchAudio.xcodeproj -scheme "$scheme" \
     -destination "platform=iOS Simulator,id=$udid" -derivedDataPath "$derived_data" \
     CODE_SIGNING_ALLOWED=NO ${extra_settings[@]+"${extra_settings[@]}"} "$@"
 }

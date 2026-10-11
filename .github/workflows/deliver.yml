@@ -15,7 +15,6 @@ on:
       - "tools/check-links/**"
       - ".github/workflows/links.yml"
       - "research/**"
-      - "spikes/**"
   workflow_dispatch:
 
 permissions:
@@ -40,13 +39,13 @@ jobs:
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - name: Build phone and Wear OS apps
-        run: ./gradlew :androidApp:assembleDebug :wearApp:assembleDebug
+        run: ./gradlew :apps:android:assembleDebug :apps:wear:assembleDebug
 
       - name: Collect builds
         run: |
           mkdir -p dist
-          cp androidApp/build/outputs/apk/debug/*.apk "dist/watch-audio-phone-${GITHUB_SHA::7}.apk"
-          cp wearApp/build/outputs/apk/debug/*.apk "dist/watch-audio-wear-${GITHUB_SHA::7}.apk"
+          cp apps/android/build/outputs/apk/debug/*.apk "dist/watch-audio-phone-${GITHUB_SHA::7}.apk"
+          cp apps/wear/build/outputs/apk/debug/*.apk "dist/watch-audio-wear-${GITHUB_SHA::7}.apk"
           {
             echo "### Builds for ${GITHUB_SHA::7}"
             echo

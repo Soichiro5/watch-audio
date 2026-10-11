@@ -1,15 +1,15 @@
 """Allow-lists for check.py: what the apps may request, link and contact.
 
 Every entry carries the reason it is allowed. Adding an entry is a privacy decision: state the
-reason here and in the PR description, and update docs/02 §7 (network call sites and storage)
-and docs/04 (how the check works). See docs/04-dev-environment.md "Local-only チェック".
+reason here and in the PR description, and update docs/architecture/02 §7 (network call sites and storage)
+and docs/dev/04 (how the check works). See docs/dev/04-dev-environment.md "Local-only チェック".
 """
 
 # Whole-domain exclusions every backup rule file must contain (Android backup domains).
 BACKUP_DOMAINS = ("root", "file", "database", "sharedpref", "external")
 
 ANDROID_APPS = {
-    "androidApp": {
+    "apps/android": {
         # <uses-permission> in the module's own manifests (src/*/AndroidManifest.xml).
         "permissions": {
             "android.permission.INTERNET": "ASR model download only (asr/ModelManager.kt)",
@@ -28,7 +28,7 @@ ANDROID_APPS = {
         # transfer (cable / local Wi-Fi) stays allowed on the phone so history can move.
         "excluded_backup_sections": ("cloud-backup",),
     },
-    "wearApp": {
+    "apps/wear": {
         "permissions": {
             "android.permission.RECORD_AUDIO": "the recorder",
             "android.permission.FOREGROUND_SERVICE": "recording service",
@@ -49,8 +49,8 @@ ANDROID_APPS = {
 
 # Directories whose .kt/.java/.swift files are scanned (relative to the repository root).
 # Test code is not shipped and is skipped: directories named "test" or containing "Test"
-# (src/test, src/jvmTest, src/androidTest, iosApp/ProtocolTests, iosApp/TestSupport, ...).
-SOURCE_ROOTS = ("androidApp/src", "wearApp/src", "composeApp/src", "shared", "iosApp")
+# (src/test, src/jvmTest, src/androidTest, apps/ios/Tests/ProtocolTests, apps/ios/Tests/TestSupport, ...).
+SOURCE_ROOTS = ("apps/android/src", "apps/wear/src", "shared", "apps/ios")
 SOURCE_EXTENSIONS = (".kt", ".java", ".swift")
 
 # APIs that move data off the device or weaken on-device protection. Matched in code with
@@ -84,7 +84,7 @@ GUARDED_APIS = (
 # file (relative path) -> {api id: reason}. These are the app's only network call sites.
 # An entry that no longer matches anything is reported too, so the list stays accurate.
 ALLOWED_API_USES = {
-    "androidApp/src/main/kotlin/app/watchaudio/android/asr/ModelDownloader.kt": {
+    "apps/android/src/main/kotlin/app/watchaudio/android/asr/ModelDownloader.kt": {
         "URLConnection": "downloads the ASR / VAD model files listed in ModelManifest (resumable, SHA-256)",
         "openConnection": "same download",
     },
@@ -107,7 +107,7 @@ DENIED_DEPENDENCIES = (
     ("network client", r"okhttp|retrofit|\bktor\b|volley|cronet|\bgrpc\b|apollographql|io\.socket|paho|mqtt"),
 )
 # Gradle files outside the shipped apps (benchmarks, the Linux harness).
-DEPENDENCY_SCAN_EXCLUDES = ("spikes/",)
+DEPENDENCY_SCAN_EXCLUDES = ("research/",)
 
 # Resolved runtime classpath of the apps (--resolved-deps): every module must match one of
 # these "group:artifact" patterns.
@@ -123,7 +123,7 @@ ALLOWED_RESOLVED_DEPENDENCIES = (
     (r"com\.github\.k2-fsa\.sherpa-onnx:[\w.-]+", "on-device ASR"),
 )
 
-IOS_PROJECT = "iosApp/project.yml"
+IOS_PROJECT = "apps/ios/project.yml"
 
 # Info.plist keys per XcodeGen target (info.properties) and allowed UIBackgroundModes.
 IOS_TARGETS = {

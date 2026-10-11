@@ -12,7 +12,7 @@ import org.gradle.kotlin.dsl.configure
  * Wearable Data Layer to pair them, so the signing setup lives here once.
  *
  * The key never lives in the repository. It is read from these environment variables (CI sets them
- * from GitHub Actions secrets, see docs/04-dev-environment.md):
+ * from GitHub Actions secrets, see docs/dev/04-dev-environment.md):
  *
  * - [STORE_FILE]: path to the keystore file
  * - [STORE_PASSWORD], [KEY_ALIAS], [KEY_PASSWORD]

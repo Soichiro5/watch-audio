@@ -272,7 +272,7 @@ def check_sources(root: Path, report: Report) -> None:
             if not prefixes:
                 line = code.count("\n", 0, match.start()) + 1
                 report.add("network", rel, line, f"URL {url} is not in policy.ALLOWED_URL_PREFIXES")
-    # Stale entries would make the list of network call sites (docs/02 §7.2) wrong.
+    # Stale entries would make the list of network call sites (docs/architecture/02 §7.2) wrong.
     for rel, allowed in policy.ALLOWED_API_USES.items():
         for api_id in allowed:
             if (rel, api_id) not in used_apis:
@@ -471,7 +471,7 @@ def check_ios(root: Path, report: Report) -> None:
             if entitlements:
                 properties = entitlements.get("properties") or {}
                 _check_entitlements(properties or ["<entitlements file>"], f"target {target}", rel, report)
-    for dirpath, dirnames, filenames in os.walk(root / "iosApp"):
+    for dirpath, dirnames, filenames in os.walk(root / "apps" / "ios"):
         dirnames[:] = sorted(d for d in dirnames if d not in ("build", "DerivedData")
                              and not d.endswith((".xcodeproj", ".xcassets")))
         for filename in sorted(filenames):
@@ -544,7 +544,7 @@ def main(argv: list[str] | None = None) -> int:
     if report.violations:
         print(f"\n{len(report.violations)} violation(s). Data must stay on the device (CLAUDE.md "
               "'Local only'). If the change is intended, extend tools/privacy-check/policy.py with a "
-              "reason and update docs/02 §7 (see docs/04).", file=sys.stderr)
+              "reason and update docs/architecture/02 §7 (see docs/dev/04).", file=sys.stderr)
         return 1
     print("Local-only check passed.")
     return 0

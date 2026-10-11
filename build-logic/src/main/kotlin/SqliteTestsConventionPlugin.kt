@@ -71,7 +71,7 @@ open class SqliteTestsConventionPlugin : Plugin<Project> {
 }
 
 /**
- * `src/sqliteTest` on JVM and the iOS simulator only. For composeApp: the Compose resources
+ * `src/sqliteTest` on JVM and the iOS simulator only. For shared/ui: the Compose resources
  * plugin cannot configure an Android device-test variant of a KMP library
  * (`copyAndroidDeviceTestComposeResourcesToAndroidAssets` has no output directory).
  */

@@ -13,8 +13,10 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
  * The JVM target lets the whole ingest/transcription pipeline run on Linux (CI and the
  * cloud dev environment) without devices; see #44.
  *
- * The Android namespace is derived from the module path, e.g. `:shared:core-protocol`
- * becomes `app.watchaudio.core.protocol` and `:composeApp` becomes `app.watchaudio.composeapp`.
+ * The Android namespace is derived from the module path and keeps the names from before the
+ * folder restructure (#49), so R classes, merged manifests and R8 output do not change:
+ * `:shared:protocol` becomes `app.watchaudio.core.protocol` and `:shared:ui` becomes
+ * `app.watchaudio.composeapp`.
  */
 class KmpLibraryConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) = with(target) {
@@ -28,8 +30,10 @@ class KmpLibraryConventionPlugin : Plugin<Project> {
             jvmToolchain(21)
 
             (this as ExtensionAware).extensions.configure<KotlinMultiplatformAndroidLibraryTarget>("android") {
-                namespace = "app.watchaudio." + path.removePrefix(":").removePrefix("shared:")
-                    .replace(':', '.').replace('-', '.').lowercase()
+                namespace = when (val module = path.removePrefix(":").removePrefix("shared:")) {
+                    "ui" -> "app.watchaudio.composeapp"
+                    else -> "app.watchaudio.core." + module.replace(':', '.').replace('-', '.').lowercase()
+                }
                 compileSdk = version("android-compileSdk").toInt()
                 minSdk = version("android-minSdk").toInt()
                 compilerOptions.jvmTarget.set(JvmTarget.JVM_17)

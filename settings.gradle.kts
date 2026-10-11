@@ -23,19 +23,17 @@ dependencyResolutionManagement {
     }
 }
 
-// Shared Kotlin Multiplatform logic (phone: Android + iOS; core-model/core-protocol also used by Wear OS)
-include(":shared:core-model")
-include(":shared:core-protocol")
-include(":shared:core-platform")
-include(":shared:core-db")
-include(":shared:core-pipeline")
-include(":shared:core-search")
-include(":shared:core-ai")
+// Shared Kotlin Multiplatform logic (phone: Android + iOS; model and protocol also used by Wear OS)
+include(":shared:model")
+include(":shared:protocol")
+include(":shared:platform")
+include(":shared:db")
+include(":shared:pipeline")
 
 // Phone UI (Compose Multiplatform) and app shells
-include(":composeApp")
-include(":androidApp")
-include(":wearApp")
+include(":shared:ui")
+include(":apps:android")
+include(":apps:wear")
 
 // Device-free verification on Linux/CI (#44)
 include(":tools:harness")

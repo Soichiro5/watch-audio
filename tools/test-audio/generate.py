@@ -9,7 +9,7 @@ Usage (from the repository root):
     tools/test-audio/.venv/bin/python tools/test-audio/generate.py            # everything
     tools/test-audio/.venv/bin/python tools/test-audio/generate.py --only clean,cafe --no-day
     tools/test-audio/.venv/bin/python tools/test-audio/generate.py \
-        --reazon-manifest spikes/asr-benchmark/data/manifest.jsonl          # + ReazonSpeech
+        --reazon-manifest research/asr-benchmark/data/manifest.jsonl          # + ReazonSpeech
     tools/test-audio/.venv/bin/python tools/test-audio/generate.py --fixtures tools/test-audio/fixtures
 
 Nothing here talks to the network: the socket layer is disabled before any work starts.
@@ -269,7 +269,7 @@ def day_blocks(by_id: dict[str, tuple[list[Placement], int]]) -> list[Block]:
 
 
 def reazon_blocks(manifest: Path, rng: np.random.Generator, wrist: bool, environment: str | None) -> Block:
-    """ReazonSpeech held-out test utterances (prepared by spikes/asr-benchmark) separated by
+    """ReazonSpeech held-out test utterances (prepared by research/asr-benchmark) separated by
     silence. Each utterance is its own alignment group."""
     root = manifest.parent.parent
     block = Block(length=int(2 * SR), wrist=wrist, environment=environment)
@@ -293,11 +293,11 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=56)
     ap.add_argument("--only", help="comma-separated condition ids (default: all)")
     ap.add_argument("--no-day", action="store_true", help="skip the one-hour 'part of a day' recording")
-    ap.add_argument("--reazon-manifest", type=Path, help="spikes/asr-benchmark/data/manifest.jsonl (optional)")
+    ap.add_argument("--reazon-manifest", type=Path, help="research/asr-benchmark/data/manifest.jsonl (optional)")
     ap.add_argument("--fixtures", type=Path, help="write the small committed sample set here instead")
     args = ap.parse_args()
     if args.reazon_manifest and not args.reazon_manifest.exists():
-        ap.error(f"{args.reazon_manifest} not found (run spikes/asr-benchmark/scripts/prepare_data.py first)")
+        ap.error(f"{args.reazon_manifest} not found (run research/asr-benchmark/scripts/prepare_data.py first)")
 
     synth = Synthesizer(args.models, HERE / "cache" / "tts")
     convs = load_corpus(args.corpus, VOICES)
