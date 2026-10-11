@@ -106,7 +106,7 @@ erDiagram
 | `recording_session` | id, device, started_at, ended_at, end_reason(user/interrupt/battery) |
 | `audio_chunk` | id(UUID, Watch 採番), session_id, start_at, duration_ms, file_path, codec, silent_ranges, state(received/transcribing/transcribed/failed/no_audio), audio_purged_at（保持期間で音声を削除した時刻。文字起こしは残る） |
 | `transcript_segment` | id, chunk_id, start_at, end_at, text, lang, confidence |
-| `segment_fts` | FTS5(trigram) 仮想テーブル |
+| `segment_fts` | FTS5(trigram) 仮想テーブル（contentless。本文 + 改行 2 つを索引し、語彙 `segment_fts_terms` で 1〜2 文字の検索にも使う。#72） |
 | `segment_embedding` | segment_id, model_id, vector(int8 BLOB), scale |
 | `mark` | id, session_id, at |
 | `hour_review` | day, hour, density_score, summary, state, provider, model |
@@ -212,7 +212,7 @@ interface LlmProvider {
 | Watch 連続録音 | Apple Watch Series 10 以降で 10 時間以上、Pixel Watch 3 / Galaxy Watch 7 以降で 8 時間以上（M0 で実測し確定） |
 | 転送遅延 | 接続中は録音から 20 分以内に Phone 着 |
 | 文字起こし | 充電中なら 1 日分（8h 録音）を 1 時間以内に処理 |
-| 検索応答 | 1 年分のデータで 300ms 以内（50 万セグメントの JVM ベンチマークで最悪 p95 約 150ms: [04 §5](04-dev-environment.md#5-検索の性能ベンチマーク23)。実機は未計測） |
+| 検索応答 | 1 年分のデータで 300ms 以内（#68 以降の発話単位で 1 年 320 万セグメントの JVM ベンチマーク: [04 §5](04-dev-environment.md#5-検索の性能ベンチマーク23-72)。実機は未計測） |
 | ストレージ | 8h/日で 1 日 ≈ 120MB 以下（音声）|
 
 ## 9. 24 時間連続録音の設計
@@ -250,7 +250,15 @@ stateDiagram-v2
 | 24h × AAC 32kbps（無音も保存） | 約 345MB | 約 126GB |
 | 24h、無音区間を捨てる（音声 8h 相当） | 約 115MB | 約 42GB |
 | 同上 + Opus 16kbps | 約 58MB | 約 21GB |
-| 文字起こし + 索引（ベクトル int8 256 次元を含む） | 約 2〜4MB | 約 1〜1.5GB |
+| 文字起こし + 検索索引（SQLite、下記） | 約 2.9MB | 約 1.1GB |
+| 埋め込みベクトル（int8 256 次元、発話 1 行ごとに作る場合。P2） | 約 2.2MB | 約 0.8GB |
+
+**文字起こしの行数と DB 容量（#72）**
+
+- 行数: #68（PR #70）以降、ASR の入力は話者交代の間で切った発話単位になり、1 行が短く多くなった。装着 16 時間・発話 約 31%（約 5 時間、[M0-5 §5](spikes/m0-5-asr-desktop.md#5-1-日分の処理時間の見積もりスマホ)）、検証用音声セットの会話で発話 1 時間あたり約 1,720 セグメント（中央値 1.7〜1.9 秒、1 行 平均約 12 文字）から、**1 日 約 8,600 行・1 年 約 310 万行**（約 3,700 万文字）。雑音の多い場面では区間が長いままなので、これは上限寄りの値。
+- 容量: ベンチマーク（30 万行）で 1 行あたり約 335 B（本文・チャンク ID（UUID）・エンジン名・索引・FTS を含む）→ **1 日 約 2.9MB・1 年 約 1.1GB**。30 万行での内訳の目安は、`transcript_segment` の表 約 41%・`chunk_id` の索引 約 16%・trigram 索引 約 16%・`start_at` の索引 約 5%、残りはチャンクの表（マニフェストの JSON を含む）など。
+- 検索は 1 年分で 300ms 以内を保つ（[04 §5](04-dev-environment.md#5-検索の性能ベンチマーク23-72)）。
+- さらに減らす余地: 行ごとのエンジン名（37 B）と UUID のチャンク ID（表と索引で約 90 B）を整数の参照にすれば 1 年で約 3 割減る見込み。埋め込みは発話 1 行ごとではなく、数十秒の窓ごとに作る方がよい。
 
 → 文字起こしは無期限に保存しても問題ない。音声は「無音を捨てる + 低ビットレート」と、保持期間・バックアップ先へのオフロードで管理する。
 
