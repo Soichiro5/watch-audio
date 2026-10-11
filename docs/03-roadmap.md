@@ -58,8 +58,8 @@ gantt
   パイプライン/ASR        :m2a, after m1b, 14d
   検索                    :m2b, after m2a, 10d
   section M3 AI (BYOK)
-  Provider/Review/Home    :m3a, after m2a, 14d
-  Chat/Memory/Reflection  :m3b, after m3a, 14d
+  プロバイダ/要約/ホーム    :m3a, after m2a, 14d
+  チャット/記憶/振り返り  :m3b, after m3a, 14d
   section M4 リリース準備
   課金/ストレージ/審査    :m4, after m3b, 14d
 ```
@@ -93,7 +93,7 @@ Epic: [#2](https://github.com/Soichiro5/watch-audio/issues/2)
 | [M1-4 (#16)](https://github.com/Soichiro5/watch-audio/issues/16) | Wear OS 録音アプリ | M0-4, M1-1 |
 | [M1-5 (#17)](https://github.com/Soichiro5/watch-audio/issues/17) | watchOS → iOS 転送（WatchConnectivity + ACK） | M1-2, M1-3 |
 | [M1-6 (#18)](https://github.com/Soichiro5/watch-audio/issues/18) | Wear OS → Android 転送（Data Layer + ACK） | M1-2, M1-4 |
-| [M1-7 (#19)](https://github.com/Soichiro5/watch-audio/issues/19) | Days タイムラインと音声再生 UI（最小） | [M1-2 (#14)](https://github.com/Soichiro5/watch-audio/issues/14) |
+| [M1-7 (#19)](https://github.com/Soichiro5/watch-audio/issues/19) | 日別タイムラインと音声再生 UI（最小） | [M1-2 (#14)](https://github.com/Soichiro5/watch-audio/issues/14) |
 | [M1-8 (#42)](https://github.com/Soichiro5/watch-audio/issues/42) | スマホ録音へのハンドオフ（Watch 充電中・非装着時の 24h 継続） | M1-2, M1-3, M1-4 |
 | [M1-9 (#43)](https://github.com/Soichiro5/watch-audio/issues/43) | 録音の連続性監視とアラート（欠損区間の可視化） | M1-5/M1-6, M1-7 |
 | [M1-10 (#41)](https://github.com/Soichiro5/watch-audio/issues/41) | Watch のコンプリケーション / Tiles（ワンタップ録音開始・再開） | M1-3, M1-4 |
@@ -122,11 +122,11 @@ Epic: [#4](https://github.com/Soichiro5/watch-audio/issues/4)
 | コード | タスク | 依存 |
 | --- | --- | --- |
 | [M3-1 (#26)](https://github.com/Soichiro5/watch-audio/issues/26) | LLM Provider 抽象と AI 設定画面 | [M0-1 (#7)](https://github.com/Soichiro5/watch-audio/issues/7) |
-| [M3-2 (#27)](https://github.com/Soichiro5/watch-audio/issues/27) | Hourly Review（Highlights / Summary / 情報密度） | M2-1, M3-1 |
-| [M3-3 (#28)](https://github.com/Soichiro5/watch-audio/issues/28) | Home 画面（24h バー + Highlights） | [M3-2 (#27)](https://github.com/Soichiro5/watch-audio/issues/27) |
-| [M3-4 (#29)](https://github.com/Soichiro5/watch-audio/issues/29) | Daily Reflection | [M3-2 (#27)](https://github.com/Soichiro5/watch-audio/issues/27) |
-| [M3-5 (#30)](https://github.com/Soichiro5/watch-audio/issues/30) | Memory（事実の抽出・編集・無効化） | [M3-2 (#27)](https://github.com/Soichiro5/watch-audio/issues/27) |
-| [M3-6 (#31)](https://github.com/Soichiro5/watch-audio/issues/31) | Chat（RAG + 引用 + ストリーミング） | M2-5, M3-1, M3-5 |
+| [M3-2 (#27)](https://github.com/Soichiro5/watch-audio/issues/27) | 1 時間ごとの要約（要点・情報量スコア） | M2-1, M3-1 |
+| [M3-3 (#28)](https://github.com/Soichiro5/watch-audio/issues/28) | ホーム画面（時間帯ごとの概要 + 要点） | [M3-2 (#27)](https://github.com/Soichiro5/watch-audio/issues/27) |
+| [M3-4 (#29)](https://github.com/Soichiro5/watch-audio/issues/29) | 1 日の振り返り | [M3-2 (#27)](https://github.com/Soichiro5/watch-audio/issues/27) |
+| [M3-5 (#30)](https://github.com/Soichiro5/watch-audio/issues/30) | 記憶（事実の抽出・編集・無効化） | [M3-2 (#27)](https://github.com/Soichiro5/watch-audio/issues/27) |
+| [M3-6 (#31)](https://github.com/Soichiro5/watch-audio/issues/31) | チャット（RAG + 引用 + ストリーミング） | M2-5, M3-1, M3-5 |
 
 **完了条件**: API キーを入れると、1 時間ごとのハイライトと日次振り返りが自動生成され、引用付きで過去の会話について質問できる。
 
@@ -149,6 +149,6 @@ Epic: [#6](https://github.com/Soichiro5/watch-audio/issues/6)
 
 | コード | タスク |
 | --- | --- |
-| [P2-1 (#37)](https://github.com/Soichiro5/watch-audio/issues/37) | Body: HealthKit / Health Connect 取り込みとストレス推定 |
-| [P2-2 (#38)](https://github.com/Soichiro5/watch-audio/issues/38) | Places: 録音中の位置取得・クラスタリング・地名化 |
+| [P2-1 (#37)](https://github.com/Soichiro5/watch-audio/issues/37) | 体調データ: HealthKit / Health Connect 取り込みとストレス推定 |
+| [P2-2 (#38)](https://github.com/Soichiro5/watch-audio/issues/38) | 場所: 録音中の位置取得・クラスタリング・地名化 |
 | [P2-3 (#39)](https://github.com/Soichiro5/watch-audio/issues/39) | オンデバイス LLM（Apple Foundation Models / Gemini Nano） |
