@@ -19,16 +19,22 @@ import kotlinx.io.files.Path
  *   ./gradlew :tools:harness:run --args="record <dataDir> <audio files...>"
  *   ./gradlew :tools:harness:run --args="search <dataDir> <query>"
  *   ./gradlew :tools:harness:run --args="show <dataDir>"
- *   ./gradlew :tools:harness:run --args="evaluate <manifest.json> <workDir> [recordingIds...]"
+ *   ./gradlew :tools:harness:run --args="evaluate <manifest.json> <workDir> [--vad name=value,...] [recordingIds...]"
  *
- * `evaluate` scores a test audio set from tools/test-audio (see docs/dev/test-audio.md).
+ * `evaluate` scores a test audio set from tools/test-audio (see docs/dev/test-audio.md); `--vad`
+ * overrides [app.watchaudio.core.pipeline.VadSettings] by property name (see [EvaluateArgs]).
  */
 fun main(args: Array<String>) = runBlocking {
     if (args.size < 2) usage()
     val models = File(System.getProperty("watchaudio.models") ?: "tools/harness/models")
     if (args[0] == "evaluate") {
-        if (args.size < 3) usage()
-        evaluate(models, File(args[1]), File(args[2]).absoluteFile, args.drop(3).toSet())
+        val parsed = try {
+            EvaluateArgs.parse(args.drop(1))
+        } catch (e: IllegalArgumentException) {
+            System.err.println(e.message)
+            usage()
+        }
+        evaluate(models, parsed)
         return@runBlocking
     }
     val dataDir = File(args[1]).absoluteFile.apply { mkdirs() }
@@ -55,9 +61,11 @@ fun main(args: Array<String>) = runBlocking {
     }
 }
 
-private suspend fun evaluate(models: File, manifest: File, workDir: File, only: Set<String>) {
-    TestSetEvaluator(models, workDir).evaluate(manifest, only)
-    val table = TestSetEvaluator.markdownTable(manifest, workDir)
+private suspend fun evaluate(models: File, args: EvaluateArgs) {
+    val workDir = args.workDir.absoluteFile
+    println("VAD: ${args.vad}")
+    TestSetEvaluator(models, workDir, vadSettings = args.vad).evaluate(args.manifest, args.recordings)
+    val table = TestSetEvaluator.markdownTable(args.manifest, workDir)
     File(workDir, "results.md").writeText(table)
     println()
     print(table)
@@ -75,6 +83,6 @@ private val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZ
 private fun time(epochMs: Long) = formatter.format(Instant.ofEpochMilli(epochMs))
 
 private fun usage(): Nothing {
-    System.err.println("usage: record <dataDir> <audio...> | search <dataDir> <query> | show <dataDir> | evaluate <manifest.json> <workDir> [ids...]")
+    System.err.println("usage: record <dataDir> <audio...> | search <dataDir> <query> | show <dataDir> | evaluate <manifest.json> <workDir> [--vad name=value,...] [ids...]")
     exitProcess(2)
 }
