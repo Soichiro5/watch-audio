@@ -115,7 +115,7 @@ class AppGraph private constructor(context: Context) {
      * the model state. Workers wait for it before touching the pipeline.
      */
     val startup: Job = scope.launch {
-        pipeline.recoverInterrupted().let { if (it > 0) Log.i(TAG, "re-queued $it interrupted chunks") }
+        pipeline.recoverInterrupted().let { if (it > 0) Log.i(TAG, "re-queued $it interrupted chunk(s)") }
         store.read { lastReceivedAt() }?.let { stored -> _lastChunkReceivedAt.compareAndSet(null, stored) }
         models.refresh()
     }
