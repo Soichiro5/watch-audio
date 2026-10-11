@@ -196,6 +196,8 @@ UNINSTALL_APP=app.watchaudio .github/scripts/xcode-test.sh PlaybackTests "Playba
 
 `ios.yml` の `build` ジョブはシミュレータを使い回す（#92）。起動は端末ごとに 1 回、同時に起動しているのは 1 台だけにする（3 コアのランナーでは、2 台を同時に起動したままにすると各ステップが 2〜3 倍遅くなった）。順番は Apple Watch（コンプリケーション → 起動確認。終わったらシャットダウン）→ iPhone（Swift unit tests → 起動確認 → Speech → Playback）。初回起動はデータ移行とその後の落ち着くまでに数分かかるため、`xcode-test.sh` は iPhone の起動をバックグラウンドで始めてからテストをビルドし（`build-for-testing`）、起動完了を待ってから実行する（`test-without-building`）。iPhone で最初に動くホストなしの SwiftUnitTests のビルドが初回起動と重なり、続く起動確認は落ち着いた端末で行われる。各スクリプト（`simulator-smoke.sh`・`watch-complication-smoke.sh`・`xcode-test.sh`）は `simulator-udid.sh` が選ぶ同じ端末（最新ランタイムの iPhone / Apple Watch）を使い、終わってもシャットダウンしない（ジョブの最後の「Shut down simulators」で止める）。アプリがホストのテスト（Speech・Playback）は、前のステップで入れたアプリが残っているとテストバンドルを読み込めないため、端末を消去（`ERASE_SIMULATOR=1`。再起動でデータ移行がやり直しになる）する代わりにアプリをアンインストールしてから（`UNINSTALL_APP`）実行する。アンインストールでアプリのコンテナ・データ・権限の状態は消去と同じく初期化される。ホストのテストのビルドでは、「Build iOS app」が同じソースから作った Kotlin フレームワークを使い、Gradle の再実行を省く（`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES`）。各ステップのログの `Timing:` 行に起動待ち・インストール・ビルド・実行の所要時間が出る。
 
+`emulator.yml` の `smoke` ジョブは、エミュレータが起動している間に Gradle のコンパイルや SDK のダウンロードを走らせない（#92）。ランナーの不要なファイル（.NET・GHC・Boost・NDK・ツールキャッシュ）は同じファイルシステムの `/ci-trash` に移してからバックグラウンドで消す（同期して消すと約 40 秒かかっていた）。エミュレータ本体とシステムイメージはジョブの準備と APK のビルドの間にバックグラウンドの `sdkmanager` で取得し（「Download the emulator and its system image (background)」→「Wait for the emulator download」）、emulator-runner 自身のインストールはほぼ何もしない（約 38 秒 → 約 6 秒）。APK はエミュレータの起動前にすべてそろえる: 配布と同じ release・debug・計装テストの APK は phone ジョブで、release での文字起こし確認用の APK（2 回目の Gradle ビルド。ほぼ R8 で、アプリのコードを変えた PR では 1〜2 分）は並行して動く `release-test-apks` ジョブが別のランナーで作る（§7.1）。エミュレータは `-no-snapshot`（毎回コールドブートで、終了時のスナップショット保存も省く）。CPU は既定の 2 コアのまま（4 コアにしても 2 回の比較で各段階の差は誤差程度だったため）。AVD のスナップショットはキャッシュしない（数 GB のキャッシュが他のキャッシュを追い出すため）。各段階の所要時間はジョブのログのタイムスタンプで追える（ビルド・SDK・起動・`LAUNCH_CHECK`・各 `SCENARIO`・計装テスト・`RELEASE_ASR_CHECK`）。
+
 Swift のテストを Linux で実行する手段はない（Xcode が必要）。変更したら CI（macOS、10 倍課金）で確認する前に、Kotlin 側は上のクロスコンパイル、Swift 側は差分の読み直しで型・並行性のエラーを潰しておく。
 
 ### 6.1 エミュレータでの音声認識モデル
@@ -279,7 +281,7 @@ python3 tools/privacy-check/check.py --resolved-deps apps/wear=/tmp/deps-wear.tx
 リポジトリは公開なので、CI のログと成果物（artifact）は GitHub にログインした人なら誰でも見られる・ダウンロードできる（#79）。
 
 - **ランナーは固定**: Linux は `ubuntu-24.04`（`ubuntu-latest` の Ubuntu 26 への切り替えで壊れないように）、macOS は `macos-26`。新しいイメージへは、全ジョブが通ることを PR で確かめてから移る。
-- **権限は最小**: 各 workflow は `permissions: contents: read`。書き込みが必要なジョブを足すときは、そのジョブにだけ付ける。`pull_request_target` は使わない（fork の PR に secret が渡るため）。
+- **権限は最小**: 各 workflow は `permissions: contents: read`。書き込みが必要なジョブを足すときは、そのジョブにだけ付ける。`emulator.yml` の `smoke` ジョブだけは、同じ実行の成果物 `release-test-apks` を取得するため `actions: read`（読み取りのみ）を足している（#92）。`pull_request_target` は使わない（fork の PR に secret が渡るため）。
 - **外部アクションは SHA で固定**し、`.github/dependabot.yml` が週 1 回まとめて更新 PR を出す。
 - **秘密情報**: GitHub Actions の Secrets にだけ置き、ログに出さない（加工して出力すると伏せ字を回避してしまうので注意）。現時点で secret を使うのは `android.yml` の release 署名だけ（§7.1）。
 
@@ -292,6 +294,7 @@ python3 tools/privacy-check/check.py --resolved-deps apps/wear=/tmp/deps-wear.tx
 | `ui-screenshots` | android.yml | JVM の UI テストが描いた画面（テスト用の合成データ） | 30 日 |
 | `logcat-phone` / `logcat-wear` | emulator.yml | エミュレータの logcat・計装テストのレポート（合成音声・テスト用 DB のみ。文字起こし本文はテスト音声の正解文） | 7 日 |
 | `screenshots-phone` / `screenshots-wear` | emulator.yml | エミュレータのスクリーンショット | 30 日 |
+| `release-test-apks` | emulator.yml | release での文字起こし確認用の APK（R8 + テスト用 keep ルールのアプリと、そのテスト APK）。ジョブ内で作った使い捨ての鍵で署名した確認専用のもので、配布には使わない。同じ実行の phone ジョブが受け取る（§7.1） | 1 日 |
 | `xcodebuild-logs` / `xcodebuild-release-logs` / `simulator-smoke` | ios.yml | ビルドログ（`xcodebuild-release-logs` は Release ビルドが失敗したときだけ）、シミュレータのスクリーンショットとアプリログ | 7 日 |
 
 成果物を Issue の証跡として参照する場合、保持期間を過ぎると消える点に注意する（コメントには数値・ログ行を本文として残す）。
@@ -311,7 +314,7 @@ python3 tools/privacy-check/check.py --resolved-deps apps/wear=/tmp/deps-wear.tx
 - **CI の動き**: `android.yml` は毎回 `:apps:android:assembleRelease :apps:wear:assembleRelease` を実行する（Wear OS の `verifyReleaseDebugInput` もここで走る）。secret があれば release 鍵で署名して成果物 `release-apks` に上げ、なければ（現在の状態。fork からの PR にも secret は渡らない）署名なしでビルドだけ確認する。`emulator.yml` は release 鍵を使わず、ジョブ内で `keytool` で作った使い捨ての鍵で署名して起動確認する（鍵とパスワードはそのジョブ限りで、配布物には使わない）。
 - **release での文字起こしの確認**（`emulator.yml` の phone、`release-asr.sh`）: 計装テスト `ReleaseAsrTest` を R8 の release ビルドに対して実行する。既知の日本語チャンク（ReazonSpeech の参照音声 1・3・5）を `AppGraph.ingestor`（Watch から受信したときと同じ経路）で保存し、アプリ自身の WorkManager の文字起こし（`TranscriptionWorker` → sherpa-onnx の JNI）で DB に保存され、FTS で検索できることを確かめる。アプリが debuggable でないこと（release であること）もテストで確認する。証拠は `RELEASE_ASR_CHECK` 行。
   - 計装テストの APK は、テスト対象のアプリの R8 の mapping に合わせて R8 で処理され、アプリの中のクラスを呼ぶ。R8 はテストだけが使うメソッドを消してしまうため、`-Pwatchaudio.testBuildType=release` を付けたビルドでだけ、テストが呼ぶものを残す keep ルール `apps/android/proguard-release-test.pro`（難読化は許可）をアプリに足す。このファイルは `tools/release-test-keep/generate.sh` が R8 の `tracereferences` で生成する（`ReleaseAsrTest` や使っているテスト用ヘルパーを変えたら再生成する）。テスト APK 自体の R8 ルールは `apps/android/proguard-test-rules.pro`。
-  - 配布する APK にはこの keep ルールは入らない。起動確認（`launch-smoke.sh`）は配布するものと同じ release APK（プロパティなしのビルド）で行う。プロパティ付きで作り直した APK での文字起こしの確認は、phone ジョブの最後（シナリオと debug の計装テストの後）に行い、それまでの確認の端末の状態を変えない。debug 専用のフックは追加していない（テストはアプリの公開されたクラスを呼ぶだけ）。
+  - 配布する APK にはこの keep ルールは入らない。起動確認（`launch-smoke.sh`）は配布するものと同じ release APK（プロパティなしのビルド）で行う。プロパティ付きで作り直した APK での文字起こしの確認は、phone ジョブの最後（シナリオと debug の計装テストの後）に行い、それまでの確認の端末の状態を変えない。プロパティ付きのビルド（1 回のビルドでテストできるビルドタイプは 1 つなので 2 回目のビルドになる。ほぼ R8）は、phone ジョブと並行して動く `release-test-apks` ジョブが別のランナーで行い、成果物 `release-test-apks` に上げる。`release-asr.sh` は環境変数 `RELEASE_TEST_ARTIFACT` があれば、順番が来た時点で同じ実行のその成果物を `gh run download` で受け取る（まだなければ 10 秒ごとに待ち、ジョブが失敗していれば `RELEASE_ASR_CHECK FAILED` で終わる。待った時間は `release-asr/apks.txt`）。環境変数がなければ（手元）ローカルのビルド出力を使う（#92）。debug 専用のフックは追加していない（テストはアプリの公開されたクラスを呼ぶだけ）。
   - 手元では（KVM のある環境、`tools/harness/download-models.sh` 済み）: 4 つの環境変数で署名してから `./gradlew :apps:android:assembleRelease :apps:android:assembleReleaseAndroidTest -Pwatchaudio.testBuildType=release` → `.github/scripts/release-asr.sh`。
 - **鍵の作り方**（一度だけ。リポジトリの外で作業し、キーストアをコミットしない）:
 
