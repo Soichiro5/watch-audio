@@ -42,7 +42,7 @@
 | Tile・コンプリケーション（#41） | ✅ クローズ（実機確認は #59・#60） | Wear OS はエミュレータで Tile・コンプリケーションの表示とタップでの録音開始を確認。watchOS は WidgetKit のコンプリケーション（録音中・一時停止・停止中）の描画と、`watchaudio://record` でアプリが開き録音が始まることをシミュレータで確認。詳細: [impl/ios-watchos.md §14](impl/ios-watchos.md#14-コンプリケーション41) |
 | ストレージ管理（#33） | ✅ クローズ | 保持期間（既定は無期限、文字起こし済みの音声のみ削除）、容量の内訳・空き容量警告、日単位/全削除 |
 | モデル配布サイズ（#46） | ✅ クローズ | 713 MB → 161 MB（int8 ファイルを個別取得、HTTP Range で途中再開、SHA-256 検証）。詳細: [impl/android-phone.md](impl/android-phone.md#31-ダウンロード受信のみ) |
-| release ビルド・署名（#78） | 🟡 着手（P1） | Android: R8 の release ビルドを CI で毎回作成（Wear OS の debug 入力の混入検査を含む）、エミュレータで release の起動確認と、release ビルドが既知の日本語チャンクを文字起こしして DB に保存する確認（`ReleaseAsrTest`）、署名は Actions の secret があるときだけ。iOS / watchOS: Release 構成の実機向けビルド（署名なし）を `ios.yml` の `release` ジョブで確認（[04 §7.1](04-dev-environment.md#71-android-の-release-ビルドと署名78)）。署名付きアーカイブは #35 |
+| release ビルド・署名（#78） | ✅ クローズ | Android: R8 の release ビルドを CI で毎回作成し、エミュレータで release の起動と文字起こし（`RELEASE_ASR_CHECK`）を確認。iOS / watchOS: 署名なしの Release 構成のビルド。署名は Actions の secret があるときだけ（[04 §7.1](04-dev-environment.md#71-android-の-release-ビルドと署名78)） |
 | データは端末内のみの CI 検査（#76） | ✅ クローズ（iOS の保護クラスの実際の値は #60） | 権限・バックアップ・通信箇所・依存 SDK・iOS の Info.plist/entitlements を許可リストで検査（`tools/privacy-check`）。未使用の ktor を削除。iOS/watchOS のデータにバックアップ除外と保護クラスを明示（[02 §7](02-architecture.md#7-セキュリティプライバシー)） |
 | スマホの診断ログ（#77） | ✅ クローズ | 受信・ACK・文字起こし（RTF）・モデル・途絶通知・異常終了を端末内の CSV（上限約 1 MB）に記録し、状態タブから共有シートで書き出す（本文・音声は含めない）。詳細: [impl/android-phone.md](impl/android-phone.md) §4.2 |
 
