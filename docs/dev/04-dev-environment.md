@@ -173,8 +173,8 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 
 SQLite（bundled ドライバ）を開くテストは `src/sqliteTest` に置く（`watchaudio.kmp.sqlite-tests` プラグイン）。`jvmTest`・`iosTest`・`androidDeviceTest` から共有され、JVM・iOS シミュレータ・Android 端末/エミュレータで実行される。Android のホストテスト（`testAndroidHostTest`）では実行しない: Android 版の `sqlite-bundled` は Android の ABI 向けネイティブライブラリしか含まず、ホストの JVM では読み込めないため。
 
-- shared/db（`LocalStoreTest`・`StorageQueriesTest`）と shared/pipeline（`IngestorTest`・`TranscriptionPipelineTest`・`StorageManagerTest`）: JVM・iOS シミュレータ・Android 端末/エミュレータ。
-- shared/ui（`GapAlertEvaluatorTest`）: JVM・iOS シミュレータ（`watchaudio.kmp.sqlite-tests-jvm-ios`）。Compose Multiplatform のリソースプラグインが KMP ライブラリの Android デバイステスト用バリアントを構成できないため、Android 端末では実行しない。
+- shared/db（`LocalStoreTest`・`StorageQueriesTest`）と shared/pipeline（`IngestorTest`・`TranscriptionPipelineTest`・`StorageManagerTest`・`ChunkIntakeTest`・`TranscriptionRunTest`・`GapAlertEvaluatorTest`）: JVM・iOS シミュレータ・Android 端末/エミュレータ。
+- shared/ui の `src/sqliteTest`（今はテスト用の `TempDir` だけ）: JVM・iOS シミュレータ（`watchaudio.kmp.sqlite-tests-jvm-ios`）。Compose Multiplatform のリソースプラグインが KMP ライブラリの Android デバイステスト用バリアントを構成できないため、Android 端末では実行しない。途絶アラートの `GapAlertEvaluatorTest` は #134 で shared/pipeline に移り、Android 端末でも実行される。
 - shared/ui の `ViewModelTest`・`AppUiTest` は JVM のみ（`Dispatchers.Main` に Swing、描画にデスクトップの Skia を使うため）。iOS では `src/iosTest` の `IosPlaybackTest` が実際の `IosAppServices` で同じ流れ（タイムライン・検索 → 再生の準備）を確かめる。Kotlin/Native のテスト実行ファイルはアプリのプロセスではなく `AVAudioPlayer.play()` が false を返すため、再生が進むことはアプリをホストにした XCTest（`apps/ios/Tests/PlaybackTests`）で確かめる。Kotlin/Native のテストはメインスレッドで動き、`Dispatchers.Main` はメインのランループが回るときだけ進むので、待ち合わせ中にランループを回している（`IosPlaybackFixture.pumpMainRunLoop`）。
 
 手元での実行:
@@ -209,7 +209,7 @@ phone ジョブは `android.yml` と同じキャッシュ（`tools/harness/model
 ### 6.2 1 回の計装テストでは確かめられないもの（`phone-scenarios.sh`）
 
 - **権限の拒否（#32）**: 権限を取り消すとアプリのプロセスが終了するため、計装テストの中ではリセットできない。インストール直後（権限が一度も付与されていない状態）に `am instrument -e scenario permission-denied` で最初に実行する。
-- **強制終了からの再開（#20）**: 計装テストは強制終了されるプロセスの中で動くため、3 段階に分ける。① `ResumeAfterKillTest#seed` が参照音声のチャンクを 8 件保存（文字起こしは要求しない）、② スクリプトがアプリを起動（起動時に未処理チャンクの処理を要求）し、`TranscriptionWorker` のログに最初の `transcribed chunk` が出たら `adb shell am force-stop app.watchaudio`、③ `ResumeAfterKillTest#verify` が再起動後に全件の完了を待ち、各チャンクの発話が重複なく揃っていること・強制終了時に処理中だったチャンクの試行回数が 2 以上であることを確認する（強制終了の直後に JobScheduler がアプリを起こして処理を再開し、③ の計装テストの開始でもう一度中断されることがあるため。2026-10-11、main の run 38138582342 で発生）。
+- **強制終了からの再開（#20）**: 計装テストは強制終了されるプロセスの中で動くため、3 段階に分ける。① `ResumeAfterKillTest#seed` が参照音声のチャンクを 8 件保存（文字起こしは要求しない）、② スクリプトがアプリを起動（起動時に未処理チャンクの処理を要求）し、アプリの診断ログ（`files/diagnostics/diagnostics.csv`。debug ビルドなので `run-as` で読む）に ① のセッションのチャンクの最初の `transcription_finished` が出たら `adb shell am force-stop app.watchaudio`。強制終了の時点で `transcription_started` だけあって `_finished` の無いチャンクを中断したチャンクとする（強制終了後に JobScheduler が起こしたプロセスの記録は、次の `app_start` 以降を除いて数えない）。logcat の文言は見ないので、ログの文言を変えても CI は壊れない（#134）、③ `ResumeAfterKillTest#verify` が再起動後に全件の完了を待ち、各チャンクの発話が重複なく揃っていること・強制終了時に処理中だったチャンクの試行回数が 2 以上であることを確認する（強制終了の直後に JobScheduler がアプリを起こして処理を再開し、③ の計装テストの開始でもう一度中断されることがあるため。2026-10-11、main の run 38138582342 で発生）。
 - **診断ログと前回の終了理由（#77）**: 同じく 3 段階。① `DiagnosticsScenarioTest#receive` が参照音声 1 文のチャンクを時計と同じフレームにして `ChunkReceiver.store` に渡し（`chunk_received` が記録され、受信時と同じく文字起こしが要求される）、本番のワーカーが文字起こしを終えるまで待つ、② スクリプトが `am start` でアプリを起動し、3 秒後に `adb shell am force-stop app.watchaudio`（前後の端末時刻を記録）、③ `DiagnosticsScenarioTest#verify` が次のプロセスで、ログに ① のチャンクの各イベント・この起動の `app_start`・強制終了の時刻に当たる `previous_exit` があることを確認し、状態タブの「診断ログを書き出す」を押して共有シート（`ChooserActivity`）が開くこと・書き出した CSV にログの行があり文字起こし本文がないことを確かめる。書き出した CSV はスクリプトが `run-as` で `scenario-logs/diagnostics-export.csv` に取り出す。
 
 手元で同じことをする場合（KVM のある環境、`tools/harness/download-models.sh` 済み）:

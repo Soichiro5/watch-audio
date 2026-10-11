@@ -69,7 +69,7 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
 | すべてのデータを削除 | ボタン → 説明と入力欄が開き、「削除」と**入力したときだけ**「すべて削除する」が押せる。全チャンク・文字起こし・マーク・音声ファイル（DB から参照されない残骸も含む）を削除し、`VACUUM` で DB ファイルを縮める。設定（`app_setting`）は残す |
 
 - 破壊的な操作はすべて**アプリ内の確認ステップ**（システムダイアログは使わない）を経る。確認状態は ViewModel（`StatusViewModel.storageActions`、`DayViewModel.deletion`）が持ち、確認前の `confirm*` 呼び出しは何もしない。
-- 自動適用: Android は `TranscriptionWorker`（1 回限り・定期の両方）の文字起こしの後、iOS は `IosAppGraph.runPipeline`（前面実行と BGProcessingTask の両方）の後に `applyRetention()` を呼ぶ。モデル未準備で文字起こしをスキップした回でも適用する。
+- 自動適用: 文字起こし 1 回分の共通処理 `TranscriptionRun`（`shared/pipeline`。Android は `TranscriptionWorker` の 1 回限り・定期の両方、iOS は前面実行と BGProcessingTask の両方から呼ぶ）が、文字起こしの後に `applyRetention()` を呼ぶ。モデル未準備で文字起こしをスキップした回でも適用する。
 - 削除の順序: 保持期間の削除は「ファイル削除 → DB に `audio_purged_at` を記録」。途中で落ちても、次回の実行で（ファイルが無くても）記録される。日単位の削除も「ファイル → 行」の順で、中断しても行が残るのでもう一度削除できる。
 
 ### 1.5 途絶アラートの判定と設定（#43）
@@ -80,7 +80,7 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
   - `QuietHours`（分単位・日付またぎ可。既定 23:00–7:00 で有効）。`contains` / `endOf`（おやすみ時間の終了時刻。DST はタイムゾーン変換に任せる）。
   - `gapAlertAt(lastEndReason, lastReceivedAt, settings, tz)`: 通知すべき時刻。最新チャンクが停止理由付き（`endReason.startsGap`）・データなし・通知オフなら null。通常は最終受信 + 10 分、それがおやすみ時間内なら終了時刻。iOS はこの時刻に通知を予約する。
   - `gapAlertDecision(…, now, alertedFor)`: 定期チェック用（Android）。`None` / `Wait(at)` / `Notify(lastReceivedAt)`。10 分**超**で通知、`now` がおやすみ時間内なら終了まで待つ、同じ途絶（同じ `lastReceivedAt`）には 1 回だけ。
-- `alert/GapAlertEvaluator`: `LocalStore` から最新チャンクの `endReason`・最終受信・設定を読んで上を適用。通知文「録音が届いていません（最後の受信: HH:mm）。Watch を確認してください」も作る。
+- `GapAlertEvaluator`: `LocalStore` から最新チャンクの `endReason`・最終受信・設定を読んで上を適用。判定（`GapAlert.kt`）とあわせて、バックグラウンド処理からも使うので UI ではない `shared/pipeline` の `app.watchaudio.core.alert` にある（#134）。通知文「録音が届いていません（最後の受信: HH:mm）。Watch を確認してください」は UI の文字列なので `shared/ui` の `alert/GapAlertText` が作る。
 - 設定は状態タブの「通知」カードで変更（時刻は 1 時間単位のメニュー）。変更すると `AppServices.gapAlertSettingsChanged()` で各プラットフォームに再評価させる。
 - 状態タブの「文字起こしのタイミング」カード（#75）: スイッチ「充電中のみ文字起こしする」（既定オフ。`SettingsViewModel.setTranscribeOnlyWhileCharging` → `AppServices.transcriptionSettingsChanged()` で各プラットフォームが予約を見直す）と、オフのときの電池駆動での処理の説明（残量 50% 以上・省電力でない間・1 時間に録音 10 分ぶんまで・熱いときは休む）。方針は [02 §6.3](../architecture/02-architecture.md#充電していないときの処理方針75)。文字起こしが方針で止まっていて未処理のチャンクがあると、「文字起こしモデル」カードに理由（`ProcessingStatus.paused` → `Strings.transcriptionPaused`）を出す。「今すぐ文字起こし」は電池の条件を外して実行する（発熱の条件は外さない）。
 
@@ -100,7 +100,7 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
 
 ### 1.7 設定の保存
 
-`settings/AppSettings.kt`。`LocalStore` の key-value テーブル `app_setting`（shared/db のマイグレーション 2）に保存するので、DB と同じく端末内のみ・バックアップ対象外。
+`AppSettings`（`shared/pipeline` の `app.watchaudio.core.settings`。文字起こしの実行や途絶アラートも読むので UI モジュールの外に置く、#134）。`LocalStore` の key-value テーブル `app_setting`（shared/db のマイグレーション 2）に保存するので、DB と同じく端末内のみ・バックアップ対象外。
 
 | キー | 意味 | 既定 |
 | --- | --- | --- |
@@ -137,6 +137,7 @@ flowchart LR
 ```
 
 - プラットフォームとの契約は `AppServices`（`store`, `audioRoot`, `storage`, `status`, `requestTranscription()`, `play()`, `stopPlayback()`, `downloadModels(allowMetered)`, `modelSetup`, `permissions` / `permissionStatus()` / `requestPermission()` / `openAppSettings()`, `gapAlertSettingsChanged()`, `transcriptionSettingsChanged()`）。追加分はすべてデフォルト実装あり（権限なし・`DOWNLOAD`・no-op）。iOS は `downloadModels` で OS にモデルのインストールを依頼する。
+- `status` の型 `ProcessingStatus` / `ModelState`、設定 `AppSettings`、途絶アラートの判定はバックグラウンド処理（文字起こしの実行・通知）も使うので、UI ではない `shared/pipeline` にある（`app.watchaudio.core.pipeline` / `.settings` / `.alert`、#134）。UI はそれを import して使う。
 - 計算はすべて UI から独立した純粋関数（`logic/`）で、`commonTest` でテストしている。
 - 時刻表示は端末のタイムゾーン（`TimeZone.currentSystemDefault()`、kotlinx-datetime）。チャンクの `timeZone` も DB に保存されているが、表示には使っていない。
 
@@ -166,9 +167,10 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 | テスト | 内容 |
 | --- | --- |
 | `commonTest/…/DayTimelineTest` ほか | タイムライン・カバー率・欠損理由、文字起こしリストのグループ化（削除済み音声は再生不可）、スニペット解析、日付/時刻・容量の書式、受信状況、保持期間変更の確認要否・「削除」入力の判定（`StorageLogicTest`） |
-| `commonTest/…/GapAlertTest`, `AppSettingsTest` | おやすみ時間（日付またぎ・DST）、通知時刻、定期チェックの判定（1 回だけ・おやすみ時間中は待つ・停止理由付きは通知しない）、設定の保存形式と不正値 |
+| `shared/pipeline` の `commonTest/…/GapAlertTest`, `AppSettingsTest` | おやすみ時間（日付またぎ・DST）、通知時刻、定期チェックの判定（1 回だけ・おやすみ時間中は待つ・停止理由付きは通知しない）、設定の保存形式と不正値 |
+| `commonTest/…/GapAlertTextTest` | 途絶アラートの通知文 |
 | `jvmTest/…/ViewModelTest` | 一時ファイルの実 `LocalStore` + 一時ディレクトリの音声 + テストディスパッチャで、日付移動・変更時の再読み込み・周期更新・再試行・検索→該当日へ移動・受信途絶の警告、容量表示と保持期間の確認・適用・空き容量警告、「削除」入力による全削除、確認付きの日単位削除、削除済み音声の発話が再生されないこと、設定の保存、オンボーディングのステップ・同意必須・権限要求・拒否時に設定画面を開き戻ったら読み直す（`refusedPermissionLeadsToTheSystemSettingsAndIsReReadOnReturn`）、診断ログの書き出しはボタンでのみ依頼し結果（空・失敗）を表示する（`exportingDiagnosticsAsksThePlatformOnlyOnTapAndReportsTheOutcome`） |
-| `jvmTest/…/GapAlertEvaluatorTest` | 実 DB 上で途絶アラートの判定・通知文・設定の反映 |
+| `shared/pipeline` の `sqliteTest/…/GapAlertEvaluatorTest` | 実 DB 上で途絶アラートの判定・設定の反映 |
 | `jvmTest/…/AppUiTest` | Skia でヘッドレス描画し、(1) タイムライン→再生→検索→結果を開く→状態→おやすみ時間の切り替え→ストレージ（「削除」を入力して全削除）→「診断ログを書き出す」、(2) オンボーディング（同意しないと次へ進めない→通知許可→モデルのダウンロード選択→はじめる→タブ画面→説明をもう一度）、(3) 通知を拒否したときの「設定を開く」（`onboarding-permission-denied.png`）を操作。スクリーンショットを `shared/ui/build/screenshots/` に出力（CI の成果物 `ui-screenshots`） |
 | `apps/android/src/androidTest/…/PlaybackTest` | エミュレータ上の実アプリで、実際の AAC を MediaPlayer が指定位置から再生すること、検索 → 結果を 1 タップ → 発話の位置から再生されることを確認（CI `emulator.yml`、[android-phone.md §6.1](android-phone.md#61-実機なしlinux--ci)） |
 | `apps/android/src/androidTest/…/PermissionDeniedTest` | エミュレータでオンボーディングから通知の許可を求め、システムのダイアログで拒否 → 理由と「設定を開く」が表示され、押すとアプリの設定画面が開く（インストール直後に `phone-scenarios.sh` から実行。スクリーンショット `onboarding-permission-denied.png` ほか） |
@@ -176,7 +178,7 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 | `shared/ui/src/iosTest/…/IosPlaybackTest` | iOS シミュレータで、本番の `Ingestor` で取り込んだ前日の AAC チャンクについて、`IosAppServices.play` 直接・共有 UI（`App`）で「前の日」→ 発話をタップ・検索 → 結果を 1 タップ、のそれぞれで「HH:mm から再生中」が表示され、そのチャンクのファイルが AVAudioPlayer に指定位置（±0.2 秒）・正しい長さで用意されることを確認（CI `ios.yml` の Shared tests、`PLAYBACK_CHECK` 行。`./gradlew iosSimulatorArm64Test`）。テスト実行ファイルはアプリではなく `play()` が false を返すので、再生開始（`started=`）は記録のみ |
 | `apps/ios/Tests/PlaybackTests/HostedPlaybackTests.swift` | iOS アプリをホストにした XCTest で、アプリの本物の `IosAppServices`（`IosAppGraph.shared.services`）が AAC 16 kHz の音声を指定位置（8 秒）から再生し、2 秒後に 1 秒以上進むこと（CI `ios.yml` の「Playback in the iOS app」、`PLAYBACK_CHECK check=hosted_player` 行） |
 
-共通ロジックのテスト: `shared/pipeline` の `AudioRetentionPolicyTest`（未処理・最近の音声は消さない、無期限は何も消さない）と `StorageManagerTest`（一時ディレクトリ + 実 `LocalStore`）、`DiagnosticsLogTest`（診断ログの書式・上限での切り替え・書き出しの順序・クラッシュ行にメッセージを含めない）と `TranscriptionPipelineTest.diagnosticsGetTimingsAndErrorTypesButNeverTextOrMessages`（文字起こしの本文や例外メッセージがログに入らない）、`shared/db` の `StorageQueriesTest`（削除の連鎖・FTS・設定・マイグレーションの冪等性）。実 SQLite を使うテストは `src/sqliteTest` にあり、JVM・iOS シミュレータ・Android 端末（shared/ui の `GapAlertEvaluatorTest` は JVM と iOS シミュレータのみ）で実行される（[04-dev-environment.md §6](../dev/04-dev-environment.md#6-ci-での自動確認実機なし)）。
+共通ロジックのテスト: `shared/pipeline` の `AudioRetentionPolicyTest`（未処理・最近の音声は消さない、無期限は何も消さない）と `StorageManagerTest`（一時ディレクトリ + 実 `LocalStore`）、`DiagnosticsLogTest`（診断ログの書式・上限での切り替え・書き出しの順序・クラッシュ行にメッセージを含めない）と `TranscriptionPipelineTest.diagnosticsGetTimingsAndErrorTypesButNeverTextOrMessages`（文字起こしの本文や例外メッセージがログに入らない）、`shared/db` の `StorageQueriesTest`（削除の連鎖・FTS・設定・マイグレーションの冪等性）。実 SQLite を使うテストは `src/sqliteTest` にあり、JVM・iOS シミュレータ・Android 端末で実行される（[04-dev-environment.md §6](../dev/04-dev-environment.md#6-ci-での自動確認実機なし)）。
 
 検索のスニペット（一致箇所を `[` `]` で囲んだ文字列）は shared/db の `highlightSnippet` が作る。40 文字を超える発話は最初の一致の前後で切り詰め、切った側に `…` を付ける。検索速度は [04-dev-environment.md §5](../dev/04-dev-environment.md#5-検索の性能ベンチマーク23-72) のベンチマークで確認する。
 

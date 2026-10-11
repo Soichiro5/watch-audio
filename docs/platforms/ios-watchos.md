@@ -23,7 +23,7 @@ Apple Watch で装着中ずっと録音 → WatchConnectivity で iPhone へ（�
 | 〃 | `apps/ios/App/WatchReceiver.swift` | WCSession 受信 → Kotlin `Ingestor` → ACK 返信 |
 | 〃 | `apps/ios/App/SpeechTranscription.swift` | SpeechAnalyzer + SpeechTranscriber による文字起こし本体（モデル準備・範囲の連結・時刻付きセグメント）。Kotlin に依存しない |
 | 〃 | `apps/ios/App/SpeechAnalyzerTranscriber.swift` | 上記を Kotlin の `IosSpeechTranscriber` として公開するブリッジ |
-| iOS (Kotlin) | `shared/ui/src/iosMain/.../IosAppGraph.kt` | iOS の composition root（DB・音声置き場・Ingestor・パイプライン・BGTask） |
+| iOS (Kotlin) | `shared/ui/src/iosMain/.../IosAppGraph.kt` | iOS の composition root（DB・音声置き場・BGTask）。受信は共通の `ChunkIntake`、文字起こし 1 回分は共通の `TranscriptionRun`（`shared/pipeline`、Android と同じコード）を呼び、結果を WatchConnectivity の ACK・前面実行・BGTask に対応づける |
 | 〃 | `IosAppServices.kt` | 共有 UI 向け `AppServices` 実装（状態 Flow、AVAudioPlayer 再生、権限、モデル準備、通知設定の変更通知） |
 | 〃 | `IosPermissions.kt` | オンボーディングで求める権限（通知 `UNUserNotificationCenter`、音声認識 `SFSpeechRecognizer`）の状態取得と要求 |
 | 〃 | `IosGapAlerts.kt` | 録音の途絶アラート（#43）のローカル通知の予約・取り消し |
@@ -112,6 +112,7 @@ sequenceDiagram
 - 二重送信防止: `outstandingFileTransfers` / `outstandingUserInfoTransfers` のメタデータ `chunkId` と照合。送信済みで ACK 待ちのものは 15 分間は再送しない（`ChunkSendTracker`。送信失敗の通知を受けたものはすぐ再送対象）。
 - 再送: WCSession が activated になるたび（= アプリ起動ごと）に未 ACK の全チャンクを再送（iPhone は `duplicate` で最終 ACK を返すので安全）。`corrupt` は最大 3 回まで即再送。`rejected`（新しいスキーマ等）は保持して次回起動時に再提示。
 - iPhone 側は `session(_:didReceive:)` 内でファイルを `Application Support/WatchAudio/inbox/` に**同期的に** move してから非同期で取り込む。取り込みは `UIApplication.beginBackgroundTask` で保護。取り込み前にプロセスが落ちた inbox の残骸は次回起動時に削除（Watch が再送する）。
+- 取り込み自体は Android と共通の `ChunkIntake.receive`（#134）: manifest が読めないがチャンク ID は読めるなら `rejected`、ID も読めない・DB に書けないなら ACK なし（`nil`）。inbox のファイルは結果にかかわらずアーカイブへ移すか削除する。
 - Watch がサスペンド中に ACK が届いた場合は `.backgroundTask(.watchConnectivity)` で起こされ、`hasContentPending` が消えるまで起きている。
 
 ## 6. Kotlin ↔ Swift ブリッジ
@@ -135,18 +136,19 @@ MainViewControllerKt.MainViewController()                             // Compose
 
 - 実装は `SpeechTranscription.swift`（Speech フレームワークだけに依存）にあり、`SpeechAnalyzerTranscriber.swift` はそれを Kotlin の `IosSpeechTranscriber` として渡す薄いブリッジ。分けてあるのは、シミュレータテスト（`SpeechTests`）が Kotlin フレームワークをリンクせずに同じコードを動かせるようにするため。
 - `SpeechTranscriber(locale:transcriptionOptions: [], reportingOptions: [], attributeOptions: [.audioTimeRange])`。ロケールは `SpeechTranscriber.supportedLocale(equivalentTo: ja_JP)` で解決。`isAvailable` が false の端末ではエラー。
-- モデルは OS 管理: `installedLocales` に無ければ `AssetInventory.reserve(locale:)` → `assetInstallationRequest(supporting:)` → `downloadAndInstall()`。Kotlin 側は各実行の前に `prepareModel` で確認し、失敗したら実行しない（モデル未導入のまま全チャンクがリトライ上限に達するのを防ぐ）。状態は `ProcessingStatus.asrModel`（Downloading / Ready / Failed）。
+- モデルは OS 管理: `installedLocales` に無ければ `AssetInventory.reserve(locale:)` → `assetInstallationRequest(supporting:)` → `downloadAndInstall()`。Kotlin 側は各実行の前に `prepareModel` で確認し（共通の `TranscriptionRun` が `SpeechModel.ensureReady` として呼ぶ）、失敗したら実行しない（モデル未導入のまま全チャンクがリトライ上限に達するのを防ぐ）。失敗したチャンクがあった実行の後は状態を `Unknown` に戻し、次の実行で確認し直す（`SpeechModel.recheck`、Android と共通の扱い）。状態は `ProcessingStatus.asrModel`（Downloading / Ready / Failed）。
 - `SpeechAnalyzer(modules:)` → `analyzeSequence(from: AVAudioFile)` → `finalizeAndFinish(through:)`。結果は `transcriber.results` を別 Task で収集し、`isFinal` の各結果を 1 セグメント（`result.range` の開始・終了をミリ秒に変換）とする。
 - 入力は音声パーツのリスト。通常はチャンク 1 つ（先頭から）で、そのファイルをそのまま解析する。チャンク境界をまたぐ発話がある場合（[02 §6.3](../architecture/02-architecture.md#63-処理パイプラインphone)）は、隣のチャンクの境界付近を含む複数パーツが来るので、各ファイルを `AVAudioFile` の `processingFormat`（Float32）で読み、範囲を切り出して一時ディレクトリの 32 bit float CAF に書き出し（ファイルが短ければ無音で埋める）、その一時ファイルを解析して削除する。パーツ間でサンプルレート・チャンネル数が違うとエラーにし、共有パイプラインがそのチャンク単体で認識し直す（同じセッションのチャンクは同じ形式なので通常は起きない）。一時ファイルは最大で「チャンク + 前後 30 秒」分（16 kHz モノラルで約 23 MB）。
 - エンジン ID: `apple-speechtranscriber-ja`。言語: `ja`。
 - 実行タイミング:
+  - 1 回分の処理（中断分の回復・モデルの確認・方針つきの文字起こし・保持期間の削除・診断ログ・次の予約の判定）は Android と共通の `TranscriptionRun`。iOS は返ってきた `FollowUp` を次のように扱う: `RunAgain`（失敗して再試行回数が残っている・実行中に届いた）→ 前面ならすぐ、BGTask なら時間切れまで続けて再実行、`Paused` → 下記の再試行・再予約、`Interrupted` / `WaitForModel` → 何もしない（バックグラウンドへ移るときの予約や、モデルの準備完了時の要求に任せる）。
   - アプリが前面（scenePhase `.active`）: すぐに処理。新しいチャンク受信時も再実行。ただし Android と同じ電池と発熱の方針（[02 §6.3「充電していないときの処理方針」](../architecture/02-architecture.md#充電していないときの処理方針75)、#75）に従う: チャンクを始める前に毎回 `IosDeviceConditions.read()`（`UIDevice` の電池の状態・残量、`ProcessInfo` の低電力モード・`thermalState`。`.serious` 以上で停止）を `ProcessingPolicy` で判定し、充電していなければ残量 50% 以上・低電力モードでない間だけ、1 時間に録音 10 分ぶんまで処理する。時間で再判定する止まり方（発熱 15 分・上限の枠の終わり）なら前面にいる間だけ再試行する。状態タブの「今すぐ文字起こし」は電池の条件を外す（発熱は外さない）。設定「充電中のみ文字起こしする」も同じ（`AppSettings`）。
   - バックグラウンドへ移るとき: 前面の実行をキャンセルし、`BGProcessingTaskRequest(app.watchaudio.transcribe)` を `requiresExternalPower = true`, `requiresNetworkConnectivity = false` で予約。
   - BGProcessingTask: 同じ方針でチャンク単位に進め（外部電源が条件なので、止まるのは通常は発熱のときだけ）、期限切れハンドラでは実行中のチャンクもキャンセルして速やかに `setTaskCompleted` する。期限切れなら再予約、発熱で止まったら `earliestBeginDate` を 15 分後にして再予約。
   - 判定は診断ログの `transcription_policy`、止まった理由は状態タブの「文字起こしモデル」欄に出る。
-  - 実行は Mutex で直列化し、毎回 `recoverInterrupted()` で前回中断分（TRANSCRIBING）をキューに戻す。
+  - 実行は `TranscriptionRun` の Mutex で直列化し、毎回（モデルの確認より前に）`recoverInterrupted()` で前回中断分（TRANSCRIBING）をキューに戻す。
   - 文字起こしの後（モデル未準備で文字起こしをスキップした場合も）、同じ実行内で `StorageManager.applyRetention(shouldContinue)` により音声の保持期間を適用する（#33。文字起こし済みのチャンクの音声だけを削除）。容量表示の空き容量は `NSURLVolumeAvailableCapacityForImportantUsageKey`（取れなければ `NSFileSystemFreeSize`）、モデルサイズは OS 管理のため不明扱い（`IosStorageEnvironment`）。
-- オンボーディング / 状態タブの「モデルを準備」（`AppServices.modelSetup = OS_MANAGED`、`downloadModels()`）は、同じ Mutex の中で `ensureModel()`（= Swift の `prepareModel`）を呼んでモデルのインストールを OS に依頼し、準備できたら文字起こしを要求する。
+- オンボーディング / 状態タブの「モデルを準備」（`AppServices.modelSetup = OS_MANAGED`、`downloadModels()`）は、モデル用の Mutex の中で `ensureModel()`（= Swift の `prepareModel`）を呼んでモデルのインストールを OS に依頼し、準備できたら文字起こしを要求する（実行中の確認と同時には走らない）。
 
 ### 7.1 録音の途絶アラート（#43）
 
@@ -163,7 +165,7 @@ MainViewControllerKt.MainViewController()                             // Compose
 Android と同じ共通の `DiagnosticsLog`（`shared/pipeline`、形式・上限・記録しないものは [android-phone.md §4.2](android-phone.md#42-診断ログ77)）を `IosAppGraph.start` で開く。
 
 - 場所: `Application Support/WatchAudio/diagnostics/diagnostics.csv`（512 KB で `.1` に回す。最大約 1 MB。バックアップ対象外のディレクトリ内）。
-- 記録: `app_start`（バージョン・OS）、`chunk_received` / `chunk_rejected`（`IosAppGraph.ingest`。ACK の送信自体は Swift 側なので記録しない）、`worker_start` / `worker_stop`（`worker=foreground` / `worker=bgtask`、件数、BGTask の時間切れ）、`transcription_*`（`DiagnosticsPipelineObserver`、RTF 付き）、`retention_purge`、`model_download_start` / `model_ready` / `model_download_failed`（OS によるモデルのインストール）、`gap_alert_scheduled`（`IosGapAlerts` が予約した時刻）、`crash`。
+- 記録: `app_start`（バージョン・OS）、`chunk_received` / `chunk_rejected`（共通の `ChunkIntake`。ACK の送信自体は Swift 側なので記録しない）、`worker_start` / `worker_stop`（共通の `TranscriptionRun`。`worker=foreground` / `worker=bgtask`、件数、BGTask の時間切れ）、`transcription_*`（`DiagnosticsPipelineObserver`、RTF 付き）、`retention_purge`、`model_download_start` / `model_ready` / `model_download_failed`（OS によるモデルのインストール）、`gap_alert_scheduled`（`IosGapAlerts` が予約した時刻）、`crash`。
 - 異常終了: Kotlin の未捕捉例外は `setUnhandledExceptionHook` で型名とスタックの先頭を 1 行書いてから元のフック（終了）に渡す。Objective-C / Swift のクラッシュや OS による強制終了（メモリ・時間切れ）は記録できないので、OS のクラッシュレポート（設定 > プライバシーとセキュリティ > 解析と改善 > 解析データ、Xcode Organizer）を見る。`NSSetUncaughtExceptionHandler` は C 関数ポインタとグローバル状態が要るため使っていない。
 - 書き出し: 状態タブの「診断ログを書き出す」→ `IosAppServices.exportDiagnostics()` が一時ディレクトリ（`tmp/diagnostics-export/`、前回分は削除）に 1 つの CSV をまとめ、`UIActivityViewController`（共有シート）を最前面の画面から表示する。送り先はユーザーが選ぶ（AirDrop・ファイルに保存など）。自動では送らない。
 

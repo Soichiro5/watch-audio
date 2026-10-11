@@ -9,14 +9,14 @@
 | クラス | 場所（`apps/android/src/main/kotlin/app/watchaudio/android/`） | 役割 |
 | --- | --- | --- |
 | `WatchAudioApp` | `WatchAudioApp.kt` | `Application`。起動時に `AppGraph` を作り、定期ジョブ登録・残件の処理要求・（Wi-Fi 時の）モデル取得を行う |
-| `AppGraph` | `AppGraph.kt` | プロセス内で 1 つの依存グラフ。`LocalStore`（`files/watch-audio.db`）、音声ルート（`files/audio`）、`Ingestor`、`ModelManager`、`AndroidSherpaTranscriber`、`TranscriptionPipeline`、`AndroidAppServices` を保持。`startup` ジョブで `pipeline.recoverInterrupted()` を **プロセス起動ごとに 1 回**実行 |
+| `AppGraph` | `AppGraph.kt` | プロセス内で 1 つの依存グラフ。`LocalStore`（`files/watch-audio.db`）、音声ルート（`files/audio`）、`Ingestor`、`ModelManager`、`AndroidSherpaTranscriber`、`TranscriptionPipeline`、共通の `ChunkIntake`（受信の入口）と `TranscriptionRun`（文字起こし 1 回分）、`AndroidAppServices` を保持。`startup` ジョブでも `pipeline.recoverInterrupted()` を実行する（起動時の「未処理があれば実行を要求する」判定が中断分も数えるため。各実行の最初にも `TranscriptionRun` が行う） |
 | `AndroidAppServices` | `AndroidAppServices.kt` | 共通 UI 向け契約 `AppServices` の Android 実装。`status`（モデル状態・処理中・最終チャンク受信時刻・メッセージ）、`requestTranscription()`（WorkManager）、`play/stopPlayback`（`MediaPlayer` でオフセットへシーク）。追加で `downloadModels(allowMetered)`、権限（Android 13+ の `POST_NOTIFICATIONS`。`permissionStatus` / `requestPermission`）、`gapAlertSettingsChanged()` |
 | `ChunkReceiverService` | `transfer/` | `WearableListenerService`。`/watch-audio/chunk/` 配下のチャネルを受け、処理を `ChunkReceiver` に渡す |
-| `ChunkReceiver` / `FrameReader` | `transfer/` | `ChunkFrame` を解析 → 音声を `cacheDir/incoming/*.part` にストリーム保存 → `Ingestor.ingest` → `MessageClient` で `ChunkAck` を返す |
+| `ChunkReceiver` / `FrameReader` | `transfer/` | `ChunkFrame` のヘッダ（manifest JSON）を読む → 共通の `ChunkIntake.decode` → 音声を `cacheDir/incoming/*.part` にストリーム保存 → `ChunkIntake.accept`（`Ingestor.ingest`・診断ログ・文字起こしの要求。iOS と共通）→ `MessageClient` で `ChunkAck` を返す |
 | `AndroidSherpaTranscriber` | `asr/` | sherpa-onnx（AAR の Kotlin API）。Silero VAD → ReazonSpeech Zipformer int8。認識器は初回に読み込み、ワーカー 1 回分の間は使い回す。入力は音声パーツのリスト（チャンク単体、または境界付近の隣のチャンクの音声と連結したもの。[02 §6.3](../architecture/02-architecture.md#63-処理パイプラインphone)）で、各ファイルを `AudioDecoder` でデコードして `concatenateParts` で切り出し・連結する |
 | `AudioDecoder` | `asr/` | `MediaExtractor` + `MediaCodec` で m4a(AAC)/ogg(Opus) を 16 kHz モノラル float PCM に。ダウンミックスと線形リサンプルは `shared/pipeline` の `Pcm.kt`（共通コード・単体テストあり） |
 | `ModelManager` / `ModelDownloadWorker` / `ModelManifest` / `ModelDownloader` | `asr/` | モデルの用意（adb サイドロード取り込み・ファイル単位のダウンロード（途中再開・SHA-256 検証）・原子的な配置） |
-| `TranscriptionScheduler` / `TranscriptionWorker` / `AndroidDeviceConditions` | `work/` | WorkManager による文字起こしの起動、電池と発熱の方針（端末の状態の読み取り、§4.0） |
+| `TranscriptionScheduler` / `TranscriptionWorker` / `AndroidDeviceConditions` | `work/` | WorkManager による文字起こしの起動。ワーカーは共通の `TranscriptionRun` を呼び、その `FollowUp` を WorkManager の予約に対応づけるだけ（§4）。電池と発熱の方針の端末の状態の読み取り（§4.0） |
 | `GapAlertMonitor` / `GapAlertWorker` | `alert/` | 録音の途絶アラート（#43）。判定は共通の `GapAlertEvaluator`、ここでは WorkManager でのチェックと通知の表示のみ（§4.1） |
 | `MainActivity` | `MainActivity.kt` | `App(services)` をホスト。オンボーディングの権限要求用に Activity Result の launcher を `AndroidAppServices` に渡す |
 
@@ -27,7 +27,7 @@
 - `shared/pipeline/Pcm.kt`: `downmixToMono` / `pcm16ToFloat` / `LinearResampler`（ストリーミング）/ `concatenateParts`（パーツの範囲を切り出して連結。足りない分は無音）。
 - `shared/pipeline/BoundaryJoin.kt`: チャンク境界をまたぐ発話を 1 つとして認識するための連結範囲の決定と、結果のチャンクへの振り分け（#45）。
 - `shared/db/StoreTransaction.previousInSession` / `nextInSession` / `replaceSegments`: 同じセッションの隣のチャンクと、範囲内のセグメントの置き換え（境界の再認識用）。
-- `shared/protocol/ChunkFrame.readManifest`: フレームヘッダ（4 byte 長 + manifest JSON）の読み取り。不正なら `IllegalArgumentException`。
+- `shared/protocol/ChunkFrame.readManifest` / `readManifestJson`: フレームヘッダ（4 byte 長 + manifest JSON）の読み取り（後者は JSON を解釈せずに返し、読めない manifest にも返答できるようにする）。長さが不正なら `IllegalArgumentException`。
 - `shared/db/StoreTransaction.lastReceivedAt()`: 最後にチャンクを受信した時刻（連続性表示用）。
 
 ## 2. データフロー
@@ -44,19 +44,19 @@ sequenceDiagram
   W->>S: ChannelClient /watch-audio/chunk/<chunkId>
   S->>R: receive(channel)
   R->>R: 近接ノード(isNearby)か確認
-  R->>R: ChunkFrame 読み取り → cacheDir/incoming/*.part
-  R->>I: ingest(manifest, file)（サイズ・SHA-256 検証、files/audio へ移動）
+  R->>R: ChunkFrame 読み取り → ChunkIntake.decode → cacheDir/incoming/*.part
+  R->>I: ChunkIntake.accept → ingest(manifest, file)（サイズ・SHA-256 検証、files/audio へ移動）
   I-->>R: ChunkAck(STORED / DUPLICATE / CORRUPT / REJECTED)
-  R->>WM: STORED なら文字起こしを要求
+  R->>WM: STORED なら文字起こしを要求（ChunkIntake の onStored）
   R->>W: MessageClient /watch-audio/ack（ChunkAck JSON）
   WM->>T: 実行
-  T->>I: processPending { !isStopped } → transcript_segment / FTS
+  T->>I: TranscriptionRun.run（processPending { !isStopped }）→ transcript_segment / FTS
 ```
 
 - 文字起こしは古い順。境界に発話がある場合は、文字起こし済みの隣のチャンクの境界付近（最大 30 秒）も一緒に認識し、隣のセグメントの該当部分を置き換える（詳細と残る制約は [02 §6.3](../architecture/02-architecture.md#63-処理パイプラインphone)）。隣の音声も `files/audio` から読むので、追加のファイルや権限は不要。
 
-- **ACK を返さないケース**: フレームが壊れている（長さ・JSON・manifest 不正）、転送が途中で切れた、DB 例外。Watch は ACK が来ないチャンクを保持して再送する。取り込みは chunkId で冪等なので、再送されても `DUPLICATE` が返るだけ。
-- `CORRUPT`（サイズ/ハッシュ不一致）・`REJECTED`（新しいスキーマ）は ACK として返す（`isFinal=false` なので Watch は保持・再送）。
+- **ACK を返さないケース**: フレームが壊れている（長さの不正）、manifest が読めずチャンク ID も読めない、転送が途中で切れた、DB 例外。Watch は ACK が来ないチャンクを保持して再送する。取り込みは chunkId で冪等なので、再送されても `DUPLICATE` が返るだけ。
+- `CORRUPT`（サイズ/ハッシュ不一致）・`REJECTED`（新しいスキーマ、または manifest が読めないがチャンク ID は読める）は ACK として返す（`isFinal=false` なので Watch は保持。`REJECTED` は 6 時間後に再送）。manifest が読めないときの `REJECTED` は iOS と同じ扱い（#134。以前の Android は ACK を返さず、Watch が 3 分ごとに再送していた）。
 - 音声は `audio.sizeBytes + 1` バイトまでしか書かない（暴走ストリームでディスクを埋めない。超過分は取り込み時のサイズ検証で `CORRUPT`）。
 - **クラウド経由を使わない**: Data Layer の `DataClient` は使わない。さらに、送信元ノードが `isNearby`（Bluetooth / Wi-Fi で直接接続）でない場合は受信せず ACK も送らない。
 - 受信は同時 2 本まで（`Semaphore`）。処理はアプリ全体のスコープで行うので、`WearableListenerService` が破棄されても途中の取り込みは続く。
@@ -122,19 +122,19 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 | `gap-alert-periodic`（15 分ごと） | アプリ起動時に登録（`KEEP`） | なし | §4.1（タイマーの取りこぼし・おやすみ時間明けの保険） |
 
 - 要求時の方針: 待機中のジョブがあれば何もしない（`KEEP` 相当）。ただし待機中のジョブが方針による遅延付き（発熱・上限）なら置き換え、新しいチャンクのたびに条件を見直す（処理できなければすぐ終わる）。**実行中なら後続を 1 つだけ追加**（`APPEND_OR_REPLACE`。実行中に `REPLACE` するとチャンクの途中で止まるので使わない）。実行中のジョブが新着チャンクを見逃しても後続が拾う。追加は最大 1 つなので鎖は伸びない。
-- 実行後にまだ保留中のチャンクがあれば（実行中に届いた、失敗して再試行回数が残っている）、もう一度要求する。方針で止まった場合は §4.0 のとおり予約する。WorkManager に停止された場合は WorkManager 自身が再スケジュールする。
+- 1 回の実行の中身（中断分の回復・モデルの確認・方針つきの文字起こし・保持期間の削除・診断ログ・次の予約の判定）は iOS と共通の `TranscriptionRun`（`shared/pipeline`、[02 §6.3](../architecture/02-architecture.md#63-処理パイプラインphone)）。ワーカーはその `FollowUp` を次のように対応づける: `RunAgain`（まだ保留中のチャンクがある: 実行中に届いた、失敗して再試行回数が残っている）→ もう一度要求、`Paused` → §4.0 のとおり予約、`Interrupted`（WorkManager に停止された）→ WorkManager 自身が再スケジュール、`WaitForModel` → 下記。
 - 設定「充電中のみ文字起こしする」を変えると（`AppServices.transcriptionSettingsChanged` → `TranscriptionScheduler.settingsChanged`）、待機中のジョブを新しい制約で置き換える。
 - 音声の保持期間（#33）は文字起こしの後に適用する。文字起こし済みのチャンクだけが対象なので、モデル未準備で文字起こしをスキップした回でも適用する。失敗はログのみ（次回の実行で再試行）。容量表示用の `AndroidStorageEnvironment` は `files/models` の合計と `StatFs(filesDir).availableBytes` を返す。
-- モデル未準備ならスキップ（ダウンロード中のみ `retry`、それ以外は成功扱いで終了し、モデル準備完了時に改めて要求）。チャンクを `FAILED` にして試行回数を浪費しないため、ワーカー側で事前に確認する。
-- 1 回限りジョブと定期ジョブが重なってもパイプラインは `Mutex` で 1 本ずつ。各実行の終わりに認識器を解放してメモリを返す（次回は再読み込み、数秒）。
-- 中断耐性: 処理中のチャンクは `TRANSCRIBING` になり、プロセスが殺されても次回起動時の `recoverInterrupted()` で `RECEIVED` に戻る。ワーカーは `AppGraph.startup` の完了を待ってから処理する。エミュレータで `am force-stop` を挟んで確認済み（§6.1 の `ResumeAfterKillTest`）。
-- ログ: ワーカーはチャンクごとに `transcribing chunk <id>` / `transcribed chunk <id>`（失敗時 `failed chunk <id>`）を出す（`TranscriptionPipeline.Observer`。ID のみで文字起こし本文は出さない）。
+- モデル未準備ならスキップ（ダウンロード中のみ `retry`、それ以外は成功扱いで終了し、モデル準備完了時に改めて要求）。チャンクを `FAILED` にして試行回数を浪費しないため、実行の最初に確認する（`SpeechModel.ensureReady`: モデルのファイルがそろっているか）。失敗したチャンクがあった実行の後は `ModelManager.recheck()` でファイルを確認し直し、消えていれば状態を `Missing` にする（iOS と共通の扱い）。
+- 1 回限りジョブと定期ジョブが重なっても実行は `TranscriptionRun` の `Mutex` で 1 本ずつ。各実行の終わりに認識器を解放してメモリを返す（次回は再読み込み、数秒）。
+- 中断耐性: 処理中のチャンクは `TRANSCRIBING` になり、プロセスが殺されても各実行の最初（と起動時）の `recoverInterrupted()` で `RECEIVED` に戻る。ワーカーは `AppGraph.startup` の完了を待ってから処理する。エミュレータで `am force-stop` を挟んで確認済み（§6.1 の `ResumeAfterKillTest`）。
+- ログ: 進捗は診断ログ（§4.2）の `transcription_started` / `_finished` / `_failed`。logcat にもチャンクごとに `transcribing chunk <id>` / `transcribed chunk <id>`（失敗時 `failed chunk <id>`）を出すが、これは `adb logcat` で見る人のためだけで、CI のスクリプトは診断ログを読む（文言を変えてもよい）。ID のみで文字起こし本文は出さない。
 
 ### 4.0 電池と発熱の方針（#75）
 
 方針と目標値は [02 §6.3「充電していないときの処理方針」](../architecture/02-architecture.md#充電していないときの処理方針75)。Android での実装:
 
-- **判定**: `TranscriptionWorker` は `AppGraph.gatedTranscription()`（`PolicyGatedTranscription`）でパイプラインを回す。チャンクを始める前に毎回 `AndroidDeviceConditions.read()` で端末の状態を読み、`ProcessingPolicy.decide` に渡す。止める判定ならそのチャンクを始めずに終える（処理中のチャンクは最後まで処理する）。
+- **判定**: `TranscriptionRun` は実行ごとに `AppGraph` の `PolicyGatedTranscription`（その時点の端末の状態・方針・時計のテスト用フックを使う）でパイプラインを回す。チャンクを始める前に毎回 `AndroidDeviceConditions.read()` で端末の状態を読み、`ProcessingPolicy.decide` に渡す。止める判定ならそのチャンクを始めずに終える（処理中のチャンクは最後まで処理する）。
 - **端末の状態**（権限不要）: 外部電源と残量はスティッキーブロードキャスト `ACTION_BATTERY_CHANGED`（`EXTRA_PLUGGED` が 0 以外なら充電中、`EXTRA_LEVEL / EXTRA_SCALE`）、バッテリーセーバーは `PowerManager.isPowerSaveMode`、発熱は `PowerManager.getCurrentThermalStatus()`（minSdk 29 なので常に使える。`THERMAL_STATUS_MODERATE` 以上で停止、EMERGENCY / SHUTDOWN は CRITICAL 扱い）。
 - **止まった後の予約**（保留中のチャンクがあるとき）: 発熱 → `transcription` を 15 分後に（`requestLater`）。1 時間の上限 → `transcription` を枠の終わりに + `transcription-on-charge`。残量不足・省電力・充電中のみ → `transcription-on-charge`（充電開始で実行）。いずれも新しいチャンクの受信でも再判定する。
 - **1 時間の上限の使用量**は `app_setting` の `transcription.battery_budget.window_start` / `.used_ms` に保存（実行の終わりにまとめて書く）。
@@ -145,7 +145,7 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 
 ### 4.1 録音の途絶アラート（#43）
 
-「録音しているはずなのにチャンクが届かない」ときにローカル通知を出す。判定ロジックは shared/ui の共通コード（`logic/GapAlert.kt` の `gapAlertAt` / `gapAlertDecision`、DB から読む `alert/GapAlertEvaluator`）で、iOS と共通・単体テストあり。
+「録音しているはずなのにチャンクが届かない」ときにローカル通知を出す。判定ロジックは UI ではない共通コード `shared/pipeline` の `core/alert`（`GapAlert.kt` の `gapAlertAt` / `gapAlertDecision`、DB から読む `GapAlertEvaluator`）で、iOS と共通・単体テストあり。通知の文言は UI の文字列なので `shared/ui` の `GapAlertText`。
 
 - 条件: 最新チャンク（開始時刻順）の `endReason` が継続（`ROTATION` / `MARK`）で、最終受信（`MAX(received_at)`）から **10 分超**何も届いていない。`user_stop` / `charging` / `off_body` など停止理由付きで終わっていれば録音停止は既知なので通知しない。
 - おやすみ時間（既定 23:00–7:00、状態タブで変更・無効化可）の間は通知せず、終了時刻まで待つ。通知自体のオン/オフも状態タブ。
@@ -168,12 +168,12 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 | `app_start` | `WatchAudioApp.onCreate` | `version=0.1.0 sdk=35 device=Pixel 8` |
 | `previous_exit` | 起動時に `ApplicationExitInfo`（Android 11+）を読み、前回以降の終了を 1 回ずつ（`PreviousExits`、既読の時刻は SharedPreferences `diagnostics`） | `reason=LOW_MEMORY status=0 importance=400 pss_kb=…`（Java のクラッシュは説明文を省き、下の `crash` 行で見る） |
 | `crash` | 未捕捉の例外（`CrashRecorder` が既定のハンドラを包み、1 行書いてから元のハンドラに渡す） | `thread=main type=java.lang.IllegalStateException causes=… at=フレーム < フレーム …` |
-| `chunk_received` / `chunk_rejected` | `ChunkReceiver`（取り込み結果、近接でないノード・壊れたフレーム・転送の中断・取り込み失敗） | `chunk=… status=STORED audio_ms=300000 bytes=…` |
+| `chunk_received` / `chunk_rejected` | 共通の `ChunkIntake`（取り込み結果、読めない manifest、取り込み失敗）と `ChunkReceiver`（近接でないノード・壊れたフレーム・転送の中断） | `chunk=… status=STORED audio_ms=300000 bytes=…` |
 | `ack_sent` / `ack_failed` | `ChunkReceiver.sendAck`（試行ごと） | `chunk=… status=STORED attempt=1` |
-| `worker_start` / `worker_stop` | `TranscriptionWorker`（件数、モデル未準備でのスキップ、OS による停止と `stop_reason`） | `worker=transcription transcribed=3 failed=0` |
+| `worker_start` / `worker_stop` | 共通の `TranscriptionRun`（件数、モデル未準備でのスキップ）。`TranscriptionWorker` が試行回数と OS による停止・`stop_reason` を足す | `worker=transcription transcribed=3 failed=0` |
 | `transcription_started` / `_finished` / `_failed` | `TranscriptionPipeline.Observer`（共通の `DiagnosticsPipelineObserver`） | `chunk=… audio_ms=300000 elapsed_ms=21000 rtf=0.07`（失敗時は `error=例外の型`） |
 | `transcription_policy` | `PolicyGatedTranscription`（各実行の最初の判定と、止めたときの理由。§4.0、#75） | `decision=run on_battery=true charging=false battery=80 power_save=false thermal=none battery_used_ms=0`、`decision=pause reason=thermal … retry_ms=900000 after_chunks=1` |
-| `retention_purge` | 保持期間による音声の削除（#33） | `chunks=12 bytes=…` |
+| `retention_purge` | 保持期間による音声の削除（#33、`TranscriptionRun`） | `chunks=12 bytes=…` |
 | `model_download_*` / `model_ready` | `ModelManager`（開始・10% ごとの進捗・完了・失敗（HTTP ステータスなど）・準備完了） | `pct=30 bytes=…`、`error=java.io.IOException message=HTTP 404 for …` |
 | `gap_alert` / `gap_alert_blocked` | `GapAlertMonitor`（通知した / 通知が許可されておらず出せなかった） | `last_received_at=…` |
 
