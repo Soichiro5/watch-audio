@@ -131,16 +131,17 @@ sequenceDiagram
   - `UploadWorker` は送るものがなくなるまで送り、ACK 待ちが残っていれば WorkManager のバックオフ（30 s〜）で再実行。スマホが見つからないときはリトライせず終了し、①スマホの capability 変化（再接続）、②次のチャンク確定（録音中は約 5 分ごと）、③15 分ごとの定期ジョブ、のいずれかで再開する。
   - スマホに ACK の再送を頼むメッセージはない。ACK を失ったときの回復は Watch からの再送（`DUPLICATE` が返る）だけ。
 - **同時実行**: サービスからの即時送信と WorkManager は同じプロセス内の `Mutex` で直列化。
-- **送信 OFF スイッチ**: 画面の「Send to phone」。電池計測で転送コストを切り分けるため（OFF でも outbox には溜まり、ON にすると送る）。
+- **送信 OFF スイッチ**: 画面の「スマホに送信」。電池計測で転送コストを切り分けるため（OFF でも outbox には溜まり、ON にすると送る）。
 
 ## 5. UI・タイル・コンプリケーション
 
-- **アプリ画面**: 状態（Recording / Paused · not worn / Paused · charging / … / Stopped）、録音中の経過時間、Mark ボタン（セッション内の回数）、送信待ち件数、最終 ACK 時刻、電池残量、Send to phone スイッチ。画面下の大きな EdgeButton で Start / Stop / Resume。
+- **文言は日本語**（#144）: 画面・タイル・コンプリケーション・通知・通知チャンネル名・debug ビルドのファイル入力画面の文言はすべて `res/values/strings.xml`（debug は `src/debug/res/values/strings.xml`）にあり、日本語。英語のままにするのはブランド名 `watch-audio`（`app_name`・`tile_label`）だけ。watchOS（`apps/ios/Watch`）と同じ言い回し（録音開始 / 停止 / 再開、未送信、電池、一時停止・充電中 など）に揃え、丸い小さな画面に収まる長さにする。単体テスト `WearStringsTest`（`src/test`、リソース XML を直接読む）が、英単語（ASCII 英字 2 文字以上。書式指定子とブランド名は除く）を含む文字列がないこと・ASCII だけの文字列がブランド名だけであること・コンプリケーションの短い文言が 3 文字以内であることを確認する。
+- **アプリ画面**: 状態（録音中 / 一時停止・未装着 / 一時停止・充電中 / 一時停止・電池不足 / 一時停止・容量不足 / 一時停止・マイク使用中 / 停止中 / 停止中・タップで再開）、録音中の経過時間、「マーク」ボタン（セッション内の回数）、「未送信 N」、「最終受領 HH:mm」、「電池 N%」、「スマホに送信」スイッチ。画面下の大きな EdgeButton で 録音開始 / 停止 / 再開。
 - **自動再開**: 録音 ON（`armed`）のままサービスが動いていない状態でアプリを開くと、その場で再開する（アプリが前景にあるので Android 14+ でも許可される）。
-- **タイル**: 状態・送信待ち件数・ボタン（Start / Resume / Open）。タップでアプリを開き（`from_tile` extra）、未録音なら開始・再開する。**タイルから直接前景サービスは開始できない**（Android 14+ の制約）ため、必ずアプリを経由する。
-- **コンプリケーション**（SHORT_TEXT）: `REC` / `OFF` / `CHG` / `BAT` / `FULL` / `MIC` / `!`（録音 ON なのに停止中）/ `—`。タップでアプリ。状態変化時に更新を要求する（定期更新なし）。
+- **タイル**: 状態・送信待ち件数・ボタン（録音開始 / 再開 / 開く）。タップでアプリを開き（`from_tile` extra）、未録音なら開始・再開する。**タイルから直接前景サービスは開始できない**（Android 14+ の制約）ため、必ずアプリを経由する。
+- **コンプリケーション**（SHORT_TEXT）: 録音中 / 未装着 / 充電中 / 電池少 / 容量満 / 中断 / 要再開（録音 ON なのに停止中）/ 停止（`status_short_*`、3 文字以内）。タイトルはブランド名、長い説明（`contentDescription`）はアプリ画面と同じ状態の文言。タップでアプリ。状態変化時に更新を要求する（定期更新なし）。
 - **Ongoing Activity**: 録音中はストップウォッチ、一時停止中は理由を表示。
-- **エミュレータでの確認（#41）**: CI `emulator.yml` の wear ジョブが `.github/scripts/wear-surfaces.sh` で、Wear OS のデバッグ用ブロードキャスト（`com.google.android.wearable.app.DEBUG_SURFACE` の `add-tile` / `set-complication`、`DEBUG_SYSUI` の `show-tile`）を使って Tile を表示し、現在の文字盤（`dumpsys wallpaper`）のスロットにコンプリケーションを設定する。停止中 → Tile のボタンをタップ（`uiautomator dump` で「Start」を探し、見つからなければ画面下寄りの中央）→ アプリが開いて録音開始 → 録音中、の順にスクリーンショットを撮る（成果物 `screenshots-wear`: `wear-tile-stopped.png` / `wear-tile-tap-opens-app.png` / `wear-tile-recording.png` / `wear-complication-*.png`）。エミュレータは AC 給電扱いで録音が「充電中」で止まるため、`dumpsys battery unplug` してから行う。マイク・通知の権限は `pm grant` で事前に付与（許可ダイアログを挟まないため）。音声入力はエミュレータの既定（ホストに入力がなければ無音）で、仮想マイクは使わない。
+- **エミュレータでの確認（#41）**: CI `emulator.yml` の wear ジョブが `.github/scripts/wear-surfaces.sh` で、Wear OS のデバッグ用ブロードキャスト（`com.google.android.wearable.app.DEBUG_SURFACE` の `add-tile` / `set-complication`、`DEBUG_SYSUI` の `show-tile`）を使って Tile を表示し、現在の文字盤（`dumpsys wallpaper`）のスロットにコンプリケーションを設定する。停止中 → Tile のボタンをタップ（`uiautomator dump` でボタンの文言「録音開始」「再開」「開く」を探し、見つからなければ画面下寄りの中央。文言を変えたらスクリプトも直す）→ アプリが開いて録音開始 → 録音中、の順にスクリーンショットを撮る（成果物 `screenshots-wear`: `wear-tile-stopped.png` / `wear-tile-tap-opens-app.png` / `wear-tile-recording.png` / `wear-complication-*.png`）。エミュレータは AC 給電扱いで録音が「充電中」で止まるため、`dumpsys battery unplug` してから行う。マイク・通知の権限は `pm grant` で事前に付与（許可ダイアログを挟まないため）。音声入力はエミュレータの既定（ホストに入力がなければ無音）で、仮想マイクは使わない。
   - システム UI のブロードキャストはイメージによって動かないことがあるため、このスクリプトは失敗してもジョブを落とさず、`WEAR_SURFACE_CHECK step=… ok=false` としてジョブサマリーに出す。特に `set-complication` は公式ドキュメントに記載がなく（Android Studio の実行構成が使う形式）、文字盤のスロット番号も文字盤ごとに違うため、0–7・100–103 を順に試す。
   - 最初の CI 実行（run 38047480914）でわかったこと: 起動完了（`sys.boot_completed`）の後もしばらくシステム UI が「Starting…」画面のままで、その間のスクリーンショットはすべてこの画面だった → スクリプトは `uiautomator dump` で `starting_screen` が消えるまで最大 5 分待つ。既定の文字盤（Orbita）はスロット 0–2 が無効（`Complication slot is not enabled`）→ インストール済みの文字盤（`cmd package query-services -a android.service.wallpaper.WallpaperService`）を `set-watchface` で順に切り替えて試す。最後に adb が切断されスクリーンショットを回収できなかった → 撮るたびにその場で `adb pull` する。
 
@@ -192,23 +193,23 @@ sequenceDiagram
 
 準備: Watch とスマホに同じ署名の debug ビルドを入れる（`./gradlew :apps:wear:installDebug :apps:android:installDebug`）。スマホ側でモデルを用意しておく。
 
-1. **開始**: アプリで Start → マイク・通知（Wear OS 4/5 は身体センサーも）を許可 → 「Recording」と経過時間が表示され、ウォッチフェイスに Ongoing Activity のアイコンが出る。
+1. **開始**: アプリで「録音開始」→ マイク・通知（Wear OS 4/5 は身体センサーも）を許可 → 「録音中」と経過時間が表示され、ウォッチフェイスに Ongoing Activity のアイコンが出る。
 2. **ローテーション**: 12 分以上録音 → 診断ログに `chunk_closed ... rotation` が約 5 分ごと。スマホ側に届いたチャンクの境目を聞いて音が欠けていない。連続するチャンクの `startedAtEpochMs + durationMs` が次の `startedAtEpochMs` と一致。
-3. **Mark**: 録音中に Mark を数回 → スマホ側のチャンクに Mark が正しい位置で付く。
+3. **Mark**: 録音中に「マーク」を数回 → スマホ側のチャンクに Mark が正しい位置で付く。
 4. **無音**: 静かな部屋に 6 分置く → そのチャンクが `silent=true`、スマホ側で音声なし・時間範囲あり。小声の会話でも `silent=false` になること（しきい値の確認）。
-5. **非装着**: 外して机に置く → 約 10 秒で「Paused · not worn」（`off_body`）、チャンクは `off_body` で閉じる。再装着で即再開（新しい session）。通知は出ない。
-6. **充電**: 充電器に置く → 「Paused · charging」（`charging`）。外して装着 → 自動再開。外して机に置いたまま → 「Paused · not worn」。
+5. **非装着**: 外して机に置く → 約 10 秒で「一時停止・未装着」（`off_body`）、チャンクは `off_body` で閉じる。再装着で即再開（新しい session）。通知は出ない。
+6. **充電**: 充電器に置く → 「一時停止・充電中」（`charging`）。外して装着 → 自動再開。外して机に置いたまま → 「一時停止・未装着」。
 7. **割り込み**: 録音中に電話を受ける / アシスタントを起動 / 他の録音アプリ → `interrupted` → 終了後にバックオフで自動再開（`recovered`）。2 分以上続くと通知 + 振動。
 8. **電池低下**: 5 % 以下 → 停止して通知 + 振動。充電後に自動再開。
 9. **容量不足**（任意）: スマホとの接続を切って長時間録音、またはダミーファイルで空きを減らす → `low_storage` で停止・通知、転送で空くと再開。
-10. **転送 / ACK**: スマホのアプリで受信を確認。画面の「To send」が 0 に戻り「Last ACK」が更新される。`files/outbox` が空になる（`adb shell run-as app.watchaudio ls files/outbox`）。
-11. **切断と再送**: スマホの Bluetooth を 30 分 OFF → 「To send」が増える → ON に戻すと数分以内に全件送られ ACK される（`phone_reachable` または次のチャンク確定で再開）。
+10. **転送 / ACK**: スマホのアプリで受信を確認。画面の「未送信」が 0 に戻り「最終受領」が更新される。`files/outbox` が空になる（`adb shell run-as app.watchaudio ls files/outbox`）。
+11. **切断と再送**: スマホの Bluetooth を 30 分 OFF → 「未送信」が増える → ON に戻すと数分以内に全件送られ ACK される（`phone_reachable` または次のチャンク確定で再開）。
 12. **ACK 消失**: ACK 受信前に Watch の Bluetooth を切る → 3 分以上後に再送され `duplicate` の ACK で削除される。
 13. **プロセス死**: `adb shell am kill app.watchaudio`（または `force-stop`）→ 次の起動で `chunk_recovered`（`terminated`、長さ 0）。数秒後に「タップで再開」通知 → タップで再開。
 14. **再起動**: 録音中に Watch を再起動 → 起動後に「タップで再開」通知。タイルからも再開できる。
 15. **タイル / コンプリケーション**: 状態に応じて表示が変わる。タップでアプリが開き、停止中なら開始する。
-16. **停止**: Stop → 前景通知が消え、最後のチャンクが `user_stop` で閉じて送られる。以後は自動再開しない。
-17. **プライバシー**: スマホの Bluetooth だけを OFF（Wi-Fi は別ネットワークで ON）にし、Watch とスマホが Data Layer のクラウド経由でしかつながらない状態にする → Watch は送らない（`isNearby == false` → `To send` が溜まるだけ）。
+16. **停止**: 「停止」→ 前景通知が消え、最後のチャンクが `user_stop` で閉じて送られる。以後は自動再開しない。
+17. **プライバシー**: スマホの Bluetooth だけを OFF（Wi-Fi は別ネットワークで ON）にし、Watch とスマホが Data Layer のクラウド経由でしかつながらない状態にする → Watch は送らない（`isNearby == false` → 「未送信」が溜まるだけ）。
 
 ## 11. 音声ファイル入力（開発用）
 
@@ -269,9 +270,9 @@ adb -s <watch> pull /sdcard/Android/data/app.watchaudio/files/diagnostics   # de
 adb -s <watch> shell dumpsys battery reset
 ```
 
-- 画面からも操作できる: メイン画面の一番下の「Debug: audio file input」→ 速度（×1 / ×10 / ×30 / ×60 を順に切り替え）・Loop を選び、ファイル名をタップ。「Stop · back to mic」で停止してマイクに戻す。
+- 画面からも操作できる: メイン画面の一番下の「デバッグ: 音声ファイル入力」→ 速度（×1 / ×10 / ×30 / ×60 を順に切り替え）・「繰り返し」を選び、ファイル名をタップ。「停止してマイクに戻す」で停止してマイクに戻す。
 - 録音が動いている最中に開始すると、いったん停止（`user_stop`）してからファイル入力で開始し直す。
-- スマホとペアになっていれば、できたチャンクは通常どおり送られる（outbox に残して見たいときはメイン画面の「Send to phone」を OFF）。
+- スマホとペアになっていれば、できたチャンクは通常どおり送られる（outbox に残して見たいときはメイン画面の「スマホに送信」を OFF）。
 - 検証用の音声: 16 kHz mono 16-bit WAV が最も確実（例: `ffmpeg -i in.m4a -ac 1 -ar 16000 -c:a pcm_s16le test.wav`）。他のレート・チャンネル数の WAV や、端末がデコードできる形式も受け付ける。無音判定を確かめるときは、無音区間の手前 1 秒程度も静かにしておく（ローテーション直後の最初のポーリングは前チャンク末尾のピークも含むため。マイクでも同じ）。
 - 期待される結果の例: 12 分 30 秒のファイル → 5 分・5 分・2 分 30 秒の 3 チャンク（`rotation`, `rotation`, `user_stop`）。5 分間ほぼ無音のチャンクは `audio` なしの manifest。
 
