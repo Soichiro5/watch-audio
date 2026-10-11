@@ -1,6 +1,8 @@
 package app.watchaudio.wear.recording
 
+import app.watchaudio.core.platform.sha256Of
 import app.watchaudio.core.protocol.ChunkEndReason
+import app.watchaudio.core.protocol.RecordingFormat
 import app.watchaudio.core.protocol.SourcePlatform
 import app.watchaudio.wear.outbox.Outbox
 import java.io.File
@@ -9,6 +11,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.io.files.Path
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -41,7 +44,7 @@ class ChunkFinalizerTest {
         val j = journal(marks = listOf(250_000, 12_000, 300_050))
         recordingDir.write(j)
         val audio = writeAudio(j.chunkId)
-        val expectedHash = ChunkFinalizer.sha256Hex(audio)
+        val expectedHash = sha256Of(Path(audio.path))
         val expectedSize = audio.length()
 
         val result = finalizer.finalize(j, 300_000, ChunkEndReason.ROTATION)
@@ -115,9 +118,11 @@ class ChunkFinalizerTest {
     }
 
     @Test
-    fun `sha256 is lowercase hex`() {
+    fun `describes audio in the shared recording format with a lowercase hex sha256`() {
         val file = tmp.newFile("test.bin").apply { writeText("test") }
-        assertEquals("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", ChunkFinalizer.sha256Hex(file))
+        val expected = RecordingFormat.CURRENT.audioFile("x.m4a", 4, "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08")
+        assertEquals(expected, ChunkFinalizer.describe(file, "x.m4a"))
+        assertEquals(900_000L, ChunkRecorder.CHUNK_BYTES, "5 minutes at 24 kbps")
     }
 
     @Test

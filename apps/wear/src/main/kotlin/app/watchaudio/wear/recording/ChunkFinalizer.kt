@@ -1,26 +1,14 @@
 package app.watchaudio.wear.recording
 
-import app.watchaudio.core.protocol.AudioCodec
+import app.watchaudio.core.platform.sha256Of
 import app.watchaudio.core.protocol.AudioFile
 import app.watchaudio.core.protocol.ChunkEndReason
 import app.watchaudio.core.protocol.ChunkManifest
+import app.watchaudio.core.protocol.RecordingFormat
 import app.watchaudio.core.protocol.SourcePlatform
 import app.watchaudio.wear.outbox.Outbox
 import java.io.File
-import java.security.MessageDigest
-
-/** Audio format written by every [RecorderInput]; recorded in every manifest. */
-object AudioFormat {
-    const val SAMPLE_RATE_HZ = 16_000
-    const val CHANNELS = 1
-    const val BITRATE_BPS = 24_000
-
-    /** ~5 minutes at [BITRATE_BPS]; `MediaRecorder` rotates by size (see [ChunkRecorder]). */
-    const val CHUNK_BYTES = BITRATE_BPS / 8L * 300
-
-    /** The chunk length [CHUNK_BYTES] amounts to at [BITRATE_BPS] (5 minutes). */
-    const val CHUNK_DURATION_MS = CHUNK_BYTES * 8 * 1000 / BITRATE_BPS
-}
+import kotlinx.io.files.Path
 
 /**
  * Turns a closed in-progress chunk ([ChunkJournal] + audio file in [RecordingDir]) into an
@@ -88,27 +76,8 @@ class ChunkFinalizer(
             endReason = endReason,
         )
 
-        fun describe(file: File, fileName: String) = AudioFile(
-            fileName = fileName,
-            codec = AudioCodec.AAC,
-            sampleRateHz = AudioFormat.SAMPLE_RATE_HZ,
-            channels = AudioFormat.CHANNELS,
-            bitrateBps = AudioFormat.BITRATE_BPS,
-            sizeBytes = file.length(),
-            sha256 = sha256Hex(file),
-        )
-
-        fun sha256Hex(file: File): String {
-            val digest = MessageDigest.getInstance("SHA-256")
-            file.inputStream().use { input ->
-                val buffer = ByteArray(64 * 1024)
-                while (true) {
-                    val read = input.read(buffer)
-                    if (read < 0) break
-                    digest.update(buffer, 0, read)
-                }
-            }
-            return digest.digest().joinToString("") { "%02x".format(it) }
-        }
+        /** Describes [file] in the format every [RecorderInput] writes ([RecordingFormat.CURRENT]). */
+        fun describe(file: File, fileName: String): AudioFile =
+            RecordingFormat.CURRENT.audioFile(fileName, sizeBytes = file.length(), sha256 = sha256Of(Path(file.path)))
     }
 }
