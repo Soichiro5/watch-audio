@@ -130,11 +130,7 @@ jobs:
           xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme iosApp \
             -configuration Debug -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build/DerivedData \
-            CODE_SIGNING_ALLOWED=NO build -quiet 2>&1 | tee xcodebuild-ios.log; test ${PIPESTATUS[0]} -eq 0
-          # The hosted test builds below add their test bundles to this app's PlugIns; the launch
-          # smoke installs this untouched copy of the app as built here.
-          mkdir -p build/launch-smoke
-          ditto build/DerivedData/Build/Products/Debug-iphonesimulator/WatchAudio.app build/launch-smoke/WatchAudio.app
+            CODE_SIGNING_ALLOWED=NO build -quiet 2>&1 | tee xcodebuild-ios.log; exit ${PIPESTATUS[0]}
 
       - name: Build watchOS app
         id: build-watch
@@ -162,9 +158,9 @@ jobs:
           echo "OK: DebugAudioFileInput is in the Debug app and absent from the Release app" | tee -a "$GITHUB_STEP_SUMMARY"
 
       # #92: one simulator at a time, each booted once. The Apple Watch steps run first and share
-      # one boot; the watch is then shut down, and the iPhone, booted by the iOS launch smoke, stays
-      # up for the Swift test steps below. (Two booted simulators on the 3-core runner, or a boot
-      # next to a build, made every step 2-3x slower.)
+      # one boot; the watch is then shut down, and the iPhone, booted by the Swift unit tests step,
+      # stays up for the launch smoke and the hosted tests. (Two booted simulators on the 3-core
+      # runner made every step 2-3x slower.)
       # #41: the complication's widget extension is embedded, and its tap URL launches the watch
       # app and starts the recorder (screenshots and the recorder log go to simulator-smoke).
       - name: watchOS complication tap on an Apple Watch simulator
@@ -184,40 +180,20 @@ jobs:
           xcrun simctl shutdown all || true # free the runner for the iPhone simulator
           exit $status
 
-      # #92: the iPhone's first boot (data migration, then 1-2 min until apps launch) overlaps the
-      # Swift test builds. The test steps build again (an up-to-date no-op when this succeeded) and
-      # report any build failure themselves.
-      - name: Build Swift tests (iPhone simulator boots meanwhile)
+      # Hostless Swift logic tests (no Kotlin build): the wire protocol vs. shared/core-protocol/testdata
+      # (ProtocolTests), the watch recorder's stop reasons / state (#15) and send queue (#17)
+      # (WatchLogicTests). Every test case is listed in the job summary.
+      # Runs first on the iPhone (#92): xcode-test.sh boots it while these tests build, so the
+      # first boot's data migration overlaps the build and the launch smoke finds a settled device.
+      - name: Swift unit tests (iOS Simulator)
         if: (success() || failure()) && steps.xcodegen.outcome == 'success'
-        continue-on-error: true
-        run: |
-          udid=$(.github/scripts/simulator-udid.sh iOS iPhone)
-          mkdir -p simulator-smoke
-          nohup xcrun simctl boot "$udid" > simulator-smoke/boot-ios.txt 2>&1 &
-          schemes=SwiftUnitTests
-          if [ "${{ steps.build-ios.outcome }}" = success ]; then schemes="$schemes SpeechTests PlaybackTests"; fi
-          status=0
-          for scheme in $schemes; do
-            SECONDS=0
-            xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme "$scheme" \
-              -destination "platform=iOS Simulator,id=$udid" -derivedDataPath build/DerivedData \
-              CODE_SIGNING_ALLOWED=NO OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES \
-              build-for-testing -quiet > "xcodebuild-build-$scheme.log" 2>&1 || { status=1; tail -n 40 "xcodebuild-build-$scheme.log"; }
-            echo "Timing: build-for-testing $scheme took ${SECONDS}s"
-          done
-          exit $status
+        run: .github/scripts/xcode-test.sh SwiftUnitTests "Swift unit tests on the iOS simulator"
 
       - name: Launch iOS app on an iPhone simulator
         if: (success() || failure()) && steps.build-ios.outcome == 'success'
         run: |
-          .github/scripts/simulator-smoke.sh iOS iPhone build/launch-smoke/WatchAudio.app app.watchaudio
-
-      # Hostless Swift logic tests (no Kotlin build): the wire protocol vs. shared/core-protocol/testdata
-      # (ProtocolTests), the watch recorder's stop reasons / state (#15) and send queue (#17)
-      # (WatchLogicTests). Every test case is listed in the job summary.
-      - name: Swift unit tests (iOS Simulator)
-        if: (success() || failure()) && steps.xcodegen.outcome == 'success'
-        run: .github/scripts/xcode-test.sh SwiftUnitTests "Swift unit tests on the iOS simulator"
+          .github/scripts/simulator-smoke.sh iOS iPhone \
+            build/DerivedData/Build/Products/Debug-iphonesimulator/WatchAudio.app app.watchaudio
 
       # Hosted tests (Speech, Playback): the host app is uninstalled first so the test host gets a
       # fresh container (no erase, which would redo the 1-2 min boot migration; see xcode-test.sh).
@@ -264,6 +240,12 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit $status
+
+      # Booted simulators otherwise slow down the runner's orphan-process cleanup at the end.
+      - name: Shut down simulators
+        if: always()
+        continue-on-error: true
+        run: xcrun simctl shutdown all
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
