@@ -178,7 +178,7 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 
 共通ロジックのテスト: `shared/core-pipeline` の `AudioRetentionPolicyTest`（未処理・最近の音声は消さない、無期限は何も消さない）と `StorageManagerTest`（一時ディレクトリ + 実 `LocalStore`）、`DiagnosticsLogTest`（診断ログの書式・上限での切り替え・書き出しの順序・クラッシュ行にメッセージを含めない）と `TranscriptionPipelineTest.diagnosticsGetTimingsAndErrorTypesButNeverTextOrMessages`（文字起こしの本文や例外メッセージがログに入らない）、`shared/core-db` の `StorageQueriesTest`（削除の連鎖・FTS・設定・マイグレーションの冪等性）。実 SQLite を使うテストは `src/sqliteTest` にあり、JVM・iOS シミュレータ・Android 端末（composeApp の `GapAlertEvaluatorTest` は JVM と iOS シミュレータのみ）で実行される（[04-dev-environment.md §6](../04-dev-environment.md#6-ci-での自動確認実機なし)）。
 
-検索のスニペット（一致箇所を `[` `]` で囲んだ文字列）は core-db の `highlightSnippet` が作る。40 文字を超える発話は最初の一致の前後で切り詰め、切った側に `…` を付ける。検索速度は [04-dev-environment.md §5](../04-dev-environment.md#5-検索の性能ベンチマーク23) のベンチマークで確認する。
+検索のスニペット（一致箇所を `[` `]` で囲んだ文字列）は core-db の `highlightSnippet` が作る。40 文字を超える発話は最初の一致の前後で切り詰め、切った側に `…` を付ける。検索速度は [04-dev-environment.md §5](../04-dev-environment.md#5-検索の性能ベンチマーク23-72) のベンチマークで確認する。
 
 ## 5. 未対応・今後
 

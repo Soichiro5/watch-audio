@@ -167,6 +167,7 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 | `ios.yml` | Japanese test speech / Speech transcription on the iOS simulator | macOS の `say` で作った日本語音声（Watch と同じ AAC 16 kHz モノラル）を SpeechTranscriber（ja_JP）で文字起こしし、時刻と文字の再現率を確認（`SpeechTests`、iOS アプリがホスト、#21）。シミュレータで使えなければ理由を残してスキップ（実機確認は #60） | ジョブサマリーのテスト一覧と「Speech check logs」、成果物 `swift-evidence` |
 | `ios.yml` | Playback in the iOS app (simulator) | `PlaybackTests`（iOS アプリがホストの XCTest）: アプリが起動時に作った本物の `IosAppServices` で AAC 16 kHz の音声を 8 秒から再生し、再生位置がそこから始まり 2 秒後に 1 秒以上進む（#19） | ジョブサマリーのテスト一覧と `PLAYBACK_CHECK check=hosted_player` 行、成果物 `swift-evidence` |
 | `ios.yml`（`release` ジョブ） | Build iOS / watchOS app, Release, device | Release 構成の iOS アプリ（watchOS アプリを同梱。Kotlin フレームワークは iosArm64 の release）と watchOS アプリが実機向け（`generic/platform=iOS` / `watchOS`）に署名なし（`CODE_SIGNING_ALLOWED=NO`）でビルドできる。Release のバイナリに debug 専用の音声ファイル入力（#57）が入っていない（#78） | ジョブサマリーの `RELEASE_BUILD_CHECK` 行（アーキテクチャ・サイズ） |
+| `links.yml` | Markdown link check | リポジトリ内のすべての Markdown の相対リンクとアンカー（見出し）が存在する。CLAUDE.md のコードとして書いたパス・`cd` 先・Gradle のプロジェクトパス（`:module:task`）が実在する（`tools/check-links`、#49） | ジョブのログ（壊れたリンクを `ファイル:行: 内容` で列挙） |
 
 スクリーンショットは成果物 `screenshots-phone` / `screenshots-wear`（30 日保存）、`*_CHECK` 行はジョブサマリーにまとめて出す。
 
@@ -225,18 +226,19 @@ adb pull /data/local/tmp/watchaudio-screenshots
 
 PR の CI 待ちを減らすため、変更したファイルに関係するワークフローだけを動かす。`workflow_dispatch` からはいつでも手動で全部動かせる。
 
-| 変更したファイル | `android.yml` | `emulator.yml` | `ios.yml` | `deliver.yml`（main のみ） |
-| --- | --- | --- | --- | --- |
-| ドキュメントだけ（`docs/**`、`**/*.md`、Issue / PR テンプレート、`tools/roadmap-view/**`、`research/**`、`spikes/**`） | 動かない | 動かない | 動かない | 動かない |
-| iOS 専用（`iosApp/**`、`src/iosMain`・`src/iosTest`、iOS 用スクリプト） | 動く | 動かない | 動く | 動く |
-| Android 専用（`androidApp/**`、`wearApp/**`、`src/androidMain`・`androidHostTest`・`androidDeviceTest`、Android 用スクリプト） | 動く | 動く | 動かない | 動く |
-| JVM 専用（`src/jvmMain`・`src/jvmTest`） | 動く | 動かない | 動かない | 動く |
-| 共通コード（`src/commonMain` など）・Gradle の設定・`build-logic/**` | 動く | 動く | 動く | 動く |
+| 変更したファイル | `android.yml` | `emulator.yml` | `ios.yml` | `deliver.yml`（main のみ） | `links.yml` |
+| --- | --- | --- | --- | --- | --- |
+| ドキュメントだけ（`docs/**`、`**/*.md`、Issue / PR テンプレート、`tools/roadmap-view/**`、`tools/check-links/**`、`.github/workflows/links.yml`、`research/**`、`spikes/**`） | 動かない | 動かない | 動かない | 動かない | 動く |
+| iOS 専用（`iosApp/**`、`src/iosMain`・`src/iosTest`、iOS 用スクリプト） | 動く | 動かない | 動く | 動く | 動く |
+| Android 専用（`androidApp/**`、`wearApp/**`、`src/androidMain`・`androidHostTest`・`androidDeviceTest`、Android 用スクリプト） | 動く | 動く | 動かない | 動く | 動く |
+| JVM 専用（`src/jvmMain`・`src/jvmTest`） | 動く | 動かない | 動かない | 動く | 動く |
+| 共通コード（`src/commonMain` など）・Gradle の設定・`build-logic/**` | 動く | 動く | 動く | 動く | 動く |
 
 - `android.yml` と `deliver.yml` は除外リスト（`paths-ignore`）。ドキュメント以外の変更では必ず動く。
+- `links.yml`（Markdown のリンク検査、数秒）は絞り込みなしで毎回動く。ドキュメントだけの変更でもリンク切れを見つけるためと、コードの移動で docs からのリンクが切れることがあるため。手元では `python3 tools/check-links/check_links.py`（テストは `python3 -m unittest discover -s tools/check-links -v`）。
 - `emulator.yml` と `ios.yml` は対象リスト（`paths`）に除外（`!`）を足している。除外は後ろに書いたものが優先されるので、新しい除外は対象リストより後ろに書く。
 - 新しいスクリプトを `.github/scripts/` に足すときは、片方のプラットフォーム専用なら、もう片方のワークフローの除外に追加する。
-- フォルダ構成を変えるとき（#49）は、上の表のパスもあわせて直す。
+- フォルダ構成を変えるとき（#49）は、上の表のパスもあわせて直す。移動の計画と書き換え箇所の一覧は [`tools/restructure/plan.md`](../tools/restructure/plan.md)。
 
 ### 6.4 Local-only チェック（`tools/privacy-check`、#76）
 

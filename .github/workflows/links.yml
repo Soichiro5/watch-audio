@@ -1,0 +1,30 @@
+name: Markdown links
+
+# Broken relative links and anchors in the repository's Markdown, and stale repository paths in
+# CLAUDE.md (#49). Seconds, no build: runs on every PR and push, also docs-only ones (the other
+# workflows skip those), since moving code can break links from the docs and vice versa.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  links:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Markdown link check
+        run: |
+          python3 -m unittest discover -s tools/check-links -v
+          python3 tools/check-links/check_links.py
