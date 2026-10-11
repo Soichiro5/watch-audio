@@ -25,7 +25,7 @@ v0.1 では、**自分の Watch とスマホに入れて 1 日中録音し、夜
 | リリース（Milestone） | ユースケース | 状態（2026-10-11） |
 | --- | --- | --- |
 | **v0.1 実機で 1 日使える** | [UC1](https://github.com/Soichiro5/watch-audio/issues/110) Watch をつけていれば、何もしなくても会話が録音されスマホにたまる | 開発環境で確認済み。実機の連続録音・電池（#59・#60・#9・#10）が残り |
-| | [UC2](https://github.com/Soichiro5/watch-audio/issues/111) 夜に、その日の会話を一覧で見て、キーワードで探し、その場面を聞き返せる | 開発環境で確認済み。充電していない間の処理方針（#75）と実機（#61・#11）が残り |
+| | [UC2](https://github.com/Soichiro5/watch-audio/issues/111) 夜に、その日の会話を一覧で見て、キーワードで探し、その場面を聞き返せる | 開発環境で確認済み。充電していない間の処理方針（#75）も完了。実機（#61・#11）が残り |
 | | [UC3](https://github.com/Soichiro5/watch-audio/issues/112) 録音が止まっていたら気づけて、すぐ再開できる | 作業 Issue は完了。実機での確認が残り |
 | | [UC4](https://github.com/Soichiro5/watch-audio/issues/113) データは自分の端末にだけ残り、消したいときに消せる | 作業 Issue は完了。iPhone の保護クラスの実機での値（#60）が残り |
 | v0.2 毎日使える品質 | [UC5](https://github.com/Soichiro5/watch-audio/issues/114) 雑音の中や英語まじりの会話でも、ちゃんと文字になる | 雑音（#71）は完了。短い誤認識（#105）・英語（#81） |
@@ -70,7 +70,7 @@ v0.1 では、**自分の Watch とスマホに入れて 1 日中録音し、夜
 | release ビルド・署名（#78） | ✅ クローズ | Android: R8 の release ビルドを CI で毎回作成し、エミュレータで release の起動と文字起こし（`RELEASE_ASR_CHECK`）を確認。iOS / watchOS: 署名なしの Release 構成のビルド。署名は Actions の secret があるときだけ（[04 §7.1](04-dev-environment.md#71-android-の-release-ビルドと署名78)） |
 | データは端末内のみの CI 検査（#76） | ✅ クローズ（iOS の保護クラスの実際の値は #60） | 権限・バックアップ・通信箇所・依存 SDK・iOS の Info.plist/entitlements を許可リストで検査（`tools/privacy-check`）。未使用の ktor を削除。iOS/watchOS のデータにバックアップ除外と保護クラスを明示（[02 §7](02-architecture.md#7-セキュリティプライバシー)） |
 | スマホの診断ログ（#77） | ✅ クローズ | 受信・ACK・文字起こし（RTF）・モデル・途絶通知・異常終了を端末内の CSV（上限約 1 MB）に記録し、状態タブから共有シートで書き出す（本文・音声は含めない）。詳細: [impl/android-phone.md](impl/android-phone.md) §4.2 |
-| 充電していないときの文字起こしと発熱（#75） | 🟡 PR レビュー待ち（実機の電池消費・発熱の計測は #61） | 充電中はすべて、電池駆動では残量 50% 以上・省電力モードでない間だけ 1 時間に録音 10 分ぶんまで、発熱時（Android MODERATE / iOS serious 以上）は充電中でも休む。判定はチャンクごと（途中で止めない）。設定「充電中のみ文字起こしする」。目標は本アプリの文字起こしによる電池消費 1 日 3% 以下（推定）。詳細: [02 §6.3](02-architecture.md#充電していないときの処理方針75)、[impl/android-phone.md](impl/android-phone.md) §4.0 |
+| 充電していないときの文字起こしと発熱（#75） | ✅ クローズ（実機の電池消費・発熱は #61） | 充電中はすべて、電池駆動では残量 50% 以上・省電力モードでない間だけ 1 時間に録音 10 分ぶんまで、発熱時（Android MODERATE / iOS serious 以上）は充電中でも休む。判定はチャンクごと（途中で止めない）。設定「充電中のみ文字起こしする」。目標は本アプリの文字起こしによる電池消費 1 日 3% 以下（推定）。詳細: [02 §6.3](02-architecture.md#充電していないときの処理方針75)、[impl/android-phone.md](impl/android-phone.md) §4.0 |
 
 ## 全体の流れ
 
