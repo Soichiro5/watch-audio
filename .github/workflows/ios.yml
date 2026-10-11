@@ -15,6 +15,16 @@ on:
       - "gradle.properties"
       - ".github/workflows/ios.yml"
       - ".github/scripts/**"
+      - "!**/*.md"
+      - "!docs/**"
+      - "!**/src/androidMain/**"
+      - "!**/src/androidHostTest/**"
+      - "!**/src/androidDeviceTest/**"
+      - "!**/src/jvmMain/**"
+      - "!**/src/jvmTest/**"
+      - "!.github/scripts/phone-scenarios.sh"
+      - "!.github/scripts/wear-surfaces.sh"
+      - "!.github/scripts/launch-smoke.sh"
   pull_request:
     branches: [main]
     paths:
@@ -27,6 +37,16 @@ on:
       - "gradle.properties"
       - ".github/workflows/ios.yml"
       - ".github/scripts/**"
+      - "!**/*.md"
+      - "!docs/**"
+      - "!**/src/androidMain/**"
+      - "!**/src/androidHostTest/**"
+      - "!**/src/androidDeviceTest/**"
+      - "!**/src/jvmMain/**"
+      - "!**/src/jvmTest/**"
+      - "!.github/scripts/phone-scenarios.sh"
+      - "!.github/scripts/wear-surfaces.sh"
+      - "!.github/scripts/launch-smoke.sh"
   workflow_dispatch:
 
 permissions:
