@@ -198,7 +198,7 @@ jobs:
           arch: x86_64
           disable-animations: true
           # All APKs are built before the emulator boots, so it can have the runner's 4 cores (default 2; #92).
-          cores: 4
+          cores: 2
           # Room for the speech models (~160 MB, twice while they are copied into the app).
           disk-size: 3072M
           # -no-snapshot: a cold boot either way (no snapshot is kept between jobs), and nothing is saved at the end (#92).
