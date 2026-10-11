@@ -24,6 +24,7 @@ on:
       - "!**/src/jvmTest/**"
       - "!.github/scripts/phone-scenarios.sh"
       - "!.github/scripts/wear-surfaces.sh"
+      - "!.github/scripts/launch-smoke.sh"
   pull_request:
     branches: [main]
     paths:
@@ -45,6 +46,7 @@ on:
       - "!**/src/jvmTest/**"
       - "!.github/scripts/phone-scenarios.sh"
       - "!.github/scripts/wear-surfaces.sh"
+      - "!.github/scripts/launch-smoke.sh"
   workflow_dispatch:
 
 permissions:
