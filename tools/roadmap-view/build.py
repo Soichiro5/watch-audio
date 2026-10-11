@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Builds the roadmap dashboard (single HTML file) from the repo's GitHub issues.
 
-Layout: releases (Milestones) -> use cases (parent issues labelled `usecase`)
--> work issues (their sub-issues), then dev-flow issues, then a health check
-listing open issues that belong to neither.
+Layout: a status legend and per-release use-case counts, then releases
+(Milestones; the current one first) each with one headline (overall status,
+what happens next and who acts) and one row per use case (parent issues
+labelled `usecase`; their work issues = sub-issues are collapsed), then
+dev-flow issues, then a health check listing open issues that belong to neither.
 
 Usage: python3 tools/roadmap-view/build.py <output.html>
 Requires the `gh` CLI with REST access to the repo (GraphQL is not used).
@@ -22,7 +24,14 @@ PLATFORM_TAGS = {
     "watchOS": "watchOS", "wearOS": "Wear OS", "asr": "文字起こし", "sync": "転送", "ui": "UI",
     "search": "検索", "ai": "AI", "setup": "基盤", "release": "リリース", "spike": "検証",
 }
-STATUS = {  # key -> (label, css token)
+UC_STATUS = {  # use-case status key -> (icon, label, css token, legend text)
+    "done": ("✅", "完了", "done", "ユースケースの Issue が閉じている"),
+    "device": ("🧪", "実機確認待ち", "device", "開発環境での作業は完了。残りは実機での確認だけ"),
+    "dev": ("🛠", "開発中", "doing", "実機確認以外の作業 Issue が残っている"),
+    "todo": ("⬜", "未着手", "later", "完了した作業 Issue も実装中の作業 Issue もない"),
+}
+UC_ORDER = ["todo", "dev", "device", "done"]  # least advanced first
+STATUS = {  # work-issue status key -> (label, css token)
     "doing": ("実装中", "doing"),
     "ready": ("着手可能", "ready"),
     "waiting": ("依存待ち", "waiting"),
@@ -110,7 +119,7 @@ def work_item(n):
     return {
         "n": n, "title": short_title(i["title"]), "url": i["html_url"], "state": i["state"],
         "notPlanned": i.get("state_reason") == "not_planned", "status": status, "prio": prio,
-        "device": "needs-device" in labels, "inProgress": "in-progress" in labels,
+        "device": "needs-device" in labels, "inProgress": "in-progress" in labels, "spike": "spike" in labels,
         "tags": [PLATFORM_TAGS[l] for l in labels if l in PLATFORM_TAGS],
         "openBlockers": open_blockers,
         "milestone": (i.get("milestone") or {}).get("number"),
@@ -122,43 +131,92 @@ for n in sorted(set(parent_of) | {i["number"] for i in issues if "dev-flow" in l
     items[n] = work_item(n)
 
 
+def usecase_status(state, kids):
+    """One status per use case, computed from the use case and its sub-issues.
+
+    done   - the use-case issue is closed
+    device - open; every open sub-issue is `needs-device` (or none is left open):
+             done in the dev environment, only real-device checks remain
+    todo   - open; no sub-issue is closed or `in-progress` (also: no sub-issues at all)
+    dev    - open; at least one open sub-issue still needs development
+    """
+    if state == "closed":
+        return "done"
+    if not kids:
+        return "todo"
+    if all(k["device"] for k in kids if k["state"] == "open"):
+        return "device"
+    if not any(k["state"] == "closed" or k["inProgress"] for k in kids):
+        return "todo"
+    return "dev"
+
+
 def usecase_view(uc):
     kids = [items[n] for n in children[uc["number"]]]
-    summary = uc.get("sub_issues_summary") or {}
-    total = summary.get("total", len(kids))
-    completed = summary.get("completed", sum(1 for k in kids if k["state"] == "closed"))
     m = re.match(r"^(UC\d+)\s*[:：]\s*(.*)$", uc["title"])
     code, title = (m.group(1), m.group(2)) if m else ("", uc["title"])
-    note = ""
-    if uc["state"] == "open" and total and completed == total:
-        if any(k["device"] for k in kids) or "実機" in (uc.get("body") or ""):
-            note = "作業 Issue はすべて完了。実機での確認待ち"
-        else:
-            note = "作業 Issue はすべて完了。完了条件の確認待ち"
-    elif uc["state"] == "open" and kids and all(k["device"] for k in kids if k["state"] == "open"):
-        note = "残りは実機での確認のみ"
     ms = (uc.get("milestone") or {}).get("number")
     for k in kids:  # flag open work issues whose release differs from their use case's
         k["msMismatch"] = k["state"] == "open" and k["milestone"] != ms
     return {"n": uc["number"], "code": code, "title": title, "url": uc["html_url"], "state": uc["state"],
-            "total": total, "completed": completed, "pct": summary.get("percent_completed", 0),
-            "note": note, "kids": kids, "milestone": ms}
+            "status": usecase_status(uc["state"], kids), "kids": kids, "milestone": ms,
+            "completed": sum(1 for k in kids if k["state"] == "closed")}
+
+
+def by_priority(ks):
+    """Order for "next" lists: regular work before spikes (measurements), then priority, then number."""
+    return sorted(ks, key=lambda k: (k["spike"], k["prio"] or "P9", k["n"]))
+
+
+def next_step(ucs):
+    """What a release needs next and who acts: (overall status, text, owner, issues).
+
+    Overall status: done if all use cases are done; waiting on devices if all are done or
+    waiting on devices; not started if none has started; otherwise in development. Next step: open non-device work of
+    the use cases in development (Claude), else the open device checks (the owner).
+    """
+    if not ucs:
+        return "todo", "ユースケースはまだありません", "", []
+    states = {u["status"] for u in ucs}
+    if states == {"done"}:
+        overall = "done"
+    elif states <= {"device", "done"}:
+        overall = "device"
+    elif states == {"todo"}:
+        overall = "todo"
+    else:
+        overall = "dev"
+    dev = [u for u in ucs if u["status"] == "dev"]
+    device = [u for u in ucs if u["status"] == "device"]
+    if dev:
+        ks = {k["n"]: k for u in dev for k in u["kids"] if k["state"] == "open" and not k["device"]}
+        return overall, "", "Claude（開発）", by_priority(ks.values())
+    if device:
+        ks = {k["n"]: k for u in device for k in u["kids"] if k["state"] == "open"}
+        text = "" if ks else "実機で完了条件を確かめて、ユースケースの Issue を閉じる"
+        return overall, text, "オーナー（実機）", by_priority(ks.values())
+    if overall == "done":
+        return overall, "なし（すべて完了）", "", []
+    all_p2 = all(k["prio"] == "P2" for u in ucs for k in u["kids"] if k["state"] == "open")
+    return overall, "未着手（P2）" if all_p2 else "未着手", "", []
 
 
 uc_views = [usecase_view(uc) for uc in usecases]
 releases = []
 for m in milestones:
     ucs = [u for u in uc_views if u["milestone"] == m["number"]]
-    work = {k["n"]: k for u in ucs for k in u["kids"]}.values()
     releases.append({
         "title": m["title"], "description": clean_description(m.get("description")), "state": m["state"],
         "due": m["due_on"][:10] if m.get("due_on") else "", "url": m["html_url"], "ucs": ucs,
-        "done": sum(1 for k in work if k["state"] == "closed"), "total": len(work),
     })
 no_release = [u for u in uc_views if u["milestone"] not in {m["number"] for m in milestones}]
 if no_release:
     releases.append({"title": "リリース未定", "description": "Milestone が付いていないユースケース。", "state": "open",
-                     "due": "", "url": "", "ucs": no_release, "total": 0, "done": 0})
+                     "due": "", "url": "", "ucs": no_release})
+for r in releases:
+    r["overall"], r["nextText"], r["owner"], r["nextIssues"] = next_step(r["ucs"])
+# Current release (first open milestone) first, then the other open ones, closed releases last.
+releases.sort(key=lambda r: r["state"] != "open")
 
 devflow = [items[n] for n in sorted(items) if "dev-flow" in label_names(by_num[n]) and n not in parent_of]
 unclassified = [
@@ -166,21 +224,42 @@ unclassified = [
     if i["state"] == "open" and "usecase" not in label_names(i) and "dev-flow" not in label_names(i)
     and i["number"] not in parent_of
 ]
-all_work = list({k["n"]: k for r in releases for u in r["ucs"] for k in u["kids"]}.values()) + devflow + unclassified
 
 # ---------------------------------------------------------------- render
 
 
-def bar(kids, total):
-    if not total:
-        return '<div class="bar"></div>'
-    segs = []
-    for s in ["done", "doing", "device", "ready", "waiting", "later"]:
-        n = sum(1 for k in kids if k["status"] == s)
-        if n:
-            segs.append(f'<span title="{esc(STATUS[s][0])}: {n}" style="width:{n / total * 100:.2f}%;'
-                        f'background:var(--{STATUS[s][1]})"></span>')
-    return f'<div class="bar">{"".join(segs)}</div>'
+def compact_title(title, limit=34):
+    """Short form for one-line lists: drops parenthesised details and truncates."""
+    t = re.split(r"[（(]", title, maxsplit=1)[0].strip() or title
+    return t if len(t) <= limit else t[:limit - 1] + "…"
+
+
+def short_release(title):
+    m = re.match(r"^(v\d+(?:\.\d+)*)\b", title)
+    return m.group(1) if m else title
+
+
+def badge(status, big=False):
+    icon, label, token, _ = UC_STATUS[status]
+    return f'<span class="ucs-badge {token}{" big" if big else ""}">{icon} {esc(label)}</span>'
+
+
+def issue_link(k, mark_device=True):
+    marks = ""
+    if k["inProgress"]:
+        marks += '<span class="mini doing">実装中</span>'
+    if k["device"] and mark_device:
+        marks += '<span class="mini device">実機</span>'
+    return (f'<a class="ilink" href="{esc(k["url"])}" target="_blank" rel="noopener" title="{esc(k["title"])}">'
+            f'<span class="num">#{k["n"]}</span> {esc(compact_title(k["title"]))}{marks}</a>')
+
+
+def inline_list(ks, limit=4):
+    mixed = not all(k["device"] for k in ks)  # the 実機 mark only helps when the list mixes both kinds
+    shown = "、".join(issue_link(k, mark_device=mixed) for k in ks[:limit])
+    if len(ks) > limit:
+        shown += f'、<span class="more">ほか {len(ks) - limit} 件</span>'
+    return shown
 
 
 def row(k):
@@ -207,82 +286,98 @@ def row(k):
             f'<span class="meta">{"".join(badges)}{deps}</span></a></li>')
 
 
-def work_list(kids, empty_text="なし"):
+def work_list(kids):
     order = {s: i for i, s in enumerate(STATUS_ORDER)}
     open_ = sorted((k for k in kids if k["state"] == "open"), key=lambda k: (order[k["status"]], k["prio"] or "P9", k["n"]))
     closed = sorted((k for k in kids if k["state"] == "closed"), key=lambda k: k["n"])
-    out = f'<ul class="rows">{"".join(row(k) for k in open_)}</ul>' if open_ else f'<p class="empty">{esc(empty_text)}</p>'
+    out = ""
+    if open_:
+        out += f'<h4>残りの作業</h4><ul class="rows">{"".join(row(k) for k in open_)}</ul>'
     if closed:
-        out += (f'<details class="closed"><summary>完了した作業 {len(closed)} 件</summary>'
-                f'<ul class="rows">{"".join(row(k) for k in closed)}</ul></details>')
+        out += f'<h4>完了した作業</h4><ul class="rows">{"".join(row(k) for k in closed)}</ul>'
     return out
 
 
 def usecase_html(u):
-    state = '<span class="pill done">達成</span>' if u["state"] == "closed" else '<span class="pill open">進行中</span>'
-    note = f'<p class="note">{esc(u["note"])}</p>' if u["note"] else ""
-    return (f'<article class="uc{" is-closed" if u["state"] == "closed" else ""}" id="uc-{u["n"]}">'
-            f'<div class="uc-head"><a class="uc-title" href="{esc(u["url"])}" target="_blank" rel="noopener">'
-            f'<span class="code">{esc(u["code"])}</span> {esc(u["title"])}</a>{state}</div>'
-            f'<div class="meter"><div class="meter-label"><span>作業 Issue の完了（#{u["n"]}）</span>'
-            f'<b>{u["completed"]} / {u["total"]}</b></div>{bar(u["kids"], u["total"])}</div>'
-            f'{note}{work_list(u["kids"], "残りの作業 Issue はありません")}</article>')
+    open_kids = by_priority(k for k in u["kids"] if k["state"] == "open")
+    if u["status"] == "done":
+        rest = "完了"
+    elif open_kids:
+        rest = "残り: " + inline_list(open_kids)
+    elif u["kids"]:
+        rest = "残り: 作業 Issue はすべて完了。実機で完了条件を確かめて閉じる"
+    else:
+        rest = "残り: 作業 Issue がまだありません"
+    details = (f'<details class="work"><summary>作業 Issue（完了 {u["completed"]} / {len(u["kids"])}）</summary>'
+               f'{work_list(u["kids"])}</details>') if u["kids"] else ""
+    return (f'<li class="uc" id="uc-{u["n"]}">{badge(u["status"])}'
+            f'<div class="uc-body"><a class="uc-title" href="{esc(u["url"])}" target="_blank" rel="noopener">'
+            f'<span class="code">{esc(u["code"] or "#" + str(u["n"]))}</span> {esc(u["title"])}</a>'
+            f'<p class="rest">{rest}</p>{details}</div></li>')
 
 
-def release_html(r, idx):
-    pct = r["done"] / r["total"] * 100 if r["total"] else 0
+def headline_html(r):
+    what = inline_list(r["nextIssues"], limit=6) if r["nextIssues"] else esc(r["nextText"])
+    owner = (f'<span class="sep">/</span><span class="owner">担当: <b>{esc(r["owner"])}</b></span>'
+             if r["owner"] else "")
+    return (f'<div class="headline">{badge(r["overall"], big=True)}'
+            f'<p class="next"><span class="k">次にやること:</span> {what}{owner}</p></div>')
+
+
+def release_html(r, idx, is_current):
     due = f'<span class="due">期日 {esc(r["due"])}</span>' if r["due"] else ""
-    closed = '<span class="pill done">完了</span>' if r["state"] == "closed" else ""
+    closed = '<span class="pill">クローズ済み</span>' if r["state"] == "closed" else ""
+    cur = '<span class="pill cur">現在のリリース</span>' if is_current else ""
     title = (f'<a href="{esc(r["url"])}" target="_blank" rel="noopener">{esc(r["title"])}</a>'
              if r["url"] else esc(r["title"]))
-    ucs = "".join(usecase_html(u) for u in r["ucs"]) or '<p class="empty">ユースケースはまだありません</p>'
-    return (f'<section class="release panel" aria-labelledby="rel-{idx}">'
-            f'<div class="rel-head"><div><h2 id="rel-{idx}">{title} {closed}{due}</h2>'
-            f'<p class="desc">{esc(r["description"])}</p></div>'
-            f'<div class="meter"><div class="meter-label"><span>作業 Issue の完了</span>'
-            f'<b>{r["done"]} / {r["total"]}</b></div>'
-            f'<div class="bar"><span style="width:{pct:.2f}%;background:var(--done)"></span></div></div></div>'
-            f'<div class="ucs">{ucs}</div></section>')
+    desc = f'<p class="desc">{esc(r["description"])}</p>' if is_current and r["description"] else ""
+    ucs = (f'<ul class="uc-list">{"".join(usecase_html(u) for u in r["ucs"])}</ul>' if r["ucs"]
+           else '<p class="empty">ユースケースはまだありません</p>')
+    return (f'<section class="release panel {"current" if is_current else "compact"}" id="rel-{idx}" '
+            f'aria-labelledby="rel-{idx}-h"><div class="rel-head"><h2 id="rel-{idx}-h">{cur}{title}{closed}{due}</h2>'
+            f'{desc}</div>{headline_html(r)}{ucs}</section>')
 
 
-current = next((r for r in releases if r["state"] == "open"), releases[0] if releases else None)
-summary_chips = "".join(
-    f'<a class="count" href="#rel-{i}"><span>{esc(r["title"])}</span><b>{r["done"]} / {r["total"]}</b></a>'
-    for i, r in enumerate(releases))
-status_chips = "".join(
-    f'<span class="count"><span class="dot" style="background:var(--{STATUS[s][1]})"></span>{esc(STATUS[s][0])}'
-    f'<b>{sum(1 for k in all_work if k["status"] == s and not k["notPlanned"])}</b></span>'
-    for s in STATUS_ORDER)
-if current:
-    goal = f'現在のリリース: {esc(current["title"])} — {esc(current["description"])}'
-    cur_pct = current["done"] / current["total"] * 100 if current["total"] else 0
-    goal_meter = (f'<div class="meter" aria-label="現在のリリースの進捗"><div class="meter-label">'
-                  f'<span>{esc(current["title"])} の作業 Issue</span><b>{current["done"]} / {current["total"]}</b></div>'
-                  f'<div class="bar"><span style="width:{cur_pct:.2f}%;background:var(--done)"></span></div></div>')
-else:
-    goal, goal_meter = "", ""
+def counts_html(r, idx):
+    n = {s: sum(1 for u in r["ucs"] if u["status"] == s) for s in UC_ORDER}
+    parts = [f'{UC_STATUS[s][0]} {n[s]}' for s in ("dev", "device", "todo") if n[s]] + [f'✅ {n["done"]}']
+    tip = "、".join(f"{UC_STATUS[s][1]} {n[s]}" for s in UC_ORDER)
+    return (f'<a class="count" href="#rel-{idx}" title="{esc(r["title"])}: {esc(tip)}">'
+            f'<span>{esc(short_release(r["title"]))}:</span><b>{" / ".join(parts)}</b></a>')
 
+
+legend = "".join(f'<li>{badge(s)}<span>{esc(UC_STATUS[s][3])}</span></li>' for s in ("done", "device", "dev", "todo"))
+current = releases[0] if releases and releases[0]["state"] == "open" else None
+goal = f'現在のリリース: {esc(current["title"])} — {esc(current["description"])}' if current else ""
+release_counts = "".join(counts_html(r, i) for i, r in enumerate(releases))
+
+open_devflow = sorted((k for k in devflow if k["state"] == "open"),
+                      key=lambda k: (not k["inProgress"], k["prio"] or "P9", k["n"]))
+devflow_html = (f'<ul class="flow">{"".join(f"<li>{issue_link(k)}</li>" for k in open_devflow)}</ul>' if open_devflow
+                else '<p class="empty">開いている開発の進め方の Issue はありません</p>')
 unclassified_html = (
     f'<ul class="rows">{"".join(row(k) for k in unclassified)}</ul>' if unclassified
     else '<p class="empty ok">なし（開いている Issue はすべてユースケースか開発の進め方に属しています）</p>')
 
-body = "".join(release_html(r, i) for i, r in enumerate(releases))
+body = "".join(release_html(r, i, r is current) for i, r in enumerate(releases))
 generated = datetime.now(JST).strftime("%Y-%m-%d %H:%M JST")
 template = (Path(__file__).parent / "template.html").read_text(encoding="utf-8")
 page = (template
         .replace("__GOAL__", goal)
-        .replace("__GOAL_METER__", goal_meter)
-        .replace("__RELEASE_COUNTS__", summary_chips)
-        .replace("__STATUS_COUNTS__", status_chips)
+        .replace("__LEGEND__", legend)
+        .replace("__RELEASE_COUNTS__", release_counts)
         .replace("__RELEASES__", body)
-        .replace("__DEVFLOW__", work_list(devflow, "開いている開発の進め方の Issue はありません"))
-        .replace("__DEVFLOW_COUNT__", str(sum(1 for k in devflow if k["state"] == "open")))
+        .replace("__DEVFLOW__", devflow_html)
+        .replace("__DEVFLOW_COUNT__", str(len(open_devflow)))
         .replace("__UNCLASSIFIED__", unclassified_html)
         .replace("__UNCLASSIFIED_COUNT__", str(len(unclassified)))
         .replace("__FOOT__", esc(f"GitHub Issues と Milestone（{REPO}）から生成: {generated}。"
-                                 "行をクリックすると GitHub の Issue が開きます。")))
+                                 "Issue 番号やタイトルをクリックすると GitHub の Issue が開きます。")))
 out = sys.argv[1] if len(sys.argv) > 1 else "roadmap.html"
 Path(out).write_text(page, encoding="utf-8")
-print(f"wrote {out}: {len(releases)} releases, {len(uc_views)} use cases, "
-      + ", ".join(f'{r["title"]} {r["done"]}/{r["total"]}' for r in releases)
-      + f", dev-flow {len(devflow)}, unclassified {len(unclassified)}")
+print(f"wrote {out}: {len(releases)} releases, {len(uc_views)} use cases; "
+      + "; ".join(f'{short_release(r["title"])}={r["overall"]} '
+                  f'[{" ".join(u["code"] + ":" + u["status"] for u in r["ucs"])}]' for r in releases)
+      + f"; dev-flow open {len(open_devflow)}, unclassified {len(unclassified)}")
+
+
