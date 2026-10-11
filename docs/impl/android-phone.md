@@ -162,6 +162,8 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 
 **書き出し**: 状態タブの「診断ログを書き出す」→ `AndroidAppServices.exportDiagnostics()` が `.1` と現在のファイルを 1 つの CSV（`cache/diagnostics-export/watch-audio-diagnostics-<日時>.csv`、前回の書き出しは削除）にまとめ、`FileProvider`（authority `app.watchaudio.diagnostics`、公開するのはこのディレクトリだけ）経由で共有シート（`ACTION_SEND`）を開く。ユーザーが選んだ共有先だけに読み取り権限が付く。**自動では送らない**。新しい権限・通信・SDK は追加していない。
 
+**エミュレータでの確認**（CI `emulator.yml` の phone、`DiagnosticsScenarioTest`）: 時計からの転送と同じフレームを `ChunkReceiver.store`（チャネルから読んだ後の処理。Wearable のチャネルなしで呼べる）に渡して受信 → 本番のワーカーが文字起こし → アプリを起動して `adb shell am force-stop app.watchaudio` → 次の起動で、ログに `chunk_received`・`transcription_started` / `_finished`（`rtf` つき）・`app_start`・強制終了の時刻の `previous_exit`（理由は OS が報告したまま記録）があること、状態タブの「診断ログを書き出す」で CSV が書き出されて共有シートが開くこと、書き出した CSV にそのチャンクの文字起こし本文が含まれないことを確かめる。証拠は `DIAGNOSTICS_CHECK` 行・`diagnostics-export.png`・成果物 `logcat-phone` の `scenario-logs/diagnostics-export.csv`（流れは [04-dev-environment.md §6.2](../04-dev-environment.md#62-1-回の計装テストでは確かめられないものphone-scenariossh)）。
+
 ## 5. プライバシー・パッケージング
 
 - `android:allowBackup="false"`、`dataExtractionRules` でクラウドバックアップは全ドメイン除外（端末間移行 = device-transfer はローカル転送なので許可）。Android 11 以前向けに `fullBackupContent` でも全除外。
@@ -203,6 +205,7 @@ adb logcat -d | grep PLAYBACK_CHECK                # 再生位置の記録
 | `GapAlertNotificationTest` | 最後のチャンクから 15 分後の時計で本番の `GapAlertMonitor.check()` を呼ぶと通知が出て、通知シェードに表示される（#43） | `GAP_ALERT_CHECK`、`gap-alert-notification.png` |
 | `PermissionDeniedTest`（シナリオ） | オンボーディングで通知を拒否 → 「設定を開く」→ アプリの設定画面（#32） | `PERMISSION_CHECK`、`onboarding-permission-denied.png` ほか |
 | `ResumeAfterKillTest`（シナリオ） | 8 チャンクの文字起こし中に `adb shell am force-stop app.watchaudio` → 再起動後に全チャンクが 1 回ずつ文字起こしされる（欠落 0・重複 0、中断したチャンクは試行 2 回）（#20） | `RESUME_CHECK` |
+| `DiagnosticsScenarioTest`（シナリオ） | `ChunkReceiver.store` で受信 → 文字起こし → `am force-stop` → 再起動で、診断ログに各イベントと前回の終了理由が残り、状態タブから CSV を書き出せる（共有シートが開く・本文を含まない）（§4.2、#77） | `DIAGNOSTICS_CHECK`、`diagnostics-export.png`、`scenario-logs/diagnostics-export.csv` |
 
 `PlaybackTest` は MediaCodec で実際の AAC（16 kHz モノラル）を作り、本番の `Ingestor` で「前日 10:00 開始」のチャンクとして取り込んだうえで、
 
@@ -229,7 +232,7 @@ adb shell dumpsys jobscheduler | grep -A3 app.watchaudio
 adb exec-out run-as app.watchaudio cat files/diagnostics/diagnostics.csv.1 files/diagnostics/diagnostics.csv > /tmp/wa-diagnostics.csv
 ```
 
-長時間の実機検証（#61 など）の証拠には、状態タブから書き出した診断ログを添えると、受信の間隔・文字起こしの RTF・ワーカーの停止理由・前回の終了理由（強制終了・メモリ不足など）を後から確認できる。
+長時間の実機検証（#61 など）の証拠には、状態タブから書き出した診断ログを添えると、受信の間隔・文字起こしの RTF・ワーカーの停止理由・前回の終了理由（強制終了・メモリ不足など）を後から確認できる。エミュレータ（API 35）では `am force-stop` が `previous_exit` にどう残るかを CI の `DIAGNOSTICS_CHECK` 行（`previous_exit_reason` / `previous_exit_description`）で確認できる（§4.2）。
 
 Watch が無くても、ADB 経由の Wear OS エミュレータとスマホエミュレータをペアリングすれば `ChannelClient` 経由の受信を確認できる（KVM のある環境が必要）。
 
