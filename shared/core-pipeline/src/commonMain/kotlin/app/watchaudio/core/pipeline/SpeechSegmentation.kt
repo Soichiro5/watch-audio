@@ -10,11 +10,22 @@ import kotlin.math.pow
 object AsrSettings {
     const val SAMPLE_RATE = 16_000
 
-    /** Tuned in the M0-5 spike: 0.3 with 0.3 s padding found 23/23 utterances (0.5: 22/23). */
-    const val VAD_THRESHOLD = 0.3f
-    const val VAD_MIN_SILENCE_SECONDS = 0.5f
+    /**
+     * Speech starts where the Silero probability reaches this ([speechSegments]). The M0-5 spike
+     * chose 0.3 on clean speech; 0.15 also hears a conversation partner in noise (#71: 8 dB
+     * quieter than the wearer, at 2–7 dB SNR), which 0.3 misses or cuts short.
+     */
+    const val VAD_THRESHOLD = 0.15f
+
+    /** Speech ends where the probability stays below this for [VAD_MIN_SILENCE_SECONDS]. */
+    const val VAD_NEG_THRESHOLD = 0.15f
+
+    /**
+     * Long, so that a quiet voice whose probability dips is not cut; pauses and turn-taking
+     * inside a segment are split by [padSpeechSpans] instead.
+     */
+    const val VAD_MIN_SILENCE_SECONDS = 2f
     const val VAD_MIN_SPEECH_SECONDS = 0.25f
-    const val VAD_MAX_SPEECH_SECONDS = 20f
     const val VAD_WINDOW_SIZE = 512
 
     /** Context added around each VAD segment; without it word onsets get clipped. */
@@ -31,6 +42,36 @@ object AsrSettings {
 
     /** How far below the segment's loud frames a pause must be, in dB. */
     const val PAUSE_DB = 30f
+
+    /**
+     * A pause may instead be this close to the noise floor, in dB (#71). In noise, turn-taking
+     * gaps are filled with noise and never get [PAUSE_DB] below the speech.
+     */
+    const val PAUSE_FLOOR_DB = 9f
+
+    /**
+     * A pause found only near the noise floor must last this long; noise has more short dips
+     * than silence does, and shorter pieces lose the context the recognizer needs.
+     */
+    const val MIN_NOISY_PAUSE_SECONDS = 0.3f
+
+    /**
+     * However close to the noise floor, a pause must stay this far below the segment's loud
+     * frames, in dB, so that speech as loud as the noise is never taken for a pause.
+     */
+    const val PAUSE_MIN_CONTRAST_DB = 6f
+
+    /**
+     * Pauses are compared with the loud frames within this distance (not of the whole segment),
+     * so that a quiet speaker next to a loud one is not cut at every dip.
+     */
+    const val PAUSE_LOUD_WINDOW_SECONDS = 1f
+
+    /** Percentile of the 10 ms frame energies around a segment taken as its noise floor. */
+    const val NOISE_FLOOR_PERCENTILE = 10
+
+    /** Audio on each side of a segment that its noise floor is estimated over. */
+    const val NOISE_FLOOR_CONTEXT_SECONDS = 5f
 
     const val JA_MODEL_NAME = "sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01"
     const val JA_ENGINE_ID = "sherpa-zipformer-ja-reazonspeech-int8"
@@ -50,10 +91,13 @@ class SpeechSpan(val startSample: Int, val samples: FloatArray) {
  * - neighbours whose padding overlaps are joined into one input, but only while the result
  *   stays within [maxSamples]. Where neighbours stay apart, the shared padding is divided at its
  *   quietest point, so no audio is recognized twice;
- * - each input is split in the middle of every near-silent pause of at least [minPauseSamples]
- *   ([pauseDb] below its loud frames), so that turns of a conversation are recognized apart;
- * - anything still longer than [maxSamples] (speech without such a pause, e.g. in noise) is
- *   split at its quietest points into pieces of at most [maxSamples].
+ * - each input is split in the middle of every pause of at least [minPauseSamples], so that
+ *   turns of a conversation are recognized apart. A pause is near-silent ([pauseDb] below the
+ *   loud frames within [pauseLoudWindowSamples]) or, in noise, close to the noise floor (within
+ *   [pauseFloorDb], at least [pauseMinContrastDb] below the loud frames, for at least
+ *   [minNoisyPauseSamples]);
+ * - anything still longer than [maxSamples] (speech without such a pause) is split at its
+ *   quietest points into pieces of at most [maxSamples].
  *
  * No returned span is longer than [maxSamples] (unless [maxSamples] is not positive), and spans
  * never overlap.
@@ -65,6 +109,10 @@ fun padSpeechSpans(
     maxSamples: Int = (AsrSettings.MAX_SEGMENT_SECONDS * AsrSettings.SAMPLE_RATE).toInt(),
     minPauseSamples: Int = (AsrSettings.MIN_PAUSE_SECONDS * AsrSettings.SAMPLE_RATE).toInt(),
     pauseDb: Float = AsrSettings.PAUSE_DB,
+    pauseFloorDb: Float = AsrSettings.PAUSE_FLOOR_DB,
+    pauseMinContrastDb: Float = AsrSettings.PAUSE_MIN_CONTRAST_DB,
+    minNoisyPauseSamples: Int = (AsrSettings.MIN_NOISY_PAUSE_SECONDS * AsrSettings.SAMPLE_RATE).toInt(),
+    pauseLoudWindowSamples: Int = (AsrSettings.PAUSE_LOUD_WINDOW_SECONDS * AsrSettings.SAMPLE_RATE).toInt(),
 ): List<SpeechSpan> {
     val limit = if (maxSamples > 0) maxSamples else Int.MAX_VALUE
     val speech = vadSegments
@@ -96,7 +144,7 @@ fun padSpeechSpans(
     }
 
     return ranges
-        .flatMap { splitAtPauses(audio, it[0], it[1], minPauseSamples, pauseDb) }
+        .flatMap { splitAtPauses(audio, it[0], it[1], minPauseSamples, pauseDb, pauseFloorDb, pauseMinContrastDb, minNoisyPauseSamples, pauseLoudWindowSamples) }
         .flatMap { (from, to) -> splitLongRange(audio, from, to, limit) }
         .filter { (from, to) -> to > from }
         .map { (from, to) -> SpeechSpan(from, audio.copyOfRange(from, to)) }
@@ -106,33 +154,105 @@ fun padSpeechSpans(
 private const val PAUSE_FRAME = AsrSettings.SAMPLE_RATE / 100
 
 /**
- * Splits `[from, to)` into `[start, end)` pieces in the middle of every pause inside it: a run of at least
- * [minPauseSamples] whose 10 ms frames are all [pauseDb] dB or more below the loud frames (95th
- * percentile) of the range. Catches turn-taking gaps the VAD rides through, e.g. after
- * reverberant speech, where Silero stays above its threshold for over a second.
+ * Splits `[from, to)` into `[start, end)` pieces in the middle of every pause inside it. A pause
+ * is a run of near-silent 10 ms frames, [pauseDb] dB or more below the loud frames (95th
+ * percentile of the range, or of the frames within [loudWindowSamples] if positive), lasting at
+ * least [minPauseSamples]; or a run of frames at most
+ * [pauseFloorDb] above the [noiseFloor] around the range (and still [pauseMinContrastDb] below
+ * the loud frames) lasting at least [minNoisyPauseSamples]. The first catches turn-taking gaps
+ * the VAD rides through after reverberant speech, where Silero stays above its threshold for
+ * over a second; the second catches them in noise, which fills the gaps (#71).
  */
-internal fun splitAtPauses(audio: FloatArray, from: Int, to: Int, minPauseSamples: Int, pauseDb: Float): List<Pair<Int, Int>> {
+internal fun splitAtPauses(
+    audio: FloatArray,
+    from: Int,
+    to: Int,
+    minPauseSamples: Int,
+    pauseDb: Float,
+    pauseFloorDb: Float = Float.NEGATIVE_INFINITY,
+    pauseMinContrastDb: Float = AsrSettings.PAUSE_MIN_CONTRAST_DB,
+    minNoisyPauseSamples: Int = minPauseSamples,
+    loudWindowSamples: Int = 0,
+): List<Pair<Int, Int>> {
     val frames = (to - from) / PAUSE_FRAME
     if (minPauseSamples <= 0 || frames < 3) return listOf(from to to)
-    val energy = DoubleArray(frames) { f ->
-        var sum = 0.0
-        for (i in from + f * PAUSE_FRAME until from + (f + 1) * PAUSE_FRAME) sum += audio[i].toDouble() * audio[i]
-        sum / PAUSE_FRAME
+    val energy = DoubleArray(frames) { frameEnergy(audio, from + it * PAUSE_FRAME) }
+    val floor = if (pauseFloorDb == Float.NEGATIVE_INFINITY) 0.0 else noiseFloor(audio, from, to) * 10.0.pow(pauseFloorDb / 10.0)
+    // Loudness reference: the 95th percentile of the whole range, or of the frames within
+    // [loudWindowSamples] of each 100 ms block.
+    val window = loudWindowSamples / PAUSE_FRAME
+    val loud = DoubleArray(frames)
+    if (window <= 0) {
+        loud.fill(energy.sortedArray()[frames * 95 / 100])
+    } else {
+        for (block in 0 until frames step 10) {
+            val near = energy.copyOfRange(maxOf(0, block - window), minOf(frames, block + 10 + window)).apply { sort() }
+            loud.fill(near[near.size * 95 / 100], block, minOf(frames, block + 10))
+        }
     }
-    val quiet = energy.sortedArray()[frames * 95 / 100] * 10.0.pow(-pauseDb / 10.0)
+    val silent = DoubleArray(frames) { loud[it] * 10.0.pow(-pauseDb / 10.0) }
+    val quiet = DoubleArray(frames) { maxOf(silent[it], minOf(floor, loud[it] * 10.0.pow(-pauseMinContrastDb / 10.0))) }
     val minFrames = (minPauseSamples + PAUSE_FRAME - 1) / PAUSE_FRAME
+    val minNoisyFrames = (minNoisyPauseSamples + PAUSE_FRAME - 1) / PAUSE_FRAME
     val cuts = mutableListOf<Int>()
+    fun cutAt(runStart: Int, runEnd: Int) {
+        cuts += from + (runStart + runEnd) * PAUSE_FRAME / 2
+    }
+    // Runs of frames that are near-silent or near the floor; each holds at most one pause.
     var runStart = -1
     for (f in 0..frames) {
-        val isQuiet = f < frames && energy[f] <= quiet
+        val isQuiet = f < frames && energy[f] <= quiet[f]
         if (isQuiet && runStart < 0) runStart = f
         if (!isQuiet && runStart >= 0) {
             // Quiet runs at the edges are padding, not a gap between two utterances.
-            if (f - runStart >= minFrames && runStart > 0 && f < frames) cuts += from + (runStart + f) * PAUSE_FRAME / 2
+            if (runStart > 0 && f < frames) {
+                if (f - runStart >= minNoisyFrames) {
+                    cutAt(runStart, f)
+                } else {
+                    longestSilentRun(energy, runStart, f, silent)?.let { (a, b) -> if (b - a >= minFrames) cutAt(a, b) }
+                }
+            }
             runStart = -1
         }
     }
     return (listOf(from) + cuts + to).zipWithNext()
+}
+
+/** The longest run `[start, end)` of frames in `[from, to)` with energy at most their [limit]. */
+private fun longestSilentRun(energy: DoubleArray, from: Int, to: Int, limit: DoubleArray): Pair<Int, Int>? {
+    var best: Pair<Int, Int>? = null
+    var start = -1
+    for (f in from..to) {
+        val isSilent = f < to && energy[f] <= limit[f]
+        if (isSilent && start < 0) start = f
+        if (!isSilent && start >= 0) {
+            if (best == null || f - start > best.second - best.first) best = start to f
+            start = -1
+        }
+    }
+    return best
+}
+
+/** Mean energy of the 10 ms frame starting at [start]. */
+private fun frameEnergy(audio: FloatArray, start: Int): Double {
+    var sum = 0.0
+    for (i in start until start + PAUSE_FRAME) sum += audio[i].toDouble() * audio[i]
+    return sum / PAUSE_FRAME
+}
+
+/**
+ * Energy of the background noise around `[from, to)`: the [AsrSettings.NOISE_FLOOR_PERCENTILE]th
+ * percentile of the 10 ms frame energies over the range and [AsrSettings.NOISE_FLOOR_CONTEXT_SECONDS]
+ * on each side, which in a conversation includes the gaps between utterances.
+ */
+internal fun noiseFloor(audio: FloatArray, from: Int, to: Int): Double {
+    val context = (AsrSettings.NOISE_FLOOR_CONTEXT_SECONDS * AsrSettings.SAMPLE_RATE).toInt()
+    val start = maxOf(0, from - context)
+    val frames = (minOf(audio.size, to + context) - start) / PAUSE_FRAME
+    if (frames <= 0) return 0.0
+    val energy = DoubleArray(frames) { frameEnergy(audio, start + it * PAUSE_FRAME) }
+    energy.sort()
+    return energy[(frames - 1) * AsrSettings.NOISE_FLOOR_PERCENTILE / 100]
 }
 
 /** Splits `[from, to)` at its quietest points into pieces no longer than [limit]. */
