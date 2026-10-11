@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Release ASR check on the phone emulator (emulator.yml, #78), after the launch check of the shipped
-# release APK:
+# Release ASR check on the phone emulator (emulator.yml, #78), after the launch checks of the shipped
+# release APK and of the debug APK:
 #
 #   1. pushes the speech models and reference recordings (push-models.sh),
 #   2. installs, on a clean state, the release APK built with `-Pwatchaudio.testBuildType=release`

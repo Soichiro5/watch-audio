@@ -166,9 +166,10 @@ jobs:
           emulator-options: ${{ matrix.emulator-options }}
           script: |
             bash .github/scripts/launch-smoke.sh release-apk/${{ matrix.module }}-release.apk logcat-release.txt
-            if [ -n "${{ matrix.release-checks }}" ]; then bash ${{ matrix.release-checks }} || touch device-tests-failed; fi
             adb uninstall app.watchaudio
             bash .github/scripts/launch-smoke.sh ${{ matrix.module }}/build/outputs/apk/debug/${{ matrix.module }}-debug.apk logcat.txt
+            # After both launch checks (each on a fresh device state); the scenarios then get a fresh debug install again.
+            if [ -n "${{ matrix.release-checks }}" ]; then bash ${{ matrix.release-checks }} || touch device-tests-failed; adb uninstall app.watchaudio || true; adb install -r ${{ matrix.module }}/build/outputs/apk/debug/${{ matrix.module }}-debug.apk; fi
             if [ -n "${{ matrix.scenarios }}" ]; then bash ${{ matrix.scenarios }} || touch device-tests-failed; fi
             # The test engine reinstalls both APKs itself; remove the earlier installs (smoke test, scenarios) so a signature mismatch cannot skip the tests.
             if [ -n "${{ matrix.device-tests }}" ]; then adb uninstall app.watchaudio || true; adb uninstall app.watchaudio.test || true; fi
