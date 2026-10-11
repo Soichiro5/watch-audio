@@ -28,7 +28,7 @@ final class RecorderStatusPublisher {
             RecorderStatus(phase: recorder.phase, since: recorder.recordingSince)
         } onChange: { [weak self] in
             // Called before the change is applied: read the new values on the next main-actor turn.
-            Task { @MainActor in self?.track() }
+            Task { @MainActor [weak self] in self?.track() }
         }
         publish(status)
     }

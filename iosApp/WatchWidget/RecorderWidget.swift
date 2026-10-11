@@ -52,8 +52,9 @@ struct RecorderStatusWidgetView: View {
                 .foregroundStyle(display.tone.color)
                 .widgetAccentable()
                 .widgetLabel {
-                    if display.recordingSince != nil {
-                        ComplicationElapsedText(display: display, fallback: display.title)
+                    // Corner labels only render Text / Gauge / ProgressView.
+                    if let since = display.recordingSince {
+                        Text(since, style: .timer)
                     } else {
                         Text(display.title)
                     }
