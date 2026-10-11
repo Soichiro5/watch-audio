@@ -35,13 +35,16 @@ on:
       - ".github/scripts/**"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   smoke:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -69,7 +72,7 @@ jobs:
             scenarios: .github/scripts/wear-surfaces.sh
     name: smoke (${{ matrix.name }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # Must run before setup-java: the tool cache it clears is where the JDK is installed.
       - name: Free disk space for the emulator image
@@ -77,12 +80,12 @@ jobs:
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android/sdk/ndk "$AGENT_TOOLSDIRECTORY"
           df -h /
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: 21
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
 
       - name: Enable KVM
         run: |
@@ -93,7 +96,7 @@ jobs:
       # Same cache as android.yml; the phone checks push these models to the emulator (#22).
       - name: Cache ASR models
         if: matrix.name == 'phone'
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: tools/harness/models
           key: asr-models-${{ hashFiles('tools/harness/download-models.sh') }}
@@ -106,7 +109,7 @@ jobs:
         run: ./gradlew :${{ matrix.module }}:assembleDebug ${{ matrix.device-test-apks }}
 
       - name: Install, launch and check for crashes
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: ${{ matrix.api-level }}
           target: ${{ matrix.target }}
@@ -149,7 +152,7 @@ jobs:
             ls screenshots-${{ matrix.name }} 2>/dev/null || echo "none"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: logcat-${{ matrix.name }}
@@ -163,7 +166,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: screenshots-${{ matrix.name }}

@@ -1,0 +1,10 @@
+# Keeps the SHA-pinned GitHub Actions up to date (#79). Gradle dependencies are updated by hand.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
