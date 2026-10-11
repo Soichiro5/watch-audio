@@ -22,6 +22,17 @@ on:
       - "*.gradle.kts"
       - ".github/workflows/emulator.yml"
       - ".github/scripts/**"
+      - "!**/*.md"
+      - "!docs/**"
+      - "!**/src/iosMain/**"
+      - "!**/src/iosTest/**"
+      - "!**/src/jvmMain/**"
+      - "!**/src/jvmTest/**"
+      - "!.github/scripts/simulator-smoke.sh"
+      - "!.github/scripts/xcode-test.sh"
+      - "!.github/scripts/make-ja-speech.sh"
+      - "!.github/scripts/xcresult-summary.py"
+      - "!.github/scripts/watch-complication-smoke.sh"
   pull_request:
     branches: [main]
     paths:
@@ -33,6 +44,17 @@ on:
       - "*.gradle.kts"
       - ".github/workflows/emulator.yml"
       - ".github/scripts/**"
+      - "!**/*.md"
+      - "!docs/**"
+      - "!**/src/iosMain/**"
+      - "!**/src/iosTest/**"
+      - "!**/src/jvmMain/**"
+      - "!**/src/jvmTest/**"
+      - "!.github/scripts/simulator-smoke.sh"
+      - "!.github/scripts/xcode-test.sh"
+      - "!.github/scripts/make-ja-speech.sh"
+      - "!.github/scripts/xcresult-summary.py"
+      - "!.github/scripts/watch-complication-smoke.sh"
   workflow_dispatch:
 
 permissions:
