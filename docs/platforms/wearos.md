@@ -231,7 +231,7 @@ sequenceDiagram
 - **時計**: ファイル入力の時計は「再生した音声の長さ」。チャンクの長さ・Mark のオフセットは倍速でも音声上の正確な値になる。レベルのポーリングも音声 1 秒ごと（実時間では `1 秒 ÷ 速度`）に行うので、無音判定の条件（カバレッジ 80 % 以上）は本番と同じ。
 - **時刻**: 最初のチャンクの `startedAtEpochMs` は開始時の壁時計、以降は本番と同じく「前チャンクの開始 + 長さ」。倍速では実際の時刻より先に進む（1 時間分の音声を 10 倍速 = 実時間 6 分で流すと、終わりの時刻は実際より約 54 分先になる）。
 - **ファイルの終わり**: 録音サービスを停止し、最後のチャンクを `user_stop` で閉じる（`loop` 指定時は先頭に戻って続ける）。その後の入力はマイクに戻る。
-- **リリースへの混入防止**: `assembleDebug` / `assembleRelease` は `verify<Variant>DebugInput` タスクに依存する。APK の dex を `app/watchaudio/wear/debug/` で、merged manifest を `app.watchaudio.wear.debug.` で検索し、debug では「ある」（検索が機能していることの確認）、release では「ない」ことを確認して、混入していればビルドを失敗させる。release は R8 で難読化されるため（#78）、R8 の mapping（元のクラス名の一覧）も `app.watchaudio.wear.debug.` で検索する。結果は `apps/wear/build/reports/debug-input/<variant>.txt`。CI は `android.yml` の `assembleRelease` で release 側の検査を毎回実行し、結果をジョブサマリーに出す。
+- **リリースへの混入防止**: `assembleDebug` / `assembleRelease` は `verify<Variant>DebugInput` タスクに依存する（`build-logic` の `VerifyDebugInputTask`。`apps/wear` が `watchaudio.android.debug-input-guard` プラグインで登録し、検索するパッケージは namespace + `.debug`）。APK の dex を `app/watchaudio/wear/debug/` で、merged manifest を `app.watchaudio.wear.debug.` で検索し、debug では「ある」（検索が機能していることの確認）、release では「ない」ことを確認して、混入していればビルドを失敗させる。release は R8 で難読化されるため（#78）、R8 の mapping（元のクラス名の一覧）も `app.watchaudio.wear.debug.` で検索する。結果は `apps/wear/build/reports/debug-input/<variant>.txt`。CI は `android.yml` の `assembleRelease` で release 側の検査を毎回実行し、結果をジョブサマリーに出す。
 
 ### 11.2 エミュレータでの使い方
 

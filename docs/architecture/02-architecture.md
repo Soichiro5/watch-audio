@@ -82,13 +82,14 @@ watch-audio/
 │   ├── pipeline/              #   Ingestor・ChunkIntake（受信の入口）、TranscriptionPipeline・TranscriptionRun（文字起こし 1 回分）、Transcriber、発話区間の切り出し、境界の連結、StorageManager、設定（AppSettings）・状態（ProcessingStatus）・途絶アラートの判定
 │   ├── testing/               #   テスト専用: TempDir、manifest の組み立て（testManifest）。各モジュールのテストだけが使う
 │   └── ui/                    #   スマホ UI（Compose MP、Android/iOS 共通）、AppServices、ViewModel。iosMain に IosAppGraph と Swift とのブリッジ
-├── build-logic/               # Gradle の convention plugin（KMP ライブラリ共通設定、SQLite テストを JVM/Android/iOS で動かす設定）
+├── build-logic/               # Gradle の convention plugin（KMP ライブラリ共通設定、SQLite テストを JVM/Android/iOS で動かす設定、Android アプリ共通設定と release、Wear OS の debug 入力の混入検査）
 ├── gradle/libs.versions.toml  # 依存バージョンのカタログ
 ├── tools/
 │   ├── harness/               #   実機なしの通し検証（Watch シミュレータ → 取り込み → sherpa-onnx → SQLite、Gradle モジュール）
 │   ├── test-audio/            #   検証用の日本語会話音声セットの生成（Python）
 │   ├── privacy-check/         #   「データは端末内のみ」の CI チェック
 │   ├── check-links/           #   Markdown のリンク切れ検査
+│   ├── check-version/         #   アプリのバージョンが gradle.properties と apps/ios/project.yml で一致するかの CI チェック
 │   └── roadmap-view/          #   Issue ダッシュボードの生成（Python）
 ├── research/                  # 技術検証のスクリプトと結果（ASR・埋め込みのベンチマーク）
 └── docs/                      # product/（調査・ロードマップ）・architecture/・platforms/（プラットフォーム別の実装メモ）・dev/（開発環境）・research/（検証結果）
