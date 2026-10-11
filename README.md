@@ -58,6 +58,7 @@ tools/harness/       実機なしの通し検証（Watch シミュレータ + sh
 tools/test-audio/    検証用音声セットの生成（オフライン TTS の日本語会話 + Watch 録音を模した加工）
 tools/privacy-check/ 「データは端末内のみ」の CI チェック（権限・バックアップ・通信・依存の許可リスト）
 tools/check-links/   Markdown のリンク切れ検査（CI: links.yml）
+tools/check-version/ アプリのバージョンの一致検査（gradle.properties と iOS の project.yml、CI: android.yml）
 tools/roadmap-view/  Issue ダッシュボードの生成
 research/            技術検証のベンチマーク（ASR・埋め込み、Python）
 docs/                product（調査・ロードマップ）/ architecture / platforms / dev（開発環境）/ research（検証結果）

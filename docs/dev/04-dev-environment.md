@@ -173,6 +173,7 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 | `ios.yml` | Japanese test speech / Speech transcription on the iOS simulator | macOS の `say` で作った日本語音声（Watch と同じ AAC 16 kHz モノラル）を SpeechTranscriber（ja_JP）で文字起こしし、時刻と文字の再現率を確認（`SpeechTests`、iOS アプリがホスト、#21）。シミュレータで使えなければ理由を残してスキップ（実機確認は #60） | ジョブサマリーのテスト一覧と「Speech check logs」、成果物 `swift-evidence` |
 | `ios.yml` | Playback in the iOS app (simulator) | `PlaybackTests`（iOS アプリがホストの XCTest）: アプリが起動時に作った本物の `IosAppServices` で AAC 16 kHz の音声を 8 秒から再生し、再生位置がそこから始まり 2 秒後に 1 秒以上進む（#19） | ジョブサマリーのテスト一覧と `PLAYBACK_CHECK check=hosted_player` 行、成果物 `swift-evidence` |
 | `ios.yml`（`release` ジョブ） | Build iOS / watchOS app, Release, device | Release 構成の iOS アプリ（watchOS アプリを同梱。Kotlin フレームワークは iosArm64 の release）と watchOS アプリが実機向け（`generic/platform=iOS` / `watchOS`）に署名なし（`CODE_SIGNING_ALLOWED=NO`）でビルドできる。Release のバイナリに debug 専用の音声ファイル入力（#57）が入っていない（#78） | ジョブサマリーの `RELEASE_BUILD_CHECK` 行（アーキテクチャ・サイズ） |
+| `android.yml` | Version check | アプリのバージョンが 1 か所（`gradle.properties`）にあり、iOS / watchOS の `apps/ios/project.yml` の `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` が同じ値（`tools/check-version`、§7.2、#138） | ジョブのログ（食い違いを `ファイル:行: 内容` で列挙） |
 | `links.yml` | Markdown link check | リポジトリ内のすべての Markdown の相対リンクとアンカー（見出し）が存在する。CLAUDE.md のコードとして書いたパス・`cd` 先・Gradle のプロジェクトパス（`:module:task`）が実在する（`tools/check-links`、#49） | ジョブのログ（壊れたリンクを `ファイル:行: 内容` で列挙） |
 
 スクリーンショットは成果物 `screenshots-phone` / `screenshots-wear`（30 日保存）、`*_CHECK` 行はジョブサマリーにまとめて出す。
@@ -309,7 +310,7 @@ python3 tools/privacy-check/check.py --resolved-deps apps/wear=/tmp/deps-wear.tx
 
 ### 7.1 Android の release ビルドと署名（#78）
 
-- **設定の場所**: `build-logic` の `AndroidReleaseConventionPlugin`（プラグイン ID `watchaudio.android.release`）を `apps/android` と `apps/wear` の両方に適用している。release は R8 によるコードの縮小・難読化とリソースの縮小（`isMinifyEnabled` / `isShrinkResources`）を行い、keep ルールは各モジュールの `proguard-rules.pro`。スマホと Watch は applicationId が同じ `app.watchaudio` で、Data Layer でつながるには**同じ鍵で署名する必要がある**ため、署名の設定は 1 か所にまとめている。
+- **設定の場所**: `build-logic` の `AndroidAppConventionPlugin`（プラグイン ID `watchaudio.android.app`、§7.2）の一部（`AndroidRelease.kt`）で、`apps/android` と `apps/wear` の両方に適用している。release は R8 によるコードの縮小・難読化とリソースの縮小（`isMinifyEnabled` / `isShrinkResources`）を行い、keep ルールは各モジュールの `proguard-rules.pro`。スマホと Watch は applicationId が同じ `app.watchaudio` で、Data Layer でつながるには**同じ鍵で署名する必要がある**ため、署名の設定は 1 か所にまとめている。
 - **鍵の渡し方**: 鍵はリポジトリに置かず、Gradle は次の環境変数から読む。4 つとも未設定なら署名なし（`*-release-unsigned.apk`）、一部だけ設定されていれば値を出さずにビルドを失敗させる（secret の設定漏れで黙って署名なしになるのを防ぐ）。
 
 | Gradle が読む環境変数 | 中身 | CI で渡す GitHub Actions secret |
@@ -338,6 +339,18 @@ base64 -w0 watch-audio-release.jks > keystore.b64   # macOS: base64 -i watch-aud
 - **更新・漏えい時**: 新しい鍵を作って 4 つの secret を上書きする。既に入れた端末では署名が変わるため、スマホ・Watch とも一度アンインストールしてから入れ直す（Play App Signing を使っていればアップロード鍵のリセットを申請する）。
 - **手元での release ビルド**: 署名なしなら `./gradlew --max-workers=2 :apps:android:assembleRelease :apps:wear:assembleRelease`。署名する場合は上の 4 つの環境変数を設定してから実行する。
 - **iOS / watchOS の Release 構成**: `ios.yml` の `release` ジョブ（シミュレータでの確認をする `build` ジョブと並列）が、iOS アプリ（watchOS アプリを同梱）と watchOS アプリを Release 構成・実機向けに署名なし（`CODE_SIGNING_ALLOWED=NO`）でビルドし、`RELEASE_BUILD_CHECK` 行（バンドル ID・アーキテクチャ・サイズ・debug 専用の音声ファイル入力がないこと）をジョブサマリーに出す。証明書・プロビジョニングプロファイルを secret に置いた署名付きのアーカイブ（TestFlight）は #35 で扱う。
+
+### 7.2 アプリのバージョンと Android アプリの共通設定（#138）
+
+- **バージョンは `gradle.properties` の 1 か所**: `watchaudio.versionName`（表示用のバージョン。例 `0.1.0`）と `watchaudio.versionCode`（ビルド番号。1 以上の整数で、上げるたびに増やす）。スマホ・Wear OS の `versionName` / `versionCode` は `build-logic` がここから読み、各アプリの `build.gradle.kts` には書かない。
+- **iOS / watchOS**: XcodeGen は `gradle.properties` を読めないので、`apps/ios/project.yml` の `settings.base` に同じ値を書く（`MARKETING_VERSION` = versionName、`CURRENT_PROJECT_VERSION` = versionCode。Info.plist の `CFBundleShortVersionString` / `CFBundleVersion` はこの設定から作られる）。
+- **CI の確認**: `android.yml` の最初のステップ「Version check」（`tools/check-version/check_version.py`、Python 標準ライブラリのみ・ビルド不要・数秒）が、次のどれかで失敗する。`android.yml` はドキュメント以外のすべての変更で動くので、`gradle.properties` や `project.yml` だけの変更でも走る。
+  - `project.yml` の `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`（ターゲットごとの上書きも含めてすべて）が `gradle.properties` と違う、またはない
+  - `gradle.properties` の値がない・形式が違う（versionName は Apple の制約に合わせて「整数を `.` で 1〜3 個つないだもの」、versionCode は 1〜2100000000）
+  - アプリの `build.gradle.kts` が `versionName` / `versionCode` を自分で設定している、`project.yml` が `CFBundleShortVersionString` / `CFBundleVersion` を `$(MARKETING_VERSION)` / `$(CURRENT_PROJECT_VERSION)` 以外の値にしている
+- **バージョンの上げ方**（例: v0.2）: `gradle.properties` の 2 行と `project.yml` の 2 行を同じ PR で直す。手元では `python3 tools/check-version/check_version.py`（テストは `python3 -m unittest discover -s tools/check-version -v`）。
+- **Android アプリの共通設定**（`build-logic` の `AndroidAppConventionPlugin`、プラグイン ID `watchaudio.android.app`。`apps/android` と `apps/wear` が適用）: Android アプリ・Compose コンパイラのプラグイン、applicationId `app.watchaudio`（Data Layer でつながるため両方で同じ）、compileSdk / targetSdk（`gradle/libs.versions.toml`）、Java 17、Compose の有効化、上のバージョン、release ビルド（R8 と署名、§7.1）。各アプリに残すのは namespace・minSdk（Watch は 33、スマホは 29）・依存・アプリ固有の設定（スマホの ABI や計装テストの設定など）。
+- **Wear OS の debug 入力の混入検査**（#57）: `build-logic` の `VerifyDebugInputTask` を `DebugInputGuardPlugin`（プラグイン ID `watchaudio.android.debug-input-guard`、`apps/wear` が適用）がバリアントごとに `verify<Variant>DebugInput` として登録し、`assemble<Variant>` から実行する（内容は [wearos.md](../platforms/wearos.md) の「リリースへの混入防止」）。
 
 ## 8. 実機検証の手順
 

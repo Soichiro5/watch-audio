@@ -21,9 +21,13 @@ gradlePlugin {
             id = "watchaudio.kmp.sqlite-tests-jvm-ios"
             implementationClass = "SqliteTestsJvmIosConventionPlugin"
         }
-        register("androidRelease") {
-            id = "watchaudio.android.release"
-            implementationClass = "AndroidReleaseConventionPlugin"
+        register("androidApp") {
+            id = "watchaudio.android.app"
+            implementationClass = "AndroidAppConventionPlugin"
+        }
+        register("debugInputGuard") {
+            id = "watchaudio.android.debug-input-guard"
+            implementationClass = "DebugInputGuardPlugin"
         }
     }
 }
