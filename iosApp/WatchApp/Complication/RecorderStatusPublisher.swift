@@ -42,7 +42,7 @@ final class RecorderStatusPublisher {
 }
 
 extension RecorderStatus {
-    init(phase: RecorderController.Phase, since: Date?) {
+    init(phase: RecorderPhase, since: Date?) {
         switch phase {
         case .recording: self = .recording(since: since)
         case .paused(let reason): self = .paused(reason)
