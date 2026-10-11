@@ -118,9 +118,9 @@ private const val PAUSE_FRAME = AsrSettings.SAMPLE_RATE / 100
  * is a run of near-silent 10 ms frames, [pauseDb] dB or more below the loud frames (95th
  * percentile of the range, or of the frames within [loudWindowSamples] if positive), lasting at
  * least [minPauseSamples]; or a run of frames at most
- * [pauseFloorDb] above the [noiseFloor] around the range (its [noiseFloorPercentile]th percentile
- * over the range and [noiseFloorContextSamples] on each side) (and still [pauseMinContrastDb] below
- * the loud frames) lasting at least [minNoisyPauseSamples]. The first catches turn-taking gaps
+ * [pauseFloorDb] above the [noiseFloor] around the range (and still [pauseMinContrastDb] below
+ * the loud frames) lasting at least [minNoisyPauseSamples]; the floor is the
+ * [noiseFloorPercentile]th percentile over the range and [noiseFloorContextSamples] on each side. The first catches turn-taking gaps
  * the VAD rides through after reverberant speech, where Silero stays above its threshold for
  * over a second; the second catches them in noise, which fills the gaps (#71).
  */
