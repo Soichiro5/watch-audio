@@ -188,11 +188,11 @@ adb logcat -d | grep -E "[A-Z_]+_CHECK"
 .github/scripts/simulator-smoke.sh iOS iPhone build/DerivedData/Build/Products/Debug-iphonesimulator/WatchAudio.app app.watchaudio
 # Mac: Swift のテスト（cd iosApp && xcodegen generate の後）
 .github/scripts/xcode-test.sh SwiftUnitTests "Swift unit tests"
-.github/scripts/make-ja-speech.sh build/ja-speech && .github/scripts/xcode-test.sh SpeechTests "SpeechTranscriber"
+.github/scripts/make-ja-speech.sh build/ja-speech && UNINSTALL_APP=app.watchaudio .github/scripts/xcode-test.sh SpeechTests "SpeechTranscriber"
 UNINSTALL_APP=app.watchaudio .github/scripts/xcode-test.sh PlaybackTests "Playback in the iOS app"
 ```
 
-`ios.yml` のシミュレータは 1 ジョブの中で使い回す（#92）。起動は端末ごとに 1 回で、同時に起動するのは 1 台だけ（3 コアのランナーでは、2 台同時やビルドと並行した起動で各ステップが 2〜3 倍遅くなった）。Apple Watch のステップ（コンプリケーション → 起動確認）を先に同じ起動で続けて実行してシャットダウンし、次に iPhone の起動確認で起動した iPhone を Swift のテスト（SwiftUnitTests・Speech・Playback）でそのまま使う。各スクリプト（`simulator-smoke.sh`・`watch-complication-smoke.sh`・`xcode-test.sh`）は `simulator-udid.sh` が選ぶ同じ端末（最新ランタイムの iPhone / Apple Watch）を使い、終わってもシャットダウンしない。アプリがホストのテスト（Speech・Playback）は、前のステップで入れたアプリが残っているとテストバンドルを読み込めないため、端末を消去（`ERASE_SIMULATOR=1`。再起動でデータ移行（1〜2 分）がやり直しになる）する代わりにアプリをアンインストールしてから（`UNINSTALL_APP`）実行する。アンインストールでアプリのコンテナ・データ・権限の状態は消去と同じく初期化される。`xcode-test.sh` は `build-for-testing` と `test-without-building` に分けて実行し、それぞれの所要時間をログに出す。
+`ios.yml` の `build` ジョブはシミュレータを使い回す（#92）。起動は端末ごとに 1 回、同時に起動しているのは 1 台だけにする（3 コアのランナーでは、2 台を同時に起動したままにすると各ステップが 2〜3 倍遅くなった）。順番は Apple Watch（コンプリケーション → 起動確認。終わったらシャットダウン）→ iPhone（Swift unit tests → 起動確認 → Speech → Playback）。初回起動はデータ移行とその後の落ち着くまでに数分かかるため、`xcode-test.sh` は iPhone の起動をバックグラウンドで始めてからテストをビルドし（`build-for-testing`）、起動完了を待ってから実行する（`test-without-building`）。iPhone で最初に動くホストなしの SwiftUnitTests のビルドが初回起動と重なり、続く起動確認は落ち着いた端末で行われる。各スクリプト（`simulator-smoke.sh`・`watch-complication-smoke.sh`・`xcode-test.sh`）は `simulator-udid.sh` が選ぶ同じ端末（最新ランタイムの iPhone / Apple Watch）を使い、終わってもシャットダウンしない（ジョブの最後の「Shut down simulators」で止める）。アプリがホストのテスト（Speech・Playback）は、前のステップで入れたアプリが残っているとテストバンドルを読み込めないため、端末を消去（`ERASE_SIMULATOR=1`。再起動でデータ移行がやり直しになる）する代わりにアプリをアンインストールしてから（`UNINSTALL_APP`）実行する。アンインストールでアプリのコンテナ・データ・権限の状態は消去と同じく初期化される。ホストのテストのビルドでは、「Build iOS app」が同じソースから作った Kotlin フレームワークを使い、Gradle の再実行を省く（`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES`）。各ステップのログの `Timing:` 行に起動待ち・インストール・ビルド・実行の所要時間が出る。
 
 Swift のテストを Linux で実行する手段はない（Xcode が必要）。変更したら CI（macOS、10 倍課金）で確認する前に、Kotlin 側は上のクロスコンパイル、Swift 側は差分の読み直しで型・並行性のエラーを潰しておく。
 
