@@ -212,7 +212,6 @@ class ViewModelTest {
         runCurrent()
         val failed = vm.state.value.content!!.entries.single() as TranscriptEntry.Untranscribed
         assertEquals(TranscriptEntry.Untranscribed.Kind.FAILED, failed.kind)
-        assertEquals("boom", failed.error)
 
         vm.transcribe(failed)
         runCurrent()

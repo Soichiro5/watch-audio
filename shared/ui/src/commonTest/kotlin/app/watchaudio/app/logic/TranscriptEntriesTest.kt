@@ -3,6 +3,7 @@ package app.watchaudio.app.logic
 import app.watchaudio.core.db.ChunkState
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 
@@ -49,7 +50,8 @@ class TranscriptEntriesTest {
         assertEquals(at(9, 20), pending.to)
         val failed = entries[2] as TranscriptEntry.Untranscribed
         assertEquals(TranscriptEntry.Untranscribed.Kind.FAILED, failed.kind)
-        assertEquals("decode", failed.error)
+        // The exception message is not part of what the timeline shows (#144).
+        assertFalse("decode" in failed.toString())
         assertEquals(TranscriptEntry.Untranscribed.Kind.TRANSCRIBING, (entries[4] as TranscriptEntry.Untranscribed).kind)
     }
 

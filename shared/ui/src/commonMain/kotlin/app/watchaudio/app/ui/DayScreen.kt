@@ -339,9 +339,7 @@ private fun UntranscribedRow(entry: TranscriptEntry.Untranscribed, timeZone: Tim
                     },
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                entry.error?.takeIf { failed }?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 2)
-                }
+                if (failed) Text(Strings.FAILED_CHUNKS_NOTE, style = MaterialTheme.typography.bodySmall)
             }
             if (entry.kind != TranscriptEntry.Untranscribed.Kind.TRANSCRIBING) {
                 TextButton(onClick = onTranscribe) { Text(if (failed) Strings.RETRY else Strings.TRANSCRIBE_NOW) }

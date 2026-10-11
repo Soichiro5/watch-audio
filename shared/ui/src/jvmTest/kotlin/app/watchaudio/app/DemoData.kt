@@ -16,6 +16,9 @@ internal object DemoData {
     private const val MIN = 60_000L
     private const val CHUNK = 5 * MIN
 
+    /** `lastError` of the demo's failed chunks. */
+    const val DEMO_FAILURE = "java.io.IOException: Failed to decode audio (MediaCodec error 0x80001001)"
+
     private val lines = listOf(
         "おはようございます、今日もよろしくお願いします",
         "明日の会議は十時からです",
@@ -44,7 +47,8 @@ internal object DemoData {
                     store.transaction {
                         markTranscribing(id)
                         if (state == 3) {
-                            markFailed(id, "音声ファイルを読み込めませんでした")
+                            // A raw exception message, as the pipeline stores it: the timeline must not show it (#144).
+                            markFailed(id, DEMO_FAILURE)
                         } else {
                             saveTranscript(
                                 id,
