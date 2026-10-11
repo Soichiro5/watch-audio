@@ -83,6 +83,56 @@ jobs:
             wearApp/build/outputs/apk/debug/*.apk
           retention-days: 7
 
+      # #78: release builds with R8 of both apps. assembleRelease also runs the Wear OS guard
+      # verifyReleaseDebugInput (#57: the debug audio file input must not be in a release build).
+      # Signed only when the release key secrets exist (docs/04 §7.1); fork PRs and a repository
+      # without the secrets build unsigned APKs, which are not uploaded. The key is written to the
+      # runner's temp dir only and removed afterwards; secret values are never echoed.
+      - name: Assemble release (R8) + debug input leak check
+        id: release
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          WATCHAUDIO_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+          WATCHAUDIO_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          WATCHAUDIO_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
+            printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            export WATCHAUDIO_RELEASE_STORE_FILE="$RUNNER_TEMP/release.jks"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            signing="signed with the release key (secrets)"
+          else
+            signing="unsigned (release key secrets are not set)"
+          fi
+          ./gradlew :androidApp:assembleRelease :wearApp:assembleRelease
+          {
+            echo "### Release builds (R8): $signing"
+            echo
+            echo "| APK | Size |"
+            echo "| --- | --- |"
+            for f in androidApp/build/outputs/apk/release/*.apk wearApp/build/outputs/apk/release/*.apk; do
+              echo "| $(basename "$f") | $(du -h "$f" | cut -f1) |"
+            done
+            echo
+            echo "Wear OS debug input guard (verifyReleaseDebugInput, #57):"
+            echo '```'
+            cat wearApp/build/reports/debug-input/release.txt
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the release key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: steps.release.outputs.signed == 'true'
+        with:
+          name: release-apks
+          path: |
+            androidApp/build/outputs/apk/release/*-release.apk
+            wearApp/build/outputs/apk/release/*-release.apk
+          retention-days: 7
+
       # Screens rendered by composeApp's AppUiTest (onboarding incl. the refused permission #32, tabs).
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()

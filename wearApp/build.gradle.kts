@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.kotlin.serialization)
+    id("watchaudio.android.release")
 }
 
 android {
@@ -61,7 +62,8 @@ dependencies {
  * Guards #57: the audio file input (package `app.watchaudio.wear.debug`, `src/debug`) must be
  * in debug builds and never in release builds. Scans the APK's dex files for the package and
  * the merged manifest for its activity; runs as part of `assemble<Variant>`. The debug variant
- * expects them present, which also proves that the scan finds them.
+ * expects them present, which also proves that the scan finds them. For minified variants (release,
+ * #78) it also scans the R8 mapping, which lists original class names even when R8 renamed them.
  */
 abstract class VerifyDebugInputTask : DefaultTask() {
     @get:InputFiles
@@ -69,6 +71,10 @@ abstract class VerifyDebugInputTask : DefaultTask() {
 
     @get:InputFile
     abstract val mergedManifest: RegularFileProperty
+
+    @get:InputFile
+    @get:Optional
+    abstract val r8Mapping: RegularFileProperty
 
     @get:Input
     abstract val expectPresent: Property<Boolean>
@@ -91,10 +97,14 @@ abstract class VerifyDebugInputTask : DefaultTask() {
             }
         }
         val inManifest = mergedManifest.get().asFile.readText().contains("app.watchaudio.wear.debug.")
-        val lines = findings.map { it.first } + "merged manifest declares debug input: $inManifest"
+        val inMapping = r8Mapping.orNull?.asFile?.let { mapping ->
+            mapping.useLines { lines -> lines.any { it.startsWith("app.watchaudio.wear.debug.") } }
+        }
+        val lines = findings.map { it.first } + "merged manifest declares debug input: $inManifest" +
+            listOfNotNull(inMapping?.let { "R8 mapping lists debug input classes: $it" })
         report.get().asFile.writeText(lines.joinToString("\n", postfix = "\n"))
-        val present = findings.all { it.second } && inManifest
-        val absent = findings.none { it.second } && !inManifest
+        val present = findings.all { it.second } && inManifest && inMapping != false
+        val absent = findings.none { it.second } && !inManifest && inMapping != true
         if (expectPresent.get()) {
             check(present) { "debug audio file input missing from the debug build:\n${lines.joinToString("\n")}" }
         } else {
@@ -117,6 +127,7 @@ androidComponents {
         val verify = tasks.register<VerifyDebugInputTask>("verify${name}DebugInput") {
             apkDirectory.set(variant.artifacts.get(SingleArtifact.APK))
             mergedManifest.set(variant.artifacts.get(SingleArtifact.MERGED_MANIFEST))
+            if (variant.isMinifyEnabled) r8Mapping.set(variant.artifacts.get(SingleArtifact.OBFUSCATION_MAPPING_FILE))
             expectPresent.set(variant.buildType == "debug")
             report.set(layout.buildDirectory.file("reports/debug-input/${variant.name}.txt"))
         }
