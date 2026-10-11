@@ -37,6 +37,7 @@ on:
       - "!.github/scripts/make-ja-speech.sh"
       - "!.github/scripts/xcresult-summary.py"
       - "!.github/scripts/watch-complication-smoke.sh"
+      - "!.github/scripts/simulator-udid.sh"
   pull_request:
     branches: [main]
     paths:
@@ -60,6 +61,7 @@ on:
       - "!.github/scripts/make-ja-speech.sh"
       - "!.github/scripts/xcresult-summary.py"
       - "!.github/scripts/watch-complication-smoke.sh"
+      - "!.github/scripts/simulator-udid.sh"
   workflow_dispatch:
 
 permissions:
