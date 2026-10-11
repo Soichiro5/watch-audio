@@ -41,7 +41,7 @@
 | Tile・コンプリケーション（#41） | 🟡 開発環境の証跡待ち | Wear OS は実装済み（エミュレータのスクリーンショット待ち）、watchOS のコンプリケーションは未実装 |
 | ストレージ管理（#33） | ✅ クローズ | 保持期間（既定は無期限、文字起こし済みの音声のみ削除）、容量の内訳・空き容量警告、日単位/全削除 |
 | モデル配布サイズ（#46） | ⬜ 未着手 | 713 MB → 約 160 MB |
-| release ビルド・署名（#78） | 🟡 着手（P1） | Android: R8 の release ビルドを CI で毎回作成（Wear OS の debug 入力の混入検査を含む）、エミュレータで release の起動確認、署名は Actions の secret があるときだけ（[04 §7.1](04-dev-environment.md#71-android-の-release-ビルドと署名78)）。残り: release での文字起こしの確認、iOS / watchOS の Release 構成のビルド |
+| release ビルド・署名（#78） | 🟡 着手（P1） | Android: R8 の release ビルドを CI で毎回作成（Wear OS の debug 入力の混入検査を含む）、エミュレータで release の起動確認と、release ビルドが既知の日本語チャンクを文字起こしして DB に保存する確認（`ReleaseAsrTest`）、署名は Actions の secret があるときだけ。iOS / watchOS: Release 構成の実機向けビルド（署名なし）を `ios.yml` の `release` ジョブで確認（[04 §7.1](04-dev-environment.md#71-android-の-release-ビルドと署名78)）。署名付きアーカイブは #35 |
 
 ## 全体の流れ
 
