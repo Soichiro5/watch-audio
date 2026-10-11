@@ -1,8 +1,9 @@
 name: Emulator smoke test
 
-# Device-free check (#44): boot a phone and a Wear OS emulator, install the debug
-# builds, launch them and fail on crashes of our own process (system apps such as the
-# Wear setup wizard sometimes crash on CI images and must not fail the check). Runs on Linux runners (KVM), 1x minutes.
+# Device-free check (#44): boot a phone and a Wear OS emulator, install the release builds (R8,
+# signed with a throwaway key generated in the job; #78) and then the debug builds, launch each and
+# fail on crashes of our own process (system apps such as the Wear setup wizard sometimes crash on
+# CI images and must not fail the check): .github/scripts/launch-smoke.sh. Runs on Linux runners (KVM), 1x minutes.
 # On the phone emulator it also runs the instrumented tests: real MediaPlayer playback and
 # the search -> one tap -> play flow (#19, #25), the shared SQLite tests of core-db and
 # core-pipeline on Android (#14), on-device ASR with the real models and the wait without a model
@@ -20,6 +21,7 @@ on:
       - "shared/**"
       - "gradle/**"
       - "*.gradle.kts"
+      - "build-logic/**"
       - ".github/workflows/emulator.yml"
       - ".github/scripts/**"
   pull_request:
@@ -31,6 +33,7 @@ on:
       - "shared/**"
       - "gradle/**"
       - "*.gradle.kts"
+      - "build-logic/**"
       - ".github/workflows/emulator.yml"
       - ".github/scripts/**"
   workflow_dispatch:
@@ -105,8 +108,15 @@ jobs:
         if: matrix.name == 'phone'
         run: tools/harness/download-models.sh
 
-      - name: Build debug APK (and instrumented test APKs)
-        run: ./gradlew :${{ matrix.module }}:assembleDebug ${{ matrix.device-test-apks }}
+      # The release build (R8, #78) is signed with a throwaway key made here: it only has to install
+      # on the emulator, and the real release key (android.yml) never reaches this job.
+      - name: Build release and debug APKs (and instrumented test APKs)
+        run: |
+          keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/throwaway.jks" -storepass ci-throwaway \
+            -keypass ci-throwaway -alias ci -keyalg RSA -keysize 2048 -validity 1 -dname "CN=watch-audio CI throwaway"
+          WATCHAUDIO_RELEASE_STORE_FILE="$RUNNER_TEMP/throwaway.jks" WATCHAUDIO_RELEASE_STORE_PASSWORD=ci-throwaway \
+            WATCHAUDIO_RELEASE_KEY_ALIAS=ci WATCHAUDIO_RELEASE_KEY_PASSWORD=ci-throwaway \
+            ./gradlew :${{ matrix.module }}:assembleRelease :${{ matrix.module }}:assembleDebug ${{ matrix.device-test-apks }}
 
       - name: Install, launch and check for crashes
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
@@ -119,13 +129,9 @@ jobs:
           disk-size: 3072M
           emulator-options: ${{ matrix.emulator-options }}
           script: |
-            adb install -r ${{ matrix.module }}/build/outputs/apk/debug/*.apk
-            adb logcat -c
-            adb shell monkey -p app.watchaudio -c android.intent.category.LAUNCHER 1
-            sleep 15
-            adb logcat -d > logcat.txt || (sleep 5 && adb wait-for-device && adb logcat -d > logcat.txt)
-            adb shell pidof app.watchaudio || (echo "app is not running"; exit 1)
-            if grep -q "AndroidRuntime: Process: app.watchaudio" logcat.txt; then grep -B2 -A25 "AndroidRuntime: Process: app.watchaudio" logcat.txt; exit 1; fi
+            bash .github/scripts/launch-smoke.sh ${{ matrix.module }}/build/outputs/apk/release/${{ matrix.module }}-release.apk logcat-release.txt
+            adb uninstall app.watchaudio
+            bash .github/scripts/launch-smoke.sh ${{ matrix.module }}/build/outputs/apk/debug/${{ matrix.module }}-debug.apk logcat.txt
             if [ -n "${{ matrix.scenarios }}" ]; then bash ${{ matrix.scenarios }} || touch device-tests-failed; fi
             # The test engine reinstalls both APKs itself; remove the earlier installs (smoke test, scenarios) so a signature mismatch cannot skip the tests.
             if [ -n "${{ matrix.device-tests }}" ]; then adb uninstall app.watchaudio || true; adb uninstall app.watchaudio.test || true; fi
@@ -145,6 +151,7 @@ jobs:
           {
             echo "Checks on the ${{ matrix.name }} emulator (logcat and scenario scripts):"
             echo '```'
+            cat launch-checks.txt 2>/dev/null || true
             grep -ho "[A-Z_]*_CHECK .*\|SCREENSHOT .*\|MODEL_INSTALL .*" logcat-device-tests.txt 2>/dev/null | awk '!seen[$0]++' || true
             cat scenario-logs/summary.txt wear-surfaces/summary.txt 2>/dev/null || true
             echo '```'
@@ -157,6 +164,7 @@ jobs:
         with:
           name: logcat-${{ matrix.name }}
           path: |
+            logcat-release.txt
             logcat.txt
             logcat-device-tests.txt
             scenario-logs/

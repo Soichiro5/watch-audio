@@ -28,12 +28,12 @@
 
 | 要件 | 内容 |
 | --- | --- |
-| 24 時間の連続性 | 録音が途切れないことを最優先する。Watch の充電中・非装着時は**スマホのマイクで録音を引き継ぐ**（ハンドオフ）。止まったら自動再開を試み、無理ならすぐに気づける（通知・コンプリケーション/Tile からワンタップ再開） |
+| 24 時間の連続性 | 録音が途切れないことを最優先する。止まったら自動再開を試み、無理ならすぐに気づける（通知・コンプリケーション/Tile からワンタップ再開）。※当初は Watch の充電中・非装着時にスマホのマイクで録音を引き継ぐ「ハンドオフ」を計画していたが、現在のゴール（[03](03-roadmap.md)）で「充電中・就寝中は止まってよい」としたため採用しない（#42、[02 §9.1](02-architecture.md#91-録音ソース-watch-のみスマホ録音へのハンドオフは採用しない)） |
 | すべて残す | 文字起こしは無期限に保存。音声も既定は無期限（設定で変更可）。端末紛失に備え **E2E 暗号化バックアップを MVP に含める** |
 | 録音状況の可視化 | 「いつ録れていて、いつ録れていなかったか」をタイムラインで明示する（欠損区間と理由） |
 | 周囲への配慮 | 常時録音であることを前提に、同意の導線と「録らない場所・時間」のルールを用意する |
 
-24 時間化の制約と方針は [02-architecture.md §9](02-architecture.md#9-24-時間連続録音の設計) を参照。
+常時録音の制約と方針は [02-architecture.md §9](02-architecture.md#9-常時録音装着中の設計) を参照。
 
 
 **「装着しているスマートウォッチで常時録音し、スマホ上で文字起こしして、端末内にためていくアプリ」**（iOS + watchOS / Android + Wear OS）
@@ -66,7 +66,7 @@
 | --- | --- | --- | --- |
 | Watch 長時間録音 | ◎ | ○ | watchOS は audio セッションを前景で開始すれば画面オフでも録音継続（既存の Watch 録音アプリで実証済み）。割り込みで停止し自動再開不可。Wear OS は `foregroundServiceType="microphone"` の前景サービス + Ongoing Activity で実現可能だが、**前景からの開始が必須**（Android 14+ の while-in-use 制約）。**Galaxy Watch / Pixel Watch での電池持ちは未知数で最大のリスク** |
 | Watch → スマホ転送 | ◎ | ◎ | WatchConnectivity `transferFile` / Wearable Data Layer `ChannelClient`。いずれも OS がキューイング |
-| オンデバイス ASR（日本語） | ○ | ○ | iOS 26+ の `SpeechAnalyzer` / `SpeechTranscriber` は日本語をサポートし、モデルは OS 管理（アプリサイズ増なし）。Android は sherpa-onnx + SenseVoice（日中英韓粤）や Whisper 系。精度・速度は実機で要検証 |
+| オンデバイス ASR（日本語） | ○ | ○ | iOS 26+ の `SpeechAnalyzer` / `SpeechTranscriber` は日本語をサポートし、モデルは OS 管理（アプリサイズ増なし）。Android は sherpa-onnx + SenseVoice（日中英韓粤）や Whisper 系。精度・速度は実機で要検証（→ M0-5 のデスクトップ比較で sherpa-onnx + ReazonSpeech Zipformer を採用、[spikes](spikes/m0-5-asr-desktop.md)） |
 | 後追い処理（バックグラウンド） | ○ | ◎ | iOS は `BGProcessingTask`（主に充電中・夜間）。8 時間/日の音声でも VAD で発話区間のみ処理すれば現実的。Android は WorkManager で柔軟 |
 | セマンティック検索 | ○ | ○ | multilingual-e5-small 等の多言語埋め込みを ONNX Runtime で実行。1 年分（数十万ベクトル）でも int8 + 総当たりで 100ms オーダー |
 | BYOK LLM | ◎ | ◎ | OpenAI 互換 / Anthropic / Gemini API を端末から直接呼ぶだけ。キーは Keychain / Android Keystore |

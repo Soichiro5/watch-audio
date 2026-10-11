@@ -2,7 +2,6 @@ package app.watchaudio.android
 
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -72,7 +71,7 @@ class ModelWaitTest {
 
         runBlocking { PlaybackFixtures.graph.store.updateSettings { it.copy(onboardingCompleted = true) } }
         ActivityScenario.launch(MainActivity::class.java).use {
-            compose.onNodeWithText(Strings.TAB_STATUS).performClick()
+            compose.openTab(Strings.TAB_STATUS)
             compose.waitUntil(timeoutMillis = 15_000) {
                 compose.onAllNodes(hasText(Strings.MODEL_MISSING)).fetchSemanticsNodes().isNotEmpty() &&
                     compose.onAllNodes(hasText(Strings.STAT_PENDING)).fetchSemanticsNodes().isNotEmpty()

@@ -156,7 +156,10 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 - `INTERNET` 権限はモデルのダウンロードのためだけに使う。解析 SDK・広告 SDK・クラッシュ収集 SDK はなし（異常終了は §4.2 の診断ログに端末内で残す）。
 - `FileProvider`（非公開・`grantUriPermissions`）が公開するのは診断ログの書き出し先 `cache/diagnostics-export/` だけ。録音・文字起こしのディレクトリは対象外。
 - ABI は `arm64-v8a`（実機）と `x86_64`（エミュレータ）のみ。sherpa-onnx の C/C++ API ライブラリ（JNI からは未使用）は APK から除外。
-- release ビルドで minify する場合に備え、sherpa-onnx のクラスを keep（JNI がフィールド名で設定を読むため）。
+- **release ビルド（#78）**: R8 でコードとリソースを縮小・難読化する（`watchaudio.android.release` プラグイン、設定と署名は [docs/04 §7.1](../04-dev-environment.md#71-android-の-release-ビルドと署名78)）。keep ルール（`androidApp/proguard-rules.pro`）:
+  - sherpa-onnx: パッケージ `com.k2fsa.sherpa.onnx` 全体を keep（JNI がフィールド名で設定を読み、結果のオブジェクトをクラス名で作るため）。
+  - それ以外は各ライブラリが同梱するルールで足りる: kotlinx.serialization（`@Serializable` の生成シリアライザ）、WorkManager（`Worker` のコンストラクタ）、bundled SQLite（JNI）、Data Layer の受信サービス（manifest から参照されるので R8 が残す）。
+  - CI: `android.yml` で `assembleRelease`、`emulator.yml` で release の APK を入れて起動し、クラッシュしないことを確認する（`launch-smoke.sh`）。release での文字起こし（取り込み → ASR → DB）の確認は未実装（#78 の残り）。
 
 ## 6. 検証方法
 
