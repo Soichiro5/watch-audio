@@ -44,7 +44,7 @@ instrument() {
 adb logcat -G 16M || true
 adb logcat -c || true
 
-# 1. Models and reference recordings (already there when release-asr.sh ran first).
+# 1. Models and reference recordings (release-asr.sh reuses them later).
 bash .github/scripts/push-models.sh > "$OUT/push-models.txt" 2>&1 || status=1
 log "$(tail -1 "$OUT/push-models.txt")"
 

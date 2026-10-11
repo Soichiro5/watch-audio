@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Release ASR check on the phone emulator (emulator.yml, #78), after the launch checks of the shipped
-# release APK and of the debug APK:
+# Release ASR check on the phone emulator (emulator.yml, #78), the last step of the phone job (after
+# the launch checks, the scenarios and the debug instrumented tests):
 #
 #   1. pushes the speech models and reference recordings (push-models.sh),
 #   2. installs, on a clean state, the release APK built with `-Pwatchaudio.testBuildType=release`
@@ -26,7 +26,9 @@ fail() {
 
 bash .github/scripts/push-models.sh > "$OUT/push-models.txt" 2>&1 || fail "models not pushed ($OUT/push-models.txt)"
 tail -1 "$OUT/push-models.txt"
+# The debug builds of the app and its test APK are signed with another key.
 adb uninstall app.watchaudio > /dev/null || true
+adb uninstall app.watchaudio.test > /dev/null || true
 adb install -r "$APP_APK" > "$OUT/install.txt" 2>&1 || { cat "$OUT/install.txt"; fail "install of $APP_APK"; }
 adb install -r -t "$TEST_APK" >> "$OUT/install.txt" 2>&1 || { cat "$OUT/install.txt"; fail "install of $TEST_APK"; }
 adb logcat -c || true
