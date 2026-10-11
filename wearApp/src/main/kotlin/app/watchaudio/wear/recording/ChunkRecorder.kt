@@ -12,38 +12,22 @@ import java.io.File
  *
  * Rotation is size based because `setNextOutputFile` only works with the file size limit; at a
  * constant bitrate that is ~5 minutes. All callbacks arrive on the thread that created the
- * recorder (the service's main thread).
+ * recorder (the service's main thread). The production [RecorderInput].
  */
 class ChunkRecorder(
     private val context: Context,
-    private val listener: Listener,
-) {
-    interface Listener {
-        /** The current file is nearly full: return the file for the next chunk (or null to skip). */
-        fun onNextFileNeeded(): File?
-
-        /** The encoder switched to the file returned by [onNextFileNeeded]; the previous file is closed. */
-        fun onRotated(atElapsedMs: Long)
-
-        /** The recorder failed or stopped on its own; it must be released and restarted. */
-        fun onRecorderFailed(detail: String)
-    }
-
+    private val listener: RecorderInput.Listener,
+) : RecorderInput {
     private var recorder: MediaRecorder? = null
 
-    /** Audio session used to match this recorder in `AudioManager` recording callbacks. */
-    val audioSessionId: Int?
+    override val audioSessionId: Int?
         get() = runCatching { recorder?.activeRecordingConfiguration?.clientAudioSessionId }.getOrNull()
 
-    /** True while another client has silenced this recorder (Android 10+ concurrent capture). */
-    val isSilenced: Boolean
+    override val isSilenced: Boolean
         get() = runCatching { recorder?.activeRecordingConfiguration?.isClientSilenced }.getOrNull() == true
 
-    /**
-     * Starts recording into [file]. Throws when the microphone cannot be opened.
-     * @return elapsed realtime at which capture started.
-     */
-    fun start(file: File): Long {
+    /** Starts recording into [file]. Throws when the microphone cannot be opened. */
+    override fun start(file: File): Long {
         check(recorder == null) { "already started" }
         val r = MediaRecorder(context)
         try {
@@ -67,14 +51,9 @@ class ChunkRecorder(
         return SystemClock.elapsedRealtime()
     }
 
-    /** Peak amplitude since the previous call (0..32767), 0 when not recording. */
-    fun pollMaxAmplitude(): Int = runCatching { recorder?.maxAmplitude ?: 0 }.getOrDefault(0)
+    override fun pollMaxAmplitude(): Int = runCatching { recorder?.maxAmplitude ?: 0 }.getOrDefault(0)
 
-    /**
-     * Stops and releases the recorder.
-     * @return true when the current file was finalized cleanly (decodable).
-     */
-    fun stop(): Boolean {
+    override fun stop(): Boolean {
         val r = recorder ?: return false
         recorder = null
         // stop() throws when no audio was captured yet; the file is then unusable.
