@@ -44,6 +44,7 @@ import app.watchaudio.app.logic.formatMinuteOfDay
 import app.watchaudio.app.settings.AppSettings
 import app.watchaudio.app.logic.formatClock
 import app.watchaudio.app.logic.formatHours
+import app.watchaudio.app.state.DiagnosticsExport
 import app.watchaudio.app.state.StatusUiState
 import app.watchaudio.core.db.StoreStats
 import kotlinx.datetime.TimeZone
@@ -59,6 +60,7 @@ internal fun StatusScreen(
     onQuietHoursChange: (QuietHours) -> Unit,
     onShowOnboarding: () -> Unit,
     storageCallbacks: StorageCallbacks,
+    onExportDiagnostics: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -73,8 +75,21 @@ internal fun StatusScreen(
         Section(Strings.PRIVACY_TITLE) {
             Text(Strings.PRIVACY_NOTE, style = MaterialTheme.typography.bodyMedium)
         }
+        DiagnosticsCard(state.diagnosticsExport, onExportDiagnostics)
         Section(Strings.GUIDE_TITLE) {
             OutlinedButton(onClick = onShowOnboarding) { Text(Strings.SHOW_ONBOARDING_AGAIN) }
+        }
+    }
+}
+
+/** The on-device diagnostics log (#77); it only leaves the phone through this button. */
+@Composable
+private fun DiagnosticsCard(export: DiagnosticsExport, onExport: () -> Unit) {
+    Section(Strings.DIAGNOSTICS_TITLE) {
+        Text(Strings.DIAGNOSTICS_NOTE, style = MaterialTheme.typography.bodySmall)
+        OutlinedButton(onClick = onExport, enabled = !export.busy) { Text(Strings.EXPORT_DIAGNOSTICS) }
+        export.message?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

@@ -20,6 +20,8 @@ import app.watchaudio.android.MainActivity
 import app.watchaudio.app.alert.GapAlertEvaluator
 import app.watchaudio.app.logic.GapAlertDecision
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.DiagnosticEvents
+import app.watchaudio.core.pipeline.Diagnostics
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -38,6 +40,7 @@ class GapAlertMonitor(
     context: Context,
     store: LocalStore,
     private val scope: CoroutineScope,
+    private val diagnostics: Diagnostics = Diagnostics.NONE,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val app = context.applicationContext
@@ -85,6 +88,7 @@ class GapAlertMonitor(
             ContextCompat.checkSelfPermission(app, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         if (!permitted || !notifications.areNotificationsEnabled()) {
             Log.i(TAG, "gap alert due, but notifications are not allowed")
+            diagnostics.log(DiagnosticEvents.GAP_ALERT_BLOCKED, "last_received_at=$lastReceivedAt reason=notifications_off")
             return false
         }
         notifications.createNotificationChannel(
@@ -111,9 +115,11 @@ class GapAlertMonitor(
             .build()
         return try {
             notifications.notify(NOTIFICATION_ID, notification)
+            diagnostics.log(DiagnosticEvents.GAP_ALERT, "last_received_at=$lastReceivedAt")
             true
         } catch (e: SecurityException) {
             Log.w(TAG, "cannot post the gap alert", e)
+            diagnostics.log(DiagnosticEvents.GAP_ALERT_BLOCKED, "last_received_at=$lastReceivedAt reason=security_exception")
             false
         }
     }

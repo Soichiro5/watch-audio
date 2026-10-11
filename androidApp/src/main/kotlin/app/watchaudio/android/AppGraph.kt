@@ -9,6 +9,7 @@ import app.watchaudio.android.asr.ModelManager
 import app.watchaudio.android.transfer.ChunkReceiver
 import app.watchaudio.android.work.TranscriptionScheduler
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.DiagnosticsLog
 import app.watchaudio.core.pipeline.Ingestor
 import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.pipeline.TranscriptionPipeline
@@ -31,10 +32,13 @@ import kotlinx.io.files.Path
  * the process without any UI.
  *
  * All data lives in the app's internal storage: the database at `files/watch-audio.db`, audio
- * under `files/audio/`, models under `files/models/`.
+ * under `files/audio/`, models under `files/models/`, the diagnostics log under
+ * `files/diagnostics/` (#77).
  */
 class AppGraph private constructor(context: Context) {
     private val app = context.applicationContext
+
+    val diagnostics: DiagnosticsLog = diagnostics(app)
 
     val scope = CoroutineScope(
         SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e -> Log.e(TAG, "background task failed", e) },
@@ -45,7 +49,7 @@ class AppGraph private constructor(context: Context) {
     val ingestor = Ingestor(store, Path(audioRoot.path))
 
     val scheduler = TranscriptionScheduler(app, scope)
-    val models = ModelManager(app, scope, onReady = scheduler::requestNow)
+    val models = ModelManager(app, scope, diagnostics, onReady = scheduler::requestNow)
     val transcriber = AndroidSherpaTranscriber(models.files)
     val pipeline = TranscriptionPipeline(store, Path(audioRoot.path), transcriber, maxAttempts = MAX_ATTEMPTS)
     val storage = StorageManager(store, Path(audioRoot.path), AndroidStorageEnvironment(models.files.root, app.filesDir))
@@ -56,9 +60,9 @@ class AppGraph private constructor(context: Context) {
     private val _lastChunkReceivedAt = MutableStateFlow<Long?>(null)
     val lastChunkReceivedAt: StateFlow<Long?> = _lastChunkReceivedAt.asStateFlow()
 
-    val gapAlerts = GapAlertMonitor(app, store, scope)
+    val gapAlerts = GapAlertMonitor(app, store, scope, diagnostics)
 
-    val chunkReceiver = ChunkReceiver(app, ingestor, scope) {
+    val chunkReceiver = ChunkReceiver(app, ingestor, scope, diagnostics) {
         _lastChunkReceivedAt.value = System.currentTimeMillis()
         scheduler.requestNow()
         gapAlerts.onChunkStored()
@@ -73,6 +77,7 @@ class AppGraph private constructor(context: Context) {
         scheduler,
         lastChunkReceivedAt,
         scope,
+        diagnostics,
         onGapAlertSettingsChanged = gapAlerts::onSettingsChanged,
     )
 
@@ -99,5 +104,18 @@ class AppGraph private constructor(context: Context) {
 
         fun get(context: Context): AppGraph =
             instance ?: synchronized(this) { instance ?: AppGraph(context).also { instance = it } }
+
+        @Volatile
+        private var diagnosticsLog: DiagnosticsLog? = null
+
+        /**
+         * The process-wide diagnostics log. Available before (and without) the graph, so a crash
+         * while building the graph is still recorded.
+         */
+        fun diagnostics(context: Context): DiagnosticsLog = diagnosticsLog ?: synchronized(this) {
+            diagnosticsLog ?: DiagnosticsLog(
+                Path(File(File(context.applicationContext.filesDir, "diagnostics"), DiagnosticsLog.FILE_NAME).path),
+            ).also { diagnosticsLog = it }
+        }
     }
 }

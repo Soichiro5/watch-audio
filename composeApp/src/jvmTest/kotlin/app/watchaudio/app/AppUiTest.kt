@@ -118,6 +118,14 @@ class AppUiTest {
         onNodeWithText(Strings.DELETE_ALL_CONFIRM).performScrollTo().performClick()
         waitForText(Strings.DELETED_ALL)
         assertEquals(0, runBlocking { store.read { stats() } }.chunks)
+
+        // Diagnostics log (#77): exported only through the button.
+        assertEquals(0, services.diagnosticsExports)
+        services.diagnosticsExportResult = false
+        onNodeWithText(Strings.EXPORT_DIAGNOSTICS).performScrollTo().performClick()
+        waitForText(Strings.DIAGNOSTICS_EMPTY)
+        assertEquals(1, services.diagnosticsExports)
+        screenshot("diagnostics")
     }
 
     @Test

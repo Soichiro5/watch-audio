@@ -140,6 +140,15 @@ object Strings {
     const val PRIVACY_TITLE = "プライバシー"
     const val PRIVACY_NOTE = "データはこの端末内にのみ保存され、外部に送信されません"
 
+    // Diagnostics log (#77)
+    const val DIAGNOSTICS_TITLE = "診断ログ"
+    const val DIAGNOSTICS_NOTE =
+        "不具合の調査用に、受信・文字起こし・モデルのダウンロード・異常終了などの記録（時刻、ID、処理時間、エラーの種類）を" +
+            "この端末内に保存しています。文字起こしの本文や音声は含みません。自動では送信されず、書き出すと共有先を選べます。"
+    const val EXPORT_DIAGNOSTICS = "診断ログを書き出す"
+    const val DIAGNOSTICS_EMPTY = "書き出せる診断ログがありません"
+    fun diagnosticsExportFailed(reason: String) = "診断ログを書き出せませんでした: $reason"
+
     // Status screen: alert settings (#43)
     const val ALERTS_TITLE = "通知"
     const val GAP_ALERT_SWITCH = "録音が届かないときに通知"

@@ -74,6 +74,18 @@ class FakeAppServices(
         gapAlertSettingsChanges++
     }
 
+    /** What [exportDiagnostics] answers; set [diagnosticsExportFailure] to make it throw instead. */
+    var diagnosticsExportResult = true
+    var diagnosticsExportFailure: Exception? = null
+    var diagnosticsExports = 0
+        private set
+
+    override suspend fun exportDiagnostics(): Boolean {
+        diagnosticsExports++
+        diagnosticsExportFailure?.let { throw it }
+        return diagnosticsExportResult
+    }
+
     companion object {
         /** Opens (or creates) the regular database in [dataDir]. */
         fun open(dataDir: String): FakeAppServices =

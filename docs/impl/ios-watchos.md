@@ -157,9 +157,18 @@ MainViewControllerKt.MainViewController()                             // Compose
 - 本文「録音が届いていません（最後の受信: HH:mm）。Watch を確認してください」。予約の失敗は ACK を妨げない（`status.message` に出すだけ）。
 - `UNUserNotificationCenterDelegate` を設定していないので、アプリが前面にある間は通知バナーは出ない（その間は状態タブの警告で分かる）。
 
+### 7.2 診断ログ（#77）
+
+Android と同じ共通の `DiagnosticsLog`（`shared/core-pipeline`、形式・上限・記録しないものは [android-phone.md §4.2](android-phone.md#42-診断ログ77)）を `IosAppGraph.start` で開く。
+
+- 場所: `Application Support/WatchAudio/diagnostics/diagnostics.csv`（512 KB で `.1` に回す。最大約 1 MB。バックアップ対象外のディレクトリ内）。
+- 記録: `app_start`（バージョン・OS）、`chunk_received` / `chunk_rejected`（`IosAppGraph.ingest`。ACK の送信自体は Swift 側なので記録しない）、`worker_start` / `worker_stop`（`worker=foreground` / `worker=bgtask`、件数、BGTask の時間切れ）、`transcription_*`（`DiagnosticsPipelineObserver`、RTF 付き）、`retention_purge`、`model_download_start` / `model_ready` / `model_download_failed`（OS によるモデルのインストール）、`gap_alert_scheduled`（`IosGapAlerts` が予約した時刻）、`crash`。
+- 異常終了: Kotlin の未捕捉例外は `setUnhandledExceptionHook` で型名とスタックの先頭を 1 行書いてから元のフック（終了）に渡す。Objective-C / Swift のクラッシュや OS による強制終了（メモリ・時間切れ）は記録できないので、OS のクラッシュレポート（設定 > プライバシーとセキュリティ > 解析と改善 > 解析データ、Xcode Organizer）を見る。`NSSetUncaughtExceptionHandler` は C 関数ポインタとグローバル状態が要るため使っていない。
+- 書き出し: 状態タブの「診断ログを書き出す」→ `IosAppServices.exportDiagnostics()` が一時ディレクトリ（`tmp/diagnostics-export/`、前回分は削除）に 1 つの CSV をまとめ、`UIActivityViewController`（共有シート）を最前面の画面から表示する。送り先はユーザーが選ぶ（AirDrop・ファイルに保存など）。自動では送らない。
+
 ## 8. 保存場所とプライバシー
 
-- iPhone: `Application Support/WatchAudio/`（`watch-audio.db`、`audio/yyyy/MM/dd/<chunkId>.m4a`、`inbox/`）。`LocalDataDirectory`（composeApp/iosMain）がディレクトリに `NSURLIsExcludedFromBackupKey` を設定して iCloud / PC バックアップに含めず、ファイル保護クラス `CompleteUntilFirstUserAuthentication`（BGTask・ロック中の取り込みから読める）を明示する（#76）。
+- iPhone: `Application Support/WatchAudio/`（`watch-audio.db`、`audio/yyyy/MM/dd/<chunkId>.m4a`、`inbox/`、`diagnostics/`（§7.2））。`LocalDataDirectory`（composeApp/iosMain）がディレクトリに `NSURLIsExcludedFromBackupKey` を設定して iCloud / PC バックアップに含めず、ファイル保護クラス `CompleteUntilFirstUserAuthentication`（BGTask・ロック中の取り込みから読める）を明示する（#76）。
 - Watch: `Application Support/WatchAudio/`（録音中・送信待ちチャンク、診断ログ）。ACK 後に削除。`ChunkOutbox` が `LocalDataProtection`（iosApp/Shared）で同じくバックアップ除外と `completeUntilFirstUserAuthentication` を設定する（画面オフ・ロック中も録音・再送できる）。
 - 属性は ios.yml のテスト（`LocalDataDirectoryTest`、`LocalDataProtectionTests`）で確認する（保護クラスの値はシミュレータが報告する場合だけ比較）。一覧は [02 §7.1](../02-architecture.md#71-保存場所と保護76)。
 - 音声・文字起こしとも端末外（自前サーバー・クラウド）には送らない。Speech もオンデバイスモデル。
@@ -211,6 +220,7 @@ MainViewControllerKt.MainViewController()                             // Compose
 11. iPhone を充電しながらロック → BGProcessingTask で文字起こしが進む（Xcode の `e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"app.watchaudio.transcribe"]` で強制起動も可）。
 12. Watch の `diagnostics.csv` で電池消費（%/時）を確認（M0-3 と比較）。
 13. コンプリケーション（§14、#60）: 文字盤に「watch-audio / 録音状態」を追加 → 停止中は「停止中」、録音開始で「録音中」+ 経過時間、充電器に置くと「一時停止（充電中）」に変わる。停止中にタップ → アプリが開いて録音が始まる。通話などで中断した後にタップ → 1 タップで再開する。
+14. iPhone の状態タブ「診断ログを書き出す」→ 共有シートが開き、ファイルに保存した CSV に受信・文字起こし（RTF）・BGTask の開始/終了が残っている（本文は含まれない）。長時間の検証ではこのファイルを証拠に添える。
 
 ## 12. 既知のリスク・制約
 

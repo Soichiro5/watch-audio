@@ -10,6 +10,9 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import app.watchaudio.app.ModelState
+import app.watchaudio.core.pipeline.DiagnosticEvents
+import app.watchaudio.core.pipeline.Diagnostics
+import app.watchaudio.core.pipeline.DiagnosticsLog
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
@@ -39,6 +42,7 @@ import kotlinx.coroutines.withContext
 class ModelManager(
     private val context: Context,
     private val scope: CoroutineScope,
+    private val diagnostics: Diagnostics,
     private val onReady: () -> Unit,
 ) {
     val files = ModelFiles(File(context.filesDir, "models"))
@@ -47,6 +51,10 @@ class ModelManager(
     val state: StateFlow<ModelState> = _state.asStateFlow()
 
     private val workManager: WorkManager get() = WorkManager.getInstance(context)
+
+    /** Last 10 % step written to the diagnostics log during a download. */
+    @Volatile
+    private var loggedDecile = 0
 
     private val downloader = ModelDownloader()
 
@@ -119,7 +127,9 @@ class ModelManager(
         val total = missing.sumOf { it.size }.coerceAtLeast(1)
         var done = 0L
         var published = -1f
+        loggedDecile = 0
         try {
+            diagnostics.log(DiagnosticEvents.MODEL_DOWNLOAD_START, "files=${missing.size} bytes=$total")
             _state.value = ModelState.Downloading(0f)
             for (source in missing) {
                 retrying {
@@ -129,17 +139,29 @@ class ModelManager(
                             published = value
                             _state.value = ModelState.Downloading(value)
                         }
+                        val decile = (value * 10).toInt()
+                        if (decile > loggedDecile) {
+                            loggedDecile = decile
+                            diagnostics.log(DiagnosticEvents.MODEL_DOWNLOAD_PROGRESS, "pct=${decile * 10} bytes=${done + bytes}")
+                        }
                     }
                 }
                 done += source.size
             }
+            diagnostics.log(DiagnosticEvents.MODEL_DOWNLOAD_DONE)
             partialDir.deleteRecursively()
             publishPresence()
         } catch (e: CancellationException) {
+            diagnostics.log(DiagnosticEvents.MODEL_DOWNLOAD_FAILED, "cancelled=true")
             _state.value = if (isReady()) ModelState.Ready else ModelState.Missing
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "model download failed", e)
+            // Network errors only (HTTP status, timeouts); nothing about the user is in them.
+            diagnostics.log(
+                DiagnosticEvents.MODEL_DOWNLOAD_FAILED,
+                "error=${DiagnosticsLog.typeName(e)} message=${e.message.orEmpty().take(200)}",
+            )
             _state.value = ModelState.Failed(e.message ?: e.javaClass.simpleName)
             throw e
         }
@@ -169,6 +191,7 @@ class ModelManager(
         val ready = isReady()
         val wasReady = _state.value == ModelState.Ready
         _state.value = if (ready) ModelState.Ready else ModelState.Missing
+        if (ready != wasReady) diagnostics.log(DiagnosticEvents.MODEL_READY, "ready=$ready")
         if (ready && !wasReady) onReady()
     }
 

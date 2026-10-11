@@ -11,6 +11,7 @@ import app.watchaudio.app.logic.QuietHours
 import app.watchaudio.app.settings.AppSettings
 import app.watchaudio.app.settings.loadSettings
 import app.watchaudio.app.state.DayDeletion
+import app.watchaudio.app.state.DiagnosticsExport
 import app.watchaudio.app.state.DayViewModel
 import app.watchaudio.app.state.OnboardingStep
 import app.watchaudio.app.state.OnboardingViewModel
@@ -508,6 +509,32 @@ class ViewModelTest {
         assertFalse(audioFile("a").exists())
         assertTrue(store.read { search("消える発話") }.isEmpty())
         assertEquals(1, services.stopRequests)
+    }
+
+    @Test
+    fun exportingDiagnosticsAsksThePlatformOnlyOnTapAndReportsTheOutcome() = runVmTest {
+        val vm = StatusViewModel(services, clock, scope = backgroundScope)
+        backgroundScope.launch { vm.state.collect {} }
+        runCurrent()
+        assertEquals(0, services.diagnosticsExports) // never on its own
+        assertEquals(DiagnosticsExport(), vm.state.value.diagnosticsExport)
+
+        // Shared: the share sheet is the feedback, no message.
+        vm.exportDiagnostics()
+        runCurrent()
+        assertEquals(1, services.diagnosticsExports)
+        assertEquals(DiagnosticsExport(), vm.state.value.diagnosticsExport)
+
+        services.diagnosticsExportResult = false
+        vm.exportDiagnostics()
+        runCurrent()
+        assertEquals(DiagnosticsExport(message = Strings.DIAGNOSTICS_EMPTY), vm.state.value.diagnosticsExport)
+
+        services.diagnosticsExportFailure = IllegalStateException("disk full")
+        vm.exportDiagnostics()
+        runCurrent()
+        assertEquals(DiagnosticsExport(message = Strings.diagnosticsExportFailed("disk full")), vm.state.value.diagnosticsExport)
+        assertEquals(3, services.diagnosticsExports)
     }
 
     @Test

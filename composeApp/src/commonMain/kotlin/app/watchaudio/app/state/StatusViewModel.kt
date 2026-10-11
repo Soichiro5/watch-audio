@@ -39,7 +39,11 @@ data class StatusUiState(
     /** null until loaded. */
     val storage: StorageUiState? = null,
     val storageActions: StorageActions = StorageActions(),
+    val diagnosticsExport: DiagnosticsExport = DiagnosticsExport(),
 )
+
+/** The 「診断ログを書き出す」 action (#77): running, and the outcome when there is something to say. */
+data class DiagnosticsExport(val busy: Boolean = false, val message: String? = null)
 
 data class StorageUiState(
     val breakdown: StorageBreakdown,
@@ -77,6 +81,7 @@ class StatusViewModel(
     scope: CoroutineScope = defaultViewModelScope(),
 ) : ViewModel(scope) {
     private val actions = MutableStateFlow(StorageActions())
+    private val diagnosticsExport = MutableStateFlow(DiagnosticsExport())
 
     private val snapshot = refreshSignal(services, refreshPeriodMs).conflate().mapLatest {
         val (stats, lastChunk) = services.store.read { stats() to lastChunkBefore() }
@@ -84,7 +89,12 @@ class StatusViewModel(
         StoreSnapshot(stats, lastChunk, clock.now(), storage)
     }
 
-    val state: StateFlow<StatusUiState> = combine(services.status, snapshot, actions) { status, snapshot, actions ->
+    val state: StateFlow<StatusUiState> = combine(
+        services.status,
+        snapshot,
+        actions,
+        diagnosticsExport,
+    ) { status, snapshot, actions, diagnosticsExport ->
         // The platform may know about a chunk before (or without) the database: take the newer.
         val lastReceived = listOfNotNull(status.lastChunkReceivedAt, snapshot.stats.lastReceivedAt).maxOrNull()
         StatusUiState(
@@ -95,6 +105,7 @@ class StatusViewModel(
             modelSetup = services.modelSetup,
             storage = snapshot.storage,
             storageActions = actions,
+            diagnosticsExport = diagnosticsExport,
         )
     }.stateIn(
         viewModelScope,
@@ -105,6 +116,22 @@ class StatusViewModel(
     fun downloadModels(allowMetered: Boolean) = services.downloadModels(allowMetered)
 
     fun requestTranscription() = services.requestTranscription()
+
+    /** Exports the diagnostics log through the platform's share sheet; only on the user's tap. */
+    fun exportDiagnostics() {
+        if (diagnosticsExport.value.busy) return
+        diagnosticsExport.value = DiagnosticsExport(busy = true)
+        viewModelScope.launch {
+            val message = try {
+                if (services.exportDiagnostics()) null else Strings.DIAGNOSTICS_EMPTY
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Strings.diagnosticsExportFailed(e.message ?: e::class.simpleName.orEmpty())
+            }
+            diagnosticsExport.value = DiagnosticsExport(message = message)
+        }
+    }
 
     /**
      * A longer retention (or the current one) applies at once. A shorter one deletes audio, so
