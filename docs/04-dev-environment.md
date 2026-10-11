@@ -143,6 +143,7 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 
 | ワークフロー | ステップ | 確認できること | 証拠の場所 |
 | --- | --- | --- | --- |
+| `android.yml` | Local-only check (static) / (merged manifests, resolved dependencies) | 「データは端末内のみ」: 権限・バックアップ設定・通信 API と URL・依存 SDK・iOS の Info.plist と entitlements が許可リストの範囲内（§6.4、#76） | ジョブのログ、ジョブサマリーの「Local-only check」（通信箇所の一覧） |
 | `android.yml` | Unit tests | 共通ロジック（JVM・Android ホスト）。SQLite を使う core-db / Ingestor / パイプラインのテストは JVM で実行 | テスト結果 |
 | `android.yml` | Search benchmark | 1 年分（320 万セグメント）での検索応答時間と DB 容量（§5） | ジョブサマリーの表と `SEARCH_BENCHMARK` 行 |
 | `android.yml` | Unit tests（composeApp の `AppUiTest`） | 画面の描画（タイムライン・検索・状態・オンボーディング。権限拒否時の「設定を開く」#32 を含む） | 成果物 `ui-screenshots`（`composeApp/build/screenshots/*.png`） |
@@ -157,6 +158,7 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 | `emulator.yml`（phone） | 同上（`phone-scenarios.sh`） | 文字起こしの途中で `am force-stop` → 再起動で全チャンクが 1 回ずつ文字起こしされる（欠落・重複 0、中断したチャンクは 2 回目で完了）（`ResumeAfterKillTest`、#20） | `RESUME_CHECK` 行、成果物 `logcat-phone` の `scenario-logs/` |
 | `emulator.yml`（wear） | 同上（`wear-surfaces.sh`） | Tile とコンプリケーションの表示（停止中 → Tile のタップでアプリが開き録音開始 → 録音中）（#41） | `WEAR_SURFACE_CHECK` 行、スクリーンショット `wear-tile-*.png` / `wear-complication-*.png` |
 | `ios.yml` | Shared tests (iOS simulator) | 共通ロジックを iOS シミュレータで実行（SQLite を使う core-db / Ingestor のテストを含む）。composeApp の `IosPlaybackTest`: `IosAppServices.play` 直接・共有 UI で前日のタイムラインの発話タップ／検索結果の 1 タップのそれぞれで、そのチャンクの AAC が AVAudioPlayer に指定位置（±0.2 秒）・正しい長さで用意される（#19, #25。テスト実行ファイルはアプリではないので再生開始 `started=` は記録のみ）。`IosTranscriberBridgeTest`: Swift の文字起こし結果が絶対時刻つきで DB・FTS に入る（#21） | ジョブサマリーのテスト一覧と `PLAYBACK_CHECK` 行 |
+| `ios.yml` | Shared tests (iOS simulator) / Swift unit tests | iPhone の DB・音声・受信ディレクトリ（`LocalDataDirectoryTest`）と Watch の送信待ちディレクトリ（`LocalDataProtectionTests`、`ChunkOutboxTests`）がバックアップ対象外で、保護クラス `CompleteUntilFirstUserAuthentication` を設定できる（シミュレータは保護クラスを報告しないことがあるため、値は報告される場合だけ比較。#76） | ジョブサマリーのテスト一覧、ログ |
 | `ios.yml` | Launch iOS app / Launch watchOS app | ビルドした iOS・watchOS アプリをシミュレータに入れて起動し、15 秒後もプロセスが生きていてクラッシュレポートがない | ジョブサマリー、成果物 `simulator-smoke`（スクリーンショット・ログ） |
 | `ios.yml` | Swift unit tests (iOS Simulator) | `SwiftUnitTests` スキーム（ホストなし）: Swift のワイヤ形式が Kotlin のテストベクタと一致（`ProtocolTests`）、Watch の停止理由・状態判定と終了理由のマニフェストへの記録（`RecorderPolicyTests`、#15）、送信キューの ACK・再送・再起動後の再送・強制終了からの復旧（`ChunkOutboxTests`、#17） | ジョブサマリーのテスト一覧（`.github/scripts/xcresult-summary.py`） |
 | `ios.yml` | Japanese test speech / Speech transcription on the iOS simulator | macOS の `say` で作った日本語音声（Watch と同じ AAC 16 kHz モノラル）を SpeechTranscriber（ja_JP）で文字起こしし、時刻と文字の再現率を確認（`SpeechTests`、iOS アプリがホスト、#21）。シミュレータで使えなければ理由を残してスキップ（実機確認は #60） | ジョブサマリーのテスト一覧と「Speech check logs」、成果物 `swift-evidence` |
@@ -228,6 +230,40 @@ PR の CI 待ちを減らすため、変更したファイルに関係するワ�
 - `emulator.yml` と `ios.yml` は対象リスト（`paths`）に除外（`!`）を足している。除外は後ろに書いたものが優先されるので、新しい除外は対象リストより後ろに書く。
 - 新しいスクリプトを `.github/scripts/` に足すときは、片方のプラットフォーム専用なら、もう片方のワークフローの除外に追加する。
 - フォルダ構成を変えるとき（#49）は、上の表のパスもあわせて直す。
+
+### 6.4 Local-only チェック（`tools/privacy-check`、#76）
+
+CLAUDE.md の「Local only」（録音・文字起こし・ユーザーデータを端末の外に出さない。通信はモデルの取得だけ）を CI で守るための静的チェック。Python の標準ライブラリだけで動き、`android.yml` で 2 回実行する。
+
+1. **最初のステップ（ビルド不要、数秒）**: `test_check.py`（違反を 1 つずつ入れたフィクスチャで失敗することを確かめるテスト）と、リポジトリのファイルに対するチェック。
+2. **Assemble の後**: リリースのマージ後マニフェスト（`processReleaseMainManifest`）と、`./gradlew :<app>:dependencies --configuration releaseRuntimeClasspath` の出力（推移的な依存を含む）も検査し、通信箇所の一覧をジョブサマリーに出す。
+
+| 検査 | 対象 | 失敗する例 |
+| --- | --- | --- |
+| 権限 | `androidApp` / `wearApp` の `src/*/AndroidManifest.xml`、マージ後マニフェスト | Wear OS に `INTERNET`、スマホに位置情報・広告 ID、依存が勝手に足した権限 |
+| バックアップ | `<application>` と `res/xml` のルール | `allowBackup="true"`、`dataExtractionRules` なし、除外していないドメイン、`<include>`、`usesCleartextTraffic="true"` |
+| 通信・保護 | `androidApp/src`・`wearApp/src`・`composeApp/src`・`shared`・`iosApp` の `.kt` / `.java` / `.swift`（コメントと、出荷されないテストコード = `test` や `Test` を含むディレクトリは除外） | 許可されていないファイルでの `HttpURLConnection`・`URLSession`・ソケット・WebView・`SFSpeech…RecognitionRequest`、`DataClient` / `PutDataRequest`、`.noFileProtection`、許可されていない URL、使われなくなった許可リストの項目 |
+| 依存（宣言） | `gradle/libs.versions.toml` と `*.gradle.kts`（`spikes/` を除く） | firebase・crashlytics・sentry・amplitude などの解析・クラッシュ送信 SDK、okhttp・retrofit・ktor などの HTTP クライアント |
+| 依存（解決結果） | リリースの実行時クラスパス | 許可リスト（AndroidX、Kotlin、Compose、play-services-wearable、sherpa-onnx など）にないモジュール |
+| iOS | `iosApp/project.yml`、コミットされた `*.entitlements` | 許可リストにない Info.plist のキー（`NSAppTransportSecurity`、位置情報など）、`UIBackgroundModes`、entitlements |
+
+手元での実行:
+
+```bash
+python3 -m unittest discover -s tools/privacy-check -v
+python3 tools/privacy-check/check.py
+# ビルド後の検査も（assembleDebug などの後）
+./gradlew --max-workers=2 :androidApp:processReleaseMainManifest :wearApp:processReleaseMainManifest
+./gradlew --max-workers=2 -q :wearApp:dependencies --configuration releaseRuntimeClasspath > /tmp/deps-wearApp.txt
+python3 tools/privacy-check/check.py --resolved-deps wearApp=/tmp/deps-wearApp.txt \
+  --merged-manifest wearApp=wearApp/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml
+```
+
+**許可リストを広げるとき**（新しい権限・依存・通信先が本当に必要な場合）:
+
+1. `tools/privacy-check/policy.py` の該当する表に、理由を添えて追加する（権限は `ANDROID_APPS`、ライブラリが足す権限は `library_permissions`、通信するファイルは `ALLOWED_API_USES`、URL は `ALLOWED_URL_PREFIXES`、依存は `ALLOWED_RESOLVED_DEPENDENCIES`、iOS は `IOS_TARGETS` / `IOS_ENTITLEMENTS`）。拒否パターン（`GUARDED_APIS`・`DENIED_DEPENDENCIES`）は緩めず、許可リスト側に足す。
+2. ユーザーデータが端末の外に出ないことを PR の本文で説明する。データを外に出す変更（AI プロバイダなど P2）は、CLAUDE.md の方針の変更として Issue で合意してから。
+3. [02 §7](02-architecture.md#7-セキュリティプライバシー) の保存場所・通信箇所の一覧を更新し、`test_check.py` の期待値（通信箇所の集合など）も直す。
 
 ## 7. CI の設定と成果物の扱い（公開リポジトリ）
 

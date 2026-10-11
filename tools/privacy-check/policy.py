@@ -1,0 +1,156 @@
+"""Allow-lists for check.py: what the apps may request, link and contact.
+
+Every entry carries the reason it is allowed. Adding an entry is a privacy decision: state the
+reason here and in the PR description, and update docs/02 §7 (network call sites and storage)
+and docs/04 (how the check works). See docs/04-dev-environment.md "Local-only チェック".
+"""
+
+# Whole-domain exclusions every backup rule file must contain (Android backup domains).
+BACKUP_DOMAINS = ("root", "file", "database", "sharedpref", "external")
+
+ANDROID_APPS = {
+    "androidApp": {
+        # <uses-permission> in the module's own manifests (src/*/AndroidManifest.xml).
+        "permissions": {
+            "android.permission.INTERNET": "ASR model download only (asr/ModelManager.kt)",
+            "android.permission.ACCESS_NETWORK_STATE": "WorkManager network constraint for the model download",
+            "android.permission.FOREGROUND_SERVICE": "model download runs as a foreground worker",
+            "android.permission.FOREGROUND_SERVICE_DATA_SYNC": "foreground service type of the model download",
+            "android.permission.POST_NOTIFICATIONS": "gap alert (#43) and download progress",
+        },
+        # Extra permissions libraries add to the merged manifest (checked with --merged-manifest).
+        "library_permissions": {
+            "android.permission.WAKE_LOCK": "WorkManager",
+            "android.permission.RECEIVE_BOOT_COMPLETED": "WorkManager reschedules work after reboot",
+            "app.watchaudio.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION": "androidx.core (signature, app-internal)",
+        },
+        # <data-extraction-rules> sections that must exclude every domain. Device-to-device
+        # transfer (cable / local Wi-Fi) stays allowed on the phone so history can move.
+        "excluded_backup_sections": ("cloud-backup",),
+    },
+    "wearApp": {
+        "permissions": {
+            "android.permission.RECORD_AUDIO": "the recorder",
+            "android.permission.FOREGROUND_SERVICE": "recording service",
+            "android.permission.FOREGROUND_SERVICE_MICROPHONE": "foreground service type of the recorder",
+            "android.permission.POST_NOTIFICATIONS": "ongoing recording notification",
+            "android.permission.VIBRATE": "haptic feedback on start/stop/mark",
+            "android.permission.RECEIVE_BOOT_COMPLETED": "resume recording after reboot (BootReceiver)",
+            "android.permission.BODY_SENSORS": "off-body detection on Wear OS 4/5 (optional)",
+        },
+        "library_permissions": {
+            "android.permission.WAKE_LOCK": "WorkManager / play-services",
+            "android.permission.ACCESS_NETWORK_STATE": "WorkManager constraint tracking (no INTERNET on the watch)",
+            "app.watchaudio.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION": "androidx.core (signature, app-internal)",
+        },
+        "excluded_backup_sections": ("cloud-backup", "device-transfer"),
+    },
+}
+
+# Directories whose .kt/.java/.swift files are scanned (relative to the repository root).
+# Test code is not shipped and is skipped: directories named "test" or containing "Test"
+# (src/test, src/jvmTest, src/androidTest, iosApp/ProtocolTests, iosApp/TestSupport, ...).
+SOURCE_ROOTS = ("androidApp/src", "wearApp/src", "composeApp/src", "shared", "iosApp")
+SOURCE_EXTENSIONS = (".kt", ".java", ".swift")
+
+# APIs that move data off the device or weaken on-device protection. Matched in code with
+# comments removed. (id, regex, what it is)
+GUARDED_APIS = (
+    ("URLConnection", r"\b(?:Http|Https)?URLConnection\b", "java.net HTTP client"),
+    ("openConnection", r"\.openConnection\s*\(", "java.net.URL.openConnection"),
+    ("openStream", r"\.openStream\s*\(", "java.net.URL.openStream"),
+    ("java.net.http", r"\bjava\.net\.http\b", "JDK HttpClient"),
+    ("Socket", r"\b(?:Server|Datagram|SSL)?Socket\b|\bjava\.net\.Socket", "raw sockets"),
+    ("WebSocket", r"\bWebSocket\b|\bURLSessionWebSocketTask\b", "WebSocket"),
+    ("OkHttp", r"\bokhttp3?\b|\bOkHttpClient\b", "OkHttp"),
+    ("Ktor", r"\bio\.ktor\b", "Ktor client"),
+    ("Retrofit", r"\bretrofit2?\b", "Retrofit"),
+    ("Cronet", r"\bCronet\w*", "Cronet"),
+    ("DownloadManager", r"\bDownloadManager\b", "Android DownloadManager"),
+    ("WebView", r"\b(?:WK)?WebView\b", "web view"),
+    ("URLSession", r"\b(?:NS)?URLSession\b", "Apple URLSession"),
+    ("NSURLConnection", r"\bNSURLConnection\b", "Apple NSURLConnection"),
+    ("Network.framework", r"\bNW(?:Connection|Listener|Browser|Endpoint)\b|^\s*import\s+Network\b|\bplatform\.Network\b",
+     "Apple Network.framework"),
+    ("MultipeerConnectivity", r"\bMultipeerConnectivity\b|\bMCSession\b", "Apple peer-to-peer networking"),
+    ("SpeechServerRecognition", r"\bSF\w*RecognitionRequest\b",
+     "SFSpeechRecognizer requests may use Apple's servers; use SpeechAnalyzer (on-device)"),
+    ("DataClient", r"\b(?:DataClient|PutDataRequest|PutDataMapRequest|getDataClient)\b",
+     "Wear Data Layer DataClient (items may sync through the cloud); use MessageClient/ChannelClient"),
+    ("WeakFileProtection", r"\bNSFileProtectionNone\b|\.noFileProtection\b|\bFileProtectionType\.none\b|"
+     r"\bMODE_WORLD_(?:READABLE|WRITEABLE)\b", "files readable without protection / by other apps"),
+)
+
+# file (relative path) -> {api id: reason}. These are the app's only network call sites.
+# An entry that no longer matches anything is reported too, so the list stays accurate.
+ALLOWED_API_USES = {
+    "androidApp/src/main/kotlin/app/watchaudio/android/asr/ModelDownloader.kt": {
+        "URLConnection": "downloads the ASR / VAD model files listed in ModelManifest (resumable, SHA-256)",
+        "openConnection": "same download",
+    },
+}
+
+# URL literals in code must start with one of these prefixes (unused prefixes are reported).
+ALLOWED_URL_PREFIXES = {
+    "https://huggingface.co/csukuangfj/reazonspeech-k2-v2": "ASR model files, pinned commit (ModelManifest)",
+    "https://github.com/k2-fsa/sherpa-onnx/releases/download/": "Silero VAD model (ModelManifest)",
+}
+
+# Declared dependencies (gradle/libs.versions.toml, *.gradle.kts) must not match these.
+DENIED_DEPENDENCIES = (
+    ("analytics / ads", r"firebase|crashlytics|google-services|analytics|telemetry|"
+     r"play-services-(?:ads|measurement|appset)|\b(?:com\.amplitude|com\.mixpanel|com\.segment|com\.posthog|"
+     r"io\.heap|com\.datadoghq|com\.newrelic|com\.flurry|com\.appsflyer|com\.adjust|io\.branch|"
+     r"com\.facebook|com\.onesignal|com\.braze|com\.clevertap|ly\.count)\b"),
+    ("crash reporting", r"\b(?:io\.sentry|com\.bugsnag|com\.instabug|ch\.acra|com\.microsoft\.appcenter|"
+     r"io\.embrace)\b|\bsentry\b|\bbugsnag\b"),
+    ("network client", r"okhttp|retrofit|\bktor\b|volley|cronet|\bgrpc\b|apollographql|io\.socket|paho|mqtt"),
+)
+# Gradle files outside the shipped apps (benchmarks, the Linux harness).
+DEPENDENCY_SCAN_EXCLUDES = ("spikes/",)
+
+# Resolved runtime classpath of the apps (--resolved-deps): every module must match one of
+# these "group:artifact" patterns.
+ALLOWED_RESOLVED_DEPENDENCIES = (
+    (r"androidx\.[\w.-]+:[\w.-]+", "AndroidX / Jetpack"),
+    (r"org\.jetbrains\.kotlinx?(?:\.[\w-]+)*:[\w.-]+", "Kotlin stdlib, coroutines, serialization, io"),
+    (r"org\.jetbrains:annotations", "Kotlin annotations"),
+    (r"org\.jetbrains\.(?:compose|androidx)\.[\w.-]+:[\w.-]+", "Compose Multiplatform"),
+    (r"com\.google\.android\.gms:play-services-(?:wearable|base|basement|tasks)",
+     "Wear OS Data Layer (MessageClient/ChannelClient to nearby nodes)"),
+    (r"com\.google\.guava:listenablefuture", "AndroidX futures"),
+    (r"org\.jspecify:jspecify", "nullness annotations"),
+    (r"com\.github\.k2-fsa\.sherpa-onnx:[\w.-]+", "on-device ASR"),
+)
+
+IOS_PROJECT = "iosApp/project.yml"
+
+# Info.plist keys per XcodeGen target (info.properties) and allowed UIBackgroundModes.
+IOS_TARGETS = {
+    "iosApp": {
+        "info": {
+            "CFBundleDisplayName": "app name",
+            "UILaunchScreen": "launch screen",
+            "CADisableMinimumFrameDurationOnPhone": "ProMotion",
+            "NSMicrophoneUsageDescription": "permission text (recording on the phone is not used yet)",
+            "NSSpeechRecognitionUsageDescription": "on-device transcription permission",
+            "UIBackgroundModes": "see background_modes",
+            "BGTaskSchedulerPermittedIdentifiers": "transcription BGProcessingTask",
+        },
+        "background_modes": {"processing": "transcribe while charging (BGProcessingTask)"},
+    },
+    "WatchApp": {
+        "info": {
+            "CFBundleDisplayName": "app name",
+            "WKApplication": "watchOS app",
+            "WKCompanionAppBundleIdentifier": "paired iPhone app",
+            "NSMicrophoneUsageDescription": "the recorder",
+            "UIBackgroundModes": "see background_modes",
+        },
+        "background_modes": {"audio": "keep recording with the screen off"},
+    },
+}
+
+# Entitlement keys (project.yml `entitlements` or committed *.entitlements). None are needed:
+# WatchConnectivity and on-device Speech work without entitlements.
+IOS_ENTITLEMENTS = {}
