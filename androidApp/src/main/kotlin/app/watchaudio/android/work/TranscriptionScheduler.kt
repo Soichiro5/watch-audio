@@ -59,8 +59,9 @@ class TranscriptionScheduler(context: Context, private val scope: CoroutineScope
         workManager.enqueueUniquePeriodicWork(PERIODIC, ExistingPeriodicWorkPolicy.KEEP, request)
     }
 
-    private companion object {
-        const val NOW = "transcription"
-        const val PERIODIC = "transcription-periodic"
+    companion object {
+        /** Unique work names (also read by the instrumented tests). */
+        internal const val NOW = "transcription"
+        internal const val PERIODIC = "transcription-periodic"
     }
 }

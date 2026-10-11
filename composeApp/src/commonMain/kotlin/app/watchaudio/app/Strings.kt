@@ -189,6 +189,7 @@ object Strings {
     const val PERMISSION_ALLOW = "許可する"
     const val PERMISSION_GRANTED = "許可済み"
     const val PERMISSION_DENIED = "許可されていません。端末の設定アプリから変更できます。"
+    const val OPEN_SETTINGS = "設定を開く"
     const val PERMISSION_CHECKING = "確認中…"
 
     const val MODEL_SETUP_TITLE = "文字起こしの準備"

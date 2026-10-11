@@ -36,6 +36,8 @@ class FakeAppServices(
     var deniesOnRequest = false
     var gapAlertSettingsChanges = 0
         private set
+    var appSettingsOpened = 0
+        private set
 
     override fun requestTranscription() {
         transcriptionRequests++
@@ -62,6 +64,10 @@ class FakeAppServices(
             permissionStates[permission] = if (deniesOnRequest) PermissionStatus.DENIED else PermissionStatus.GRANTED
         }
         return permissionStatus(permission)
+    }
+
+    override fun openAppSettings() {
+        appSettingsOpened++
     }
 
     override fun gapAlertSettingsChanged() {

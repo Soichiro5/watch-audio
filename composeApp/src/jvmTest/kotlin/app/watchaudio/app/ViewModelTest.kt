@@ -392,6 +392,34 @@ class ViewModelTest {
     }
 
     @Test
+    fun refusedPermissionLeadsToTheSystemSettingsAndIsReReadOnReturn() = runVmTest {
+        val platform = FakeAppServices(store, permissions = listOf(AppPermission.NOTIFICATIONS))
+        platform.deniesOnRequest = true
+        val vm = OnboardingViewModel(platform, scope = backgroundScope)
+        backgroundScope.launch { vm.state.collect {} }
+        vm.refreshPermissions()
+        runCurrent()
+
+        // Nothing refused yet: the system prompt is still available, settings are not opened.
+        vm.openAppSettings()
+        assertEquals(0, platform.appSettingsOpened)
+
+        vm.requestPermission(AppPermission.NOTIFICATIONS)
+        runCurrent()
+        assertEquals(PermissionStatus.DENIED, vm.state.value.permissions[AppPermission.NOTIFICATIONS])
+        vm.openAppSettings()
+        assertEquals(1, platform.appSettingsOpened)
+
+        // The user allows notifications in the settings app; the screen re-reads them on resume.
+        platform.permissionStates[AppPermission.NOTIFICATIONS] = PermissionStatus.GRANTED
+        vm.refreshPermissions()
+        runCurrent()
+        assertEquals(PermissionStatus.GRANTED, vm.state.value.permissions[AppPermission.NOTIFICATIONS])
+        vm.openAppSettings()
+        assertEquals(1, platform.appSettingsOpened)
+    }
+
+    @Test
     fun statusShowsStorageAndConfirmsAShorterRetention() = runVmTest {
         val fortyDaysAgo = at(9) - 40 * 24 * 3_600_000L
         addChunk("old", fortyDaysAgo)

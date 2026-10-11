@@ -49,11 +49,11 @@ flowchart LR
     ING --> JOB[Job Scheduler<br>BGProcessingTask / WorkManager]
     JOB --> VAD[VAD] --> ASR[ASR<br>SpeechAnalyzer / sherpa-onnx] --> DB
     JOB --> EMB[Embedding<br>ONNX Runtime] --> DB
-    JOB --> REV[Hourly Review / Daily Reflection / Memory 抽出] --> DB
+    JOB --> REV[1 時間ごとの要約 / 1 日の振り返り / 記憶（事実の抽出）] --> DB
     HEALTH[HealthKit / Health Connect<br>Phase2] --> CTX[Context Builder<br>体調・場所ラベル]
     CTX --> REV
-    UI[Compose MP UI<br>Home / Days / Search / Chat / Settings] --> DB
-    CHAT[Chat RAG] --> DB
+    UI[Compose MP UI<br>ホーム / 日別タイムライン / 検索 / チャット / 設定] --> DB
+    CHAT[チャット（RAG）] --> DB
     UI --> CHAT
   end
 
@@ -74,7 +74,7 @@ watch-audio/
 │   ├── core-search/           #   FTS + ベクトルのハイブリッド検索
 │   ├── core-ai/               #   LLM Provider 抽象、プロンプト、RAG
 │   ├── core-platform/         #   expect/actual: Transcriber, Embedder, SecureStore, HealthSource, Geocoder
-│   └── feature-*/             #   画面ごとの ViewModel（Home, Days, Search, Chat, Settings）
+│   └── feature-*/             #   画面ごとの ViewModel（ホーム・日別タイムライン・検索・チャット・設定）
 ├── composeApp/                # Compose Multiplatform UI（Android/iOS 共通）
 ├── androidApp/                # Android スマホアプリ（エントリ、WorkManager、Data Layer 受信）
 ├── wearApp/                   # Wear OS アプリ（録音 FGS、Ongoing Activity、Data Layer 送信）
@@ -147,6 +147,21 @@ received → vad → transcribed → embedded → (hour closed) reviewed → (da
 - 音声の保持期間ポリシー（#33）: 文字起こし完了済みのチャンクのみ削除対象。文字起こしの後に同じバックグラウンド処理（Android `TranscriptionWorker`、iOS `BGProcessingTask` / 前面実行）で `StorageManager.applyRetention()` を実行する。詳細は §9.3。
 - 文字起こしエンジンは共通インターフェース `Transcriber`（`core-pipeline`）の裏に置く。入力は「音声パーツ（ファイル + 範囲 `[fromMs, toMs)`）のリスト」で、エンジンはそれを連結した 1 本の録音として認識し、連結先頭からの相対時刻で発話を返す（各パーツはちょうど `toMs - fromMs` の長さにする。ファイルが短ければ無音で埋める）。実装: Android = sherpa-onnx（各ファイルを `MediaCodec` でデコードして PCM を連結）、iOS = SpeechAnalyzer（Swift 側で一時 CAF ファイルに連結）、JVM ハーネス = sherpa-onnx（ffmpeg でデコード）。
 
+#### 発話区間の切り出し（Android / JVM ハーネス、#68）
+
+sherpa-onnx の経路では、Silero VAD（しきい値 0.3、最小無音 0.5 秒、最小発話 0.25 秒、最大発話 20 秒）で見つけた発話区間を `padSpeechSpans`（`core-pipeline/SpeechSegmentation.kt`、設定は `AsrSettings`）で認識器への入力に切り分ける。Android とハーネスは同じコードを使う。iOS の SpeechAnalyzer は音声ファイルを丸ごと渡し、区切りは OS に任せる（この処理は通らない）。
+
+1. **余白**: 各区間の前後に 0.3 秒の実音声を付ける（語頭が欠けないように）。
+2. **結合と切り分け**: 余白が重なる隣の区間は、余白込みで 20 秒（`MAX_SEGMENT_SECONDS`）以内に収まる場合だけ 1 つにまとめる。収まらない場合はまとめず、重なった余白の中で最も静かな点で切り分ける（同じ音声を 2 回認識しない）。
+3. **間での分割**: 各区間の中に「間」があれば、その中央で切る。間とは、10 ms ごとのエネルギーが区間内の大きい音（95 パーセンタイル）より 30 dB 以上小さい状態が 0.22 秒（`MIN_PAUSE_SECONDS`）以上続く所。会話の話者交代（平均 0.35 秒）を捉えるため。残響のある音声では、Silero の確率は無音になっても 1 秒以上しきい値を下回らないので、VAD の最小無音を短くしても話者交代では切れない。
+4. **上限**: それでも 20 秒を超える区間（間のない長い発話、雑音で間が埋まった会話）は、最も静かな点（前後 50 ms のエネルギーが最小の所）で 20 秒以下に分ける。どの片も 5 秒以上にする。
+
+結果として、認識器への入力は必ず 20 秒以下になり、入力どうしは重ならない。
+
+**理由**: ReazonSpeech の Zipformer は、1 つの入力に複数の話者交代が入ると文をまとめて落とす。以前は VAD が最大 20 秒で切った区間どうしが接していたため、余白を付けると重なって結合し直され、入力が最大 109 秒になっていた。上限を 20 秒にするだけでは足りず（会話の CER 53.8% → 44.3%、区間長の中央値 10 秒）、話者交代ごとに切って初めて正解区間で切った場合に近づいた（15.0%、中央値 2 秒前後）。測定結果は [test-audio.md §4](test-audio.md#4-結果)。
+
+**残る制約**: 雑音のある条件（オフィス・カフェ・屋外）では間が雑音で埋まり、エネルギーでは話者交代を見つけられない。区間が長いままになり、正解区間で切った場合との差が大きい。
+
 #### チャンク境界をまたぐ発話（#45）
 
 Watch は発話に関係なく約 5 分ごとにチャンクを区切るので、境界をまたぐ発話を別々に認識すると前後で単語が切れて誤認識する（ハーネスの例: 「持ち主とはぐれた / そして傘が風で舞い」「バルクイ / 十八歳の時だった」）。そこで `TranscriptionPipeline` は、チャンクを**隣のチャンクの境界付近の音声と連結して**認識する（`core-pipeline/BoundaryJoin.kt`）。
@@ -172,11 +187,11 @@ Watch は発話に関係なく約 5 分ごとにチャンクを区切るので�
 - 連結の判定は保存済みセグメント（VAD / SpeechTranscriber の結果）に依存する。境界直前の発話を VAD が取りこぼした場合（0.25 秒未満など）は連結されない。
 - 隣のチャンクの境界付近のセグメントは後から書き換わる（タイムライン・検索結果がそのぶん変わる）。
 
-### 6.4 検索・Chat（RAG）
+### 6.4 検索・チャット（RAG）
 
 1. クエリを埋め込み → ベクトル上位 K 件 + FTS5 上位 K 件を RRF（Reciprocal Rank Fusion）で統合。
 2. 日付/時間帯フィルタ（「先週の火曜」など）は LLM の関数呼び出しで抽出（AI 未設定時は UI フィルタ）。
-3. 前後の文脈セグメント + 関連 Memory + Hour Summary をコンテキストにして LLM へ。
+3. 前後の文脈セグメント + 関連記憶 + 1 時間ごとの要約をコンテキストにして LLM へ。
 4. 回答中の引用 `[seg:123]` を UI で原文・音声再生へのリンクに変換。
 
 ### 6.5 AI プロバイダ（BYOK）
@@ -199,7 +214,7 @@ interface LlmProvider {
 | 項目 | 方針 |
 | --- | --- |
 | 保存 | アプリサンドボックス内。iOS は `Application Support/WatchAudio`（ファイル保護は既定の `CompleteUntilFirstUserAuthentication`。ロック中の BGTask からも読める）、Android は内部ストレージ（`files/`） |
-| バックアップ | MVP では OS バックアップ対象外（Auday と同方針）。Phase 2 で E2E 暗号化バックアップを提供 |
+| バックアップ | MVP では OS バックアップ対象外（データを端末外に出さないため）。Phase 2 で E2E 暗号化バックアップを提供 |
 | API キー | Keychain（`ThisDeviceOnly`）/ Android Keystore |
 | 外部送信 | AI プロバイダ（テキストのみ）、OS ジオコーダ（Phase 2）。解析 SDK・広告 SDK は入れない |
 | 同意 | 初回オンボーディングで「録音対象者への告知」の注意喚起。Watch に録音中インジケータを常時表示 |
@@ -276,4 +291,4 @@ stateDiagram-v2
 | --- | --- | --- |
 | 録音開始 | アプリ前景からのみ | アプリ前景からのみ（Android 14+）。再起動後に自動開始できない |
 | 割り込み後の自動再開 | 不確実（M0-3 で検証） | AudioFocus / 同時録音の扱いを M0-4 で検証 |
-| 電池（24h） | 約 4%/時（Auday 実測）→ 1 日 1 回の充電の間はスマホがカバー | 機種差大（M0-4 で検証） |
+| 電池（24h） | 約 4%/時（既存の Watch 録音アプリの公開値からの推定）→ 1 日 1 回の充電の間はスマホがカバー | 機種差大（M0-4 で検証） |

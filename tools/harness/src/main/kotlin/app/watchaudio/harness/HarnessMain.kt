@@ -19,11 +19,19 @@ import kotlinx.io.files.Path
  *   ./gradlew :tools:harness:run --args="record <dataDir> <audio files...>"
  *   ./gradlew :tools:harness:run --args="search <dataDir> <query>"
  *   ./gradlew :tools:harness:run --args="show <dataDir>"
+ *   ./gradlew :tools:harness:run --args="evaluate <manifest.json> <workDir> [recordingIds...]"
+ *
+ * `evaluate` scores a test audio set from tools/test-audio (see docs/test-audio.md).
  */
 fun main(args: Array<String>) = runBlocking {
     if (args.size < 2) usage()
-    val dataDir = File(args[1]).absoluteFile.apply { mkdirs() }
     val models = File(System.getProperty("watchaudio.models") ?: "tools/harness/models")
+    if (args[0] == "evaluate") {
+        if (args.size < 3) usage()
+        evaluate(models, File(args[1]), File(args[2]).absoluteFile, args.drop(3).toSet())
+        return@runBlocking
+    }
+    val dataDir = File(args[1]).absoluteFile.apply { mkdirs() }
     LocalStore.open(File(dataDir, LocalStore.FILE_NAME).path).use { store ->
         when (args[0]) {
             "record" -> {
@@ -47,6 +55,15 @@ fun main(args: Array<String>) = runBlocking {
     }
 }
 
+private suspend fun evaluate(models: File, manifest: File, workDir: File, only: Set<String>) {
+    TestSetEvaluator(models, workDir).evaluate(manifest, only)
+    val table = TestSetEvaluator.markdownTable(manifest, workDir)
+    File(workDir, "results.md").writeText(table)
+    println()
+    print(table)
+    println("\nper-conversation transcripts: $workDir/<recording>/report.md")
+}
+
 private suspend fun printDay(store: LocalStore) {
     val stats = store.read { stats() }
     println("chunks=${stats.chunks} pending=${stats.pendingChunks} segments=${stats.segments} audio=${stats.audioBytes / 1024}KB recorded=${stats.recordedMs / 1000}s")
@@ -58,6 +75,6 @@ private val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZ
 private fun time(epochMs: Long) = formatter.format(Instant.ofEpochMilli(epochMs))
 
 private fun usage(): Nothing {
-    System.err.println("usage: record <dataDir> <audio...> | search <dataDir> <query> | show <dataDir>")
+    System.err.println("usage: record <dataDir> <audio...> | search <dataDir> <query> | show <dataDir> | evaluate <manifest.json> <workDir> [ids...]")
     exitProcess(2)
 }
