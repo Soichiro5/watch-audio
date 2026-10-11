@@ -34,7 +34,8 @@ class ModelManifestTest {
     /** The harness E2E must transcribe with the very files the app downloads. */
     @Test
     fun harnessScriptDownloadsTheSameFiles() {
-        val script = File(System.getProperty("user.dir")).resolveSibling("tools/harness/download-models.sh")
+        // Unit tests run in the module directory (androidApp/).
+        val script = File("").absoluteFile.resolveSibling("tools/harness/download-models.sh")
         val variables = mutableMapOf<String, String>()
         val fetched = mutableSetOf<ModelSource>()
         for (raw in script.readLines()) {
