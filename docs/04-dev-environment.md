@@ -114,7 +114,8 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 | `android.yml` | Unit tests | 共通ロジック（JVM・Android ホスト）。SQLite を使う core-db / Ingestor / パイプラインのテストは JVM で実行 | テスト結果 |
 | `android.yml` | Search benchmark | 50 万セグメントでの検索応答時間（§5） | ジョブサマリーの表と `SEARCH_BENCHMARK` 行 |
 | `android.yml` | Unit tests（composeApp の `AppUiTest`） | 画面の描画（タイムライン・検索・状態・オンボーディング。権限拒否時の「設定を開く」#32 を含む） | 成果物 `ui-screenshots`（`composeApp/build/screenshots/*.png`） |
-| `emulator.yml`（phone / wear） | Install, launch and check for crashes | スマホ・Wear OS アプリがエミュレータで起動し、15 秒後もクラッシュしていない | ジョブのログ、成果物 `logcat-*` |
+| `android.yml` | Assemble release (R8) + debug input leak check | スマホ・Wear OS の release ビルド（R8 で縮小・難読化）が通る。Wear OS の debug 専用の音声ファイル入力（#57）が release に入っていない（`verifyReleaseDebugInput`）（#78） | ジョブサマリーの APK 一覧と `debug-input/release.txt` の内容 |
+| `emulator.yml`（phone / wear） | Install, launch and check for crashes | release ビルド（R8、CI で作る使い捨ての鍵で署名）→ debug ビルドの順に入れて起動し、15 秒後もクラッシュしていない（`launch-smoke.sh`。R8 の keep 漏れによる起動時のクラッシュを検出、#78） | ジョブサマリーの `LAUNCH_CHECK` 行、成果物 `logcat-*`（`logcat-release.txt` / `logcat.txt`） |
 | `emulator.yml`（phone） | 同上（続けて実行） | 計装テスト: 実際の音声（AAC）を MediaPlayer で指定位置から再生できる・検索結果を 1 タップでその発話から再生できる（`PlaybackTest`）、SQLite のテストを Android 上で実行（core-db / core-pipeline） | ジョブサマリーのテスト一覧と `PLAYBACK_CHECK` 行、成果物 `logcat-phone`（テストレポート） |
 | `emulator.yml`（phone） | 同上（計装テスト） | 実モデルでの文字起こし: `AndroidSherpaTranscriber`（MediaCodec + sherpa-onnx AAR）が日本語の参照音声チャンクを文字起こしして DB に保存・検索できる（`SherpaTranscriberTest`、#22） | `ASR_CHECK` / `ASR_SEGMENT` 行 |
 | `emulator.yml`（phone） | 同上（計装テスト） | モデルなしでも受信・再生でき文字起こしは待機（チャンクは処理待ちのまま・失敗扱いにしない）、モデルを置くと自動で処理が進む（`ModelWaitTest`、#22） | `MODEL_CHECK` 行、スクリーンショット `status-model-missing.png` / `status-model-ready.png` |
@@ -123,8 +124,11 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 | `emulator.yml`（phone） | 同上（`phone-scenarios.sh`） | 通知権限をシステムのダイアログで拒否 → 理由と「設定を開く」が表示され、押すとアプリの設定画面が開く（`PermissionDeniedTest`、#32） | `PERMISSION_CHECK` 行、スクリーンショット `permission-system-dialog.png` / `onboarding-permission-denied.png` / `app-settings-opened.png` |
 | `emulator.yml`（phone） | 同上（`phone-scenarios.sh`） | 文字起こしの途中で `am force-stop` → 再起動で全チャンクが 1 回ずつ文字起こしされる（欠落・重複 0、中断したチャンクは 2 回目で完了）（`ResumeAfterKillTest`、#20） | `RESUME_CHECK` 行、成果物 `logcat-phone` の `scenario-logs/` |
 | `emulator.yml`（wear） | 同上（`wear-surfaces.sh`） | Tile とコンプリケーションの表示（停止中 → Tile のタップでアプリが開き録音開始 → 録音中）（#41） | `WEAR_SURFACE_CHECK` 行、スクリーンショット `wear-tile-*.png` / `wear-complication-*.png` |
-| `ios.yml` | Shared tests (iOS simulator) | 共通ロジックを iOS シミュレータで実行（SQLite を使う core-db / Ingestor のテストを含む） | ジョブサマリーのテスト一覧 |
+| `ios.yml` | Shared tests (iOS simulator) | 共通ロジックを iOS シミュレータで実行（SQLite を使う core-db / Ingestor のテストを含む）。composeApp の `IosPlaybackTest`: `IosAppServices.play` 直接・共有 UI で前日のタイムラインの発話タップ／検索結果の 1 タップのそれぞれで、そのチャンクの AAC が AVAudioPlayer に指定位置（±0.2 秒）・正しい長さで用意される（#19, #25。テスト実行ファイルはアプリではないので再生開始 `started=` は記録のみ）。`IosTranscriberBridgeTest`: Swift の文字起こし結果が絶対時刻つきで DB・FTS に入る（#21） | ジョブサマリーのテスト一覧と `PLAYBACK_CHECK` 行 |
 | `ios.yml` | Launch iOS app / Launch watchOS app | ビルドした iOS・watchOS アプリをシミュレータに入れて起動し、15 秒後もプロセスが生きていてクラッシュレポートがない | ジョブサマリー、成果物 `simulator-smoke`（スクリーンショット・ログ） |
+| `ios.yml` | Swift unit tests (iOS Simulator) | `SwiftUnitTests` スキーム（ホストなし）: Swift のワイヤ形式が Kotlin のテストベクタと一致（`ProtocolTests`）、Watch の停止理由・状態判定と終了理由のマニフェストへの記録（`RecorderPolicyTests`、#15）、送信キューの ACK・再送・再起動後の再送・強制終了からの復旧（`ChunkOutboxTests`、#17） | ジョブサマリーのテスト一覧（`.github/scripts/xcresult-summary.py`） |
+| `ios.yml` | Japanese test speech / Speech transcription on the iOS simulator | macOS の `say` で作った日本語音声（Watch と同じ AAC 16 kHz モノラル）を SpeechTranscriber（ja_JP）で文字起こしし、時刻と文字の再現率を確認（`SpeechTests`、iOS アプリがホスト、#21）。シミュレータで使えなければ理由を残してスキップ（実機確認は #60） | ジョブサマリーのテスト一覧と「Speech check logs」、成果物 `swift-evidence` |
+| `ios.yml` | Playback in the iOS app (simulator) | `PlaybackTests`（iOS アプリがホストの XCTest）: アプリが起動時に作った本物の `IosAppServices` で AAC 16 kHz の音声を 8 秒から再生し、再生位置がそこから始まり 2 秒後に 1 秒以上進む（#19） | ジョブサマリーのテスト一覧と `PLAYBACK_CHECK check=hosted_player` 行、成果物 `swift-evidence` |
 
 スクリーンショットは成果物 `screenshots-phone` / `screenshots-wear`（30 日保存）、`*_CHECK` 行はジョブサマリーにまとめて出す。
 
@@ -132,22 +136,26 @@ SQLite（bundled ドライバ）を開くテストは `src/sqliteTest` に置く
 
 - core-db（`LocalStoreTest`・`StorageQueriesTest`）と core-pipeline（`IngestorTest`・`TranscriptionPipelineTest`・`StorageManagerTest`）: JVM・iOS シミュレータ・Android 端末/エミュレータ。
 - composeApp（`GapAlertEvaluatorTest`）: JVM・iOS シミュレータ（`watchaudio.kmp.sqlite-tests-jvm-ios`）。Compose Multiplatform のリソースプラグインが KMP ライブラリの Android デバイステスト用バリアントを構成できないため、Android 端末では実行しない。
-- composeApp の `ViewModelTest`・`AppUiTest` は JVM のみ（`Dispatchers.Main` に Swing、描画にデスクトップの Skia を使うため）。
+- composeApp の `ViewModelTest`・`AppUiTest` は JVM のみ（`Dispatchers.Main` に Swing、描画にデスクトップの Skia を使うため）。iOS では `src/iosTest` の `IosPlaybackTest` が実際の `IosAppServices` で同じ流れ（タイムライン・検索 → 再生の準備）を確かめる。Kotlin/Native のテスト実行ファイルはアプリのプロセスではなく `AVAudioPlayer.play()` が false を返すため、再生が進むことはアプリをホストにした XCTest（`iosApp/PlaybackTests`）で確かめる。Kotlin/Native のテストはメインスレッドで動き、`Dispatchers.Main` はメインのランループが回るときだけ進むので、待ち合わせ中にランループを回している（`IosPlaybackFixture.pumpMainRunLoop`）。
 
 手元での実行:
 
 ```bash
 # iOS 向けテストのコンパイル確認（Linux、リンクなし）
 ./gradlew --max-workers=2 :shared:core-db:compileTestKotlinIosSimulatorArm64 :shared:core-pipeline:compileTestKotlinIosSimulatorArm64 \
-  -Pkotlin.native.enableKlibsCrossCompilation=true
+  :composeApp:compileTestKotlinIosSimulatorArm64 -Pkotlin.native.enableKlibsCrossCompilation=true
 # Android エミュレータ / 実機を接続して（KVM のある環境）
 ./gradlew :androidApp:connectedDebugAndroidTest :shared:core-db:connectedAndroidDeviceTest :shared:core-pipeline:connectedAndroidDeviceTest
 adb logcat -d | grep -E "[A-Z_]+_CHECK"
 # Mac: ビルド済みアプリをシミュレータで起動確認
 .github/scripts/simulator-smoke.sh iOS iPhone build/DerivedData/Build/Products/Debug-iphonesimulator/WatchAudio.app app.watchaudio
+# Mac: Swift のテスト（cd iosApp && xcodegen generate の後）
+.github/scripts/xcode-test.sh SwiftUnitTests "Swift unit tests"
+.github/scripts/make-ja-speech.sh build/ja-speech && .github/scripts/xcode-test.sh SpeechTests "SpeechTranscriber"
+ERASE_SIMULATOR=1 .github/scripts/xcode-test.sh PlaybackTests "Playback in the iOS app"
 ```
 
-未対応: iOS の再生（`IosAppServices.play`）を確かめるシミュレータテスト。テスト用の AAC の生成と XCTest のホストアプリ設定が必要で、macOS の CI 時間（10 倍課金）もかかるため、現状はシミュレータでの起動確認までとする。
+Swift のテストを Linux で実行する手段はない（Xcode が必要）。変更したら CI（macOS、10 倍課金）で確認する前に、Kotlin 側は上のクロスコンパイル、Swift 側は差分の読み直しで型・並行性のエラーを潰しておく。
 
 ### 6.1 エミュレータでの音声認識モデル
 
@@ -172,6 +180,23 @@ adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
 adb pull /data/local/tmp/watchaudio-screenshots
 ```
 
+### 6.3 どの変更でどのワークフローが動くか（#92）
+
+PR の CI 待ちを減らすため、変更したファイルに関係するワークフローだけを動かす。`workflow_dispatch` からはいつでも手動で全部動かせる。
+
+| 変更したファイル | `android.yml` | `emulator.yml` | `ios.yml` | `deliver.yml`（main のみ） |
+| --- | --- | --- | --- | --- |
+| ドキュメントだけ（`docs/**`、`**/*.md`、Issue / PR テンプレート、`tools/roadmap-view/**`、`research/**`、`spikes/**`） | 動かない | 動かない | 動かない | 動かない |
+| iOS 専用（`iosApp/**`、`src/iosMain`・`src/iosTest`、iOS 用スクリプト） | 動く | 動かない | 動く | 動く |
+| Android 専用（`androidApp/**`、`wearApp/**`、`src/androidMain`・`androidHostTest`・`androidDeviceTest`、Android 用スクリプト） | 動く | 動く | 動かない | 動く |
+| JVM 専用（`src/jvmMain`・`src/jvmTest`） | 動く | 動かない | 動かない | 動く |
+| 共通コード（`src/commonMain` など）・Gradle の設定・`build-logic/**` | 動く | 動く | 動く | 動く |
+
+- `android.yml` と `deliver.yml` は除外リスト（`paths-ignore`）。ドキュメント以外の変更では必ず動く。
+- `emulator.yml` と `ios.yml` は対象リスト（`paths`）に除外（`!`）を足している。除外は後ろに書いたものが優先されるので、新しい除外は対象リストより後ろに書く。
+- 新しいスクリプトを `.github/scripts/` に足すときは、片方のプラットフォーム専用なら、もう片方のワークフローの除外に追加する。
+- フォルダ構成を変えるとき（#49）は、上の表のパスもあわせて直す。
+
 ## 7. CI の設定と成果物の扱い（公開リポジトリ）
 
 リポジトリは公開なので、CI のログと成果物（artifact）は GitHub にログインした人なら誰でも見られる・ダウンロードできる（#79）。
@@ -179,19 +204,47 @@ adb pull /data/local/tmp/watchaudio-screenshots
 - **ランナーは固定**: Linux は `ubuntu-24.04`（`ubuntu-latest` の Ubuntu 26 への切り替えで壊れないように）、macOS は `macos-26`。新しいイメージへは、全ジョブが通ることを PR で確かめてから移る。
 - **権限は最小**: 各 workflow は `permissions: contents: read`。書き込みが必要なジョブを足すときは、そのジョブにだけ付ける。`pull_request_target` は使わない（fork の PR に secret が渡るため）。
 - **外部アクションは SHA で固定**し、`.github/dependabot.yml` が週 1 回まとめて更新 PR を出す。
-- **秘密情報**: 必要になったら GitHub Actions の Secrets に置き、ログに出さない（加工して出力すると伏せ字を回避してしまうので注意）。現時点で secret を使う workflow はない。
+- **秘密情報**: GitHub Actions の Secrets にだけ置き、ログに出さない（加工して出力すると伏せ字を回避してしまうので注意）。現時点で secret を使うのは `android.yml` の release 署名だけ（§7.1）。
 
 成果物の中身（どれも実データ・個人データ・秘密情報を含まない）:
 
 | 成果物 | workflow | 中身 | 保持 |
 | --- | --- | --- | --- |
 | `debug-apks` / `watch-audio-android-<sha>` | android.yml / deliver.yml | debug 署名の APK（スマホ・Wear OS）。API キーは入っていない。モデルは同梱せず初回にダウンロード | 7 / 30 日 |
+| `release-apks` | android.yml | release 鍵で署名した R8 の APK（スマホ・Wear OS）。**署名用の secret があるときだけ**作る（ないときは署名なしでビルドだけ確認し、アップロードしない）。鍵そのものは入っていない | 7 日 |
 | `ui-screenshots` | android.yml | JVM の UI テストが描いた画面（テスト用の合成データ） | 30 日 |
 | `logcat-phone` / `logcat-wear` | emulator.yml | エミュレータの logcat・計装テストのレポート（合成音声・テスト用 DB のみ。文字起こし本文はテスト音声の正解文） | 7 日 |
 | `screenshots-phone` / `screenshots-wear` | emulator.yml | エミュレータのスクリーンショット | 30 日 |
 | `xcodebuild-logs` / `simulator-smoke` | ios.yml | ビルドログ、シミュレータのスクリーンショットとアプリログ | 7 日 |
 
 成果物を Issue の証跡として参照する場合、保持期間を過ぎると消える点に注意する（コメントには数値・ログ行を本文として残す）。
+
+### 7.1 Android の release ビルドと署名（#78）
+
+- **設定の場所**: `build-logic` の `AndroidReleaseConventionPlugin`（プラグイン ID `watchaudio.android.release`）を `androidApp` と `wearApp` の両方に適用している。release は R8 によるコードの縮小・難読化とリソースの縮小（`isMinifyEnabled` / `isShrinkResources`）を行い、keep ルールは各モジュールの `proguard-rules.pro`。スマホと Watch は applicationId が同じ `app.watchaudio` で、Data Layer でつながるには**同じ鍵で署名する必要がある**ため、署名の設定は 1 か所にまとめている。
+- **鍵の渡し方**: 鍵はリポジトリに置かず、Gradle は次の環境変数から読む。4 つとも未設定なら署名なし（`*-release-unsigned.apk`）、一部だけ設定されていれば値を出さずにビルドを失敗させる（secret の設定漏れで黙って署名なしになるのを防ぐ）。
+
+| Gradle が読む環境変数 | 中身 | CI で渡す GitHub Actions secret |
+| --- | --- | --- |
+| `WATCHAUDIO_RELEASE_STORE_FILE` | キーストアのパス | `ANDROID_RELEASE_KEYSTORE_BASE64`（キーストアを base64 にしたもの。CI がランナーの一時ディレクトリに復元し、ジョブの最後に消す） |
+| `WATCHAUDIO_RELEASE_STORE_PASSWORD` | キーストアのパスワード | `ANDROID_RELEASE_KEYSTORE_PASSWORD` |
+| `WATCHAUDIO_RELEASE_KEY_ALIAS` | 鍵のエイリアス | `ANDROID_RELEASE_KEY_ALIAS` |
+| `WATCHAUDIO_RELEASE_KEY_PASSWORD` | 鍵のパスワード | `ANDROID_RELEASE_KEY_PASSWORD` |
+
+- **CI の動き**: `android.yml` は毎回 `:androidApp:assembleRelease :wearApp:assembleRelease` を実行する（Wear OS の `verifyReleaseDebugInput` もここで走る）。secret があれば release 鍵で署名して成果物 `release-apks` に上げ、なければ（現在の状態。fork からの PR にも secret は渡らない）署名なしでビルドだけ確認する。`emulator.yml` は release 鍵を使わず、ジョブ内で `keytool` で作った使い捨ての鍵で署名して起動確認する（鍵とパスワードはそのジョブ限りで、配布物には使わない）。
+- **鍵の作り方**（一度だけ。リポジトリの外で作業し、キーストアをコミットしない）:
+
+```bash
+keytool -genkeypair -keystore watch-audio-release.jks -alias watch-audio \
+  -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=watch-audio"
+# パスワードは対話で入力する（コマンドラインやシェル履歴に残さない）
+base64 -w0 watch-audio-release.jks > keystore.b64   # macOS: base64 -i watch-audio-release.jks -o keystore.b64
+```
+
+- **secret の登録**: GitHub のリポジトリの Settings → Secrets and variables → Actions → New repository secret で上の 4 つを登録する（`gh secret set ANDROID_RELEASE_KEYSTORE_BASE64 < keystore.b64` でも可。パスワードは `gh secret set <名前>` を実行して対話で入力）。登録後に `keystore.b64` は削除する。
+- **保管**: キーストアとパスワードはパスワードマネージャーなど、リポジトリ・Issue・CI ログ以外の場所に保管する。**鍵をなくすと同じアプリとして更新できない**（Play で配信する場合は Play App Signing を使い、ここでの鍵はアップロード鍵として扱う。#35）。
+- **更新・漏えい時**: 新しい鍵を作って 4 つの secret を上書きする。既に入れた端末では署名が変わるため、スマホ・Watch とも一度アンインストールしてから入れ直す（Play App Signing を使っていればアップロード鍵のリセットを申請する）。
+- **手元での release ビルド**: 署名なしなら `./gradlew --max-workers=2 :androidApp:assembleRelease :wearApp:assembleRelease`。署名する場合は上の 4 つの環境変数を設定してから実行する。
 
 ## 8. 実機検証の手順
 

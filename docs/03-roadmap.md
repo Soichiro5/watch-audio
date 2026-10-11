@@ -24,23 +24,25 @@
 | 領域 | 状態 | 内容 |
 | --- | --- | --- |
 | 基盤・CI（#7, #8） | ✅ クローズ | KMP モノレポ、4 アプリのビルド、エミュレータ/シミュレータでの起動確認（GitHub Actions） |
+| CI の待ち時間短縮（#92） | 🟡 着手（dev-flow） | 変更したファイルに関係するワークフローだけを動かす（ドキュメントだけの変更では CI を動かさない、[04 §6.3](04-dev-environment.md#63-どの変更でどのワークフローが動くか92)）。残り: iOS ジョブの並列化 |
 | 実機なし検証基盤（#44） | ✅ クローズ | JVM 上の E2E（Watch シミュレータ → 取り込み → 日本語 ASR → SQLite → 検索）、エミュレータでの計装テスト（本番の Ingestor で取り込み → 再生）、iOS シミュレータでの共通テスト |
 | 検証用の音声・ファイル入力（#56, #57） | ✅ クローズ | 正解テキスト付きの日本語会話音声セット（オフライン TTS、16 会話・約 29 分、Watch を模した加工 6 条件 + 1 日分）とハーネスの `evaluate`（#56、[test-audio.md](test-audio.md)）。debug ビルドで Watch のマイク入力を音声ファイルに差し替え（#57） |
 | 技術検証（#9〜#11） | 🟡 実機待ち（needs-device） | デスクトップ比較は完了（[ASR](spikes/m0-5-asr-desktop.md)・[埋め込み](spikes/m0-6-embedding-desktop.md)）。電池計測は実機待ち |
 | 転送プロトコル（#13） | ✅ クローズ | ChunkManifest / ChunkAck / フレーミング / テストベクタ |
 | ローカル DB・取り込み（#14） | ✅ クローズ | bundled SQLite + FTS5（日本語部分一致）、冪等な Ingestor。JVM・Android エミュレータ・iOS シミュレータでテスト |
 | Wear OS 録音・転送（#16, #18） | ✅ クローズ（実機確認は #59） | 常時録音、装着検出・充電で自動停止/再開、送信キュー + ACK。詳細: [impl/wearos.md](impl/wearos.md) |
-| watchOS 録音・転送（#15, #17） | 🟡 開発環境の証跡待ち | Swift の単体テスト（停止理由・送信キュー）を作成中。詳細: [impl/ios-watchos.md](impl/ios-watchos.md) |
-| 文字起こし（#20, #21, #22） | 🟡 開発環境の証跡待ち | 再開可能なパイプライン + WorkManager / BGProcessingTask、sherpa-onnx、SpeechAnalyzer。エミュレータ/シミュレータでのテストを作成中。詳細: [impl/android-phone.md](impl/android-phone.md) |
+| watchOS 録音・転送（#15, #17） | 🟡 開発環境の証跡待ち | 停止理由の判定（`RecorderPolicy`）と送信キュー（`ChunkOutbox` / `ChunkSendTracker`）の Swift 単体テストを CI の iPhone シミュレータで実行（PR #67）。詳細: [impl/ios-watchos.md](impl/ios-watchos.md) |
+| 文字起こし（#20, #21, #22） | 🟡 開発環境の証跡待ち | 再開可能なパイプライン + WorkManager / BGProcessingTask、sherpa-onnx、SpeechAnalyzer。iOS シミュレータで SpeechTranscriber（ja_JP）を試すテスト（使えなければ理由を記録してスキップ）と、Swift の結果が DB に入るまでのテストを追加（PR #67、CI 確認待ち）。詳細: [impl/android-phone.md](impl/android-phone.md) |
 | 会話で文が抜け落ちる問題（#68） | ✅ クローズ | ASR 入力を 20 秒以下に制限し、話者交代の間で分割（clean の CER 53.8% → 15.0%、wrist 84.1% → 21.4%）。詳細: [test-audio.md](test-audio.md) §4 |
 | 雑音下の抜け落ち・セグメント増の影響（#71, #72） | 🟡 着手（P1） | 雑音で話者交代の間が埋まる会話の抜け落ち（#71）、発話区間の細分化でセグメント数が 5〜6 倍になる影響（検索性能・DB 容量）の確認（#72） |
 | 検索（#23） | ✅ クローズ（中位機種の実測は #61） | 50 万セグメントで p95 最大 150 ms 程度（目標 300 ms）。CI で毎回ベンチマーク |
-| スマホ UI・再生（#19, #25） | 🟡 Android は確認済み、iOS 待ち | 日別タイムライン・文字起こし・検索・1 タップ再生。Android エミュレータで実際のプレーヤーの再生位置を確認済み。詳細: [impl/phone-ui.md](impl/phone-ui.md) |
+| スマホ UI・再生（#19, #25） | 🟡 Android は確認済み、iOS 待ち | 日別タイムライン・文字起こし・検索・1 タップ再生。Android エミュレータで実際のプレーヤーの再生位置を確認済み。iOS シミュレータの `IosPlaybackTest`（UI → 再生の準備）とアプリをホストにした `PlaybackTests`（実際に再生が進む）（PR #67）は CI 確認待ち。詳細: [impl/phone-ui.md](impl/phone-ui.md) |
 | チャンク境界の発話分断（#45） | ✅ クローズ | 隣のチャンクの境界付近と連結して認識（[02 §6.3](02-architecture.md#63-処理パイプラインphone)） |
 | 録音途絶の通知・オンボーディング（#43, #32） | 🟡 開発環境の証跡待ち | 通知・権限画面のスクリーンショット、Watch 側のテスト。権限拒否画面に「設定を開く」ボタンを追加予定 |
 | Tile・コンプリケーション（#41） | 🟡 開発環境の証跡待ち | Wear OS は実装済み（エミュレータのスクリーンショット待ち）。watchOS は WidgetKit のコンプリケーション（録音中・一時停止・停止中、タップで開始/再開）を実装し、CI でレイアウトの描画とシミュレータでのタップ経路を確認。詳細: [impl/ios-watchos.md §14](impl/ios-watchos.md#14-コンプリケーション41) |
 | ストレージ管理（#33） | ✅ クローズ | 保持期間（既定は無期限、文字起こし済みの音声のみ削除）、容量の内訳・空き容量警告、日単位/全削除 |
-| モデル配布サイズ（#46） | ⬜ 未着手 | 713 MB → 約 160 MB |
+| モデル配布サイズ（#46） | 🟡 PR レビュー中 | 713 MB → 161 MB（int8 ファイルを個別取得、HTTP Range で途中再開、SHA-256 検証）。詳細: [impl/android-phone.md](impl/android-phone.md#31-ダウンロード受信のみ) |
+| release ビルド・署名（#78） | 🟡 着手（P1） | Android: R8 の release ビルドを CI で毎回作成（Wear OS の debug 入力の混入検査を含む）、エミュレータで release の起動確認、署名は Actions の secret があるときだけ（[04 §7.1](04-dev-environment.md#71-android-の-release-ビルドと署名78)）。残り: release での文字起こしの確認、iOS / watchOS の Release 構成のビルド |
 
 ## 全体の流れ
 
@@ -96,11 +98,11 @@ Epic: [#2](https://github.com/Soichiro5/watch-audio/issues/2)
 | [M1-5 (#17)](https://github.com/Soichiro5/watch-audio/issues/17) | watchOS → iOS 転送（WatchConnectivity + ACK） | M1-2, M1-3 |
 | [M1-6 (#18)](https://github.com/Soichiro5/watch-audio/issues/18) | Wear OS → Android 転送（Data Layer + ACK） | M1-2, M1-4 |
 | [M1-7 (#19)](https://github.com/Soichiro5/watch-audio/issues/19) | 日別タイムラインと音声再生 UI（最小） | [M1-2 (#14)](https://github.com/Soichiro5/watch-audio/issues/14) |
-| [M1-8 (#42)](https://github.com/Soichiro5/watch-audio/issues/42) | スマホ録音へのハンドオフ（Watch 充電中・非装着時の 24h 継続） | M1-2, M1-3, M1-4 |
+| [M1-8 (#42)](https://github.com/Soichiro5/watch-audio/issues/42) | ~~スマホ録音へのハンドオフ（Watch 充電中・非装着時の 24h 継続）~~ 採用しない（not planned。充電中・就寝中は止まってよいため、[02 §9.1](02-architecture.md#91-録音ソース-watch-のみスマホ録音へのハンドオフは採用しない)） | M1-2, M1-3, M1-4 |
 | [M1-9 (#43)](https://github.com/Soichiro5/watch-audio/issues/43) | 録音の連続性監視とアラート（欠損区間の可視化） | M1-5/M1-6, M1-7 |
 | [M1-10 (#41)](https://github.com/Soichiro5/watch-audio/issues/41) | Watch のコンプリケーション / Tiles（ワンタップ録音開始・再開） | M1-3, M1-4 |
 
-**完了条件**: 両 OS で「Watch で録音 → スマホに届く → タイムラインで再生できる」。24 時間モードで録音カバー率 95% 以上、停止は 10 分以内に通知。
+**完了条件**: 両 OS で「Watch で録音 → スマホに届く → タイムラインで再生できる」。装着中（充電中・就寝中を除く）の録音カバー率 95% 以上、途絶は 10 分以内に通知（実機の確認は #59・#60）。
 
 ## M2: 文字起こしと検索
 
