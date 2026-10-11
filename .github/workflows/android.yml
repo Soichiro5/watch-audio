@@ -63,3 +63,12 @@ jobs:
             androidApp/build/outputs/apk/debug/*.apk
             wearApp/build/outputs/apk/debug/*.apk
           retention-days: 7
+
+      # Screens rendered by composeApp's AppUiTest (onboarding incl. the refused permission #32, tabs).
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-screenshots
+          path: composeApp/build/screenshots/
+          if-no-files-found: ignore
+          retention-days: 30

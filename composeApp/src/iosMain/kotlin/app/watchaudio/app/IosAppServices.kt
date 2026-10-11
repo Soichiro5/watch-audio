@@ -19,6 +19,8 @@ import platform.AVFAudio.setActive
 import platform.Foundation.NSError
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSURL
+import platform.UIKit.UIApplication
+import platform.UIKit.UIApplicationOpenSettingsURLString
 
 /**
  * [AppServices] for iOS. Created by [IosAppGraph]; the shared UI only sees the interface.
@@ -51,6 +53,12 @@ class IosAppServices internal constructor(
     override suspend fun permissionStatus(permission: AppPermission): PermissionStatus = IosPermissions.status(permission)
 
     override suspend fun requestPermission(permission: AppPermission): PermissionStatus = IosPermissions.request(permission)
+
+    /** This app's page in the Settings app (notification and speech recognition switches). */
+    override fun openAppSettings() {
+        val url = NSURL.URLWithString(UIApplicationOpenSettingsURLString) ?: return
+        UIApplication.sharedApplication.openURL(url, options = emptyMap<Any?, Any>(), completionHandler = null)
+    }
 
     override fun gapAlertSettingsChanged() = onGapAlertSettingsChanged()
 

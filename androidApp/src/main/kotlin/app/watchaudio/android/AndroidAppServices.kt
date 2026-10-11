@@ -1,11 +1,15 @@
 package app.watchaudio.android
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.result.ActivityResultLauncher
 import androidx.annotation.VisibleForTesting
@@ -100,6 +104,17 @@ class AndroidAppServices(
     fun onPermissionResult(granted: Boolean) {
         pendingPermission?.complete(granted)
         pendingPermission = null
+    }
+
+    /** The app's page in the system settings ("App info"), where notifications can be allowed. */
+    override fun openAppSettings() {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            context.startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "no settings screen for the app", e)
+        }
     }
 
     private fun notificationsGranted(): Boolean =

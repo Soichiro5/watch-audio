@@ -66,9 +66,13 @@ dependencies {
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.junit)
 
-    // Emulator checks of real playback and the search -> play flow (#19, #25): emulator.yml.
+    // Emulator checks (emulator.yml): real playback and the search -> play flow (#19, #25),
+    // on-device ASR and the model wait (#22), resuming after a kill and the charging job (#20),
+    // the gap alert notification (#43) and the refused permission (#32).
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.test.uiautomator)
+    androidTestImplementation(libs.androidx.work.testing)
     androidTestImplementation(libs.compose.ui.test.junit4)
     androidTestImplementation(libs.kotlin.test.junit)
 }

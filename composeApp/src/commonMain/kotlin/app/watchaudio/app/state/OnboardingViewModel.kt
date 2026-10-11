@@ -91,6 +91,14 @@ class OnboardingViewModel(
         viewModelScope.launch { setPermission(permission, services.requestPermission(permission)) }
     }
 
+    /**
+     * A refused permission can only be granted in the system settings: opens the app's page there
+     * (only while one is refused). [refreshPermissions] picks up the change on resume.
+     */
+    fun openAppSettings() {
+        if (local.value.permissions.values.any { it == PermissionStatus.DENIED }) services.openAppSettings()
+    }
+
     fun downloadModels(allowMetered: Boolean) = services.downloadModels(allowMetered)
 
     private fun setPermission(permission: AppPermission, status: PermissionStatus) =

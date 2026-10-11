@@ -248,7 +248,7 @@ object IosAppGraph {
         try {
             // Chunks left TRANSCRIBING by a cancelled or killed run go back into the queue.
             pipeline.recoverInterrupted()
-            val result = pipeline.processPending(shouldContinue)
+            val result = pipeline.processPending(shouldContinue = shouldContinue)
             if (result.failed > 0) {
                 // Re-check the model next time (the OS may have removed it).
                 status.update { it.copy(asrModel = ModelState.Unknown, message = "文字起こしに失敗したチャンク: ${result.failed}") }

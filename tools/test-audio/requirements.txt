@@ -1,0 +1,7 @@
+# Offline TTS + audio processing for the test audio set (tools/test-audio/generate.py).
+kokoro-onnx==0.6.1
+misaki[ja]==0.7.4
+pyopenjtalk==0.4.1
+numpy==2.5.3
+scipy==1.18.1
+soundfile==0.14.0
