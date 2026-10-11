@@ -26,6 +26,7 @@ import app.watchaudio.app.ProcessingStatus
 import app.watchaudio.app.Strings
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.DiagnosticsLog
+import app.watchaudio.core.pipeline.PauseReason
 import app.watchaudio.core.pipeline.StorageManager
 import java.io.File
 import java.text.SimpleDateFormat
@@ -53,6 +54,7 @@ class AndroidAppServices(
     private val models: ModelManager,
     private val scheduler: TranscriptionScheduler,
     lastChunkReceivedAt: StateFlow<Long?>,
+    transcriptionPause: StateFlow<PauseReason?>,
     scope: CoroutineScope,
     private val diagnostics: DiagnosticsLog,
     private val onGapAlertSettingsChanged: () -> Unit,
@@ -64,12 +66,14 @@ class AndroidAppServices(
         models.downloadWaiting,
         scheduler.running,
         lastChunkReceivedAt,
-    ) { model, waiting, running, lastChunk ->
+        transcriptionPause,
+    ) { model, waiting, running, lastChunk, paused ->
         ProcessingStatus(
             asrModel = model,
             transcribing = running,
             lastChunkReceivedAt = lastChunk,
             message = if (model == ModelState.Missing && waiting) context.getString(R.string.model_waiting_for_wifi) else null,
+            paused = paused,
         )
     }.stateIn(scope, SharingStarted.Eagerly, ProcessingStatus())
 
@@ -163,7 +167,10 @@ class AndroidAppServices(
         return true
     }
 
-    override fun requestTranscription() = scheduler.requestNow()
+    /** Only called from the user's tap: the run waives the battery rules (not the thermal one, #75). */
+    override fun requestTranscription() = scheduler.requestForUser()
+
+    override fun transcriptionSettingsChanged() = scheduler.settingsChanged()
 
     /**
      * Starts downloading the speech models. Without [allowMetered] it waits for Wi-Fi; pass true

@@ -47,6 +47,7 @@ class IosAppServices internal constructor(
     private val onPrepareModel: () -> Unit,
     private val onGapAlertSettingsChanged: () -> Unit,
     private val diagnostics: DiagnosticsLog,
+    private val onTranscriptionSettingsChanged: () -> Unit = {},
 ) : AppServices {
     private var player: AVAudioPlayer? = null
 
@@ -80,6 +81,8 @@ class IosAppServices internal constructor(
     }
 
     override fun gapAlertSettingsChanged() = onGapAlertSettingsChanged()
+
+    override fun transcriptionSettingsChanged() = onTranscriptionSettingsChanged()
 
     /**
      * Copies the diagnostics log to the temporary directory (replacing earlier exports) and

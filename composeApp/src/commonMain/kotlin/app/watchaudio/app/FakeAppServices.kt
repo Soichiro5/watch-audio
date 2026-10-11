@@ -35,6 +35,7 @@ class FakeAppServices(
     val permissionRequests = mutableListOf<AppPermission>()
     var deniesOnRequest = false
     var gapAlertSettingsChanges = 0
+    var transcriptionSettingsChanges = 0
         private set
     var appSettingsOpened = 0
         private set
@@ -72,6 +73,10 @@ class FakeAppServices(
 
     override fun gapAlertSettingsChanged() {
         gapAlertSettingsChanges++
+    }
+
+    override fun transcriptionSettingsChanged() {
+        transcriptionSettingsChanges++
     }
 
     /** What [exportDiagnostics] answers; set [diagnosticsExportFailure] to make it throw instead. */

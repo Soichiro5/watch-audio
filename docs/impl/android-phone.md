@@ -16,7 +16,7 @@
 | `AndroidSherpaTranscriber` | `asr/` | sherpa-onnx（AAR の Kotlin API）。Silero VAD → ReazonSpeech Zipformer int8。認識器は初回に読み込み、ワーカー 1 回分の間は使い回す。入力は音声パーツのリスト（チャンク単体、または境界付近の隣のチャンクの音声と連結したもの。[02 §6.3](../02-architecture.md#63-処理パイプラインphone)）で、各ファイルを `AudioDecoder` でデコードして `concatenateParts` で切り出し・連結する |
 | `AudioDecoder` | `asr/` | `MediaExtractor` + `MediaCodec` で m4a(AAC)/ogg(Opus) を 16 kHz モノラル float PCM に。ダウンミックスと線形リサンプルは `core-pipeline` の `Pcm.kt`（共通コード・単体テストあり） |
 | `ModelManager` / `ModelDownloadWorker` / `ModelManifest` / `ModelDownloader` | `asr/` | モデルの用意（adb サイドロード取り込み・ファイル単位のダウンロード（途中再開・SHA-256 検証）・原子的な配置） |
-| `TranscriptionScheduler` / `TranscriptionWorker` | `work/` | WorkManager による文字起こしの起動 |
+| `TranscriptionScheduler` / `TranscriptionWorker` / `AndroidDeviceConditions` | `work/` | WorkManager による文字起こしの起動、電池と発熱の方針（端末の状態の読み取り、§4.0） |
 | `GapAlertMonitor` / `GapAlertWorker` | `alert/` | 録音の途絶アラート（#43）。判定は共通の `GapAlertEvaluator`、ここでは WorkManager でのチェックと通知の表示のみ（§4.1） |
 | `MainActivity` | `MainActivity.kt` | `App(services)` をホスト。オンボーディングの権限要求用に Activity Result の launcher を `AndroidAppServices` に渡す |
 
@@ -114,19 +114,34 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 
 | ジョブ | 起動条件 | 制約 | 内容 |
 | --- | --- | --- | --- |
-| `transcription`（1 回限り・unique） | チャンクを `STORED` で受信したとき、UI からの要求、モデル準備完了時、起動時に残件があるとき | 電池残量低下でないこと | `pipeline.processPending { !isStopped }` → `storage.applyRetention { !isStopped }`（音声の保持期間、#33） |
+| `transcription`（1 回限り・unique） | チャンクを `STORED` で受信したとき、UI からの要求、モデル準備完了時、起動時に残件があるとき、方針による一時停止の後（遅延付き、§4.0） | 電池残量低下でないこと（設定「充電中のみ文字起こしする」がオンなら充電中。UI からの要求は制約なし） | `PolicyGatedTranscription.run`（チャンクごとに `ProcessingPolicy` で判定して `pipeline.processPending`、§4.0）→ `storage.applyRetention { !isStopped }`（音声の保持期間、#33） |
+| `transcription-on-charge`（1 回限り・unique） | 方針が充電待ちで止めたとき（残量 50% 未満・省電力・充電中のみ・1 時間の上限） | 充電中 | 同上 |
 | `transcription-periodic`（6 時間ごと） | アプリ起動時に登録（`KEEP`） | 充電中 | 同上（取りこぼしの保険） |
 | `model-download`（unique） | 起動時（Wi-Fi 制約）またはユーザー操作 | UNMETERED / CONNECTED、ストレージ残量 | §3.1 |
 | `gap-alert-timer`（1 回限り・unique・`REPLACE`） | チャンクを `STORED` で受信したとき・通知設定の変更時。次にアラートが必要になる時刻に遅延実行 | なし | §4.1 |
 | `gap-alert-periodic`（15 分ごと） | アプリ起動時に登録（`KEEP`） | なし | §4.1（タイマーの取りこぼし・おやすみ時間明けの保険） |
 
-- 要求時の方針: 待機中のジョブがあれば何もしない（`KEEP` 相当）。**実行中なら後続を 1 つだけ追加**（`APPEND_OR_REPLACE`）。実行中のジョブが新着チャンクを見逃しても後続が拾う。追加は最大 1 つなので鎖は伸びない。
-- 実行後にまだ保留中のチャンクがあれば（実行中に届いた、失敗して再試行回数が残っている）、もう一度要求する。WorkManager に停止された場合は WorkManager 自身が再スケジュールする。
+- 要求時の方針: 待機中のジョブがあれば何もしない（`KEEP` 相当）。ただし待機中のジョブが方針による遅延付き（発熱・上限）なら置き換え、新しいチャンクのたびに条件を見直す（処理できなければすぐ終わる）。**実行中なら後続を 1 つだけ追加**（`APPEND_OR_REPLACE`。実行中に `REPLACE` するとチャンクの途中で止まるので使わない）。実行中のジョブが新着チャンクを見逃しても後続が拾う。追加は最大 1 つなので鎖は伸びない。
+- 実行後にまだ保留中のチャンクがあれば（実行中に届いた、失敗して再試行回数が残っている）、もう一度要求する。方針で止まった場合は §4.0 のとおり予約する。WorkManager に停止された場合は WorkManager 自身が再スケジュールする。
+- 設定「充電中のみ文字起こしする」を変えると（`AppServices.transcriptionSettingsChanged` → `TranscriptionScheduler.settingsChanged`）、待機中のジョブを新しい制約で置き換える。
 - 音声の保持期間（#33）は文字起こしの後に適用する。文字起こし済みのチャンクだけが対象なので、モデル未準備で文字起こしをスキップした回でも適用する。失敗はログのみ（次回の実行で再試行）。容量表示用の `AndroidStorageEnvironment` は `files/models` の合計と `StatFs(filesDir).availableBytes` を返す。
 - モデル未準備ならスキップ（ダウンロード中のみ `retry`、それ以外は成功扱いで終了し、モデル準備完了時に改めて要求）。チャンクを `FAILED` にして試行回数を浪費しないため、ワーカー側で事前に確認する。
 - 1 回限りジョブと定期ジョブが重なってもパイプラインは `Mutex` で 1 本ずつ。各実行の終わりに認識器を解放してメモリを返す（次回は再読み込み、数秒）。
 - 中断耐性: 処理中のチャンクは `TRANSCRIBING` になり、プロセスが殺されても次回起動時の `recoverInterrupted()` で `RECEIVED` に戻る。ワーカーは `AppGraph.startup` の完了を待ってから処理する。エミュレータで `am force-stop` を挟んで確認済み（§6.1 の `ResumeAfterKillTest`）。
 - ログ: ワーカーはチャンクごとに `transcribing chunk <id>` / `transcribed chunk <id>`（失敗時 `failed chunk <id>`）を出す（`TranscriptionPipeline.Observer`。ID のみで文字起こし本文は出さない）。
+
+### 4.0 電池と発熱の方針（#75）
+
+方針と目標値は [02 §6.3「充電していないときの処理方針」](../02-architecture.md#充電していないときの処理方針75)。Android での実装:
+
+- **判定**: `TranscriptionWorker` は `AppGraph.gatedTranscription()`（`PolicyGatedTranscription`）でパイプラインを回す。チャンクを始める前に毎回 `AndroidDeviceConditions.read()` で端末の状態を読み、`ProcessingPolicy.decide` に渡す。止める判定ならそのチャンクを始めずに終える（処理中のチャンクは最後まで処理する）。
+- **端末の状態**（権限不要）: 外部電源と残量はスティッキーブロードキャスト `ACTION_BATTERY_CHANGED`（`EXTRA_PLUGGED` が 0 以外なら充電中、`EXTRA_LEVEL / EXTRA_SCALE`）、バッテリーセーバーは `PowerManager.isPowerSaveMode`、発熱は `PowerManager.getCurrentThermalStatus()`（minSdk 29 なので常に使える。`THERMAL_STATUS_MODERATE` 以上で停止、EMERGENCY / SHUTDOWN は CRITICAL 扱い）。
+- **止まった後の予約**（保留中のチャンクがあるとき）: 発熱 → `transcription` を 15 分後に（`requestLater`）。1 時間の上限 → `transcription` を枠の終わりに + `transcription-on-charge`。残量不足・省電力・充電中のみ → `transcription-on-charge`（充電開始で実行）。いずれも新しいチャンクの受信でも再判定する。
+- **1 時間の上限の使用量**は `app_setting` の `transcription.battery_budget.window_start` / `.used_ms` に保存（実行の終わりにまとめて書く）。
+- **ユーザーの要求**（状態タブの「今すぐ文字起こし」、タイムラインの「文字起こしする」）は `userRequested` 付きのジョブ（制約なし）で、電池の条件を外す（発熱の条件は外さない）。
+- **表示**: 最後の実行が止まった理由を `AppGraph.transcriptionPause` → `ProcessingStatus.paused` で状態タブの「文字起こしモデル」欄に出す（例「電池残量が50%未満のため、充電を待っています」）。設定は状態タブの「文字起こしのタイミング」（`AppSettings.transcribeOnlyWhileCharging`、`app_setting.transcription.charging_only`、既定オフ）。
+- **診断ログ**: 各実行の判定を `transcription_policy` に記録する（§4.2）。
+- テスト: 判定の単体テスト `ProcessingPolicyTest`（commonTest）、中断・再開の単体テスト `PolicyGatedTranscriptionTest`（sqliteTest。JVM と Android 実機/エミュレータ）、端末の状態の変換 `AndroidDeviceConditionsTest`（JVM）、WorkManager のテストドライバでの計装テスト `BatteryPolicyWorkTest`（§6.1）。
 
 ### 4.1 録音の途絶アラート（#43）
 
@@ -157,6 +172,7 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 | `ack_sent` / `ack_failed` | `ChunkReceiver.sendAck`（試行ごと） | `chunk=… status=STORED attempt=1` |
 | `worker_start` / `worker_stop` | `TranscriptionWorker`（件数、モデル未準備でのスキップ、OS による停止と `stop_reason`） | `worker=transcription transcribed=3 failed=0` |
 | `transcription_started` / `_finished` / `_failed` | `TranscriptionPipeline.Observer`（共通の `DiagnosticsPipelineObserver`） | `chunk=… audio_ms=300000 elapsed_ms=21000 rtf=0.07`（失敗時は `error=例外の型`） |
+| `transcription_policy` | `PolicyGatedTranscription`（各実行の最初の判定と、止めたときの理由。§4.0、#75） | `decision=run on_battery=true charging=false battery=80 power_save=false thermal=none battery_used_ms=0`、`decision=pause reason=thermal … retry_ms=900000 after_chunks=1` |
 | `retention_purge` | 保持期間による音声の削除（#33） | `chunks=12 bytes=…` |
 | `model_download_*` / `model_ready` | `ModelManager`（開始・10% ごとの進捗・完了・失敗（HTTP ステータスなど）・準備完了） | `pct=30 bytes=…`、`error=java.io.IOException message=HTTP 404 for …` |
 | `gap_alert` / `gap_alert_blocked` | `GapAlertMonitor`（通知した / 通知が許可されておらず出せなかった） | `last_received_at=…` |
@@ -203,6 +219,7 @@ adb logcat -d | grep PLAYBACK_CHECK                # 再生位置の記録
 | `SherpaTranscriberTest` | `AndroidSherpaTranscriber`（MediaCodec で AAC をデコード + sherpa-onnx AAR、Silero VAD + ReazonSpeech int8）が参照音声 5 文を 1 チャンクにした AAC を文字起こしし、DB に保存・検索できる（「気象庁」「ヤンバルクイナ」「傘」）（#22） | `ASR_CHECK`（処理時間・RTF・セグメント数）、`ASR_SEGMENT` |
 | `ModelWaitTest` | モデルを退避した状態でチャンクを受信 → 文字起こしジョブは成功扱いで終わりチャンクは `RECEIVED`・試行 0 回のまま、再生はできる、状態タブに「モデルが未ダウンロードです」→ モデルを戻すと（`ModelManager.refresh` → `onReady`）自動で文字起こしされる（#22） | `MODEL_CHECK`、`status-model-missing.png` / `status-model-ready.png` |
 | `ChargingWorkTest` | `TranscriptionScheduler.schedulePeriodic()` の定期ジョブは充電を条件とし、条件を満たすまで実行されない（チャンクは処理待ちのまま）。WorkManager の `TestDriver.setAllConstraintsMet`（充電開始に相当）で本番の `TranscriptionWorker` が走り、溜まったチャンクが文字起こしされる（#20） | `CHARGING_CHECK` |
+| `BatteryPolicyWorkTest` | 電池と発熱の方針（§4.0、#75）。本番の `TranscriptionScheduler` / `TranscriptionWorker`・DB・ASR を WorkManager の `TestDriver` で動かし、端末の状態・上限・時計は `AppGraph` のテスト用フックで差し替える: 電池駆動で残量 30% → 何も処理せず `transcription-on-charge`（充電が条件）を予約 → 残量 80%・上限 = 1 チャンク分 → 1 チャンクだけ処理して 1 時間後の再実行を予約 → 充電開始（`setAllConstraintsMet`）、2 つ目の処理中に発熱 → 2 つ目を終えて止まり（3 つ目は `RECEIVED` のまま）、15 分後の再実行を予約 → 冷えてから再実行（`setInitialDelayMet`）で 3 つ目を処理。3 チャンクとも試行 1 回・`transcription_started` 1 回（重複・欠落なし）で、参照音声のキーワードを含む | `POLICY_CHECK` |
 | `GapAlertNotificationTest` | 最後のチャンクから 15 分後の時計で本番の `GapAlertMonitor.check()` を呼ぶと通知が出て、通知シェードに表示される（#43） | `GAP_ALERT_CHECK`、`gap-alert-notification.png` |
 | `PermissionDeniedTest`（シナリオ） | オンボーディングで通知を拒否 → 「設定を開く」→ アプリの設定画面（#32） | `PERMISSION_CHECK`、`onboarding-permission-denied.png` ほか |
 | `ResumeAfterKillTest`（シナリオ） | 8 チャンクの文字起こし中に `adb shell am force-stop app.watchaudio` → 再起動後に全チャンクが 1 回ずつ文字起こしされる（欠落 0・重複 0、中断したチャンクは試行 2 回）（#20） | `RESUME_CHECK` |
@@ -239,7 +256,7 @@ Watch が無くても、ADB 経由の Wear OS エミュレータとスマホエ�
 
 ## 7. 既知の制限・TODO
 
-- **実機での動作確認は未実施**（#61）。エミュレータ（CI、§6.1）では起動・再生・MediaCodec デコード + sherpa-onnx AAR での文字起こし・モデル待ち・強制終了からの再開・充電時の定期ジョブ（WorkManager のテストドライバ）・途絶通知の表示を確認している（この開発環境には KVM がないため手元では動かせない）。Data Layer 受信、実機の速度・発熱、Doze 中の WorkManager の挙動は実機で確認が必要。
+- **実機での動作確認は未実施**（#61）。エミュレータ（CI、§6.1）では起動・再生・MediaCodec デコード + sherpa-onnx AAR での文字起こし・モデル待ち・強制終了からの再開・充電時の定期ジョブ（WorkManager のテストドライバ）・電池と発熱の方針（同、端末の状態は差し替え）・途絶通知の表示を確認している（この開発環境には KVM がないため手元では動かせない）。Data Layer 受信、実機の速度・発熱、Doze 中の WorkManager の挙動、方針の目標値（電池消費 1 日 3% 以下）は実機で確認が必要。
 - `TransferPaths.SYNC_REQUEST_MESSAGE`（Watch からの ACK 再送依頼）は未対応。ペイロードがなく対象チャンクが分からないため、現状は Watch がチャンクを再送 → `DUPLICATE` ACK で回復する。必要なら chunkId 一覧をペイロードに持たせる仕様にする。
 - モデルの取得元は外部（Hugging Face の個人リポジトリと k2-fsa の GitHub Release）に依存している。コミット固定 + SHA-256 検証なので内容が差し替わることはないが、公開が取り下げられると取得できなくなる。その場合は `ModelManifest` と `tools/harness/download-models.sh` の URL を自前の配布先（このリポジトリの GitHub Release 等）に差し替える（ハッシュはそのまま）。
 - `ModelDownloadWorker` の通知には進捗を出していない（状態は `AppServices.status` で UI に出す）。Android 13+ で通知権限がないと通知は表示されないが、ダウンロードは続く。

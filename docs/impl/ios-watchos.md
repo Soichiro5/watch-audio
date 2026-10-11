@@ -140,9 +140,10 @@ MainViewControllerKt.MainViewController()                             // Compose
 - 入力は音声パーツのリスト。通常はチャンク 1 つ（先頭から）で、そのファイルをそのまま解析する。チャンク境界をまたぐ発話がある場合（[02 §6.3](../02-architecture.md#63-処理パイプラインphone)）は、隣のチャンクの境界付近を含む複数パーツが来るので、各ファイルを `AVAudioFile` の `processingFormat`（Float32）で読み、範囲を切り出して一時ディレクトリの 32 bit float CAF に書き出し（ファイルが短ければ無音で埋める）、その一時ファイルを解析して削除する。パーツ間でサンプルレート・チャンネル数が違うとエラーにし、共有パイプラインがそのチャンク単体で認識し直す（同じセッションのチャンクは同じ形式なので通常は起きない）。一時ファイルは最大で「チャンク + 前後 30 秒」分（16 kHz モノラルで約 23 MB）。
 - エンジン ID: `apple-speechtranscriber-ja`。言語: `ja`。
 - 実行タイミング:
-  - アプリが前面（scenePhase `.active`）: すぐに処理。新しいチャンク受信時も再実行。
+  - アプリが前面（scenePhase `.active`）: すぐに処理。新しいチャンク受信時も再実行。ただし Android と同じ電池と発熱の方針（[02 §6.3「充電していないときの処理方針」](../02-architecture.md#充電していないときの処理方針75)、#75）に従う: チャンクを始める前に毎回 `IosDeviceConditions.read()`（`UIDevice` の電池の状態・残量、`ProcessInfo` の低電力モード・`thermalState`。`.serious` 以上で停止）を `ProcessingPolicy` で判定し、充電していなければ残量 50% 以上・低電力モードでない間だけ、1 時間に録音 10 分ぶんまで処理する。時間で再判定する止まり方（発熱 15 分・上限の枠の終わり）なら前面にいる間だけ再試行する。状態タブの「今すぐ文字起こし」は電池の条件を外す（発熱は外さない）。設定「充電中のみ文字起こしする」も同じ（`AppSettings`）。
   - バックグラウンドへ移るとき: 前面の実行をキャンセルし、`BGProcessingTaskRequest(app.watchaudio.transcribe)` を `requiresExternalPower = true`, `requiresNetworkConnectivity = false` で予約。
-  - BGProcessingTask: `processPending { !expired }` でチャンク単位に進め、期限切れハンドラでは実行中のチャンクもキャンセルして速やかに `setTaskCompleted` する。期限切れなら再予約。
+  - BGProcessingTask: 同じ方針でチャンク単位に進め（外部電源が条件なので、止まるのは通常は発熱のときだけ）、期限切れハンドラでは実行中のチャンクもキャンセルして速やかに `setTaskCompleted` する。期限切れなら再予約、発熱で止まったら `earliestBeginDate` を 15 分後にして再予約。
+  - 判定は診断ログの `transcription_policy`、止まった理由は状態タブの「文字起こしモデル」欄に出る。
   - 実行は Mutex で直列化し、毎回 `recoverInterrupted()` で前回中断分（TRANSCRIBING）をキューに戻す。
   - 文字起こしの後（モデル未準備で文字起こしをスキップした場合も）、同じ実行内で `StorageManager.applyRetention(shouldContinue)` により音声の保持期間を適用する（#33。文字起こし済みのチャンクの音声だけを削除）。容量表示の空き容量は `NSURLVolumeAvailableCapacityForImportantUsageKey`（取れなければ `NSFileSystemFreeSize`）、モデルサイズは OS 管理のため不明扱い（`IosStorageEnvironment`）。
 - オンボーディング / 状態タブの「モデルを準備」（`AppServices.modelSetup = OS_MANAGED`、`downloadModels()`）は、同じ Mutex の中で `ensureModel()`（= Swift の `prepareModel`）を呼んでモデルのインストールを OS に依頼し、準備できたら文字起こしを要求する。

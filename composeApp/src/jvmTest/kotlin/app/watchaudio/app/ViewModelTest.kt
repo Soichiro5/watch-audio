@@ -336,6 +336,15 @@ class ViewModelTest {
         runCurrent()
         assertEquals(false, vm.settings.value!!.gapAlert.enabled)
         assertEquals(2, services.gapAlertSettingsChanges)
+        assertEquals(0, services.transcriptionSettingsChanges)
+
+        // #75: the charging-only switch is stored and reported to the platform's scheduler.
+        vm.setTranscribeOnlyWhileCharging(true)
+        runCurrent()
+        assertEquals(true, vm.settings.value!!.transcribeOnlyWhileCharging)
+        assertEquals(true, store.loadSettings().transcribeOnlyWhileCharging)
+        assertEquals(1, services.transcriptionSettingsChanges)
+        assertEquals(2, services.gapAlertSettingsChanges)
     }
 
     @Test

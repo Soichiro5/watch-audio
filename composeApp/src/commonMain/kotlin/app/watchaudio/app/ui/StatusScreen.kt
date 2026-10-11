@@ -47,6 +47,7 @@ import app.watchaudio.app.logic.formatHours
 import app.watchaudio.app.state.DiagnosticsExport
 import app.watchaudio.app.state.StatusUiState
 import app.watchaudio.core.db.StoreStats
+import app.watchaudio.core.pipeline.ProcessingPolicy
 import kotlinx.datetime.TimeZone
 
 @Composable
@@ -58,6 +59,7 @@ internal fun StatusScreen(
     settings: AppSettings?,
     onGapAlertsEnabledChange: (Boolean) -> Unit,
     onQuietHoursChange: (QuietHours) -> Unit,
+    onTranscribeOnlyWhileChargingChange: (Boolean) -> Unit,
     onShowOnboarding: () -> Unit,
     storageCallbacks: StorageCallbacks,
     onExportDiagnostics: () -> Unit,
@@ -69,6 +71,7 @@ internal fun StatusScreen(
     ) {
         ArrivalCard(state, timeZone)
         ModelCard(state, onDownloadModel, onTranscribeNow)
+        settings?.let { TranscriptionSettingsCard(it.transcribeOnlyWhileCharging, onTranscribeOnlyWhileChargingChange) }
         settings?.let { AlertSettingsCard(it.gapAlert, onGapAlertsEnabledChange, onQuietHoursChange) }
         state.stats?.let { StatsCard(it) }
         state.storage?.let { StorageCard(it, state.storageActions, storageCallbacks) }
@@ -90,6 +93,22 @@ private fun DiagnosticsCard(export: DiagnosticsExport, onExport: () -> Unit) {
         OutlinedButton(onClick = onExport, enabled = !export.busy) { Text(Strings.EXPORT_DIAGNOSTICS) }
         export.message?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** When the phone transcribes (#75): the charging-only switch and the on-battery rules. */
+@Composable
+private fun TranscriptionSettingsCard(chargingOnly: Boolean, onChange: (Boolean) -> Unit) {
+    Section(Strings.TRANSCRIPTION_SETTINGS_TITLE) {
+        SwitchRow(Strings.CHARGING_ONLY_SWITCH, Strings.CHARGING_ONLY_DETAIL, chargingOnly, onChange)
+        if (!chargingOnly) {
+            val limits = ProcessingPolicy.Limits()
+            Text(
+                Strings.batteryPolicyNote(limits.minBatteryPercent, limits.batteryAudioMsPerWindow / 60_000),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -217,6 +236,13 @@ private fun ModelCard(state: StatusUiState, onDownloadModel: (Boolean) -> Unit, 
             LinearProgressIndicator(Modifier.fillMaxWidth())
         } else if (model == ModelState.Ready && (state.stats?.pendingChunks ?: 0) > 0) {
             OutlinedButton(onClick = onTranscribeNow) { Text(Strings.TRANSCRIBE_NOW) }
+        }
+        state.status.paused?.takeIf { !state.status.transcribing && (state.stats?.pendingChunks ?: 0) > 0 }?.let {
+            Text(
+                Strings.transcriptionPaused(it, ProcessingPolicy.Limits().minBatteryPercent),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         state.status.message?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

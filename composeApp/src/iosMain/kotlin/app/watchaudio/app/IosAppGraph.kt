@@ -1,11 +1,15 @@
 package app.watchaudio.app
 
 import app.watchaudio.app.alert.GapAlertEvaluator
+import app.watchaudio.app.settings.loadSettings
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.DiagnosticEvents
 import app.watchaudio.core.pipeline.DiagnosticsLog
 import app.watchaudio.core.pipeline.DiagnosticsPipelineObserver
 import app.watchaudio.core.pipeline.Ingestor
+import app.watchaudio.core.pipeline.PolicyGatedTranscription
+import app.watchaudio.core.pipeline.ProcessingDecision
+import app.watchaudio.core.pipeline.ProcessingPolicy
 import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.pipeline.TranscriptionPipeline
 import app.watchaudio.core.protocol.AckStatus
@@ -25,6 +29,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -42,8 +47,10 @@ import platform.BackgroundTasks.BGTask
 import platform.BackgroundTasks.BGTaskScheduler
 import platform.Foundation.NSApplicationSupportDirectory
 import platform.Foundation.NSBundle
+import platform.Foundation.NSDate
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSUserDomainMask
+import platform.Foundation.dateWithTimeIntervalSinceNow
 import platform.UIKit.UIApplication
 import platform.UIKit.UIBackgroundTaskInvalid
 
@@ -74,6 +81,13 @@ object IosAppGraph {
     private var appActive = false
     private var foregroundRun: Job? = null
     private var rerunRequested = false
+    private var rerunUserRequested = false
+
+    /** A foreground retry after a timed pause (warm phone, hourly cap; #75). */
+    private var retryRun: Job? = null
+
+    /** When transcription may run on battery and when warm (#75); the same policy as Android. */
+    private val processingPolicy = ProcessingPolicy()
 
     private lateinit var transcriber: IosSpeechTranscriber
     private lateinit var store: LocalStore
@@ -133,10 +147,12 @@ object IosAppGraph {
             audioRoot,
             storage,
             status,
-            onRequestTranscription = ::requestTranscription,
+            // Only the user's tap calls this: the run waives the battery rules (not the thermal one).
+            onRequestTranscription = { requestTranscription(userRequested = true) },
             onPrepareModel = ::prepareModel,
             onGapAlertSettingsChanged = { scope.launch { runCatching { gapAlerts.reschedule(chunkArrived = false) } } },
             diagnostics = diagnostics,
+            onTranscriptionSettingsChanged = { requestTranscription() },
         )
         BGTaskScheduler.sharedScheduler.registerForTaskWithIdentifier(PROCESSING_TASK_ID, null) { task ->
             if (task != null) scope.launch { runBackgroundTask(task) }
@@ -153,6 +169,8 @@ object IosAppGraph {
             // Speech analysis is not guaranteed in the background; continue in a BGProcessingTask.
             foregroundRun?.cancel()
             foregroundRun = null
+            retryRun?.cancel()
+            retryRun = null
             scheduleBackgroundProcessing()
         }
     }
@@ -230,7 +248,12 @@ object IosAppGraph {
         return ack.toJson()
     }
 
-    private fun requestTranscription() {
+    /**
+     * Transcribes in the foreground while the app is visible, under [processingPolicy] (#75); a timed
+     * pause (warm phone, hourly cap on battery) is retried while the app stays visible.
+     * @param userRequested the user's tap (see [ProcessingPolicy.decide]).
+     */
+    private fun requestTranscription(userRequested: Boolean = false) {
         if (!started) return
         if (!appActive) {
             scheduleBackgroundProcessing()
@@ -238,19 +261,35 @@ object IosAppGraph {
         }
         if (foregroundRun?.isActive == true) {
             rerunRequested = true
+            rerunUserRequested = rerunUserRequested || userRequested
             return
         }
+        retryRun?.cancel()
+        retryRun = null
         foregroundRun = scope.launch {
+            var user = userRequested
+            var pause: ProcessingDecision.Pause?
             do {
                 rerunRequested = false
-                runPipeline("foreground", shouldContinue = { appActive })
+                rerunUserRequested = false
+                pause = runPipeline("foreground", userRequested = user, shouldContinue = { appActive })
+                user = rerunUserRequested
             } while (rerunRequested && appActive)
+            val retryAfterMs = pause?.retryAfterMs
+            if (retryAfterMs != null && appActive) {
+                retryRun = scope.launch {
+                    delay(retryAfterMs)
+                    requestTranscription()
+                }
+            }
         }
     }
 
     private suspend fun runBackgroundTask(task: BGTask) {
         val flag = ExpirationFlag()
-        val job = scope.launch { runPipeline("bgtask", shouldContinue = { !flag.expired }) }
+        var pause: ProcessingDecision.Pause? = null
+        // Runs on external power only; the policy can still pause it when the phone is warm (#75).
+        val job = scope.launch { pause = runPipeline("bgtask", userRequested = false, shouldContinue = { !flag.expired }) }
         task.expirationHandler = {
             // Stop between chunks if possible; cancel the running chunk so we finish in time.
             flag.expired = true
@@ -259,37 +298,61 @@ object IosAppGraph {
         job.join()
         if (flag.expired) diagnostics.log(DiagnosticEvents.WORKER_STOP, "worker=bgtask expired=true")
         task.setTaskCompletedWithSuccess(!flag.expired)
-        if (flag.expired) scheduleBackgroundProcessing()
+        when {
+            flag.expired -> scheduleBackgroundProcessing()
+            pause != null -> scheduleBackgroundProcessing(earliestAfterMs = pause?.retryAfterMs)
+        }
     }
 
     /**
      * Serialized: at most one pipeline run (foreground or BGTask) at a time. Transcribes, then
      * applies the audio retention setting (only transcribed audio is ever deleted, #33).
+     * @return the policy's pause if it stopped the run (#75).
      */
-    private suspend fun runPipeline(worker: String, shouldContinue: () -> Boolean) = runLock.withLock {
-        diagnostics.log(DiagnosticEvents.WORKER_START, "worker=$worker")
-        var summary = ""
-        try {
-            // Without the model every chunk would fail and use up its retry attempts.
-            summary = if (ensureModel()) transcribePending(shouldContinue) else " skipped=model_not_ready"
-            applyRetention(shouldContinue)
-        } finally {
-            diagnostics.log(DiagnosticEvents.WORKER_STOP, "worker=$worker$summary")
+    private suspend fun runPipeline(worker: String, userRequested: Boolean, shouldContinue: () -> Boolean): ProcessingDecision.Pause? =
+        runLock.withLock {
+            diagnostics.log(DiagnosticEvents.WORKER_START, "worker=$worker")
+            var summary = ""
+            var pause: ProcessingDecision.Pause? = null
+            try {
+                // Without the model every chunk would fail and use up its retry attempts.
+                if (ensureModel()) {
+                    val outcome = transcribePending(userRequested, shouldContinue)
+                    pause = outcome.pause
+                    summary = " transcribed=${outcome.result.transcribed} failed=${outcome.result.failed}" +
+                        pause?.let { " paused=${it.reason.code}" }.orEmpty()
+                } else {
+                    summary = " skipped=model_not_ready"
+                }
+                applyRetention(shouldContinue)
+            } finally {
+                diagnostics.log(DiagnosticEvents.WORKER_STOP, "worker=$worker$summary")
+            }
+            pause
         }
-    }
 
-    /** @return the run's counts for the `worker_stop` line. */
-    private suspend fun transcribePending(shouldContinue: () -> Boolean): String {
+    /** Transcribes what waits, as far as [processingPolicy] allows (checked before every chunk). */
+    private suspend fun transcribePending(userRequested: Boolean, shouldContinue: () -> Boolean): PolicyGatedTranscription.Outcome {
         status.update { it.copy(transcribing = true) }
         try {
             // Chunks left TRANSCRIBING by a cancelled or killed run go back into the queue.
             pipeline.recoverInterrupted()
-            val result = pipeline.processPending(DiagnosticsPipelineObserver(diagnostics), shouldContinue)
+            val chargingOnly = store.loadSettings().transcribeOnlyWhileCharging
+            val outcome = PolicyGatedTranscription(
+                pipeline,
+                store,
+                processingPolicy,
+                conditions = IosDeviceConditions::read,
+                clock = { Clock.System.now().toEpochMilliseconds() },
+                diagnostics = diagnostics,
+            ).run(chargingOnly, userRequested, DiagnosticsPipelineObserver(diagnostics), shouldContinue)
+            val result = outcome.result
+            status.update { it.copy(paused = outcome.pause?.reason) }
             if (result.failed > 0) {
                 // Re-check the model next time (the OS may have removed it).
                 status.update { it.copy(asrModel = ModelState.Unknown, message = "文字起こしに失敗したチャンク: ${result.failed}") }
             }
-            return " transcribed=${result.transcribed} failed=${result.failed}"
+            return outcome
         } finally {
             status.update { it.copy(transcribing = false) }
         }
@@ -334,9 +397,11 @@ object IosAppGraph {
         return error == null
     }
 
-    private fun scheduleBackgroundProcessing() {
+    /** @param earliestAfterMs not before this delay (a thermal pause, #75). */
+    private fun scheduleBackgroundProcessing(earliestAfterMs: Long? = null) {
         val request = BGProcessingTaskRequest(PROCESSING_TASK_ID)
         request.requiresExternalPower = true
+        earliestAfterMs?.let { request.earliestBeginDate = NSDate.dateWithTimeIntervalSinceNow(it / 1000.0) }
         request.requiresNetworkConnectivity = false
         // Fails on the simulator and when Background App Refresh is off; foreground runs still work.
         BGTaskScheduler.sharedScheduler.submitTaskRequest(request, null)

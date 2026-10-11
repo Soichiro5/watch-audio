@@ -13,6 +13,8 @@ data class AppSettings(
     val gapAlert: GapAlertSettings = GapAlertSettings(),
     /** `lastReceivedAt` of the gap the alert was last shown for, so each gap is alerted once. */
     val gapAlertShownFor: Long? = null,
+    /** 「充電中のみ文字起こしする」 (#75): no transcription on battery at all. */
+    val transcribeOnlyWhileCharging: Boolean = false,
 ) {
     /** Key-value form; null values remove the key. */
     fun toEntries(): Map<String, String?> = mapOf(
@@ -22,6 +24,7 @@ data class AppSettings(
         Keys.QUIET_HOURS_START to gapAlert.quietHours.startMinute.toString(),
         Keys.QUIET_HOURS_END to gapAlert.quietHours.endMinute.toString(),
         Keys.GAP_ALERT_SHOWN_FOR to gapAlertShownFor?.toString(),
+        Keys.TRANSCRIBE_ONLY_WHILE_CHARGING to transcribeOnlyWhileCharging.toString(),
     )
 
     object Keys {
@@ -31,6 +34,7 @@ data class AppSettings(
         const val QUIET_HOURS_START = "gap_alert.quiet_hours.start_minute"
         const val QUIET_HOURS_END = "gap_alert.quiet_hours.end_minute"
         const val GAP_ALERT_SHOWN_FOR = "gap_alert.shown_for"
+        const val TRANSCRIBE_ONLY_WHILE_CHARGING = "transcription.charging_only"
     }
 
     companion object {
@@ -52,6 +56,7 @@ data class AppSettings(
                     ),
                 ),
                 gapAlertShownFor = entries[Keys.GAP_ALERT_SHOWN_FOR]?.toLongOrNull(),
+                transcribeOnlyWhileCharging = bool(Keys.TRANSCRIBE_ONLY_WHILE_CHARGING, defaults.transcribeOnlyWhileCharging),
             )
         }
     }

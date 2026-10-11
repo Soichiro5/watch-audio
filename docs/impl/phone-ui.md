@@ -82,6 +82,7 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
   - `gapAlertDecision(…, now, alertedFor)`: 定期チェック用（Android）。`None` / `Wait(at)` / `Notify(lastReceivedAt)`。10 分**超**で通知、`now` がおやすみ時間内なら終了まで待つ、同じ途絶（同じ `lastReceivedAt`）には 1 回だけ。
 - `alert/GapAlertEvaluator`: `LocalStore` から最新チャンクの `endReason`・最終受信・設定を読んで上を適用。通知文「録音が届いていません（最後の受信: HH:mm）。Watch を確認してください」も作る。
 - 設定は状態タブの「通知」カードで変更（時刻は 1 時間単位のメニュー）。変更すると `AppServices.gapAlertSettingsChanged()` で各プラットフォームに再評価させる。
+- 状態タブの「文字起こしのタイミング」カード（#75）: スイッチ「充電中のみ文字起こしする」（既定オフ。`SettingsViewModel.setTranscribeOnlyWhileCharging` → `AppServices.transcriptionSettingsChanged()` で各プラットフォームが予約を見直す）と、オフのときの電池駆動での処理の説明（残量 50% 以上・省電力でない間・1 時間に録音 10 分ぶんまで・熱いときは休む）。方針は [02 §6.3](../02-architecture.md#充電していないときの処理方針75)。文字起こしが方針で止まっていて未処理のチャンクがあると、「文字起こしモデル」カードに理由（`ProcessingStatus.paused` → `Strings.transcriptionPaused`）を出す。「今すぐ文字起こし」は電池の条件を外して実行する（発熱の条件は外さない）。
 
 ### 1.6 オンボーディング（#32）
 
@@ -107,8 +108,9 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
 | `gap_alert.enabled` | 途絶アラート | true |
 | `gap_alert.quiet_hours.enabled` / `.start_minute` / `.end_minute` | おやすみ時間（0 時からの分） | true / 1380 / 420 |
 | `gap_alert.shown_for` | 最後に通知した途絶の `lastReceivedAt`（Android の重複通知防止） | なし |
+| `transcription.charging_only` | 充電中のみ文字起こしする（#75） | false |
 
-音声の保持期間（#33、§1.4）も同じテーブルに `StorageManager` が保存する。
+音声の保持期間（#33、§1.4）も同じテーブルに `StorageManager` が保存する。電池駆動での 1 時間あたりの処理量（`transcription.battery_budget.*`、#75）は設定ではなく状態で、`PolicyGatedTranscription` が保存する。
 
 読めない値は既定値に戻す。`updateSettings { … }` は 1 トランザクションで読み→変更→差分のみ書き込み。`SettingsViewModel` は `LocalStore.changes` で再読み込みする。
 
@@ -134,7 +136,7 @@ flowchart LR
   end
 ```
 
-- プラットフォームとの契約は `AppServices`（`store`, `audioRoot`, `storage`, `status`, `requestTranscription()`, `play()`, `stopPlayback()`, `downloadModels(allowMetered)`, `modelSetup`, `permissions` / `permissionStatus()` / `requestPermission()` / `openAppSettings()`, `gapAlertSettingsChanged()`）。追加分はすべてデフォルト実装あり（権限なし・`DOWNLOAD`・no-op）。iOS は `downloadModels` で OS にモデルのインストールを依頼する。
+- プラットフォームとの契約は `AppServices`（`store`, `audioRoot`, `storage`, `status`, `requestTranscription()`, `play()`, `stopPlayback()`, `downloadModels(allowMetered)`, `modelSetup`, `permissions` / `permissionStatus()` / `requestPermission()` / `openAppSettings()`, `gapAlertSettingsChanged()`, `transcriptionSettingsChanged()`）。追加分はすべてデフォルト実装あり（権限なし・`DOWNLOAD`・no-op）。iOS は `downloadModels` で OS にモデルのインストールを依頼する。
 - 計算はすべて UI から独立した純粋関数（`logic/`）で、`commonTest` でテストしている。
 - 時刻表示は端末のタイムゾーン（`TimeZone.currentSystemDefault()`、kotlinx-datetime）。チャンクの `timeZone` も DB に保存されているが、表示には使っていない。
 

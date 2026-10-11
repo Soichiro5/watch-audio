@@ -37,10 +37,19 @@ class SettingsViewModel(
         it.copy(gapAlert = it.gapAlert.copy(quietHours = quietHours))
     }
 
-    private fun update(alertSettings: Boolean = false, transform: (AppSettings) -> AppSettings) {
+    fun setTranscribeOnlyWhileCharging(enabled: Boolean) = update(transcriptionSettings = true) {
+        it.copy(transcribeOnlyWhileCharging = enabled)
+    }
+
+    private fun update(
+        alertSettings: Boolean = false,
+        transcriptionSettings: Boolean = false,
+        transform: (AppSettings) -> AppSettings,
+    ) {
         viewModelScope.launch {
             services.store.updateSettings(transform)
             if (alertSettings) services.gapAlertSettingsChanged()
+            if (transcriptionSettings) services.transcriptionSettingsChanged()
         }
     }
 }

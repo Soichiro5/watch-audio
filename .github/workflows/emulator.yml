@@ -9,8 +9,8 @@ name: Emulator smoke test
 # On the phone emulator it also runs the instrumented tests: real MediaPlayer playback and
 # the search -> one tap -> play flow (#19, #25), the shared SQLite tests of core-db and
 # core-pipeline on Android (#14), on-device ASR with the real models and the wait without a model
-# (#22), the charging job and resuming after a force-stop (#20), the gap alert notification (#43)
-# and the refused permission (#32); see .github/scripts/phone-scenarios.sh.
+# (#22), the charging job and resuming after a force-stop (#20), the battery/thermal policy (#75),
+# the gap alert notification (#43) and the refused permission (#32); see .github/scripts/phone-scenarios.sh.
 # On the Wear OS emulator it shows the tile and the complication and taps the tile (#41):
 # .github/scripts/wear-surfaces.sh. Screenshots are uploaded as the screenshots-<name> artifact.
 on:
