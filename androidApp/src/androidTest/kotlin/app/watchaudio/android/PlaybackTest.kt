@@ -3,7 +3,6 @@ package app.watchaudio.android
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
@@ -56,7 +55,7 @@ class PlaybackTest {
         runBlocking { PlaybackFixtures.graph.store.updateSettings { it.copy(onboardingCompleted = true) } }
 
         ActivityScenario.launch(MainActivity::class.java).use {
-            compose.onNodeWithText(Strings.TAB_SEARCH).performClick()
+            compose.openTab(Strings.TAB_SEARCH)
             compose.onNode(hasSetTextAction()).performTextInput(word)
             compose.waitUntil(timeoutMillis = 10_000) {
                 compose.onAllNodes(hasText("の発話です", substring = true)).fetchSemanticsNodes().isNotEmpty()
