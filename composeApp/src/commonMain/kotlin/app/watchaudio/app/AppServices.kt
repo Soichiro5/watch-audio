@@ -47,6 +47,12 @@ interface AppServices {
     suspend fun requestPermission(permission: AppPermission): PermissionStatus = permissionStatus(permission)
 
     /**
+     * Opens this app's page in the system settings, where a refused permission
+     * ([PermissionStatus.DENIED]) can still be granted. The UI re-reads the permissions on resume.
+     */
+    fun openAppSettings() {}
+
+    /**
      * The gap alert preferences (`AppSettings.gapAlert`) were changed in the UI; re-evaluate any
      * scheduled alert.
      */

@@ -1,0 +1,4 @@
+# Python venv and generated/downloaded audio + models (large; rebuilt by the scripts)
+/.venv/
+/cache/
+__pycache__/

@@ -6,6 +6,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import app.watchaudio.android.AppGraph
 import app.watchaudio.app.ModelState
+import app.watchaudio.core.pipeline.TranscriptionPipeline
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.sync.withLock
 
@@ -27,7 +28,7 @@ class TranscriptionWorker(context: Context, params: WorkerParameters) : Coroutin
         // The one-off and the periodic worker may overlap; one pipeline run at a time.
         val result = graph.transcriptionLock.withLock {
             try {
-                graph.pipeline.processPending { !isStopped }
+                graph.pipeline.processPending(ChunkLog) { !isStopped }
             } finally {
                 graph.transcriber.release()
             }
@@ -50,7 +51,18 @@ class TranscriptionWorker(context: Context, params: WorkerParameters) : Coroutin
         }
     }
 
-    private companion object {
+    /** One line per chunk: progress for `adb logcat` (ids only, never transcript text). */
+    private object ChunkLog : TranscriptionPipeline.Observer {
+        override fun started(chunkId: String) {
+            Log.i(TAG, "transcribing chunk $chunkId")
+        }
+
+        override fun finished(chunkId: String, transcribed: Boolean) {
+            Log.i(TAG, if (transcribed) "transcribed chunk $chunkId" else "failed chunk $chunkId")
+        }
+    }
+
+    internal companion object {
         const val TAG = "TranscriptionWorker"
     }
 }
