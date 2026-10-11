@@ -5,7 +5,7 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
 
 ## 1. 画面構成
 
-初回起動時はオンボーディング（§1.6）を表示し、完了後は下部ナビゲーションで 3 画面を切り替える。文字列はすべて `Strings.kt` に集約（将来のローカライズ用）。
+初回起動時はオンボーディング（§1.6）を表示し、完了後は下部ナビゲーションで 3 画面を切り替える。文字列はすべて `Strings.kt` に集約（将来のローカライズ用）。通知（途絶アラート・Android のモデルのダウンロード）の文言も同じ `Strings` にあり、`strings.xml` には置かない。
 
 | タブ | 内容 |
 | --- | --- |
@@ -82,7 +82,7 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
   - `gapAlertDecision(…, now, alertedFor)`: 定期チェック用（Android）。`None` / `Wait(at)` / `Notify(lastReceivedAt)`。10 分**超**で通知、`now` がおやすみ時間内なら終了まで待つ、同じ途絶（同じ `lastReceivedAt`）には 1 回だけ。
 - `GapAlertEvaluator`: `LocalStore` から最新チャンクの `endReason`・最終受信・設定を読んで上を適用。判定（`GapAlert.kt`）とあわせて、バックグラウンド処理からも使うので UI ではない `shared/pipeline` の `app.watchaudio.core.alert` にある（#134）。通知文「録音が届いていません（最後の受信: HH:mm）。Watch を確認してください」は UI の文字列なので `shared/ui` の `alert/GapAlertText` が作る。
 - 設定は状態タブの「通知」カードで変更（時刻は 1 時間単位のメニュー）。変更すると `AppServices.gapAlertSettingsChanged()` で各プラットフォームに再評価させる。
-- 状態タブの「文字起こしのタイミング」カード（#75）: スイッチ「充電中のみ文字起こしする」（既定オフ。`SettingsViewModel.setTranscribeOnlyWhileCharging` → `AppServices.transcriptionSettingsChanged()` で各プラットフォームが予約を見直す）と、オフのときの電池駆動での処理の説明（残量 50% 以上・省電力でない間・1 時間に録音 10 分ぶんまで・熱いときは休む）。方針は [02 §6.3](../architecture/02-architecture.md#充電していないときの処理方針75)。文字起こしが方針で止まっていて未処理のチャンクがあると、「文字起こしモデル」カードに理由（`ProcessingStatus.paused` → `Strings.transcriptionPaused`）を出す。「今すぐ文字起こし」は電池の条件を外して実行する（発熱の条件は外さない）。
+- 状態タブの「文字起こしのタイミング」カード（#75）: スイッチ「充電中のみ文字起こしする」（既定オフ。`SettingsViewModel.setTranscribeOnlyWhileCharging` → `AppServices.transcriptionSettingsChanged()` で各プラットフォームが予約を見直す）と、オフのときの電池駆動での処理の説明（残量 50% 以上・省電力でない間・1 時間に録音 10 分ぶんまで・熱いときは休む）。方針は [02 §6.3](../architecture/02-architecture.md#充電していないときの処理方針75)。文字起こしが方針で止まっていて未処理のチャンクがあると、「文字起こしモデル」カードに理由（`ProcessingStatus.paused` → `Strings.transcriptionPaused`）を出す。バックグラウンド処理からのお知らせ（Wi-Fi 待ち・取り込み失敗・途絶通知の予約失敗・文字起こし失敗の件数・古い音声の削除失敗）も同じカードに出す。各プラットフォームは文言ではなく型付きの `ProcessingStatus.notice`（`StatusNotice`、`shared/pipeline`）を渡し、日本語の文言は `Strings.statusNotice` だけが持つ（#135）。失敗のお知らせには例外のメッセージを入れない（英語になりうるため。エラーの種類は診断ログにある）。「今すぐ文字起こし」は電池の条件を外して実行する（発熱の条件は外さない）。
 
 ### 1.6 オンボーディング（#32）
 
@@ -169,9 +169,10 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 | `commonTest/…/DayTimelineTest` ほか | タイムライン・カバー率・欠損理由、文字起こしリストのグループ化（削除済み音声は再生不可）、スニペット解析、日付/時刻・容量の書式、受信状況、保持期間変更の確認要否・「削除」入力の判定（`StorageLogicTest`） |
 | `shared/pipeline` の `commonTest/…/GapAlertTest`, `AppSettingsTest` | おやすみ時間（日付またぎ・DST）、通知時刻、定期チェックの判定（1 回だけ・おやすみ時間中は待つ・停止理由付きは通知しない）、設定の保存形式と不正値 |
 | `commonTest/…/GapAlertTextTest` | 途絶アラートの通知文 |
+| `commonTest/…/StatusNoticeTextTest` | すべての `StatusNotice` と通知の文言（途絶アラート・モデルのダウンロード）が空でなく、文ごとに日本語であること（#135） |
 | `jvmTest/…/ViewModelTest` | 一時ファイルの実 `LocalStore` + 一時ディレクトリの音声 + テストディスパッチャで、日付移動・変更時の再読み込み・周期更新・再試行・検索→該当日へ移動・受信途絶の警告、容量表示と保持期間の確認・適用・空き容量警告、「削除」入力による全削除、確認付きの日単位削除、削除済み音声の発話が再生されないこと、設定の保存、オンボーディングのステップ・同意必須・権限要求・拒否時に設定画面を開き戻ったら読み直す（`refusedPermissionLeadsToTheSystemSettingsAndIsReReadOnReturn`）、診断ログの書き出しはボタンでのみ依頼し結果（空・失敗）を表示する（`exportingDiagnosticsAsksThePlatformOnlyOnTapAndReportsTheOutcome`） |
 | `shared/pipeline` の `sqliteTest/…/GapAlertEvaluatorTest` | 実 DB 上で途絶アラートの判定・設定の反映 |
-| `jvmTest/…/AppUiTest` | Skia でヘッドレス描画し、(1) タイムライン→再生→検索→結果を開く→状態→おやすみ時間の切り替え→ストレージ（「削除」を入力して全削除）→「診断ログを書き出す」、(2) オンボーディング（同意しないと次へ進めない→通知許可→モデルのダウンロード選択→はじめる→タブ画面→説明をもう一度）、(3) 通知を拒否したときの「設定を開く」（`onboarding-permission-denied.png`）を操作。スクリーンショットを `shared/ui/build/screenshots/` に出力（CI の成果物 `ui-screenshots`） |
+| `jvmTest/…/AppUiTest` | Skia でヘッドレス描画し、(1) タイムライン→再生→検索→結果を開く→状態→おやすみ時間の切り替え→ストレージ（「削除」を入力して全削除）→「診断ログを書き出す」、(2) オンボーディング（同意しないと次へ進めない→通知許可→モデルのダウンロード選択→はじめる→タブ画面→説明をもう一度）、(3) 通知を拒否したときの「設定を開く」（`onboarding-permission-denied.png`）を操作。(4) 状態タブのお知らせ（Wi-Fi 待ち・文字起こし失敗）を表示し、画面上に英語だけのテキストがないことを確認（`status-waiting-for-wifi.png`、`status-notice.png`、#135）。スクリーンショットを `shared/ui/build/screenshots/` に出力（CI の成果物 `ui-screenshots`） |
 | `apps/android/src/androidTest/…/PlaybackTest` | エミュレータ上の実アプリで、実際の AAC を MediaPlayer が指定位置から再生すること、検索 → 結果を 1 タップ → 発話の位置から再生されることを確認（CI `emulator.yml`、[android-phone.md §6.1](android-phone.md#61-実機なしlinux--ci)） |
 | `apps/android/src/androidTest/…/PermissionDeniedTest` | エミュレータでオンボーディングから通知の許可を求め、システムのダイアログで拒否 → 理由と「設定を開く」が表示され、押すとアプリの設定画面が開く（インストール直後に `phone-scenarios.sh` から実行。スクリーンショット `onboarding-permission-denied.png` ほか） |
 | `apps/android/src/androidTest/…/ModelWaitTest` | モデルなしの状態タブ（「モデルが未ダウンロードです」・文字起こし待ち）と、モデルを置いた後の「準備完了」のスクリーンショット（`status-model-*.png`） |

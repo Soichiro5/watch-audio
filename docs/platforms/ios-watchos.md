@@ -113,6 +113,7 @@ sequenceDiagram
 - 再送: WCSession が activated になるたび（= アプリ起動ごと）に未 ACK の全チャンクを再送（iPhone は `duplicate` で最終 ACK を返すので安全）。`corrupt` は最大 3 回まで即再送。`rejected`（新しいスキーマ等）は保持して次回起動時に再提示。
 - iPhone 側は `session(_:didReceive:)` 内でファイルを `Application Support/WatchAudio/inbox/` に**同期的に** move してから非同期で取り込む。取り込みは `UIApplication.beginBackgroundTask` で保護。取り込み前にプロセスが落ちた inbox の残骸は次回起動時に削除（Watch が再送する）。
 - 取り込み自体は Android と共通の `ChunkIntake.receive`（#134）: manifest が読めないがチャンク ID は読めるなら `rejected`、ID も読めない・DB に書けないなら ACK なし（`nil`）。inbox のファイルは結果にかかわらずアーカイブへ移すか削除する。
+- 取り込み・文字起こし・古い音声の削除・途絶通知の予約に失敗したときは、`IosAppGraph` が文言ではなく `ProcessingStatus.notice`（`StatusNotice.IngestFailed` / `TranscriptionFailed(件数)` / `RetentionFailed` / `GapAlertScheduleFailed`）を設定し、状態タブの日本語の文言は共通の `Strings.statusNotice` が作る（#135）。例外のメッセージは画面に出さない（エラーの種類は診断ログ）。
 - Watch がサスペンド中に ACK が届いた場合は `.backgroundTask(.watchConnectivity)` で起こされ、`hasContentPending` が消えるまで起きている。
 
 ## 6. Kotlin ↔ Swift ブリッジ
@@ -157,7 +158,7 @@ MainViewControllerKt.MainViewController()                             // Compose
 - チャンクを `STORED` で取り込むたびに `IosGapAlerts.reschedule(chunkArrived = true)`: 識別子 `app.watchaudio.gap-alert` の未配信の通知（と表示済みの古い通知）を取り消し、`GapAlertEvaluator.alertAt()` の時刻に `UNTimeIntervalNotificationTrigger` で 1 件だけ予約し直す。
 - そのチャンクが停止理由付き（`user_stop` / `charging` / `off_body` など）で終わっていれば予約しない（取り消しのみ）。通常は最終受信 + 10 分。おやすみ時間（既定 23:00–7:00）にかかる場合は終了時刻に予約する。
 - 状態タブで通知設定を変えると `gapAlertSettingsChanged()` → 予約し直し（すでに過ぎた時刻なら予約しない）。
-- 本文「録音が届いていません（最後の受信: HH:mm）。Watch を確認してください」。予約の失敗は ACK を妨げない（`status.message` に出すだけ）。
+- 本文「録音が届いていません（最後の受信: HH:mm）。Watch を確認してください」。予約の失敗は ACK を妨げない（診断ログに `gap_alert_blocked reason=schedule_failed` を書き、状態タブに `StatusNotice.GapAlertScheduleFailed` を出すだけ）。
 - `UNUserNotificationCenterDelegate` を設定していないので、アプリが前面にある間は通知バナーは出ない（その間は状態タブの警告で分かる）。
 
 ### 7.2 診断ログ（#77）
