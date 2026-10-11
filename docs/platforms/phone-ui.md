@@ -154,7 +154,7 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 
 - Android: `MainActivity` で `App((application as WatchAudioApp).services)`。権限要求の launcher も `MainActivity` が登録して `AndroidAppServices` に渡す。
 - iOS: Swift から `MainViewControllerKt.MainViewController()`（`IosAppGraph.services` を使う）。
-- `FakeAppServices`（commonMain）は呼び出しを記録するだけの実装で、テスト・プレビュー用。
+- `FakeAppServices`（`jvmTest`）は呼び出しを記録するだけのテスト用の実装。アプリ（iOS の framework を含む）には入らない。
 
 ## 4. テスト
 

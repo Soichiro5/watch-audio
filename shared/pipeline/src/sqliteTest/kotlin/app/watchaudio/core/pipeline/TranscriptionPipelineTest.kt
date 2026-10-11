@@ -131,8 +131,8 @@ class TranscriptionPipelineTest {
                 events += "start $chunkId"
             }
 
-            override fun finished(chunkId: String, transcribed: Boolean) {
-                events += "done $chunkId $transcribed"
+            override fun finished(outcome: TranscriptionPipeline.ChunkOutcome) {
+                events += "done ${outcome.chunkId} ${outcome.transcribed}"
             }
         }
         TranscriptionPipeline(store, dir.path, FakeTranscriber(failFor = setOf("b"))).processPending(observer = observer)

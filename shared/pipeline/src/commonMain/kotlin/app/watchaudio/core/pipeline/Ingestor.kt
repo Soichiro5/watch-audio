@@ -61,8 +61,6 @@ class Ingestor(
         return ack(manifest, AckStatus.STORED)
     }
 
-    fun absolutePath(relativePath: String): Path = Path(audioRoot, relativePath)
-
     private fun verify(file: Path, expectedSize: Long, expectedSha256: String): String? {
         val size = SystemFileSystem.metadataOrNull(file)?.size ?: return "file not found"
         if (size != expectedSize) return "size $size != $expectedSize"

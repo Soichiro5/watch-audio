@@ -6,7 +6,7 @@ plugins {
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            api(projects.shared.model)
+            api(libs.kotlinx.serialization.json)
         }
     }
 }

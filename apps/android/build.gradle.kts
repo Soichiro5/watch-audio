@@ -63,7 +63,6 @@ dependencies {
     implementation(libs.androidx.fragment)
     implementation(libs.androidx.work.runtime)
     implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.kotlinx.datetime)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.play.services.wearable)
     implementation(libs.sherpa.onnx.android)
@@ -80,4 +79,5 @@ dependencies {
     androidTestImplementation(libs.androidx.work.testing)
     androidTestImplementation(libs.compose.ui.test.junit4)
     androidTestImplementation(libs.kotlin.test.junit)
+    androidTestImplementation(libs.kotlinx.datetime)
 }

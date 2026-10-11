@@ -81,8 +81,6 @@ androidx-test-runner = { module = "androidx.test:runner", version.ref = "android
 androidx-work-runtime = { module = "androidx.work:work-runtime", version.ref = "androidx-work" }
 androidx-work-testing = { module = "androidx.work:work-testing", version.ref = "androidx-work" }
 androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "androidx-test-uiautomator" }
-# bzip2 + tar extraction of the downloaded ASR model archive (streaming).
-
 # Wear OS
 play-services-wearable = { module = "com.google.android.gms:play-services-wearable", version.ref = "play-services-wearable" }
 wear-compose-material3 = { module = "androidx.wear.compose:compose-material3", version.ref = "wear-compose" }
