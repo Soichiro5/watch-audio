@@ -32,7 +32,8 @@ suspend fun speechProbabilities(samples: FloatArray, windowSize: Int, compute: (
  *
  * Each non-blank result becomes a [TimedText] (times relative to the start of [samples]) in
  * [Recognition.lang] or else [language], with its [TimedText.speechProbability]
- * ([meanSpeechProbability]). Checks for cancellation before each input.
+ * ([meanSpeechProbability]) and [TimedText.levelAboveNoiseDb] ([levelAboveNoiseFloorDb]) for a
+ * [SegmentFilter]. Checks for cancellation before each input.
  */
 suspend fun transcribeSpeech(
     samples: FloatArray,
@@ -55,6 +56,13 @@ suspend fun transcribeSpeech(
                 lang = result.lang ?: language,
                 confidence = result.confidence,
                 speechProbability = meanSpeechProbability(probabilities, settings.windowSize, span),
+                levelAboveNoiseDb = levelAboveNoiseFloorDb(
+                    samples,
+                    span.startSample,
+                    span.startSample + span.samples.size,
+                    settings.noiseFloorPercentile,
+                    settings.noiseFloorContextSamples,
+                ),
             )
         }
     }

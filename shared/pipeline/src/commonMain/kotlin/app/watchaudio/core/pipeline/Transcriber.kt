@@ -43,9 +43,11 @@ data class AudioPart(val file: Path, val fromMs: Long, val toMs: Long) {
  *
  * - [confidence]: the recognizer's own confidence in the text, 0..1;
  * - [speechProbability]: the mean VAD speech probability (0..1) over the utterance's audio
- *   (sherpa-onnx path: Silero, see [transcribeSpeech]).
+ *   (sherpa-onnx path: Silero, see [transcribeSpeech]);
+ * - [levelAboveNoiseDb]: how far the utterance's audio rises above the background noise, in dB
+ *   ([levelAboveNoiseFloorDb]).
  *
- * Neither is stored in the database.
+ * None of them is stored in the database.
  */
 data class TimedText(
     val startMs: Long,
@@ -54,4 +56,5 @@ data class TimedText(
     val lang: String? = null,
     val confidence: Float? = null,
     val speechProbability: Float? = null,
+    val levelAboveNoiseDb: Float? = null,
 )
