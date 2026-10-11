@@ -126,10 +126,35 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 - 通知: チャネル `gap_alert`（「録音の途絶アラート」、重要度 HIGH）、本文「録音が届いていません（最後の受信: HH:mm）。Watch を確認してください」、タップでアプリを開く。
 - `POST_NOTIFICATIONS`（Android 13+）が無い場合は通知せず、記録もしない（許可後の次のチェックで通知する）。権限はオンボーディングで要求する（`MainActivity` の `registerForActivityResult(RequestPermission())` を `AndroidAppServices` が使う。Activity Result API の lint 要件のため `androidx.fragment` 1.8.9 を明示的に依存に追加）。
 
+### 4.2 診断ログ（#77）
+
+夜間の処理や数日にわたる実機検証で「止まった・遅い」原因を後から追えるよう、処理の記録を端末内の CSV に残す。logcat と違って流れて消えず、`adb` をつながなくても状態タブから書き出せる。
+
+- 実装: 共通コード `shared/core-pipeline` の `Diagnostics`（インターフェース）/ `DiagnosticsLog`（kotlinx-io のファイル実装、iOS と共通）。プロセスで 1 つ（`AppGraph.diagnostics(context)`。グラフの構築前から使えるので、構築中のクラッシュも残る）。
+- 場所: `files/diagnostics/diagnostics.csv`。**512 KB に達すると `diagnostics.csv.1` に回して（前の `.1` は削除）新しく始める**ので、最大でも約 1 MB。アプリ内部ストレージなのでバックアップ対象外（§5）。
+- 形式: `timestamp,event,detail`（UTC の ISO 8601、イベント名、`key=value` の空白区切り）。Watch 側の `events.csv` / `diagnostics.csv` と同じ考え方。
+- **含めないもの**: 文字起こしの本文・音声・例外メッセージ（データを引用しうるため。例外は型名とスタックの先頭のみ）。含めるのは ID・件数・時間・エラーの種類だけ。
+
+| イベント | 記録する場所 | detail の例 |
+| --- | --- | --- |
+| `app_start` | `WatchAudioApp.onCreate` | `version=0.1.0 sdk=35 device=Pixel 8` |
+| `previous_exit` | 起動時に `ApplicationExitInfo`（Android 11+）を読み、前回以降の終了を 1 回ずつ（`PreviousExits`、既読の時刻は SharedPreferences `diagnostics`） | `reason=LOW_MEMORY status=0 importance=400 pss_kb=…`（Java のクラッシュは説明文を省き、下の `crash` 行で見る） |
+| `crash` | 未捕捉の例外（`CrashRecorder` が既定のハンドラを包み、1 行書いてから元のハンドラに渡す） | `thread=main type=java.lang.IllegalStateException causes=… at=フレーム < フレーム …` |
+| `chunk_received` / `chunk_rejected` | `ChunkReceiver`（取り込み結果、近接でないノード・壊れたフレーム・転送の中断・取り込み失敗） | `chunk=… status=STORED audio_ms=300000 bytes=…` |
+| `ack_sent` / `ack_failed` | `ChunkReceiver.sendAck`（試行ごと） | `chunk=… status=STORED attempt=1` |
+| `worker_start` / `worker_stop` | `TranscriptionWorker`（件数、モデル未準備でのスキップ、OS による停止と `stop_reason`） | `worker=transcription transcribed=3 failed=0` |
+| `transcription_started` / `_finished` / `_failed` | `TranscriptionPipeline.Observer`（共通の `DiagnosticsPipelineObserver`） | `chunk=… audio_ms=300000 elapsed_ms=21000 rtf=0.07`（失敗時は `error=例外の型`） |
+| `retention_purge` | 保持期間による音声の削除（#33） | `chunks=12 bytes=…` |
+| `model_download_*` / `model_ready` | `ModelManager`（開始・10% ごとの進捗・完了・失敗（HTTP ステータスなど）・準備完了） | `pct=30 bytes=…`、`error=java.io.IOException message=HTTP 404 for …` |
+| `gap_alert` / `gap_alert_blocked` | `GapAlertMonitor`（通知した / 通知が許可されておらず出せなかった） | `last_received_at=…` |
+
+**書き出し**: 状態タブの「診断ログを書き出す」→ `AndroidAppServices.exportDiagnostics()` が `.1` と現在のファイルを 1 つの CSV（`cache/diagnostics-export/watch-audio-diagnostics-<日時>.csv`、前回の書き出しは削除）にまとめ、`FileProvider`（authority `app.watchaudio.diagnostics`、公開するのはこのディレクトリだけ）経由で共有シート（`ACTION_SEND`）を開く。ユーザーが選んだ共有先だけに読み取り権限が付く。**自動では送らない**。新しい権限・通信・SDK は追加していない。
+
 ## 5. プライバシー・パッケージング
 
 - `android:allowBackup="false"`、`dataExtractionRules` でクラウドバックアップは全ドメイン除外（端末間移行 = device-transfer はローカル転送なので許可）。Android 11 以前向けに `fullBackupContent` でも全除外。
-- `INTERNET` 権限はモデルのダウンロードのためだけに使う。解析 SDK・広告 SDK はなし。
+- `INTERNET` 権限はモデルのダウンロードのためだけに使う。解析 SDK・広告 SDK・クラッシュ収集 SDK はなし（異常終了は §4.2 の診断ログに端末内で残す）。
+- `FileProvider`（非公開・`grantUriPermissions`）が公開するのは診断ログの書き出し先 `cache/diagnostics-export/` だけ。録音・文字起こしのディレクトリは対象外。
 - ABI は `arm64-v8a`（実機）と `x86_64`（エミュレータ）のみ。sherpa-onnx の C/C++ API ライブラリ（JNI からは未使用）は APK から除外。
 - release ビルドで minify する場合に備え、sherpa-onnx のクラスを keep（JNI がフィールド名で設定を読むため）。
 
@@ -139,7 +164,7 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 
 ```bash
 ./gradlew --max-workers=2 jvmTest testAndroidHostTest   # 共通コード（フレーム読み取り・Pcm・VAD 区間の分割など）
-./gradlew --max-workers=2 :androidApp:testDebugUnitTest  # FrameReader / ModelArchive（JVM）
+./gradlew --max-workers=2 :androidApp:testDebugUnitTest  # FrameReader / ModelArchive / CrashRecorder・PreviousExits（JVM）
 ./gradlew --max-workers=2 :tools:harness:test            # 実モデルでの E2E（Android と同じ AsrSettings）
 ./gradlew --max-workers=2 :androidApp:assembleDebug :androidApp:lintDebug
 ```
@@ -185,7 +210,11 @@ adb exec-out run-as app.watchaudio cat files/watch-audio.db > /tmp/wa.db   # WAL
 sqlite3 /tmp/wa.db "select state, count(*) from audio_chunk group by state; select start_at, text from transcript_segment order by start_at desc limit 20;"
 # WorkManager の状態（gap-alert-* も含む）
 adb shell dumpsys jobscheduler | grep -A3 app.watchaudio
+# 診断ログ（§4.2）。adb なしなら状態タブの「診断ログを書き出す」から共有する
+adb exec-out run-as app.watchaudio cat files/diagnostics/diagnostics.csv.1 files/diagnostics/diagnostics.csv > /tmp/wa-diagnostics.csv
 ```
+
+長時間の実機検証（#61 など）の証拠には、状態タブから書き出した診断ログを添えると、受信の間隔・文字起こしの RTF・ワーカーの停止理由・前回の終了理由（強制終了・メモリ不足など）を後から確認できる。
 
 Watch が無くても、ADB 経由の Wear OS エミュレータとスマホエミュレータをペアリングすれば `ChannelClient` 経由の受信を確認できる（KVM のある環境が必要）。
 

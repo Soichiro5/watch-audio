@@ -2,6 +2,9 @@ package app.watchaudio.android.transfer
 
 import android.content.Context
 import android.util.Log
+import app.watchaudio.core.pipeline.DiagnosticEvents
+import app.watchaudio.core.pipeline.Diagnostics
+import app.watchaudio.core.pipeline.DiagnosticsLog
 import app.watchaudio.core.pipeline.Ingestor
 import app.watchaudio.core.protocol.AckStatus
 import app.watchaudio.core.protocol.ChunkAck
@@ -36,6 +39,7 @@ class ChunkReceiver(
     context: Context,
     private val ingestor: Ingestor,
     private val scope: CoroutineScope,
+    private val diagnostics: Diagnostics,
     private val onStored: () -> Unit,
 ) {
     private val channelClient = Wearable.getChannelClient(context)
@@ -53,6 +57,7 @@ class ChunkReceiver(
         try {
             if (!isNearby(channel.nodeId)) {
                 Log.w(TAG, "ignoring ${channel.path}: node is not directly connected")
+                diagnostics.log(DiagnosticEvents.CHUNK_REJECTED, "path=${channel.path} reason=not_nearby")
                 return
             }
             val job = currentCoroutineContext()
@@ -62,9 +67,14 @@ class ChunkReceiver(
                 }
             } catch (e: IllegalArgumentException) {
                 Log.w(TAG, "malformed frame on ${channel.path}; no ACK", e)
+                diagnostics.log(DiagnosticEvents.CHUNK_REJECTED, "path=${channel.path} reason=malformed_frame")
                 return
             } catch (e: IOException) {
                 Log.w(TAG, "transfer of ${channel.path} broke off; no ACK", e)
+                diagnostics.log(
+                    DiagnosticEvents.CHUNK_REJECTED,
+                    "path=${channel.path} reason=transfer_broke_off error=${DiagnosticsLog.typeName(e)}",
+                )
                 return
             }
             if (channel.path.removePrefix(TransferPaths.CHUNK_CHANNEL_PREFIX) != manifest.chunkId) {
@@ -73,6 +83,11 @@ class ChunkReceiver(
 
             val ack = ingestor.ingest(manifest, if (manifest.audio != null) Path(temp.path) else null)
             Log.i(TAG, "chunk ${manifest.chunkId}: ${ack.status}${ack.detail?.let { " ($it)" }.orEmpty()}")
+            diagnostics.log(
+                DiagnosticEvents.CHUNK_RECEIVED,
+                "chunk=${manifest.chunkId} status=${ack.status} audio_ms=${manifest.durationMs} " +
+                    "bytes=${manifest.audio?.sizeBytes ?: 0}${ack.detail?.let { " detail=$it" }.orEmpty()}",
+            )
             if (ack.status == AckStatus.STORED) onStored()
             sendAck(channel.nodeId, ack)
         } catch (e: CancellationException) {
@@ -80,6 +95,10 @@ class ChunkReceiver(
         } catch (e: Exception) {
             // e.g. the database is unavailable: no ACK, the watch resends.
             Log.e(TAG, "could not ingest ${channel.path}", e)
+            diagnostics.log(
+                DiagnosticEvents.CHUNK_REJECTED,
+                "path=${channel.path} reason=ingest_failed error=${DiagnosticsLog.typeName(e)}",
+            )
         } finally {
             temp.delete()
             runCatching { channelClient.close(channel).await() }
@@ -94,11 +113,16 @@ class ChunkReceiver(
         repeat(ACK_ATTEMPTS) { attempt ->
             try {
                 messageClient.sendMessage(nodeId, TransferPaths.ACK_MESSAGE, payload).await()
+                diagnostics.log(DiagnosticEvents.ACK_SENT, "chunk=${ack.chunkId} status=${ack.status} attempt=${attempt + 1}")
                 return
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "ACK for ${ack.chunkId} not delivered (attempt ${attempt + 1})", e)
+                diagnostics.log(
+                    DiagnosticEvents.ACK_FAILED,
+                    "chunk=${ack.chunkId} attempt=${attempt + 1} error=${DiagnosticsLog.typeName(e)}",
+                )
                 delay(1_000L shl attempt)
             }
         }

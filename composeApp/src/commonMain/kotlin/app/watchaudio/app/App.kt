@@ -186,6 +186,7 @@ private fun MainTabs(
                         },
                         onCancelDeleteAll = statusViewModel::cancelDeleteAll,
                     ),
+                    onExportDiagnostics = statusViewModel::exportDiagnostics,
                     modifier = modifier,
                 )
             }
