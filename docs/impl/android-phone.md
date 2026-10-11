@@ -112,7 +112,8 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 - 音声の保持期間（#33）は文字起こしの後に適用する。文字起こし済みのチャンクだけが対象なので、モデル未準備で文字起こしをスキップした回でも適用する。失敗はログのみ（次回の実行で再試行）。容量表示用の `AndroidStorageEnvironment` は `files/models` の合計と `StatFs(filesDir).availableBytes` を返す。
 - モデル未準備ならスキップ（ダウンロード中のみ `retry`、それ以外は成功扱いで終了し、モデル準備完了時に改めて要求）。チャンクを `FAILED` にして試行回数を浪費しないため、ワーカー側で事前に確認する。
 - 1 回限りジョブと定期ジョブが重なってもパイプラインは `Mutex` で 1 本ずつ。各実行の終わりに認識器を解放してメモリを返す（次回は再読み込み、数秒）。
-- 中断耐性: 処理中のチャンクは `TRANSCRIBING` になり、プロセスが殺されても次回起動時の `recoverInterrupted()` で `RECEIVED` に戻る。ワーカーは `AppGraph.startup` の完了を待ってから処理する。
+- 中断耐性: 処理中のチャンクは `TRANSCRIBING` になり、プロセスが殺されても次回起動時の `recoverInterrupted()` で `RECEIVED` に戻る。ワーカーは `AppGraph.startup` の完了を待ってから処理する。エミュレータで `am force-stop` を挟んで確認済み（§6.1 の `ResumeAfterKillTest`）。
+- ログ: ワーカーはチャンクごとに `transcribing chunk <id>` / `transcribed chunk <id>`（失敗時 `failed chunk <id>`）を出す（`TranscriptionPipeline.Observer`。ID のみで文字起こし本文は出さない）。
 
 ### 4.1 録音の途絶アラート（#43）
 
@@ -151,6 +152,18 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 adb logcat -d | grep PLAYBACK_CHECK                # 再生位置の記録
 ```
 
+計装テストの一覧（すべて CI `emulator.yml` の phone ジョブ。証拠の行はジョブサマリーに集約、スクリーンショットは成果物 `screenshots-phone`。モデルの置き方と、計装テスト 1 回では確かめられないシナリオの流れは [04-dev-environment.md §6.1–6.2](../04-dev-environment.md#61-エミュレータでの音声認識モデル)）:
+
+| テスト | 確認すること（Issue） | 証拠 |
+| --- | --- | --- |
+| `PlaybackTest` | 再生・検索から 1 タップ再生（#19, #25、下記） | `PLAYBACK_CHECK` |
+| `SherpaTranscriberTest` | `AndroidSherpaTranscriber`（MediaCodec で AAC をデコード + sherpa-onnx AAR、Silero VAD + ReazonSpeech int8）が参照音声 5 文を 1 チャンクにした AAC を文字起こしし、DB に保存・検索できる（「気象庁」「ヤンバルクイナ」「傘」）（#22） | `ASR_CHECK`（処理時間・RTF・セグメント数）、`ASR_SEGMENT` |
+| `ModelWaitTest` | モデルを退避した状態でチャンクを受信 → 文字起こしジョブは成功扱いで終わりチャンクは `RECEIVED`・試行 0 回のまま、再生はできる、状態タブに「モデルが未ダウンロードです」→ モデルを戻すと（`ModelManager.refresh` → `onReady`）自動で文字起こしされる（#22） | `MODEL_CHECK`、`status-model-missing.png` / `status-model-ready.png` |
+| `ChargingWorkTest` | `TranscriptionScheduler.schedulePeriodic()` の定期ジョブは充電を条件とし、条件を満たすまで実行されない（チャンクは処理待ちのまま）。WorkManager の `TestDriver.setAllConstraintsMet`（充電開始に相当）で本番の `TranscriptionWorker` が走り、溜まったチャンクが文字起こしされる（#20） | `CHARGING_CHECK` |
+| `GapAlertNotificationTest` | 最後のチャンクから 15 分後の時計で本番の `GapAlertMonitor.check()` を呼ぶと通知が出て、通知シェードに表示される（#43） | `GAP_ALERT_CHECK`、`gap-alert-notification.png` |
+| `PermissionDeniedTest`（シナリオ） | オンボーディングで通知を拒否 → 「設定を開く」→ アプリの設定画面（#32） | `PERMISSION_CHECK`、`onboarding-permission-denied.png` ほか |
+| `ResumeAfterKillTest`（シナリオ） | 8 チャンクの文字起こし中に `adb shell am force-stop app.watchaudio` → 再起動後に全チャンクが 1 回ずつ文字起こしされる（欠落 0・重複 0、中断したチャンクは試行 2 回）（#20） | `RESUME_CHECK` |
+
 `PlaybackTest` は MediaCodec で実際の AAC（16 kHz モノラル）を作り、本番の `Ingestor` で「前日 10:00 開始」のチャンクとして取り込んだうえで、
 
 - `AndroidAppServices.play(path, 45 秒)` で MediaPlayer が 45 秒付近から再生を始め、2 秒後に再生位置が進んでいることを確認する（#19）。
@@ -178,7 +191,7 @@ Watch が無くても、ADB 経由の Wear OS エミュレータとスマホエ�
 
 ## 7. 既知の制限・TODO
 
-- **実機での動作確認は未実施**。エミュレータでは CI で起動確認と再生の計装テスト（§6.1）を実行している（この開発環境には KVM がないため手元では動かせない）。MediaCodec デコード（文字起こし用）・sherpa-onnx AAR の読み込み・Data Layer 受信・WorkManager の挙動は実機で確認が必要。
+- **実機での動作確認は未実施**（#61）。エミュレータ（CI、§6.1）では起動・再生・MediaCodec デコード + sherpa-onnx AAR での文字起こし・モデル待ち・強制終了からの再開・充電時の定期ジョブ（WorkManager のテストドライバ）・途絶通知の表示を確認している（この開発環境には KVM がないため手元では動かせない）。Data Layer 受信、実機の速度・発熱、Doze 中の WorkManager の挙動は実機で確認が必要。
 - `TransferPaths.SYNC_REQUEST_MESSAGE`（Watch からの ACK 再送依頼）は未対応。ペイロードがなく対象チャンクが分からないため、現状は Watch がチャンクを再送 → `DUPLICATE` ACK で回復する。必要なら chunkId 一覧をペイロードに持たせる仕様にする。
 - モデルのダウンロードが約 713 MB と大きい（必要なのは約 160 MB）。int8 ファイルを個別に配布しているミラー（Hugging Face 等）からの取得や、自前の配布形態にすると通信量を約 1/4 にできる。ダウンロードの途中再開（Range）は未対応（bzip2 ストリームのため最初からやり直し）。
 - モデルファイルのハッシュ検証なし（公式のチェックサムが公開されていない）。

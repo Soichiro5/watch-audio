@@ -117,6 +117,24 @@ class TranscriptionPipelineTest {
     }
 
     @Test
+    fun observerHearsEachChunkStartAndFinish() = runTest {
+        addChunk("a", 0)
+        addChunk("b", 600_000)
+        val events = mutableListOf<String>()
+        val observer = object : TranscriptionPipeline.Observer {
+            override fun started(chunkId: String) {
+                events += "start $chunkId"
+            }
+
+            override fun finished(chunkId: String, transcribed: Boolean) {
+                events += "done $chunkId $transcribed"
+            }
+        }
+        TranscriptionPipeline(store, dir.path, FakeTranscriber(failFor = setOf("b"))).processPending(observer = observer)
+        assertEquals(listOf("start a", "done a true", "start b", "done b false"), events)
+    }
+
+    @Test
     fun failureIsRecordedAndRetriedOnNextRunOnly() = runTest {
         addChunk("bad", 0)
         addChunk("good", 300_000)
