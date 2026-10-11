@@ -37,6 +37,12 @@ class IosAppServices internal constructor(
 ) : AppServices {
     private var player: AVAudioPlayer? = null
 
+    /** Absolute path of the file in [player]. */
+    private var playerPath: String? = null
+
+    /** Whether `AVAudioPlayer.play()` returned true for the current [player]. */
+    private var playerStarted = false
+
     /** What the last [play] call did, for diagnosing playback in simulator checks. */
     private var lastPlay = "not called"
 
@@ -86,6 +92,8 @@ class IosAppServices internal constructor(
         // A seek before play() is not honoured for every file; seek again once it plays.
         if (started && abs(next.currentTime - offset) > 0.5) next.currentTime = offset
         player = next
+        playerPath = absolute
+        playerStarted = started
         lastPlay = "play(offset=${offset}s) started=$started duration=${next.duration}s position=${next.currentTime}s" +
             (sessionError?.let { " session error: $it" } ?: "")
     }
@@ -99,12 +107,42 @@ class IosAppServices internal constructor(
     override fun stopPlayback() {
         player?.stop()
         player = null
+        playerPath = null
+        playerStarted = false
     }
 
-    /** Position of the current playback in ms, or null when nothing is playing (simulator checks, #19). */
-    internal fun playingPositionMs(): Long? = player?.takeIf { it.playing }?.let { (it.currentTime * 1000).toLong() }
+    /**
+     * Position of the current playback in ms, or -1 when nothing is playing. Read by the
+     * app-hosted XCTest (`iosApp/PlaybackTests`, #19), whose process can actually start the player.
+     */
+    val playbackPositionMs: Long
+        get() = player?.takeIf { it.playing }?.let { (it.currentTime * 1000).toLong() } ?: -1
 
     /** The last [play] outcome and the player's current state (simulator checks). */
-    internal fun playbackDiagnostics(): String =
+    fun playbackDiagnostics(): String =
         "$lastPlay; now " + (player?.let { "playing=${it.playing} position=${it.currentTime}s" } ?: "no player")
+
+    /**
+     * The player [play] prepared, whether or not it could start: in a process that is not an app
+     * (the Kotlin/Native test executable) `play()` returns false, but the player is opened and seeked.
+     */
+    internal fun preparedPlayback(): PreparedPlayback? {
+        val current = player ?: return null
+        return PreparedPlayback(
+            absolutePath = playerPath ?: return null,
+            positionMs = (current.currentTime * 1000).toLong(),
+            durationMs = (current.duration * 1000).toLong(),
+            started = playerStarted,
+            playing = current.playing,
+        )
+    }
 }
+
+/** State of the player prepared by [IosAppServices.play] (simulator checks). */
+internal data class PreparedPlayback(
+    val absolutePath: String,
+    val positionMs: Long,
+    val durationMs: Long,
+    val started: Boolean,
+    val playing: Boolean,
+)

@@ -12,10 +12,12 @@ import app.watchaudio.core.protocol.ChunkEndReason
 import app.watchaudio.core.protocol.ChunkManifest
 import app.watchaudio.core.protocol.SourcePlatform
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.sin
 import kotlin.random.Random
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
@@ -110,28 +112,37 @@ class IosPlaybackFixture {
     }
 
     /**
-     * Waits until the player is playing at or after [requestedMs], then checks that the position
-     * keeps advancing in real time. Prints a `PLAYBACK_CHECK` line (kept in the test report).
+     * Checks that [IosAppServices.play] prepared a player for [chunk]'s file (resolved under the
+     * audio root) at [requestedMs] with the file's full [durationMs]. Prints a `PLAYBACK_CHECK`
+     * line (kept in the test report).
+     *
+     * Whether the player actually starts is only recorded (`started=`): this test executable is
+     * not an app, and `AVAudioPlayer.play()` returns false in it. That playback starts at the
+     * offset and advances is checked in the app process by the hosted XCTest
+     * `iosApp/PlaybackTests` (`check=hosted_player`).
      */
-    fun assertPlaysFrom(requestedMs: Long, check: String) {
-        val first = try {
-            waitFor(15_000, "playback at >= $requestedMs ms") {
-                services.playingPositionMs()?.takeIf { it >= requestedMs }
-            }
+    fun assertPreparedAt(chunk: SeededChunk, requestedMs: Long, durationMs: Long, check: String) {
+        val prepared = try {
+            waitFor(15_000, "a player for ${chunk.audioPath}") { services.preparedPlayback() }
         } catch (e: IllegalStateException) {
             println("PLAYBACK_CHECK check=$check requested_ms=$requestedMs FAILED ${services.playbackDiagnostics()}")
             throw IllegalStateException("${e.message}: ${services.playbackDiagnostics()}", e)
         }
-        pumpMainRunLoop(2_000)
-        val later = services.playingPositionMs()
-        val summary = "PLAYBACK_CHECK check=$check requested_ms=$requestedMs first_ms=$first after_2s_ms=$later " +
-            "(${services.playbackDiagnostics()})"
+        val summary = "PLAYBACK_CHECK check=$check requested_ms=$requestedMs prepared_ms=${prepared.positionMs} " +
+            "duration_ms=${prepared.durationMs} path=${chunk.audioPath} started=${prepared.started} " +
+            "playing=${prepared.playing} (${services.playbackDiagnostics()})"
         println(summary)
-        check(first < requestedMs + 5_000) { "playback started at $first ms, requested $requestedMs ms" }
-        check(later != null && later - first >= 1_000) { "playback did not advance: $first -> $later ms ($summary)" }
+        assertEquals("$audioRoot/${chunk.audioPath}", prepared.absolutePath, summary)
+        assertTrue(abs(prepared.durationMs - durationMs) <= DURATION_TOLERANCE_MS, "duration: $summary")
+        // If the player did start here after all, it may have moved on since play().
+        val upperBound = requestedMs + if (prepared.playing) 5_000 else POSITION_TOLERANCE_MS
+        assertTrue(prepared.positionMs in (requestedMs - POSITION_TOLERANCE_MS)..upperBound, "position: $summary")
     }
 
     companion object {
+        private const val POSITION_TOLERANCE_MS = 200L
+        private const val DURATION_TOLERANCE_MS = 250L
+
         /**
          * Lets main-queue work run (view models use `Dispatchers.Main`, which the test thread
          * would otherwise block) for [millis] ms.

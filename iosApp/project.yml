@@ -117,6 +117,7 @@ targets:
     platform: iOS
     sources:
       - SpeechTests
+      - TestSupport
       - path: iosApp/SpeechTranscription.swift
     dependencies:
       - target: iosApp
@@ -127,6 +128,31 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/WatchAudio.app/WatchAudio
         BUNDLE_LOADER: $(TEST_HOST)
+        EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
+
+  # Real playback through the app's own IosAppServices (AVAudioPlayer) in the app process (#19):
+  # the Kotlin/Native test executable cannot start AVAudioPlayer. Hosted by the iOS app, whose
+  # IosAppGraph is started at launch. The Kotlin framework is static and linked into the app only:
+  # this bundle sees its headers, resolves its symbols through BUNDLE_LOADER and must not autolink
+  # a second copy of the Kotlin runtime.
+  PlaybackTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - PlaybackTests
+      - TestSupport
+    dependencies:
+      - target: iosApp
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).playbacktests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/WatchAudio.app/WatchAudio
+        BUNDLE_LOADER: $(TEST_HOST)
+        FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
+        OTHER_SWIFT_FLAGS: [$(inherited), -Xfrontend, -disable-autolink-framework, -Xfrontend, ComposeApp]
+        CLANG_MODULES_AUTOLINK: NO
         EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
 
 schemes:
@@ -154,3 +180,9 @@ schemes:
         SpeechTests: [test]
     test:
       targets: [SpeechTests]
+  PlaybackTests:
+    build:
+      targets:
+        PlaybackTests: [test]
+    test:
+      targets: [PlaybackTests]

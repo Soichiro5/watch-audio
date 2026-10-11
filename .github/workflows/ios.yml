@@ -56,7 +56,7 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
-      # The playback checks in composeApp's iOS tests (#19, #25) need AVAudioPlayer's clock to run,
+      # The app-hosted playback check (PlaybackTests, #19) needs AVAudioPlayer's clock to run,
       # i.e. an audio output device on the host; add a virtual one if the runner has none.
       - name: Audio output for the simulators
         continue-on-error: true
@@ -81,7 +81,7 @@ jobs:
             'shared/*/build/test-results/iosSimulatorArm64Test/*.xml' \
             'composeApp/build/test-results/iosSimulatorArm64Test/*.xml' >> "$GITHUB_STEP_SUMMARY"
           {
-            echo "Playback checks on the iOS simulator (IosPlaybackTest, #19 / #25):"
+            echo "Playback checks on the iOS simulator (IosPlaybackTest, #19 / #25; the player is prepared, started= is informational):"
             echo '```'
             grep -ho "PLAYBACK_CHECK[^<&]*" composeApp/build/test-results/iosSimulatorArm64Test/*.xml || echo "no PLAYBACK_CHECK lines"
             echo '```'
@@ -168,7 +168,24 @@ jobs:
           {
             echo "Speech check logs (build/swift-evidence):"
             echo '```'
-            cat build/swift-evidence/*.txt 2>/dev/null || echo "no evidence written"
+            cat build/swift-evidence/speech-*.txt 2>/dev/null || echo "no evidence written"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      # #19: real playback in the app process. The app's own IosAppServices (reached through the
+      # ComposeApp framework) plays a 16 kHz AAC chunk from 8 s; the position must start there and
+      # advance (the Kotlin IosPlaybackTest above cannot start AVAudioPlayer in its test executable).
+      - name: Playback in the iOS app (simulator)
+        if: (success() || failure()) && steps.build-ios.outcome == 'success'
+        timeout-minutes: 15
+        run: |
+          status=0
+          ERASE_SIMULATOR=1 .github/scripts/xcode-test.sh PlaybackTests "Playback in the iOS app on the simulator (#19)" || status=$?
+          {
+            echo "Playback check in the app process (PlaybackTests):"
+            echo '```'
+            cat build/swift-evidence/hosted-playback.txt 2>/dev/null || echo "no evidence written"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit $status

@@ -26,10 +26,13 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone
 
 /**
- * Real playback on the iOS simulator (#19, #25): audio archived by the production Ingestor is
- * played by [IosAppServices] (AVAudioPlayer) from the requested position, directly and through
- * the shared Compose UI (timeline of the previous day; search, then one tap on the hit).
+ * Playback on the iOS simulator (#19, #25): for audio archived by the production Ingestor,
+ * [IosAppServices] opens the right file in an AVAudioPlayer at the requested position, directly
+ * and through the shared Compose UI (timeline of the previous day; search, then one tap on the hit).
  * The iOS counterpart of androidApp's `PlaybackTest`; runs in `./gradlew iosSimulatorArm64Test`.
+ *
+ * This executable is not an app process, so `AVAudioPlayer.play()` returns false here; that the
+ * player really starts at the offset and advances is checked in the app by `iosApp/PlaybackTests`.
  */
 @OptIn(ExperimentalTestApi::class)
 class IosPlaybackTest {
@@ -45,12 +48,12 @@ class IosPlaybackTest {
         fixture.close()
     }
 
-    /** #19: yesterday's recording plays from a given time. */
+    /** #19: yesterday's recording is opened at a given time. */
     @Test
-    fun playsYesterdaysChunkFromTheRequestedOffset() {
+    fun preparesYesterdaysChunkAtTheRequestedOffset() {
         val chunk = fixture.seedYesterdayChunk(durationMs = 90_000, segments = emptyList())
         fixture.services.play(chunk.audioPath, 45_000)
-        fixture.assertPlaysFrom(requestedMs = 45_000, check = "services.play")
+        fixture.assertPreparedAt(chunk, requestedMs = 45_000, durationMs = 90_000, check = "services.play")
     }
 
     /** #19 through the UI: go to the previous day on the timeline and tap an utterance. */
@@ -70,7 +73,7 @@ class IosPlaybackTest {
             onAllNodes(hasText("昨日の打ち合わせの件です"))[0].performClick()
 
             waitForText(Strings.playingFrom(formatClock(chunk.startedAt + 30_000, TimeZone.currentSystemDefault())))
-            fixture.assertPlaysFrom(requestedMs = 30_000, check = "timeline_previous_day")
+            fixture.assertPreparedAt(chunk, requestedMs = 30_000, durationMs = 90_000, check = "timeline_previous_day")
         }
     }
 
@@ -94,7 +97,7 @@ class IosPlaybackTest {
             onAllNodes(hasText("の発話です", substring = true))[0].performClick() // the one tap
 
             waitForText(Strings.playingFrom(formatClock(chunk.startedAt + 60_000, TimeZone.currentSystemDefault())))
-            fixture.assertPlaysFrom(requestedMs = 60_000, check = "search_one_tap")
+            fixture.assertPreparedAt(chunk, requestedMs = 60_000, durationMs = 120_000, check = "search_one_tap")
         }
     }
 
