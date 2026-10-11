@@ -22,25 +22,45 @@
 
 v0.1 では、**自分の Watch とスマホに入れて 1 日中録音し、夜に検索して聞き返す**ことが一通りできる状態を目指す。
 
-| リリース（Milestone） | ユースケース | 状態（2026-10-11） |
+ユースケースの状態は次の 4 つで表す（ダッシュボードも同じ）。
+
+| 状態 | 意味 |
+| --- | --- |
+| ⬜ 未着手 | まだ作業を始めていない |
+| 🛠 開発中 | 開発環境での作業が残っている |
+| 🧪 実機確認待ち | 開発環境では完成。実機での確認だけが残っている |
+| ✅ 完了 | 実機で確かめ、ユースケースを閉じた |
+
+### 現在地（2026-10-11）
+
+| リリース | 状態 | 次にやること | 担当 |
+| --- | --- | --- | --- |
+| **v0.1 実機で 1 日使える** | 🧪 実機確認待ち | 実機で数日使い、UC1〜UC4 の完了条件を確かめる: #59（Wear OS）・#60（watchOS / iPhone）・#61（Android スマホ）、電池計測 #9・#10、ASR の実機比較 #11 | オーナー（実機） |
+| v0.2 毎日使える品質 | 🛠 開発中 | 短い誤認識 #105、英語・日英混在 #81、DB 容量 #94、音声の容量 #52 | Claude（開発） |
+| v0.3 人に配れる | ⬜ 未着手（P2） | ベータ配信 #35 から | — |
+| AI で振り返る（P2） | ⬜ 未着手 | — | — |
+| Phase 2 | ⬜ 未着手 | — | — |
+
+| リリース | ユースケース | 状態 |
 | --- | --- | --- |
-| **v0.1 実機で 1 日使える** | [UC1](https://github.com/Soichiro5/watch-audio/issues/110) Watch をつけていれば、何もしなくても会話が録音されスマホにたまる | 開発環境で確認済み。実機の連続録音・電池（#59・#60・#9・#10）が残り |
-| | [UC2](https://github.com/Soichiro5/watch-audio/issues/111) 夜に、その日の会話を一覧で見て、キーワードで探し、その場面を聞き返せる | 開発環境で確認済み。充電していない間の処理方針（#75）も完了。実機（#61・#11）が残り |
-| | [UC3](https://github.com/Soichiro5/watch-audio/issues/112) 録音が止まっていたら気づけて、すぐ再開できる | 作業 Issue は完了。実機での確認が残り |
-| | [UC4](https://github.com/Soichiro5/watch-audio/issues/113) データは自分の端末にだけ残り、消したいときに消せる | 作業 Issue は完了。iPhone の保護クラスの実機での値（#60）が残り |
-| v0.2 毎日使える品質 | [UC5](https://github.com/Soichiro5/watch-audio/issues/114) 雑音の中や英語まじりの会話でも、ちゃんと文字になる | 雑音（#71）は完了。短い誤認識（#105）・英語（#81） |
-| | [UC6](https://github.com/Soichiro5/watch-audio/issues/115) 何年分でもスマホにためておける | #94・#52 |
-| v0.3 人に配れる | [UC7](https://github.com/Soichiro5/watch-audio/issues/116) 自分以外の人が、アプリを入手して使い始められる | release ビルド（#78）は完了。#35・#36・#34 |
-| | [UC8](https://github.com/Soichiro5/watch-audio/issues/117) 機種変更や故障でも、ためたデータを失わない | #40 |
-| AI で振り返る（P2） | [UC9](https://github.com/Soichiro5/watch-audio/issues/118) ためた会話を、AI の要約や振り返り・チャットで使える | #24・#26〜#31・#12・#39 |
-| Phase 2 | [UC10](https://github.com/Soichiro5/watch-audio/issues/119) 体調や場所と合わせて振り返れる | #37・#38 |
-| （開発の進め方） | — | #47・#92・#49（開いている PR がなくなってから）・#85（最後） |
+| v0.1 | [UC1](https://github.com/Soichiro5/watch-audio/issues/110) Watch をつけていれば、何もしなくても会話が録音されスマホにたまる | 🧪 実機確認待ち（#59・#60・#9・#10） |
+| v0.1 | [UC2](https://github.com/Soichiro5/watch-audio/issues/111) 夜に、その日の会話を一覧で見て、キーワードで探し、その場面を聞き返せる | 🧪 実機確認待ち（#61・#11） |
+| v0.1 | [UC3](https://github.com/Soichiro5/watch-audio/issues/112) 録音が止まっていたら気づけて、すぐ再開できる | 🧪 実機確認待ち（#59〜#61 の中で確認） |
+| v0.1 | [UC4](https://github.com/Soichiro5/watch-audio/issues/113) データは自分の端末にだけ残り、消したいときに消せる | 🧪 実機確認待ち（#60 の保護クラス） |
+| v0.2 | [UC5](https://github.com/Soichiro5/watch-audio/issues/114) 雑音の中や英語まじりの会話でも、ちゃんと文字になる | 🛠 開発中（雑音 #71 は完了。#105・#81） |
+| v0.2 | [UC6](https://github.com/Soichiro5/watch-audio/issues/115) 何年分でもスマホにためておける | ⬜ 未着手（#94・#52） |
+| v0.3 | [UC7](https://github.com/Soichiro5/watch-audio/issues/116) 自分以外の人が、アプリを入手して使い始められる | 🛠 開発中（release ビルド #78 は完了。#35・#36・#34） |
+| v0.3 | [UC8](https://github.com/Soichiro5/watch-audio/issues/117) 機種変更や故障でも、ためたデータを失わない | ⬜ 未着手（#40） |
+| AI（P2） | [UC9](https://github.com/Soichiro5/watch-audio/issues/118) ためた会話を、AI の要約や振り返り・チャットで使える | ⬜ 未着手 |
+| Phase 2 | [UC10](https://github.com/Soichiro5/watch-audio/issues/119) 体調や場所と合わせて振り返れる | ⬜ 未着手 |
+
+開発の進め方: #92（CI の待ち時間。エミュレータの短縮が作業中）、#49（フォルダ構成の整理。設計中、#92 の後に移動）、#47（10/17 に完了確認）、#85（最後）。
 
 ユースケースは、作業 Issue がすべて閉じ、使う人から見た完了条件を（多くは実機で）確かめたら閉じる。
 
 以下の「M0〜M4・Phase 2」の節は、当初の計画（Epic #1〜#6、2026-10-11 に上のユースケースへ移行して閉じた）の記録として残す。
 
-## 進捗（2026-10-11 時点）
+## 作業 Issue ごとの記録（2026-10-11 時点）
 
 最新の状況は Issue ダッシュボード（`python3 tools/roadmap-view/build.py out.html` で生成）で確認できる。リリース（Milestone）ごとに、そのユースケースと作業 Issue（sub-issue）の進み具合を上から順に並べ、続けて開発の進め方（`dev-flow`）と、どちらにも属さない開いた Issue（「未分類」。空であることを確かめる欄）を表示する。ユースケースの作業 Issue がすべて閉じているのにユースケースが開いている場合は「実機での確認待ち」と表示する。
 
