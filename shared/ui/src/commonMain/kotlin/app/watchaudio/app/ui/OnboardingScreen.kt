@@ -193,7 +193,7 @@ private fun ModelPage(setup: ModelSetup, model: ModelState, onDownload: (Boolean
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(Strings.ASR_MODEL, style = MaterialTheme.typography.titleSmall)
-            Text(modelStateText(model), style = MaterialTheme.typography.bodyMedium)
+            Text(modelStateText(model, setup), style = MaterialTheme.typography.bodyMedium)
             if (model is ModelState.Downloading) {
                 LinearProgressIndicator(progress = { model.progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
             }
@@ -224,10 +224,10 @@ private fun WatchPage() {
 }
 
 /** Shared with the status screen. */
-internal fun modelStateText(model: ModelState): String = when (model) {
+internal fun modelStateText(model: ModelState, setup: ModelSetup): String = when (model) {
     ModelState.Unknown -> Strings.MODEL_UNKNOWN
     ModelState.Missing -> Strings.MODEL_MISSING
     is ModelState.Downloading -> Strings.modelDownloading((model.progress * 100).toInt().coerceIn(0, 100))
     ModelState.Ready -> Strings.MODEL_READY
-    is ModelState.Failed -> Strings.modelFailed(model.reason)
+    is ModelState.Failed -> Strings.modelFailed(setup)
 }

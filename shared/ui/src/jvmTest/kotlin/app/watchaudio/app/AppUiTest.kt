@@ -2,7 +2,10 @@ package app.watchaudio.app
 
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.toAwtImage
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -26,7 +29,9 @@ import app.watchaudio.app.logic.dayWindow
 import app.watchaudio.app.state.NowProvider
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.ModelState
+import app.watchaudio.core.pipeline.PauseReason
 import app.watchaudio.core.pipeline.ProcessingStatus
+import app.watchaudio.core.pipeline.StatusNotice
 import app.watchaudio.core.settings.loadSettings
 import app.watchaudio.core.settings.updateSettings
 import java.io.File
@@ -213,6 +218,52 @@ class AppUiTest {
         waitForText(Strings.MODEL_SETUP_TITLE)
     }
 
+    /** #135: the status tab's notes and failures are Japanese, and nothing on the tab is worded in English. */
+    @Test
+    fun statusNoticesAreJapanese() = runDesktopComposeUiTest(width = 412, height = 915) {
+        runBlocking {
+            DemoData.seed(store, day, tokyo, until = now - 20 * 60_000L)
+            store.updateSettings { it.copy(onboardingCompleted = true) }
+        }
+        val services = FakeAppServices(
+            store,
+            audioRoot = audioDir.path,
+            initialStatus = ProcessingStatus(asrModel = ModelState.Missing, notice = StatusNotice.ModelWaitingForWifi),
+        )
+        showApp(services)
+        onNodeWithText(Strings.TAB_STATUS).performClick()
+        waitForText(Strings.statusNotice(StatusNotice.ModelWaitingForWifi))
+        assertNoEnglish()
+        screenshot("status-waiting-for-wifi")
+
+        services.mutableStatus.value = ProcessingStatus(
+            asrModel = ModelState.Ready,
+            notice = StatusNotice.TranscriptionFailed(2),
+            paused = PauseReason.LOW_BATTERY,
+        )
+        waitForText(Strings.statusNotice(StatusNotice.TranscriptionFailed(2)))
+        assertNoEnglish()
+        screenshot("status-notice")
+
+        // A failed download shows a fixed text, never the platform's (English) reason.
+        services.mutableStatus.value = ProcessingStatus(asrModel = ModelState.Failed("HTTP 404 for https://example.invalid/model.onnx"))
+        waitForText(Strings.modelFailed(ModelSetup.DOWNLOAD))
+        assertTrue(onAllNodes(hasText("HTTP 404", substring = true)).fetchSemanticsNodes().isEmpty())
+        assertNoEnglish()
+        screenshot("status-model-failed")
+    }
+
+    /** Fails on any text on screen (scrolled away or not) with an English word and no Japanese. */
+    private fun ComposeUiTest.assertNoEnglish() {
+        val texts = onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text)).fetchSemanticsNodes()
+            .flatMap { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } }
+        assertTrue(texts.isNotEmpty())
+        val english = texts.filter { text ->
+            ENGLISH_WORD.containsMatchIn(text) && text.none { it in '\u3040'..'\u30FF' || it in '\u4E00'..'\u9FFF' }
+        }
+        assertTrue(english.isEmpty(), "English text on screen: $english")
+    }
+
     private fun ComposeUiTest.showApp(services: AppServices) {
         setContent {
             CompositionLocalProvider(
@@ -234,5 +285,10 @@ class AppUiTest {
         waitForIdle()
         val dir = File("build/screenshots").apply { mkdirs() }
         ImageIO.write(onRoot().captureToImage().toAwtImage(), "png", File(dir, "$name.png"))
+    }
+
+    private companion object {
+        /** Three or more ASCII letters: a word, not a unit such as MB. */
+        val ENGLISH_WORD = Regex("[A-Za-z]{3,}")
     }
 }

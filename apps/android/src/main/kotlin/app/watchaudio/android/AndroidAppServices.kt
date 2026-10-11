@@ -27,6 +27,7 @@ import app.watchaudio.core.pipeline.DiagnosticsLog
 import app.watchaudio.core.pipeline.ModelState
 import app.watchaudio.core.pipeline.PauseReason
 import app.watchaudio.core.pipeline.ProcessingStatus
+import app.watchaudio.core.pipeline.StatusNotice
 import app.watchaudio.core.pipeline.StorageManager
 import java.io.File
 import java.text.SimpleDateFormat
@@ -56,7 +57,7 @@ class AndroidAppServices(
     lastChunkReceivedAt: StateFlow<Long?>,
     transcriptionPause: StateFlow<PauseReason?>,
     scope: CoroutineScope,
-    private val diagnostics: DiagnosticsLog,
+    override val diagnostics: DiagnosticsLog,
     private val onGapAlertSettingsChanged: () -> Unit,
 ) : AppServices {
     override val audioRoot: String = audioRootDir.absolutePath
@@ -72,7 +73,7 @@ class AndroidAppServices(
             asrModel = model,
             transcribing = running,
             lastChunkReceivedAt = lastChunk,
-            message = if (model == ModelState.Missing && waiting) context.getString(R.string.model_waiting_for_wifi) else null,
+            notice = if (model == ModelState.Missing && waiting) StatusNotice.ModelWaitingForWifi else null,
             paused = paused,
         )
     }.stateIn(scope, SharingStarted.Eagerly, ProcessingStatus())

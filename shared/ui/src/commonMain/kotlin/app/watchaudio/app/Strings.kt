@@ -2,6 +2,7 @@ package app.watchaudio.app
 
 import app.watchaudio.core.pipeline.AudioRetention
 import app.watchaudio.core.pipeline.PauseReason
+import app.watchaudio.core.pipeline.StatusNotice
 import app.watchaudio.core.protocol.ChunkEndReason
 
 /**
@@ -91,11 +92,29 @@ object Strings {
     const val MODEL_MISSING = "モデルが未ダウンロードです。文字起こしにはダウンロードが必要です。"
     fun modelDownloading(percent: Int) = "ダウンロード中… $percent%"
     const val MODEL_READY = "準備完了（端末内で文字起こしします）"
-    fun modelFailed(reason: String) = "エラー: $reason"
+    /** No raw reason: it may be an English exception message (#135); the diagnostics log has it. */
+    fun modelFailed(setup: ModelSetup) = when (setup) {
+        ModelSetup.DOWNLOAD -> "文字起こしモデルをダウンロードできませんでした。通信状況を確認して、もう一度ダウンロードしてください。"
+        ModelSetup.OS_MANAGED -> "文字起こしモデルを準備できませんでした。「モデルを準備」でもう一度試してください。"
+    }
     const val DOWNLOAD_WIFI = "Wi-Fi でダウンロード"
     const val DOWNLOAD_ANY = "モバイル通信でも許可"
     const val TRANSCRIBING_NOW = "文字起こし中…"
     const val TRANSCRIBE_NOW = "今すぐ文字起こし"
+
+    /** The status card's note about the background work (#135). */
+    fun statusNotice(notice: StatusNotice): String = when (notice) {
+        StatusNotice.ModelWaitingForWifi -> "Wi-Fi に接続されたときに、文字起こしモデルを自動でダウンロードします"
+        StatusNotice.IngestFailed -> "Watch から届いた録音を保存できませんでした。Watch が自動で送り直します"
+        StatusNotice.GapAlertScheduleFailed -> "録音の途絶通知を予約できませんでした。次に録音が届いたときに予約し直します"
+        is StatusNotice.TranscriptionFailed ->
+            "${notice.count}件のチャンクを文字起こしできませんでした。タイムラインから再試行できます"
+        StatusNotice.RetentionFailed -> "保持期間を過ぎた音声を削除できませんでした。次の文字起こしの後にもう一度試します"
+    }
+
+    // Model download notification (Android foreground work)
+    const val MODEL_DOWNLOAD_CHANNEL = "文字起こしモデルのダウンロード"
+    const val MODEL_DOWNLOAD_NOTIFICATION_TITLE = "文字起こしモデルをダウンロード中"
 
     const val STORAGE = "保存データ"
     const val STAT_CHUNKS = "チャンク"
@@ -136,7 +155,7 @@ object Strings {
     const val DELETE_ALL_INPUT = "確認のため「削除」と入力"
     const val DELETE_ALL_CONFIRM = "すべて削除する"
     const val DELETED_ALL = "すべてのデータを削除しました"
-    fun storageActionFailed(reason: String) = "削除できませんでした: $reason"
+    const val STORAGE_ACTION_FAILED = "削除できませんでした。もう一度試してください。"
 
     const val PRIVACY_TITLE = "プライバシー"
     const val PRIVACY_NOTE = "データはこの端末内にのみ保存され、外部に送信されません"
@@ -148,7 +167,7 @@ object Strings {
             "この端末内に保存しています。文字起こしの本文や音声は含みません。自動では送信されず、書き出すと共有先を選べます。"
     const val EXPORT_DIAGNOSTICS = "診断ログを書き出す"
     const val DIAGNOSTICS_EMPTY = "書き出せる診断ログがありません"
-    fun diagnosticsExportFailed(reason: String) = "診断ログを書き出せませんでした: $reason"
+    const val DIAGNOSTICS_EXPORT_FAILED = "診断ログを書き出せませんでした。もう一度試してください。"
 
     // Status screen: alert settings (#43)
     const val ALERTS_TITLE = "通知"

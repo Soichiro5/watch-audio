@@ -47,7 +47,7 @@ class IosAppServices internal constructor(
     private val onRequestTranscription: () -> Unit,
     private val onPrepareModel: () -> Unit,
     private val onGapAlertSettingsChanged: () -> Unit,
-    private val diagnostics: DiagnosticsLog,
+    override val diagnostics: DiagnosticsLog,
     private val onTranscriptionSettingsChanged: () -> Unit = {},
 ) : AppServices {
     private var player: AVAudioPlayer? = null

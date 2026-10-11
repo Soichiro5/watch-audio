@@ -544,8 +544,36 @@ class ViewModelTest {
         services.diagnosticsExportFailure = IllegalStateException("disk full")
         vm.exportDiagnostics()
         runCurrent()
-        assertEquals(DiagnosticsExport(message = Strings.diagnosticsExportFailed("disk full")), vm.state.value.diagnosticsExport)
+        // A fixed text, not the (possibly English) exception message; the log gets the type only (#135).
+        assertEquals(DiagnosticsExport(message = Strings.DIAGNOSTICS_EXPORT_FAILED), vm.state.value.diagnosticsExport)
+        assertEquals(listOf("diagnostics_export_failed error=java.lang.IllegalStateException"), services.diagnosticsLines)
         assertEquals(3, services.diagnosticsExports)
+    }
+
+    @Test
+    fun aFailedDeletionShowsAFixedTextAndLogsOnlyTheErrorType() = runVmTest {
+        addChunk("a", at(9))
+        // An audio root that is a file: sweeping it fails after the rows are gone.
+        val notADirectory = File.createTempFile("watch-audio-ui-root", ".bin").apply { deleteOnExit() }
+        val services = FakeAppServices(
+            store,
+            notADirectory.path,
+            storage = StorageManager(store, Path(notADirectory.path), dispatcher = dispatcher),
+        )
+        val vm = StatusViewModel(services, clock, scope = backgroundScope)
+        backgroundScope.launch { vm.state.collect {} }
+        runCurrent()
+
+        vm.openDeleteAll()
+        vm.updateDeleteAllInput(Strings.DELETE_ALL_WORD)
+        runCurrent()
+        assertTrue(vm.confirmDeleteAll())
+        runCurrent()
+
+        assertEquals(Strings.STORAGE_ACTION_FAILED, vm.state.value.storageActions.message)
+        val line = services.diagnosticsLines.single()
+        assertTrue(line.startsWith("storage_action_failed action=delete_all error="), line)
+        notADirectory.delete()
     }
 
     @Test

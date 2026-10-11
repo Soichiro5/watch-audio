@@ -218,7 +218,7 @@ private fun ArrivalCard(state: StatusUiState, timeZone: TimeZone) {
 private fun ModelCard(state: StatusUiState, onDownloadModel: (Boolean) -> Unit, onTranscribeNow: () -> Unit) {
     val model = state.status.asrModel
     Section(Strings.ASR_MODEL) {
-        Text(modelStateText(model), style = MaterialTheme.typography.bodyMedium)
+        Text(modelStateText(model, state.modelSetup), style = MaterialTheme.typography.bodyMedium)
         if (model is ModelState.Downloading) {
             LinearProgressIndicator(progress = { model.progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
         }
@@ -244,8 +244,8 @@ private fun ModelCard(state: StatusUiState, onDownloadModel: (Boolean) -> Unit, 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        state.status.message?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        state.status.notice?.let {
+            Text(Strings.statusNotice(it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

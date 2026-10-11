@@ -1,6 +1,7 @@
 package app.watchaudio.app
 
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.Diagnostics
 import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -90,5 +91,13 @@ class FakeAppServices(
         diagnosticsExports++
         diagnosticsExportFailure?.let { throw it }
         return diagnosticsExportResult
+    }
+
+    /** What the shared UI wrote to [diagnostics], as `event detail` lines. */
+    val diagnosticsLines = mutableListOf<String>()
+    override val diagnostics: Diagnostics = object : Diagnostics {
+        override fun log(event: String, detail: String) {
+            diagnosticsLines += "$event $detail"
+        }
     }
 }

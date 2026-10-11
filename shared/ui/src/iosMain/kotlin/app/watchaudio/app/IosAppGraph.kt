@@ -11,6 +11,7 @@ import app.watchaudio.core.pipeline.PolicyGatedTranscription
 import app.watchaudio.core.pipeline.ProcessingPolicy
 import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.SpeechModel
+import app.watchaudio.core.pipeline.StatusNotice
 import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.pipeline.TranscriptionPipeline
 import app.watchaudio.core.pipeline.TranscriptionRun
@@ -225,7 +226,8 @@ object IosAppGraph {
         }
         // The ACK itself is sent by the Swift receiver (WatchConnectivity).
         val result = intake.receive(manifestJson, file)
-        if (result is ChunkIntake.Result.Failed) status.update { it.copy(message = "取り込みに失敗: ${result.error.message}") }
+        // ChunkIntake logged the error type; the watch resends the chunk.
+        if (result is ChunkIntake.Result.Failed) status.update { it.copy(notice = StatusNotice.IngestFailed) }
         return result.ack?.toJson()
     }
 
@@ -239,7 +241,11 @@ object IosAppGraph {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            status.update { it.copy(message = "通知の予約に失敗: ${e.message}") }
+            diagnostics.log(
+                DiagnosticEvents.GAP_ALERT_BLOCKED,
+                "reason=schedule_failed error=${DiagnosticsLog.typeName(e)}",
+            )
+            status.update { it.copy(notice = StatusNotice.GapAlertScheduleFailed) }
         }
     }
 
@@ -318,11 +324,12 @@ object IosAppGraph {
         report.transcription?.let { outcome ->
             status.update { it.copy(paused = outcome.pause?.reason) }
             if (outcome.result.failed > 0) {
-                status.update { it.copy(message = "文字起こしに失敗したチャンク: ${outcome.result.failed}") }
+                status.update { it.copy(notice = StatusNotice.TranscriptionFailed(outcome.result.failed)) }
             }
         }
-        (report.retention as? TranscriptionRun.Retention.Failed)?.let { failed ->
-            status.update { it.copy(message = "古い音声の削除に失敗: ${failed.error.message}") }
+        // TranscriptionRun logged the error type.
+        if (report.retention is TranscriptionRun.Retention.Failed) {
+            status.update { it.copy(notice = StatusNotice.RetentionFailed) }
         }
         return report.followUp
     }
