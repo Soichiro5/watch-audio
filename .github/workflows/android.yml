@@ -40,6 +40,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # #138: the app version lives in gradle.properties only; apps/ios/project.yml must repeat the
+      # same values (XcodeGen cannot read gradle.properties). Seconds, no build. This workflow runs
+      # on every change outside docs, so also when only gradle.properties or project.yml changes.
+      - name: "Version check (gradle.properties = apps/ios/project.yml)"
+        run: |
+          python3 -m unittest discover -s tools/check-version -v
+          python3 tools/check-version/check_version.py
+
       # #76: data stays on the device (CLAUDE.md "Local only"). Static part first: seconds, no build.
       # Permissions, backup rules, network APIs / URLs in code, declared dependencies, iOS
       # Info.plist keys and entitlements against tools/privacy-check/policy.py (docs/dev/04 §6.4).

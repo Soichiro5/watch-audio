@@ -15,6 +15,8 @@ settings:
     DEVELOPMENT_TEAM: $(TEAM_ID)
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "6.0"
+    # Must equal watchaudio.versionName / watchaudio.versionCode in gradle.properties, the single
+    # source of the app version (#138); tools/check-version fails CI otherwise.
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
 
