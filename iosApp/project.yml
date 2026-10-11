@@ -76,6 +76,46 @@ targets:
         NSMicrophoneUsageDescription: 会話を録音し、iPhone 上で文字起こしするために使用します。
         # Keeps the recorder running with the screen off (verified in M0-3).
         UIBackgroundModes: [audio]
+        # Complication tap (#41): watchaudio://record opens the app and starts / resumes recording.
+        CFBundleURLTypes:
+          - CFBundleURLName: $(BUNDLE_ID_PREFIX).record
+            CFBundleURLSchemes: [watchaudio]
+        # App Group read by RecorderStatusStore (shared with the complication).
+        WatchAudioAppGroup: $(APP_GROUP_ID)
+    entitlements:
+      path: WatchApp/WatchApp.entitlements
+      properties:
+        com.apple.security.application-groups: [$(APP_GROUP_ID)]
+    dependencies:
+      - target: WatchWidget
+        embed: true
+
+  # Watch face complication / Smart Stack widget showing the recording state (#41).
+  # Shares RecorderStatus via the App Group; tapping opens the watch app (widgetURL).
+  WatchWidget:
+    type: app-extension
+    platform: watchOS
+    sources:
+      - WatchWidget
+      - path: WatchApp/Complication/RecorderStatus.swift
+      - path: WatchApp/Complication/ComplicationViews.swift
+      - path: Shared/ChunkProtocol.swift
+    settings:
+      base:
+        PRODUCT_NAME: WatchAudioWidget
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).watchkitapp.widget
+        SKIP_INSTALL: YES
+    info:
+      path: WatchWidget/Info.plist
+      properties:
+        CFBundleDisplayName: watch-audio
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        WatchAudioAppGroup: $(APP_GROUP_ID)
+    entitlements:
+      path: WatchWidget/WatchWidget.entitlements
+      properties:
+        com.apple.security.application-groups: [$(APP_GROUP_ID)]
 
   # Logic tests (no host app, no Kotlin framework) for the Swift wire-protocol code shared by
   # the watch and the phone, against the Kotlin test vectors in shared/core-protocol/testdata.
@@ -87,6 +127,9 @@ targets:
       - ProtocolTests
       - path: ../shared/core-protocol/testdata
         buildPhase: resources
+      # Complication state mapping and layouts (#41, ComplicationDisplayTests).
+      - path: WatchApp/Complication/RecorderStatus.swift
+      - path: WatchApp/Complication/ComplicationViews.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).protocoltests
