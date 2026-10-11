@@ -92,13 +92,15 @@ class DiagnosticsScenarioTest {
         val exit = PlaybackFixtures.waitFor(15_000, "a previous_exit line for the force-stop") {
             readLog().lastOrNull { line -> line.event == DiagnosticEvents.PREVIOUS_EXIT && line.value("at")?.toLongOrNull()?.let { it in window } == true }
         }
+        val exitAt = requireNotNull(exit.value("at")?.toLongOrNull())
         val lines = readLog()
         val found = linkedMapOf(
             DiagnosticEvents.CHUNK_RECEIVED to lines.lastOrNull { it.event == DiagnosticEvents.CHUNK_RECEIVED && it.chunk == chunkId },
             DiagnosticEvents.TRANSCRIPTION_STARTED to lines.lastOrNull { it.event == DiagnosticEvents.TRANSCRIPTION_STARTED && it.chunk == chunkId },
             DiagnosticEvents.TRANSCRIPTION_FINISHED to lines.lastOrNull { it.event == DiagnosticEvents.TRANSCRIPTION_FINISHED && it.chunk == chunkId },
-            // The start after the force-stop (this process).
-            DiagnosticEvents.APP_START to lines.lastOrNull { it.event == DiagnosticEvents.APP_START && it.time > stoppedUntil },
+            // The start after the force-stop (this process). Compared with the exit's own time, not
+            // stoppedUntil: that is rounded up to the end of a second, which this start may share.
+            DiagnosticEvents.APP_START to lines.lastOrNull { it.event == DiagnosticEvents.APP_START && it.time > exitAt },
             DiagnosticEvents.PREVIOUS_EXIT to exit,
         )
         // The process that was force-stopped (opened by the script) had logged its start too.
