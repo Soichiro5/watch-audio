@@ -150,7 +150,7 @@ erDiagram
 詳細は [impl/wearos.md](../platforms/wearos.md)・[impl/ios-watchos.md](../platforms/ios-watchos.md)。
 
 - **開始**: ユーザーが Watch アプリでタップ（前景）。watchOS は `AVAudioSession(.record)` + background audio、Wear OS は `foregroundServiceType=microphone` の前景サービス + Ongoing Activity。一度 ON にすると、充電・非装着（Wear OS のみ検出）・電池残量低下・容量不足・割り込みで一時停止し、条件が解けたら自動で再開する（watchOS の充電後の再開はアプリが前面に戻ったとき）。
-- **エンコード**: 16kHz / mono / AAC-LC 24kbps（.m4a、1 時間 ≈ 10.8MB）。
+- **エンコード**: 16kHz / mono / AAC-LC 24kbps（.m4a、1 時間 ≈ 11MB。ffmpeg での実測 11.1MB、§9.3）。値は両 Watch 共通の `RecordingFormat`（`shared/protocol`、Swift 側は同じ値をテストベクタで確認）。
 - **チャンク化**: 約 5 分ごと（停止・一時停止でも閉じる。watchOS は Mark でも閉じる）にファイルをローテーション。各チャンクに manifest（`ChunkManifest`: チャンク UUID、セッション ID、デバイス ID、開始時刻、長さ、タイムゾーン、Mark のオフセット、音声ファイルの形式・サイズ・SHA-256、終了理由）を付ける。
 - **無音スキップ**: 1 秒ごとのレベル（Wear OS: ピーク、watchOS: 平均・ピーク）がチャンク全体で一度もしきい値を超えなかった場合だけ「確実に無音」として音声を捨て、`audio` なしの manifest で時間範囲だけを送る（タイムライン上は無音区間として残る）。
 - **割り込み・停止**: 終了理由（`interruption` / `charging` / `off_body` / `low_battery` / `terminated` など）を manifest に記録し、欠損の理由としてタイムラインに出す。予期しない停止は Watch 上で通知/ハプティクスを出す。
@@ -373,13 +373,21 @@ interface LlmProvider {
 
 ### 9.3 データ量の見積もり
 
-| 条件 | 1 日 | 1 年 |
-| --- | --- | --- |
-| 24h × AAC 32kbps（無音も保存） | 約 345MB | 約 126GB |
-| 24h、無音区間を捨てる（音声 8h 相当） | 約 115MB | 約 42GB |
-| 同上 + Opus 16kbps | 約 58MB | 約 21GB |
-| 文字起こし + 検索索引（SQLite、下記） | 約 2.8MB | 約 1.0GB |
-| 埋め込みベクトル（int8 256 次元、発話 1 行ごとに作る場合。P2） | 約 2.2MB | 約 0.8GB |
+音声の 1 時間あたりのサイズは、検証用音声セットを各形式で符号化した実測値（#52、[test-audio §4「録音形式の比較」](../dev/test-audio.md#録音形式の比較52)。ffmpeg の符号化器で、Watch のプラットフォームの符号化器ではない）。
+
+| 条件 | 1 時間 | 1 日 | 1 年 |
+| --- | --- | --- | --- |
+| 24h × AAC-LC 24kbps（現在の形式、無音も保存） | 11.1MB | 約 266MB | 約 97GB |
+| **24h、無音チャンクを捨てる（音声 8h 相当）、AAC-LC 24kbps（現在）** | 11.1MB | **約 89MB** | **約 32GB** |
+| 同上 + Opus 16kbps（形式を変えた場合） | 6.7MB | 約 54MB | 約 20GB |
+| 参考: 同上 + AAC-LC 32kbps（#52 以前の見積もりの前提） | 14.8MB | 約 118MB | 約 43GB |
+| 文字起こし + 検索索引（SQLite、下記） | - | 約 2.8MB | 約 1.0GB |
+| 埋め込みベクトル（int8 256 次元、発話 1 行ごとに作る場合。P2） | - | 約 2.2MB | 約 0.8GB |
+
+- 「音声 8h 相当」は仮定（無音を捨てるのは 5 分チャンク全体が確実に無音のときだけ、§6.1）。実際の比率は実機の 1 日分の録音で確かめる。
+- AAC はほぼ固定ビットレート（公称の約 1.03 倍）。Opus は可変ビットレートで、無音を含めて連続で符号化すると 16kbps で約 6.0MB/時になる。
+- 形式ごとの文字起こし精度（正解区間で切った CER の 7 条件平均）: AAC 32kbps 19.4%・**AAC 24kbps 20.7%**・Opus 24kbps 20.5%・Opus 16kbps 21.7%・Opus 12kbps 23.5%・AAC 16kbps 24.8%（ffmpeg の AAC は 16kbps で 4kHz より上を削り、雑音下で発話の検出が崩れる）。
+- **形式は AAC-LC 24kbps のままにする**（#52 の結論）。Opus 16kbps にすると音声は約 4 割減る（8h 相当で 1 年 32GB → 20GB）が、精度は平均 1 ポイント落ち、さらに watchOS の `AVAudioRecorder` は Ogg を書けない（Opus は CAF になる）、iPhone 側の AVFoundation は Ogg Opus を再生・デコードできない、Wear OS の `MediaRecorder`（OGG）で `setNextOutputFile` のローテーションと強制終了後の回収（`Mp4Probe` は MP4 専用）が使えるか未確認、と両プラットフォームとプロトコル（`AudioCodec.OPUS` = Ogg）の変更が要る。容量は保持期間（下記）で管理できる範囲に収まっている。
 
 **文字起こしの行数と DB 容量（#72）**
 
@@ -396,7 +404,7 @@ interface LlmProvider {
 - 削除対象は**文字起こし完了済み**（`TRANSCRIBED`）かつ終了時刻が「今 − 保持日数」以前のチャンクの音声ファイルだけ。未処理・処理中・失敗のチャンクの音声は消さない。文字起こしは常に残り、UI ではそのチャンクの発話を再生ボタンなしで表示する。
 - 削除は「ファイル削除 → `audio_purged_at` を記録」の順（中断しても次回で整合する）。DB の `audio_path` は残す（タイムライン上は録音できていた時間として表示）。
 - 容量の内訳（音声 / 文字起こし・索引 = DB ファイル / モデル / 空き容量）を状態画面に表示し、空き容量が 1 GB 未満なら警告する。モデルサイズと空き容量はプラットフォーム実装（`StorageEnvironment`）から取得する（iOS の Speech モデルは OS 管理のため不明扱い）。
-- 未対応: バックアップ（#40）済みの音声だけを消す「オフロード」、コーデック比較（AAC 32kbps vs Opus）による上表の更新。
+- 未対応: バックアップ（#40）済みの音声だけを消す「オフロード」。
 
 ### 9.4 OS の制約（要実機検証）
 
