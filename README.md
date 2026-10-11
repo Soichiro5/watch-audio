@@ -55,6 +55,7 @@ wearApp/       Wear OS アプリ
 iosApp/        iOS アプリ + watchOS アプリ（XcodeGen: project.yml）
 build-logic/   Gradle の共通設定（convention plugin）
 tools/harness/ 実機なしの通し検証（Watch シミュレータ + sherpa-onnx、Linux/CI）
+tools/test-audio/ 検証用音声セットの生成（オフライン TTS の日本語会話 + Watch 録音を模した加工）
 tools/roadmap-view/ Issue ダッシュボードの生成
 ```
 

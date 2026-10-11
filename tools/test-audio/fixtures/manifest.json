@@ -1,0 +1,419 @@
+{
+ "version": 1,
+ "sampleRate": 16000,
+ "seed": 56,
+ "generator": "tools/test-audio/generate.py",
+ "recordings": [
+  {
+   "id": "sample_clean",
+   "description": "近接・無雑音（基準）",
+   "watchAudio": "sample_clean.m4a",
+   "audio": "sample_clean.m4a",
+   "durationMs": 54348,
+   "condition": "clean",
+   "snrDb": null,
+   "segments": [
+    {
+     "startMs": 1000,
+     "endMs": 4959,
+     "speaker": "01_weekly_meeting:A",
+     "role": "wearer",
+     "voice": "jf_alpha",
+     "group": "01_weekly_meeting",
+     "text": "おはようございます。それでは、週次の定例を始めます。"
+    },
+    {
+     "startMs": 5265,
+     "endMs": 6565,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "はい、お願いします。"
+    },
+    {
+     "startMs": 6645,
+     "endMs": 7595,
+     "speaker": "01_weekly_meeting:C",
+     "role": "partner",
+     "voice": "ojt_m001",
+     "group": "01_weekly_meeting",
+     "text": "お願いします。"
+    },
+    {
+     "startMs": 8072,
+     "endMs": 13154,
+     "speaker": "01_weekly_meeting:A",
+     "role": "wearer",
+     "voice": "jf_alpha",
+     "group": "01_weekly_meeting",
+     "text": "まず、先週のふりかえりからですね。佐藤さん、リリースの準備はどうですか？"
+    },
+    {
+     "startMs": 13850,
+     "endMs": 18260,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "えっと、テストはほぼ終わっていて、残りのバグが3件です。"
+    },
+    {
+     "startMs": 18962,
+     "endMs": 22062,
+     "speaker": "01_weekly_meeting:A",
+     "role": "wearer",
+     "voice": "jf_alpha",
+     "group": "01_weekly_meeting",
+     "text": "3件ですね。重要度はどれくらいですか？"
+    },
+    {
+     "startMs": 22530,
+     "endMs": 27330,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "1件だけ高めで、ログイン画面が固まることがあるんです。"
+    },
+    {
+     "startMs": 27613,
+     "endMs": 30173,
+     "speaker": "01_weekly_meeting:C",
+     "role": "partner",
+     "voice": "ojt_m001",
+     "group": "01_weekly_meeting",
+     "text": "ああ、それは先に直したほうがいいね。"
+    },
+    {
+     "startMs": 30338,
+     "endMs": 32788,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "はい、今日中に原因を調べます。"
+    },
+    {
+     "startMs": 33206,
+     "endMs": 38944,
+     "speaker": "01_weekly_meeting:A",
+     "role": "wearer",
+     "voice": "jf_alpha",
+     "group": "01_weekly_meeting",
+     "text": "ありがとうございます。リリース日は11月20日のままで大丈夫そうですか？"
+    },
+    {
+     "startMs": 39524,
+     "endMs": 43054,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "うーん、ぎりぎりですけど、たぶん間に合うと思います。"
+    },
+    {
+     "startMs": 43526,
+     "endMs": 46326,
+     "speaker": "01_weekly_meeting:C",
+     "role": "partner",
+     "voice": "ojt_m001",
+     "group": "01_weekly_meeting",
+     "text": "もし厳しかったら、早めに言ってください。"
+    },
+    {
+     "startMs": 46891,
+     "endMs": 48091,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "わかりました。"
+    },
+    {
+     "startMs": 48597,
+     "endMs": 53348,
+     "speaker": "01_weekly_meeting:A",
+     "role": "wearer",
+     "voice": "jf_alpha",
+     "group": "01_weekly_meeting",
+     "text": "次に、予算の件です。田中さん、追加の見積もりは届きましたか？"
+    }
+   ]
+  },
+  {
+   "id": "sample_cafe",
+   "description": "wrist ＋ カフェ雑音（多人数のざわめき・食器）",
+   "watchAudio": "sample_cafe.m4a",
+   "audio": "sample_cafe.m4a",
+   "durationMs": 54348,
+   "condition": "cafe",
+   "snrDb": 10.0,
+   "segments": [
+    {
+     "startMs": 1000,
+     "endMs": 4959,
+     "speaker": "01_weekly_meeting:A",
+     "role": "wearer",
+     "voice": "jf_alpha",
+     "group": "01_weekly_meeting",
+     "text": "おはようございます。それでは、週次の定例を始めます。"
+    },
+    {
+     "startMs": 5265,
+     "endMs": 6565,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "はい、お願いします。"
+    },
+    {
+     "startMs": 6645,
+     "endMs": 7595,
+     "speaker": "01_weekly_meeting:C",
+     "role": "partner",
+     "voice": "ojt_m001",
+     "group": "01_weekly_meeting",
+     "text": "お願いします。"
+    },
+    {
+     "startMs": 8072,
+     "endMs": 13154,
+     "speaker": "01_weekly_meeting:A",
+     "role": "wearer",
+     "voice": "jf_alpha",
+     "group": "01_weekly_meeting",
+     "text": "まず、先週のふりかえりからですね。佐藤さん、リリースの準備はどうですか？"
+    },
+    {
+     "startMs": 13850,
+     "endMs": 18260,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "えっと、テストはほぼ終わっていて、残りのバグが3件です。"
+    },
+    {
+     "startMs": 18962,
+     "endMs": 22062,
+     "speaker": "01_weekly_meeting:A",
+     "role": "wearer",
+     "voice": "jf_alpha",
+     "group": "01_weekly_meeting",
+     "text": "3件ですね。重要度はどれくらいですか？"
+    },
+    {
+     "startMs": 22530,
+     "endMs": 27330,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "1件だけ高めで、ログイン画面が固まることがあるんです。"
+    },
+    {
+     "startMs": 27613,
+     "endMs": 30173,
+     "speaker": "01_weekly_meeting:C",
+     "role": "partner",
+     "voice": "ojt_m001",
+     "group": "01_weekly_meeting",
+     "text": "ああ、それは先に直したほうがいいね。"
+    },
+    {
+     "startMs": 30338,
+     "endMs": 32788,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "はい、今日中に原因を調べます。"
+    },
+    {
+     "startMs": 33206,
+     "endMs": 38944,
+     "speaker": "01_weekly_meeting:A",
+     "role": "wearer",
+     "voice": "jf_alpha",
+     "group": "01_weekly_meeting",
+     "text": "ありがとうございます。リリース日は11月20日のままで大丈夫そうですか？"
+    },
+    {
+     "startMs": 39524,
+     "endMs": 43054,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "うーん、ぎりぎりですけど、たぶん間に合うと思います。"
+    },
+    {
+     "startMs": 43526,
+     "endMs": 46326,
+     "speaker": "01_weekly_meeting:C",
+     "role": "partner",
+     "voice": "ojt_m001",
+     "group": "01_weekly_meeting",
+     "text": "もし厳しかったら、早めに言ってください。"
+    },
+    {
+     "startMs": 46891,
+     "endMs": 48091,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "わかりました。"
+    },
+    {
+     "startMs": 48597,
+     "endMs": 53348,
+     "speaker": "01_weekly_meeting:A",
+     "role": "wearer",
+     "voice": "jf_alpha",
+     "group": "01_weekly_meeting",
+     "text": "次に、予算の件です。田中さん、追加の見積もりは届きましたか？"
+    }
+   ]
+  },
+  {
+   "id": "sample_rub",
+   "description": "wrist ＋ 腕の動きによる擦れ音（平均 6 回/分）",
+   "watchAudio": "sample_rub.m4a",
+   "audio": "sample_rub.m4a",
+   "durationMs": 54348,
+   "condition": "rub",
+   "snrDb": null,
+   "segments": [
+    {
+     "startMs": 1000,
+     "endMs": 4959,
+     "speaker": "01_weekly_meeting:A",
+     "role": "wearer",
+     "voice": "jf_alpha",
+     "group": "01_weekly_meeting",
+     "text": "おはようございます。それでは、週次の定例を始めます。"
+    },
+    {
+     "startMs": 5265,
+     "endMs": 6565,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "はい、お願いします。"
+    },
+    {
+     "startMs": 6645,
+     "endMs": 7595,
+     "speaker": "01_weekly_meeting:C",
+     "role": "partner",
+     "voice": "ojt_m001",
+     "group": "01_weekly_meeting",
+     "text": "お願いします。"
+    },
+    {
+     "startMs": 8072,
+     "endMs": 13154,
+     "speaker": "01_weekly_meeting:A",
+     "role": "wearer",
+     "voice": "jf_alpha",
+     "group": "01_weekly_meeting",
+     "text": "まず、先週のふりかえりからですね。佐藤さん、リリースの準備はどうですか？"
+    },
+    {
+     "startMs": 13850,
+     "endMs": 18260,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "えっと、テストはほぼ終わっていて、残りのバグが3件です。"
+    },
+    {
+     "startMs": 18962,
+     "endMs": 22062,
+     "speaker": "01_weekly_meeting:A",
+     "role": "wearer",
+     "voice": "jf_alpha",
+     "group": "01_weekly_meeting",
+     "text": "3件ですね。重要度はどれくらいですか？"
+    },
+    {
+     "startMs": 22530,
+     "endMs": 27330,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "1件だけ高めで、ログイン画面が固まることがあるんです。"
+    },
+    {
+     "startMs": 27613,
+     "endMs": 30173,
+     "speaker": "01_weekly_meeting:C",
+     "role": "partner",
+     "voice": "ojt_m001",
+     "group": "01_weekly_meeting",
+     "text": "ああ、それは先に直したほうがいいね。"
+    },
+    {
+     "startMs": 30338,
+     "endMs": 32788,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "はい、今日中に原因を調べます。"
+    },
+    {
+     "startMs": 33206,
+     "endMs": 38944,
+     "speaker": "01_weekly_meeting:A",
+     "role": "wearer",
+     "voice": "jf_alpha",
+     "group": "01_weekly_meeting",
+     "text": "ありがとうございます。リリース日は11月20日のままで大丈夫そうですか？"
+    },
+    {
+     "startMs": 39524,
+     "endMs": 43054,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "うーん、ぎりぎりですけど、たぶん間に合うと思います。"
+    },
+    {
+     "startMs": 43526,
+     "endMs": 46326,
+     "speaker": "01_weekly_meeting:C",
+     "role": "partner",
+     "voice": "ojt_m001",
+     "group": "01_weekly_meeting",
+     "text": "もし厳しかったら、早めに言ってください。"
+    },
+    {
+     "startMs": 46891,
+     "endMs": 48091,
+     "speaker": "01_weekly_meeting:B",
+     "role": "partner",
+     "voice": "jm_kumo",
+     "group": "01_weekly_meeting",
+     "text": "わかりました。"
+    },
+    {
+     "startMs": 48597,
+     "endMs": 53348,
+     "speaker": "01_weekly_meeting:A",
+     "role": "wearer",
+     "voice": "jf_alpha",
+     "group": "01_weekly_meeting",
+     "text": "次に、予算の件です。田中さん、追加の見積もりは届きましたか？"
+    }
+   ]
+  }
+ ]
+}
