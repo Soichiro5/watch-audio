@@ -12,12 +12,12 @@ import org.junit.runner.RunWith
 
 /**
  * #20: transcription survives the app being force-stopped in the middle of a run. Driven by
- * `.github/scripts/resume-after-kill.sh` in three steps, since the instrumentation runs inside the
+ * `.github/scripts/phone-scenarios.sh` in three steps, since the instrumentation runs inside the
  * process that gets killed:
  *
  * 1. [seed] (`-e scenario resume-seed`): store [CHUNKS] chunks of real speech, without starting a run.
- * 2. The script opens the app (its start-up asks for a run), waits until the worker logged the first
- *    "transcribed chunk", and runs `adb shell am force-stop app.watchaudio`.
+ * 2. The script opens the app (its start-up asks for a run), waits until the diagnostics log has the
+ *    first `transcription_finished` of the seeded session, and runs `adb shell am force-stop app.watchaudio`.
  * 3. [verify] (`-e scenario resume-verify`): the next process start recovers the interrupted chunk and
  *    finishes the rest; every chunk ends up transcribed exactly once (no missing chunk, no duplicate
  *    segment), and the chunk that was cut off was attempted twice.

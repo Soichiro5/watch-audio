@@ -24,6 +24,24 @@ status=0
 
 log() { echo "$*" | tee -a "$OUT/summary.txt"; }
 
+# The app's diagnostics log (CSV `timestamp,event,detail`, rotated part first). Debug build, so
+# run-as can read the app's files.
+diagnostics_log() {
+  adb exec-out "run-as $PKG sh -c 'cat files/diagnostics/diagnostics.csv.1 files/diagnostics/diagnostics.csv 2>/dev/null'" 2>/dev/null || true
+}
+
+# session_events <session> <event> < log: chunk ids of the session's chunks with that event, in order.
+session_events() {
+  awk -F, -v prefix="chunk=$1-" -v event="$2" \
+    '$2 == event && index($3, prefix) == 1 { split($3, fields, " "); print substr(fields[1], 7) }'
+}
+
+# until_restart <session> < log: the log up to the next app start after the session's first event,
+# i.e. without what a process that JobScheduler restarted after the force-stop wrote.
+until_restart() {
+  awk -F, -v prefix="chunk=$1-" 'seen && $2 == "app_start" { exit } index($3, prefix) == 1 { seen = 1 } { print }'
+}
+
 # Keeps everything the device logged so far, then starts a fresh logcat buffer.
 save_logcat() { adb logcat -d >> "$OUT/logcat-scenarios.txt" 2>/dev/null || true; adb logcat -c || true; }
 
@@ -54,23 +72,28 @@ adb install -r -t "$TEST_APK" || { log "SCENARIO install of the test APK FAILED"
 instrument permission-denied -e class app.watchaudio.android.PermissionDeniedTest -e scenario permission-denied
 save_logcat
 
-# 3. Resume after a force-stop in the middle of a transcription run.
+# 3. Resume after a force-stop in the middle of a transcription run. Progress is read from the
+#    app's diagnostics log (transcription_started / transcription_finished, #77), not from logcat
+#    wording, so log messages can change freely.
 instrument resume-seed -e class app.watchaudio.android.ResumeAfterKillTest#seed -e scenario resume-seed -e requireModels true
 save_logcat
+session=$(adb exec-out "run-as $PKG cat files/resume-check-session.txt" 2>/dev/null | tr -d '\r\n')
+[ -n "$session" ] || log "RESUME_CHECK phase=seeded session=unknown (files/resume-check-session.txt not readable)"
 adb shell am start -W -n "$PKG/app.watchaudio.android.MainActivity"
 transcribed=0
 for _ in $(seq 1 600); do
-  transcribed=$(adb logcat -d -s TranscriptionWorker:I | grep -c "transcribed chunk" || true)
+  transcribed=$(diagnostics_log | session_events "$session" transcription_finished | awk 'END { print NR }')
   [ "$transcribed" -ge 1 ] && break
   sleep 0.5
 done
 adb shell am force-stop "$PKG"
-adb logcat -d -s TranscriptionWorker:I AppGraph:I > "$OUT/resume-before-kill.txt" || true
-transcribed=$(grep -c "transcribed chunk" "$OUT/resume-before-kill.txt" || true)
-started=$(grep -o "transcribing chunk [^ ]*" "$OUT/resume-before-kill.txt" | awk '{print $3}' || true)
+diagnostics_log | until_restart "$session" > "$OUT/resume-before-kill.csv"
+transcribed=$(session_events "$session" transcription_finished < "$OUT/resume-before-kill.csv" | awk 'END { print NR }')
+started=$(session_events "$session" transcription_started < "$OUT/resume-before-kill.csv")
+finished=$(session_events "$session" transcription_finished < "$OUT/resume-before-kill.csv")
 interrupted=""
 for id in $started; do
-  grep -q "transcribed chunk $id" "$OUT/resume-before-kill.txt" || interrupted=$id
+  grep -qxF "$id" <<< "$finished" || interrupted=$id
 done
 log "RESUME_CHECK phase=killed command='am force-stop $PKG' transcribed_before_kill=$transcribed interrupted_chunk=${interrupted:-none}"
 save_logcat
