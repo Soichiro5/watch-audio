@@ -84,7 +84,7 @@ jobs:
             api-level: 35
             target: google_apis
             # Audio stays enabled: the playback tests need a working audio output.
-            emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back none
+            emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
             device-test-apks: :androidApp:assembleDebugAndroidTest :shared:core-db:assembleAndroidDeviceTest :shared:core-pipeline:assembleAndroidDeviceTest
             device-tests: :androidApp:connectedDebugAndroidTest :shared:core-db:connectedAndroidDeviceTest :shared:core-pipeline:connectedAndroidDeviceTest
             # Each of these must report at least one test case: the test engine can end green with 0 tests (e.g. a failed APK install).
@@ -101,7 +101,7 @@ jobs:
             api-level: 34
             target: android-wear
             # Audio enabled so that recording started from the tile gets a (silent) microphone.
-            emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back none
+            emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
             scenarios: .github/scripts/wear-surfaces.sh
     name: smoke (${{ matrix.name }})
     steps:
@@ -192,11 +192,13 @@ jobs:
           target: ${{ matrix.target }}
           arch: x86_64
           disable-animations: true
-          # Nothing else runs on the 4-core runner while the emulator is up (all APKs are built before it boots).
+          # All APKs are built before the emulator boots, so it can have the runner's 4 cores (default 2; #92).
           cores: 4
           # Room for the speech models (~160 MB, twice while they are copied into the app).
           disk-size: 3072M
-          emulator-options: ${{ matrix.emulator-options }}
+          # -no-snapshot: a cold boot either way (no snapshot is kept between jobs), and nothing is saved at the end (#92).
+          # Not in the matrix values: changing them changes setup-gradle's cache key for the job.
+          emulator-options: ${{ matrix.emulator-options }} -no-snapshot
           script: |
             bash .github/scripts/launch-smoke.sh release-apk/${{ matrix.module }}-release.apk logcat-release.txt
             adb uninstall app.watchaudio
