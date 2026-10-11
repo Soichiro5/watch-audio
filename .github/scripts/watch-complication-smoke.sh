@@ -61,11 +61,16 @@ xcrun simctl terminate "$udid" "$bundle_id" 2>/dev/null || true
 sleep 2
 before=$( [ -f "$csv" ] && wc -l < "$csv" || echo 0 )
 
-# 2. Tap: the complication's widgetURL.
+# 2. Tap: the complication's widgetURL. watchOS simulators refuse `simctl openurl` for app URL
+# schemes (LSApplicationWorkspaceErrorDomain 115), so fall back to the Debug-only launch argument
+# that hands the same URL to the same handler as onOpenURL.
 status=0
-if ! xcrun simctl openurl "$udid" "watchaudio://record"; then
-  echo "::error::simctl openurl watchaudio://record failed"
-  status=1
+if xcrun simctl openurl "$udid" "watchaudio://record"; then
+  tap_path="simctl openurl"
+else
+  echo "simctl openurl failed; launching with -complicationURL instead"
+  xcrun simctl launch "$udid" "$bundle_id" -complicationURL "watchaudio://record"
+  tap_path="launch argument -complicationURL (Debug)"
 fi
 sleep 12
 xcrun simctl io "$udid" screenshot "$out_dir/watchos-complication-tap.png" || true
@@ -87,12 +92,12 @@ echo "$after_tap"
 start_event=$(echo "$after_tap" | awk -F, '$4 ~ /^(start|resume|start_blocked|start_failed|permission_denied)$/ { print $4 ($5 == "" ? "" : " (" $5 ")"); exit }')
 
 if [ -z "$start_event" ]; then
-  echo "::error::opening watchaudio://record did not make the recorder start"
+  echo "::error::opening watchaudio://record ($tap_path) did not make the recorder start"
   status=1
 fi
 
 if [ $status -eq 0 ]; then
-  summary "- watchOS complication: **OK**. \`$extension_id\` ($extension_point) is embedded; opening \`watchaudio://record\` on $device_name launched the app and the recorder logged \`$start_event\`. Shared status: \`${status_json:-none}\` (screenshots watchos-complication-*.png in simulator-smoke)."
+  summary "- watchOS complication: **OK**. \`$extension_id\` ($extension_point) is embedded; opening \`watchaudio://record\` on $device_name (via $tap_path) launched the app and the recorder logged \`$start_event\`. Shared status: \`${status_json:-none}\` (screenshots watchos-complication-*.png in simulator-smoke)."
 else
   summary "- watchOS complication: **FAILED** (see watchos-complication-* in simulator-smoke)."
 fi

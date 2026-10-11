@@ -22,7 +22,7 @@ final class ComplicationDisplayTests: XCTestCase {
         let display = ComplicationDisplay(.recording(since: since))
         XCTAssertEqual(display.tone, .recording)
         XCTAssertEqual(display.title, "録音中")
-        XCTAssertEqual(display.inlineText, "● 録音中")
+        XCTAssertEqual(display.inlineText, "録音中")
         XCTAssertEqual(display.symbolName, "record.circle")
         XCTAssertEqual(display.recordingSince, since)
         XCTAssertEqual(display.url, ComplicationLink.record)

@@ -134,7 +134,7 @@ struct ComplicationDisplay: Equatable, Sendable {
             title = "録音中"
             detail = "経過"
             recordingSince = status.recordingSince
-            inlineText = "● 録音中"
+            inlineText = "録音中"
         case .paused:
             let reason = RecorderStatusText.shortPausedLabel(status.pausedReason)
             tone = .paused

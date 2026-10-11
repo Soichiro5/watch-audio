@@ -276,7 +276,7 @@ cat "$DATA/Library/Application Support/WatchAudio/diagnostics.csv"
 
 | 録音状態 | 円形 | 長方形（2 行目） | インライン |
 | --- | --- | --- | --- |
-| 録音中 | 赤 `record.circle` + 「録音中」 | 「経過 h:mm:ss」 | 「● 録音中」 |
+| 録音中 | 赤 `record.circle` + 「録音中」 | 「経過 h:mm:ss」 | 「録音中」 |
 | 一時停止（理由あり） | 橙 `pause.circle` + 「一時停止」 | 「充電中・タップで再開」など（充電中 / 電池不足 / 容量不足 / 通話等で中断 / エラー） | 「一時停止（充電中）」 |
 | 停止中 | 灰 `mic.slash` + 「停止中」 | 「タップで録音開始」 | 「録音停止中」 |
 
@@ -296,6 +296,6 @@ cat "$DATA/Library/Application Support/WatchAudio/diagnostics.csv"
 | --- | --- | --- |
 | 状態 → 表示の対応、保存の往復、タップ URL の判定 | `ComplicationDisplayTests`（`ProtocolTests`、iOS シミュレータ） | CI で確認 |
 | 表示（録音中・一時停止・停止中） | 同テストの `testRendersPreviewImages` が各レイアウトを `ImageRenderer` で PNG に書き出す → 成果物 `watch-complication-previews`（`complication-recording.png` / `-paused-charging.png` / `-paused-interruption.png` / `-stopped.png` / `-all.png`）。文字盤へのコンプリケーション追加はコマンドラインから操作できないため、この描画を証跡とする | CI で確認 |
-| ウィジェット拡張の埋め込みとタップ経路 | CI ステップ「watchOS complication tap on an Apple Watch simulator」（`.github/scripts/watch-complication-smoke.sh`）: `WatchAudio.app/PlugIns/WatchAudioWidget.appex`（`com.apple.widgetkit-extension`）の存在を確認 → 通常起動（停止中）のスクリーンショット → `simctl openurl watchaudio://record` → 録音開始（またはその理由付きの不可）が診断ログに記録されることを確認し、スクリーンショットとアプリが書いた共有状態を成果物 `simulator-smoke` に残す（`watchos-complication-*.png` / `-diagnostics.csv` / `-defaults.txt`） | CI で確認 |
-| 実機の文字盤での表示・タップ・中断後の 1 タップ再開 | 実機のみ（§11 の 13、#60） | 要確認 |
+| ウィジェット拡張の埋め込みとタップ経路 | CI ステップ「watchOS complication tap on an Apple Watch simulator」（`.github/scripts/watch-complication-smoke.sh`）: `WatchAudio.app/PlugIns/WatchAudioWidget.appex`（`com.apple.widgetkit-extension`）の存在を確認 → 通常起動（停止中）のスクリーンショット → `simctl openurl watchaudio://record`（watchOS シミュレータはアプリの URL スキームを開けず LSApplicationWorkspaceErrorDomain 115 になるため、その場合は **Debug 限定**の起動引数 `-complicationURL watchaudio://record` で `onOpenURL` と同じ処理に URL を渡す）→ 録音開始（またはその理由付きの不可）が診断ログに記録されることを確認し、スクリーンショットとアプリが書いた共有状態を成果物 `simulator-smoke` に残す（`watchos-complication-*.png` / `-diagnostics.csv` / `-defaults.txt`） | CI で確認 |
+| 実機の文字盤での表示、システムからの `widgetURL` の受け渡し、中断後の 1 タップ再開 | 実機のみ（§11 の 13、#60） | 要確認 |
 
