@@ -1,6 +1,7 @@
 package app.watchaudio.android.work
 
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -28,7 +29,11 @@ class TranscriptionWorker(context: Context, params: WorkerParameters) : Coroutin
         try {
             return run(graph, diagnostics) { summary = it }
         } finally {
-            val stop = if (isStopped) " stopped=true stop_reason=$stopReason" else ""
+            val stop = when {
+                !isStopped -> ""
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> " stopped=true stop_reason=$stopReason"
+                else -> " stopped=true"
+            }
             diagnostics.log(DiagnosticEvents.WORKER_STOP, "worker=transcription$summary$stop")
         }
     }

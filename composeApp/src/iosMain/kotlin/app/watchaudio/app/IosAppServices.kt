@@ -23,6 +23,7 @@ import platform.UIKit.UIApplicationOpenSettingsURLString
 import platform.UIKit.UIViewController
 import platform.UIKit.UIWindow
 import platform.UIKit.UIWindowScene
+import platform.UIKit.popoverPresentationController
 
 /**
  * [AppServices] for iOS. Created by [IosAppGraph]; the shared UI only sees the interface.
