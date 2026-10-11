@@ -185,43 +185,74 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
         }
 
     /**
-     * Substring search over transcripts, newest first. Trigram FTS needs 3+ characters, so
-     * shorter queries fall back to LIKE.
+     * Substring search over transcripts, newest first (case-insensitive), at most [limit] hits.
      *
-     * Shaped for a year of data (#23, `:shared:core-db:jvmBenchmark`): the FTS path sorts only
-     * segment ids and loads the [limit] newest rows afterwards, and the LIKE path scans the
-     * `(start_at, text)` index newest-first, stopping at [limit] hits. Snippets are built in
-     * Kotlin for the returned rows only ([highlightSnippet]).
+     * Shaped for a year of data (#23, #72, `:shared:core-db:jvmBenchmark`):
+     * - 3+ characters: trigram FTS. Only segment ids are sorted; the [limit] newest rows are
+     *   loaded afterwards.
+     * - 1-2 characters (too short for a trigram match): LIKE over the newest
+     *   [SHORT_QUERY_RECENT_SEGMENTS] segments, which is enough for a frequent word. A rarer one
+     *   is looked up in the trigram index's vocabulary (every trigram that starts with the query,
+     *   see migration 5) instead of scanning every text.
+     *
+     * Snippets are built in Kotlin for the returned rows only ([highlightSnippet]).
      */
-    fun search(query: String, limit: Int = 50): List<SearchHit> {
+    fun search(query: String, limit: Int = 50): List<SearchHit> = search(query, limit, SHORT_QUERY_RECENT_SEGMENTS)
+
+    /** [search] with the window of the 1-2 character LIKE scan as a parameter (for tests). */
+    internal fun search(query: String, limit: Int, recentSegments: Int): List<SearchHit> {
         val q = query.trim()
         if (q.isEmpty()) return emptyList()
-        val sql = if (q.length >= 3) {
-            """
-            SELECT $SEGMENT_COLUMNS FROM transcript_segment WHERE id IN (
-                SELECT s.id FROM segment_fts JOIN transcript_segment s ON s.id = segment_fts.rowid
-                WHERE segment_fts MATCH ? ORDER BY s.start_at DESC LIMIT ?
-            ) ORDER BY start_at DESC
-            """.trimIndent()
+        val segments = if (q.length >= 3) {
+            querySegments(
+                """
+                SELECT $SEGMENT_COLUMNS FROM transcript_segment WHERE id IN (
+                    SELECT s.id FROM segment_fts JOIN transcript_segment s ON s.id = segment_fts.rowid
+                    WHERE segment_fts MATCH ? ORDER BY s.start_at DESC LIMIT ?
+                ) ORDER BY start_at DESC
+                """.trimIndent(),
+                "\"" + q.replace("\"", "\"\"") + "\"",
+                limit,
+            )
         } else {
-            "SELECT $SEGMENT_COLUMNS FROM transcript_segment WHERE text LIKE ? ESCAPE '\\' ORDER BY start_at DESC LIMIT ?"
-        }
-        val pattern = if (q.length >= 3) {
-            "\"" + q.replace("\"", "\"\"") + "\""
-        } else {
-            "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-        }
-        return db.prepare(sql).use { st ->
-            st.bindText(1, pattern)
-            st.bindLong(2, limit.toLong())
-            buildList {
-                while (st.step()) {
-                    val segment = st.toSegment()
-                    add(SearchHit(segment, highlightSnippet(segment.text, q)))
-                }
+            val recent = querySegments(
+                """
+                SELECT * FROM (
+                    SELECT $SEGMENT_COLUMNS FROM transcript_segment ORDER BY start_at DESC LIMIT $recentSegments
+                ) WHERE text LIKE ? ESCAPE '\' LIMIT ?
+                """.trimIndent(),
+                "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%",
+                limit,
+            )
+            if (recent.size >= limit) {
+                recent
+            } else {
+                // Terms are case-folded trigrams; U+10FFFF sorts after any character that can follow.
+                val prefix = q.lowercase()
+                querySegments(
+                    """
+                    SELECT $SEGMENT_COLUMNS FROM transcript_segment WHERE id IN (
+                        SELECT doc FROM segment_fts_terms WHERE term >= ? AND term < ?
+                    ) ORDER BY start_at DESC LIMIT ?
+                    """.trimIndent(),
+                    prefix,
+                    limit,
+                    upperBound = prefix + "􏿿",
+                )
             }
         }
+        return segments.map { SearchHit(it, highlightSnippet(it.text, q)) }
     }
+
+    /** Runs [sql] with [pattern], then [upperBound] if given, then [limit] as parameters. */
+    private fun querySegments(sql: String, pattern: String, limit: Int, upperBound: String? = null): List<SegmentRecord> =
+        db.prepare(sql).use { st ->
+            var index = 1
+            st.bindText(index++, pattern)
+            upperBound?.let { st.bindText(index++, it) }
+            st.bindLong(index, limit.toLong())
+            buildList { while (st.step()) add(st.toSegment()) }
+        }
 
     fun stats(): StoreStats = db.prepare(
         """
@@ -391,6 +422,13 @@ class StoreTransaction internal constructor(private val db: SQLiteConnection) {
             "id, session_id, device_id, source, started_at, ended_at, time_zone, audio_path, end_reason, state, attempts, " +
                 "last_error, size_bytes, audio_purged_at"
         const val SEGMENT_COLUMNS = "id, chunk_id, start_at, end_at, text, lang, engine"
+
+        /**
+         * Newest segments scanned with LIKE for a 1-2 character query (~2 days of speech after #68)
+         * before falling back to the trigram vocabulary ([search]). A word with fewer hits than the
+         * limit in this window has few enough in a year for the vocabulary lookup to be fast.
+         */
+        const val SHORT_QUERY_RECENT_SEGMENTS = 20_000
 
         /** Transcribed, audio still present, ended at or before the bound parameter. */
         const val PURGEABLE =

@@ -255,17 +255,60 @@ class LocalStoreTest {
     }
 
     @Test
-    fun upgradesVersion1And3DatabasesToTheSearchIndex() = runTest {
+    fun upgradesOlderDatabasesToTheSearchIndex() = runTest {
         store.close()
-        assertEquals(4, MIGRATIONS.size)
-        for (version in listOf(1, 3)) {
+        assertEquals(5, MIGRATIONS.size)
+        for (version in listOf(1, 3, 4)) {
             val path = databaseAtVersion(version)
             LocalStore.open(path).use { upgraded ->
                 assertEquals("歯医者の[予約]", upgraded.read { search("予約") }.single().snippet)
+                // Existing segments are in the new index, including a short query at the end of a text.
+                assertEquals("歯医者の[予約]", upgraded.read { search("予約", 50, recentSegments = 0) }.single().snippet)
                 assertEquals("[歯医者]の予約", upgraded.read { search("歯医者") }.single().snippet)
+                // New and deleted segments keep the index in step.
+                upgraded.transaction { saveTranscript("a", listOf(NewSegment(1_000, 2_000, "美容院の予約", "ja")), "v5") }
+                assertEquals(listOf("美容院の予約"), upgraded.read { search("予約", 50, recentSegments = 0) }.map { it.segment.text })
+                assertTrue(upgraded.read { search("歯医者") }.isEmpty())
             }
-            assertEquals(4 to listOf("idx_segment_start_text"), schemaOf(path), "from version $version")
+            assertEquals(5 to listOf("idx_segment_start_at"), schemaOf(path), "from version $version")
         }
+    }
+
+    @Test
+    fun shortQueriesOutsideTheRecentWindowUseTheTrigramVocabulary() = runTest {
+        store.transaction {
+            insertChunk(manifest("a", 0), "a.m4a", 0)
+            saveTranscript(
+                "a",
+                listOf(
+                    NewSegment(1_000, 2_000, "明日の会議は十時からです", "ja"),
+                    NewSegment(3_000, 4_000, "歯医者の予約", "ja"),
+                    NewSegment(5_000, 6_000, "雨", "ja"),
+                    NewSegment(7_000, 8_000, "AIの話をした", "ja"),
+                    NewSegment(9_000, 10_000, "美容院の予約を取った", "ja"),
+                ),
+                "test",
+            )
+        }
+        for (window in listOf(0, 1, 2)) {
+            suspend fun texts(query: String, limit: Int = 50) =
+                store.read { search(query, limit, recentSegments = window) }.map { it.segment.text }
+
+            assertEquals(listOf("美容院の予約を取った", "歯医者の予約"), texts("予約"), "window $window")
+            assertEquals(listOf("美容院の予約を取った"), texts("予約", limit = 1), "window $window")
+            assertEquals(listOf("雨"), texts("雨"), "window $window")
+            assertEquals(listOf("明日の会議は十時からです"), texts("す"), "window $window")
+            assertEquals(listOf("AIの話をした"), texts("ai"), "window $window")
+            assertEquals(listOf("AIの話をした"), texts("Ai"), "window $window")
+            assertTrue(texts("猫舌").isEmpty(), "window $window")
+            assertTrue(texts("%").isEmpty(), "window $window")
+        }
+        assertEquals("歯医者の[予約]", store.read { search("予約", 50, recentSegments = 0) }.last().snippet)
+
+        // Deleted segments leave the vocabulary.
+        store.transaction { saveTranscript("a", listOf(NewSegment(1_000, 2_000, "別の内容", "ja")), "test2") }
+        assertTrue(store.read { search("予約", 50, recentSegments = 0) }.isEmpty())
+        assertEquals(listOf("別の内容"), store.read { search("内容", 50, recentSegments = 0) }.map { it.segment.text })
     }
 
     @Test
