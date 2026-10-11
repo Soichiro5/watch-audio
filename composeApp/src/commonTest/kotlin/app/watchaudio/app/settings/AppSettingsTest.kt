@@ -12,6 +12,7 @@ class AppSettingsTest {
         assertEquals(false, settings.onboardingCompleted)
         assertEquals(GapAlertSettings(enabled = true, quietHours = QuietHours(true, 23 * 60, 7 * 60)), settings.gapAlert)
         assertEquals(null, settings.gapAlertShownFor)
+        assertEquals(false, settings.transcribeOnlyWhileCharging)
     }
 
     @Test
@@ -20,6 +21,7 @@ class AppSettingsTest {
             onboardingCompleted = true,
             gapAlert = GapAlertSettings(enabled = false, quietHours = QuietHours(false, 22 * 60, 6 * 60 + 30)),
             gapAlertShownFor = 1_700_000_000_000,
+            transcribeOnlyWhileCharging = true,
         )
         val stored = settings.toEntries().mapNotNull { (k, v) -> v?.let { k to it } }.toMap()
         assertEquals(settings, AppSettings.fromEntries(stored))
@@ -33,6 +35,7 @@ class AppSettingsTest {
                 AppSettings.Keys.QUIET_HOURS_START to "1440",
                 AppSettings.Keys.QUIET_HOURS_END to "x",
                 AppSettings.Keys.GAP_ALERT_SHOWN_FOR to "",
+                AppSettings.Keys.TRANSCRIBE_ONLY_WHILE_CHARGING to "1",
             ),
         )
         assertEquals(AppSettings(), settings)

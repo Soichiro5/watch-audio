@@ -108,6 +108,11 @@ class AppUiTest {
         waitUntil(timeoutMillis = 10_000) { services.gapAlertSettingsChanges == 1 }
         assertEquals(false, runBlocking { store.loadSettings() }.gapAlert.quietHours.enabled)
 
+        // Transcription timing (#75): the charging-only switch is stored and reported to the platform.
+        onNodeWithText(Strings.CHARGING_ONLY_SWITCH).performScrollTo().performClick()
+        waitUntil(timeoutMillis = 10_000) { services.transcriptionSettingsChanges == 1 }
+        assertEquals(true, runBlocking { store.loadSettings() }.transcribeOnlyWhileCharging)
+
         // Storage: breakdown, retention and the typed confirmation for deleting everything.
         waitForText(Strings.STORAGE_USAGE)
         waitForText(Strings.RETENTION)

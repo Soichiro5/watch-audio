@@ -173,6 +173,7 @@ private fun MainTabs(
                     settings = settings,
                     onGapAlertsEnabledChange = settingsViewModel::setGapAlertsEnabled,
                     onQuietHoursChange = settingsViewModel::setQuietHours,
+                    onTranscribeOnlyWhileChargingChange = settingsViewModel::setTranscribeOnlyWhileCharging,
                     onShowOnboarding = onShowOnboarding,
                     storageCallbacks = StorageCallbacks(
                         onSelectRetention = statusViewModel::selectRetention,

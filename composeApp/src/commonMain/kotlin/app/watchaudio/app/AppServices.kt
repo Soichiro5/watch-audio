@@ -1,6 +1,7 @@
 package app.watchaudio.app
 
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.PauseReason
 import app.watchaudio.core.pipeline.StorageManager
 import kotlinx.coroutines.flow.StateFlow
 
@@ -59,6 +60,12 @@ interface AppServices {
     fun gapAlertSettingsChanged() {}
 
     /**
+     * The transcription preferences (`AppSettings.transcribeOnlyWhileCharging`, #75) were changed in
+     * the UI; re-plan the scheduled transcription work.
+     */
+    fun transcriptionSettingsChanged() {}
+
+    /**
      * Writes the on-device diagnostics log (`DiagnosticsLog`: event times, ids, durations and
      * error types; never audio or transcript text) to one file and opens the system share sheet,
      * where the user picks where it goes. Only ever called from the user's tap.
@@ -98,6 +105,8 @@ data class ProcessingStatus(
     val transcribing: Boolean = false,
     val lastChunkReceivedAt: Long? = null,
     val message: String? = null,
+    /** Why transcription is waiting for the charger or a cooler phone (#75); null while it may run. */
+    val paused: PauseReason? = null,
 )
 
 sealed interface ModelState {

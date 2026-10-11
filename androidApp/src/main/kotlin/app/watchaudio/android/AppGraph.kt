@@ -3,14 +3,21 @@ package app.watchaudio.android
 import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import app.watchaudio.android.alert.GapAlertMonitor
 import app.watchaudio.android.asr.AndroidSherpaTranscriber
 import app.watchaudio.android.asr.ModelManager
 import app.watchaudio.android.transfer.ChunkReceiver
+import app.watchaudio.android.work.AndroidDeviceConditions
 import app.watchaudio.android.work.TranscriptionScheduler
+import app.watchaudio.app.settings.loadSettings
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.DeviceConditions
 import app.watchaudio.core.pipeline.DiagnosticsLog
 import app.watchaudio.core.pipeline.Ingestor
+import app.watchaudio.core.pipeline.PauseReason
+import app.watchaudio.core.pipeline.PolicyGatedTranscription
+import app.watchaudio.core.pipeline.ProcessingPolicy
 import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.pipeline.TranscriptionPipeline
 import java.io.File
@@ -48,7 +55,7 @@ class AppGraph private constructor(context: Context) {
     val audioRoot = File(app.filesDir, "audio")
     val ingestor = Ingestor(store, Path(audioRoot.path))
 
-    val scheduler = TranscriptionScheduler(app, scope)
+    val scheduler = TranscriptionScheduler(app, scope, chargingOnly = { store.loadSettings().transcribeOnlyWhileCharging })
     val models = ModelManager(app, scope, diagnostics, onReady = scheduler::requestNow)
     val transcriber = AndroidSherpaTranscriber(models.files)
     val pipeline = TranscriptionPipeline(store, Path(audioRoot.path), transcriber, maxAttempts = MAX_ATTEMPTS)
@@ -56,6 +63,27 @@ class AppGraph private constructor(context: Context) {
 
     /** Serializes pipeline runs between overlapping workers. */
     val transcriptionLock = Mutex()
+
+    /** Battery, battery saver and thermal state for the processing policy (#75); tests substitute their own. */
+    @VisibleForTesting
+    @Volatile
+    var deviceConditions: () -> DeviceConditions = AndroidDeviceConditions(app)::read
+
+    /** When transcription may run (#75); tests use smaller limits. */
+    @VisibleForTesting
+    @Volatile
+    var processingPolicy = ProcessingPolicy()
+
+    /** The clock of the hourly battery budget; tests move it forward. */
+    @VisibleForTesting
+    @Volatile
+    var clock: () -> Long = System::currentTimeMillis
+
+    /** Why the last run paused (null: it did not), for the status card. */
+    val transcriptionPause = MutableStateFlow<PauseReason?>(null)
+
+    /** [pipeline] under the battery/thermal policy, with the current [deviceConditions], [processingPolicy] and [clock]. */
+    fun gatedTranscription() = PolicyGatedTranscription(pipeline, store, processingPolicy, deviceConditions, clock, diagnostics)
 
     private val _lastChunkReceivedAt = MutableStateFlow<Long?>(null)
     val lastChunkReceivedAt: StateFlow<Long?> = _lastChunkReceivedAt.asStateFlow()
@@ -76,6 +104,7 @@ class AppGraph private constructor(context: Context) {
         models,
         scheduler,
         lastChunkReceivedAt,
+        transcriptionPause,
         scope,
         diagnostics,
         onGapAlertSettingsChanged = gapAlerts::onSettingsChanged,

@@ -1,6 +1,7 @@
 package app.watchaudio.app
 
 import app.watchaudio.core.pipeline.AudioRetention
+import app.watchaudio.core.pipeline.PauseReason
 import app.watchaudio.core.protocol.ChunkEndReason
 
 /**
@@ -157,6 +158,24 @@ object Strings {
     const val QUIET_HOURS_DETAIL = "おやすみ時間中に途絶えた場合は、終了時刻に通知します"
     const val QUIET_HOURS_FROM = "開始"
     const val QUIET_HOURS_TO = "終了"
+
+    // Status screen: when to transcribe (#75)
+    const val TRANSCRIPTION_SETTINGS_TITLE = "文字起こしのタイミング"
+    const val CHARGING_ONLY_SWITCH = "充電中のみ文字起こしする"
+    const val CHARGING_ONLY_DETAIL = "スマホの電池を使わず、充電中にまとめて文字起こしします"
+    fun batteryPolicyNote(minBatteryPercent: Int, audioMinutesPerHour: Long) =
+        "充電していないときは、電池残量が${minBatteryPercent}%以上で省電力モードでない間だけ、" +
+            "1 時間あたり録音${audioMinutesPerHour}分ぶんまで文字起こしします。残りは充電中に処理します。" +
+            "スマホが熱いときは充電中でも休みます。"
+
+    /** Why transcription is waiting, for the status card (#75). */
+    fun transcriptionPaused(reason: PauseReason, minBatteryPercent: Int): String = when (reason) {
+        PauseReason.THERMAL -> "スマホが熱くなっているため、文字起こしを休んでいます。冷えたら再開します"
+        PauseReason.CHARGING_ONLY -> "充電中のみ文字起こしする設定のため、充電を待っています"
+        PauseReason.LOW_BATTERY -> "電池残量が${minBatteryPercent}%未満のため、充電を待っています"
+        PauseReason.POWER_SAVE -> "省電力モードのため、充電を待っています"
+        PauseReason.HOURLY_CAP -> "電池を節約するため、続きは少し後か充電中に文字起こしします"
+    }
     const val GUIDE_TITLE = "はじめに"
     const val SHOW_ONBOARDING_AGAIN = "初回の説明をもう一度見る"
 

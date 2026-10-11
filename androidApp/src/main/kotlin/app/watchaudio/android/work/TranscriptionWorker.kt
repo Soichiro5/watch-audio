@@ -7,16 +7,19 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import app.watchaudio.android.AppGraph
 import app.watchaudio.app.ModelState
+import app.watchaudio.app.settings.loadSettings
 import app.watchaudio.core.pipeline.DiagnosticEvents
 import app.watchaudio.core.pipeline.Diagnostics
 import app.watchaudio.core.pipeline.DiagnosticsLog
 import app.watchaudio.core.pipeline.DiagnosticsPipelineObserver
+import app.watchaudio.core.pipeline.PauseReason
 import app.watchaudio.core.pipeline.TranscriptionPipeline
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Transcribes pending chunks until none are left or WorkManager stops the worker, then applies the
+ * Transcribes pending chunks until none are left, the battery/thermal policy pauses (#75; checked
+ * between chunks, then a later run is scheduled) or WorkManager stops the worker, then applies the
  * audio retention setting. Progress lives in the database, so a stopped run loses at most the
  * chunk in progress (it is re-queued).
  */
@@ -48,18 +51,32 @@ class TranscriptionWorker(context: Context, params: WorkerParameters) : Coroutin
             applyRetention(graph, diagnostics)
             return if (graph.models.state.value is ModelState.Downloading) Result.retry() else Result.success()
         }
+        val chargingOnly = graph.store.loadSettings().transcribeOnlyWhileCharging
+        val userRequested = inputData.getBoolean(TranscriptionScheduler.KEY_USER_REQUESTED, false)
         // The one-off and the periodic worker may overlap; one pipeline run at a time.
-        val result = graph.transcriptionLock.withLock {
+        val outcome = graph.transcriptionLock.withLock {
             try {
-                graph.pipeline.processPending(ChunkLog(diagnostics)) { !isStopped }
+                // The battery/thermal policy (#75) is asked before every chunk: a pause stops between chunks.
+                graph.gatedTranscription().run(chargingOnly, userRequested, ChunkLog(diagnostics)) { !isStopped }
             } finally {
                 graph.transcriber.release()
             }
         }
-        Log.i(TAG, "transcribed ${result.transcribed}, failed ${result.failed}")
-        report(" transcribed=${result.transcribed} failed=${result.failed}")
+        val result = outcome.result
+        val pause = outcome.pause
+        graph.transcriptionPause.value = pause?.reason
+        Log.i(TAG, "transcribed ${result.transcribed}, failed ${result.failed}" + pause?.let { ", paused: ${it.reason.code}" }.orEmpty())
+        report(" transcribed=${result.transcribed} failed=${result.failed}" + pause?.let { " paused=${it.reason.code}" }.orEmpty())
         applyRetention(graph, diagnostics)
-        if (!isStopped && graph.hasPendingChunks()) graph.scheduler.requestNow()
+        if (!isStopped && graph.hasPendingChunks()) {
+            if (pause == null) {
+                graph.scheduler.requestNow()
+            } else {
+                // A delayed retry (warm phone, hourly cap) and/or a run once plugged in.
+                pause.retryAfterMs?.let { graph.scheduler.requestLater(it) }
+                if (pause.reason != PauseReason.THERMAL) graph.scheduler.requestOnCharge()
+            }
+        }
         return Result.success()
     }
 

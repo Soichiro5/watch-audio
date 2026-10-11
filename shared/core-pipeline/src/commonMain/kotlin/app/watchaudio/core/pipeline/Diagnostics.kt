@@ -45,6 +45,9 @@ object DiagnosticEvents {
     const val TRANSCRIPTION_STARTED = "transcription_started"
     const val TRANSCRIPTION_FINISHED = "transcription_finished"
     const val TRANSCRIPTION_FAILED = "transcription_failed"
+
+    /** What the battery/thermal policy decided for a run, and why it paused (#75). */
+    const val TRANSCRIPTION_POLICY = "transcription_policy"
     const val RETENTION_PURGE = "retention_purge"
 
     const val MODEL_DOWNLOAD_START = "model_download_start"
