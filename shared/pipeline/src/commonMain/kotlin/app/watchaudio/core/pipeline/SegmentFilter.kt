@@ -21,9 +21,9 @@ fun interface SegmentFilter {
  * two rules chosen on the test audio set (docs/dev/test-audio.md):
  *
  * - **near the noise floor**: the utterance's audio rises less than [minLevelAboveNoiseDb] above
- *   the background ([TimedText.levelAboveNoiseDb]). Distant chatter, air conditioning and
- *   silence turn into 「うん」「え」「何」 this way, while speech at the watch, even a quiet
- *   partner in a café, stands further above the noise;
+ *   the background ([TimedText.levelAboveNoiseDb]), whatever its length. Distant chatter, air
+ *   conditioning and silence turn into 「うん」「え」「何」 this way (3.8–5.5 dB in the one-day
+ *   recording), and no test condition (quiet partners in noise included) got a worse CER up to 8 dB;
  * - **a lone sound**: a text of at most [shortTextMaxChars] letters or digits (e.g. 「え」「あ」)
  *   whose mean speech probability ([TimedText.speechProbability]) stays below
  *   [shortTextMinSpeechProbability], as for the rustle of a sleeve or a knock.
