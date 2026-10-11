@@ -67,8 +67,6 @@ on:
 
 permissions:
   contents: read
-  # release-asr.sh downloads the release-test-apks artifact of the same run.
-  actions: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -77,6 +75,10 @@ concurrency:
 jobs:
   smoke:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      # release-asr.sh downloads the release-test-apks artifact of the same run.
+      actions: read
     timeout-minutes: 60
     strategy:
       fail-fast: false
