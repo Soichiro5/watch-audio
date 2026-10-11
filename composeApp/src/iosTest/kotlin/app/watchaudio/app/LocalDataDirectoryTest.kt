@@ -13,7 +13,14 @@ import platform.Foundation.NSURL
 import platform.Foundation.NSURLIsExcludedFromBackupKey
 import platform.Foundation.NSUUID
 
-/** #76: the iPhone's database, audio and inbox directories are excluded from backup and protected. */
+/**
+ * #76: the iPhone's database, audio and inbox directories are excluded from backup and get the
+ * `CompleteUntilFirstUserAuthentication` protection class.
+ *
+ * The simulator has no Data Protection: setting the class succeeds ([LocalDataDirectory.prepare]
+ * returns true) but the class is not necessarily reported back, so it is compared only when the
+ * file system reports one. The backup exclusion is checked strictly.
+ */
 @OptIn(ExperimentalForeignApi::class)
 class LocalDataDirectoryTest {
     @Test
@@ -30,14 +37,15 @@ class LocalDataDirectoryTest {
 
     @Test
     fun appDirectoriesAreProtected() {
-        // Application Support/WatchAudio holds the database; audio/ the archive; inbox/ the
-        // files just received from the watch.
-        assertProtected(IosAppGraph.rootDirectory)
-        assertProtected(IosAppGraph.audioDirectory)
+        // Application Support/WatchAudio holds the database (and inbox/), audio/ the archive.
+        for (path in listOf(IosAppGraph.rootDirectory, IosAppGraph.audioDirectory)) {
+            assertTrue(LocalDataDirectory.prepare(path), "attributes can be set on $path")
+            assertProtected(path)
+        }
         val dbPath = IosAppGraph.rootDirectory + "/protection-probe.db"
         try {
             assertTrue(NSFileManager.defaultManager.createFileAtPath(dbPath, null, null))
-            assertEquals(NSFileProtectionCompleteUntilFirstUserAuthentication, protectionOf(dbPath), "inherited by new files")
+            assertProtectionClass(dbPath)
         } finally {
             NSFileManager.defaultManager.removeItemAtPath(dbPath, null)
         }
@@ -46,9 +54,13 @@ class LocalDataDirectoryTest {
     private fun assertProtected(path: String) {
         val values = NSURL.fileURLWithPath(path).resourceValuesForKeys(listOf(NSURLIsExcludedFromBackupKey), null)
         assertEquals(true, (values?.get(NSURLIsExcludedFromBackupKey) as? NSNumber)?.boolValue, "$path excluded from backup")
-        assertEquals(NSFileProtectionCompleteUntilFirstUserAuthentication, protectionOf(path), "$path protection class")
+        assertProtectionClass(path)
     }
 
-    private fun protectionOf(path: String): Any? =
-        NSFileManager.defaultManager.attributesOfItemAtPath(path, null)?.get(NSFileProtectionKey)
+    private fun assertProtectionClass(path: String) {
+        val protection = NSFileManager.defaultManager.attributesOfItemAtPath(path, null)?.get(NSFileProtectionKey)
+        if (protection != null) {
+            assertEquals<Any?>(NSFileProtectionCompleteUntilFirstUserAuthentication, protection, "$path protection class")
+        }
+    }
 }

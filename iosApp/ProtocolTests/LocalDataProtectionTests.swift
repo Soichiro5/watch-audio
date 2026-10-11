@@ -16,12 +16,12 @@ final class LocalDataProtectionTests: XCTestCase {
         for directory in [root, outbox] {
             let values = try directory.resourceValues(forKeys: [.isExcludedFromBackupKey])
             XCTAssertEqual(values.isExcludedFromBackup, true, directory.lastPathComponent)
+            // The simulator has no Data Protection: setting the class succeeds (prepare did not
+            // throw) but it is not necessarily reported back. Compare it when it is.
             let attributes = try FileManager.default.attributesOfItem(atPath: directory.path(percentEncoded: false))
-            XCTAssertEqual(
-                attributes[.protectionKey] as? FileProtectionType,
-                .completeUntilFirstUserAuthentication,
-                directory.lastPathComponent
-            )
+            if let protection = attributes[.protectionKey] as? FileProtectionType {
+                XCTAssertEqual(protection, .completeUntilFirstUserAuthentication, directory.lastPathComponent)
+            }
         }
     }
 }

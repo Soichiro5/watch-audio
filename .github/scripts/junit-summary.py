@@ -21,8 +21,15 @@ def main() -> None:
         suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
         for suite in suites:
             for case in suite.iter("testcase"):
-                if case.find("failure") is not None or case.find("error") is not None:
-                    result = "failed"
+                failure = case.find("failure")
+                if failure is None:
+                    failure = case.find("error")
+                if failure is not None:
+                    # The first line of the message (e.g. "Expected <a>, actual <b>.") is not in the
+                    # Gradle console output, so show it here.
+                    lines = (failure.get("message") or failure.text or "").strip().splitlines()
+                    detail = lines[0][:300].replace("|", "\\|") if lines else ""
+                    result = f"failed: {detail}" if detail else "failed"
                 elif case.find("skipped") is not None:
                     result = "skipped"
                 else:
@@ -33,7 +40,7 @@ def main() -> None:
     if not cases:
         print("No test results found.\n")
         return
-    counts = {r: sum(1 for c in cases if c[2] == r) for r in ("passed", "failed", "skipped")}
+    counts = {r: sum(1 for c in cases if c[2].split(":")[0] == r) for r in ("passed", "failed", "skipped")}
     print(f"{counts['passed']} passed, {counts['failed']} failed, {counts['skipped']} skipped "
           f"({len(files)} result files)\n")
     print("<details><summary>Test cases</summary>\n")
