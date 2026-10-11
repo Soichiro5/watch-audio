@@ -35,6 +35,10 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)
         }
+        iosTest.dependencies {
+            // Compose UI on the iOS simulator over the real IosAppServices player (#19, #25).
+            implementation(libs.compose.ui.test)
+        }
         jvmTest.dependencies {
             // Headless Compose UI smoke tests (Skia for the host OS).
             implementation(libs.compose.ui.test)

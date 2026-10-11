@@ -26,13 +26,17 @@ class ModelFiles(val root: File) {
     /** Every file the transcriber needs. */
     val all: List<File> get() = listOf(encoder, decoder, joiner, tokens, vad)
 
-    fun hasAsr(): Boolean = listOf(encoder, decoder, joiner, tokens).all(::present)
+    /** Where [source] is placed under [root]. */
+    fun fileFor(source: ModelSource): File = File(root, source.path)
 
-    fun hasVad(): Boolean = present(vad)
+    fun hasAsr(): Boolean = listOf(encoder, decoder, joiner, tokens).all(::isPresent)
+
+    fun hasVad(): Boolean = isPresent(vad)
 
     fun isComplete(): Boolean = hasAsr() && hasVad()
 
-    private fun present(file: File) = file.isFile && file.length() > 0
+    /** A file counts as present once it is non-empty; files only appear through an atomic rename. */
+    fun isPresent(file: File) = file.isFile && file.length() > 0
 
     companion object {
         const val ENCODER = "encoder-epoch-99-avg-1.int8.onnx"
@@ -40,9 +44,5 @@ class ModelFiles(val root: File) {
         const val JOINER = "joiner-epoch-99-avg-1.int8.onnx"
         const val TOKENS = "tokens.txt"
         const val VAD = "silero_vad.onnx"
-
-        /** Files needed from the ASR archive (paths inside the tar). */
-        val ASR_ARCHIVE_ENTRIES: List<String> =
-            listOf(ENCODER, DECODER, JOINER, TOKENS).map { "${AsrSettings.JA_MODEL_NAME}/$it" }
     }
 }

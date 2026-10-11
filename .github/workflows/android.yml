@@ -4,8 +4,24 @@ name: Android & shared
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
+      - "tools/roadmap-view/**"
+      - "research/**"
+      - "spikes/**"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
+      - "tools/roadmap-view/**"
+      - "research/**"
+      - "spikes/**"
   workflow_dispatch:
 
 permissions:
@@ -24,7 +40,7 @@ jobs:
 
       # #76: data stays on the device (CLAUDE.md "Local only"). Static part first: seconds, no build.
       # Permissions, backup rules, network APIs / URLs in code, declared dependencies, iOS
-      # Info.plist keys and entitlements against tools/privacy-check/policy.py (docs/04 §6.3).
+      # Info.plist keys and entitlements against tools/privacy-check/policy.py (docs/04 §6.4).
       - name: "Local-only check (static)"
         run: |
           python3 -m unittest discover -s tools/privacy-check -v

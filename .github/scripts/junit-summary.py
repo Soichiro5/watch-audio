@@ -21,34 +21,39 @@ def main() -> None:
         suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
         for suite in suites:
             for case in suite.iter("testcase"):
-                failure = case.find("failure")
-                if failure is None:
-                    failure = case.find("error")
-                if failure is not None:
-                    # The first line of the message (e.g. "Expected <a>, actual <b>.") is not in the
-                    # Gradle console output, so show it here.
-                    lines = (failure.get("message") or failure.text or "").strip().splitlines()
-                    detail = lines[0][:300].replace("|", "\\|") if lines else ""
-                    result = f"failed: {detail}" if detail else "failed"
+                problem = case.find("failure")
+                if problem is None:
+                    problem = case.find("error")
+                message = ""
+                if problem is not None:
+                    result = "failed"
+                    message = (problem.get("message") or (problem.text or "").strip().split("\n")[0])[:300]
                 elif case.find("skipped") is not None:
                     result = "skipped"
                 else:
                     result = "passed"
-                cases.append((case.get("classname", ""), case.get("name", ""), result, case.get("time", "")))
+                cases.append((case.get("classname", ""), case.get("name", ""), result, case.get("time", ""), message))
 
     print(f"### {title}\n")
     if not cases:
         print("No test results found.\n")
         return
-    counts = {r: sum(1 for c in cases if c[2].split(":")[0] == r) for r in ("passed", "failed", "skipped")}
+    counts = {r: sum(1 for c in cases if c[2] == r) for r in ("passed", "failed", "skipped")}
     print(f"{counts['passed']} passed, {counts['failed']} failed, {counts['skipped']} skipped "
           f"({len(files)} result files)\n")
     print("<details><summary>Test cases</summary>\n")
     print("| Class | Test | Result | Time (s) |")
     print("| --- | --- | --- | ---: |")
-    for classname, name, result, time in cases:
+    for classname, name, result, time, _ in cases:
         print(f"| {classname} | {name} | {result} | {time} |")
     print("\n</details>\n")
+    failures = [c for c in cases if c[2] == "failed"]
+    if failures:
+        print("Failures:\n")
+        for classname, name, _, _, message in failures:
+            text = message.replace("|", "\\|").replace("\n", " ") or "(no message)"
+            print(f"- `{classname}.{name}`: {text}")
+        print()
 
 
 if __name__ == "__main__":
