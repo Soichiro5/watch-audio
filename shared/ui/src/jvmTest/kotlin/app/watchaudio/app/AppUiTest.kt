@@ -231,6 +231,8 @@ class AppUiTest {
             initialStatus = ProcessingStatus(asrModel = ModelState.Missing, notice = StatusNotice.ModelWaitingForWifi),
         )
         showApp(services)
+        // The tabs appear once the settings are loaded; clicking before that finds no node.
+        waitForText(Strings.TAB_STATUS)
         onNodeWithText(Strings.TAB_STATUS).performClick()
         waitForText(Strings.statusNotice(StatusNotice.ModelWaitingForWifi))
         assertNoEnglish()
