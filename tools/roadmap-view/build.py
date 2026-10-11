@@ -171,12 +171,21 @@ def by_priority(ks):
 def next_step(ucs):
     """What a release needs next and who acts: (overall status, text, owner, issues).
 
-    Overall status is the least advanced use case. Next step: open non-device work of
+    Overall status: done if all use cases are done; waiting on devices if all are done or
+    waiting on devices; not started if none has started; otherwise in development. Next step: open non-device work of
     the use cases in development (Claude), else the open device checks (the owner).
     """
     if not ucs:
         return "todo", "ユースケースはまだありません", "", []
-    overall = min((u["status"] for u in ucs), key=UC_ORDER.index)
+    states = {u["status"] for u in ucs}
+    if states == {"done"}:
+        overall = "done"
+    elif states <= {"device", "done"}:
+        overall = "device"
+    elif states == {"todo"}:
+        overall = "todo"
+    else:
+        overall = "dev"
     dev = [u for u in ucs if u["status"] == "dev"]
     device = [u for u in ucs if u["status"] == "device"]
     if dev:
