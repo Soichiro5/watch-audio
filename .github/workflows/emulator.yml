@@ -124,15 +124,9 @@ jobs:
           done
           sudo nohup nice -n 19 ionice -c 3 rm -rf /ci-trash > /dev/null 2>&1 &
 
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
-        with:
-          distribution: temurin
-          java-version: 21
-
-      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
-
       # The emulator runner installs the emulator and the system image right before it boots (~30 s of
-      # download and unzip); fetch them now, in the background, while the APKs are built (#92).
+      # download and unzip); fetch them now, in the background, while the job sets up and builds the APKs (#92).
+      # Uses the runner's default JDK (setup-java comes next).
       # "Wait for the emulator download" joins it before the emulator runner's own (then no-op) install.
       - name: Download the emulator and its system image (background)
         run: |
@@ -144,6 +138,13 @@ jobs:
               "system-images;android-${{ matrix.api-level }};${{ matrix.target }};x86_64" --channel=0 > "$RUNNER_TEMP/sdk-prefetch.log" 2>&1
             echo $? > "$RUNNER_TEMP/sdk-prefetch.status"
           ) > /dev/null 2>&1 &
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - name: Enable KVM
         run: |
@@ -197,8 +198,6 @@ jobs:
           target: ${{ matrix.target }}
           arch: x86_64
           disable-animations: true
-          # All APKs are built before the emulator boots, so it can have the runner's 4 cores (default 2; #92).
-          cores: 4
           # Room for the speech models (~160 MB, twice while they are copied into the app).
           disk-size: 3072M
           # -no-snapshot: a cold boot either way (no snapshot is kept between jobs), and nothing is saved at the end (#92).
