@@ -49,11 +49,11 @@ flowchart LR
     ING --> JOB[Job Scheduler<br>BGProcessingTask / WorkManager]
     JOB --> VAD[VAD] --> ASR[ASR<br>SpeechAnalyzer / sherpa-onnx] --> DB
     JOB --> EMB[Embedding<br>ONNX Runtime] --> DB
-    JOB --> REV[Hourly Review / Daily Reflection / Memory 抽出] --> DB
+    JOB --> REV[1 時間ごとの要約 / 1 日の振り返り / 記憶（事実の抽出）] --> DB
     HEALTH[HealthKit / Health Connect<br>Phase2] --> CTX[Context Builder<br>体調・場所ラベル]
     CTX --> REV
-    UI[Compose MP UI<br>Home / Days / Search / Chat / Settings] --> DB
-    CHAT[Chat RAG] --> DB
+    UI[Compose MP UI<br>ホーム / 日別タイムライン / 検索 / チャット / 設定] --> DB
+    CHAT[チャット（RAG）] --> DB
     UI --> CHAT
   end
 
@@ -74,7 +74,7 @@ watch-audio/
 │   ├── core-search/           #   FTS + ベクトルのハイブリッド検索
 │   ├── core-ai/               #   LLM Provider 抽象、プロンプト、RAG
 │   ├── core-platform/         #   expect/actual: Transcriber, Embedder, SecureStore, HealthSource, Geocoder
-│   └── feature-*/             #   画面ごとの ViewModel（Home, Days, Search, Chat, Settings）
+│   └── feature-*/             #   画面ごとの ViewModel（ホーム・日別タイムライン・検索・チャット・設定）
 ├── composeApp/                # Compose Multiplatform UI（Android/iOS 共通）
 ├── androidApp/                # Android スマホアプリ（エントリ、WorkManager、Data Layer 受信）
 ├── wearApp/                   # Wear OS アプリ（録音 FGS、Ongoing Activity、Data Layer 送信）
@@ -187,11 +187,11 @@ Watch は発話に関係なく約 5 分ごとにチャンクを区切るので�
 - 連結の判定は保存済みセグメント（VAD / SpeechTranscriber の結果）に依存する。境界直前の発話を VAD が取りこぼした場合（0.25 秒未満など）は連結されない。
 - 隣のチャンクの境界付近のセグメントは後から書き換わる（タイムライン・検索結果がそのぶん変わる）。
 
-### 6.4 検索・Chat（RAG）
+### 6.4 検索・チャット（RAG）
 
 1. クエリを埋め込み → ベクトル上位 K 件 + FTS5 上位 K 件を RRF（Reciprocal Rank Fusion）で統合。
 2. 日付/時間帯フィルタ（「先週の火曜」など）は LLM の関数呼び出しで抽出（AI 未設定時は UI フィルタ）。
-3. 前後の文脈セグメント + 関連 Memory + Hour Summary をコンテキストにして LLM へ。
+3. 前後の文脈セグメント + 関連記憶 + 1 時間ごとの要約をコンテキストにして LLM へ。
 4. 回答中の引用 `[seg:123]` を UI で原文・音声再生へのリンクに変換。
 
 ### 6.5 AI プロバイダ（BYOK）
@@ -214,7 +214,7 @@ interface LlmProvider {
 | 項目 | 方針 |
 | --- | --- |
 | 保存 | アプリサンドボックス内。iOS は `Application Support/WatchAudio`（ファイル保護は既定の `CompleteUntilFirstUserAuthentication`。ロック中の BGTask からも読める）、Android は内部ストレージ（`files/`） |
-| バックアップ | MVP では OS バックアップ対象外（Auday と同方針）。Phase 2 で E2E 暗号化バックアップを提供 |
+| バックアップ | MVP では OS バックアップ対象外（データを端末外に出さないため）。Phase 2 で E2E 暗号化バックアップを提供 |
 | API キー | Keychain（`ThisDeviceOnly`）/ Android Keystore |
 | 外部送信 | AI プロバイダ（テキストのみ）、OS ジオコーダ（Phase 2）。解析 SDK・広告 SDK は入れない |
 | 同意 | 初回オンボーディングで「録音対象者への告知」の注意喚起。Watch に録音中インジケータを常時表示 |
@@ -283,4 +283,4 @@ stateDiagram-v2
 | --- | --- | --- |
 | 録音開始 | アプリ前景からのみ | アプリ前景からのみ（Android 14+）。再起動後に自動開始できない |
 | 割り込み後の自動再開 | 不確実（M0-3 で検証） | AudioFocus / 同時録音の扱いを M0-4 で検証 |
-| 電池（24h） | 約 4%/時（Auday 実測）→ 1 日 1 回の充電の間はスマホがカバー | 機種差大（M0-4 で検証） |
+| 電池（24h） | 約 4%/時（既存の Watch 録音アプリの公開値からの推定）→ 1 日 1 回の充電の間はスマホがカバー | 機種差大（M0-4 で検証） |
