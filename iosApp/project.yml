@@ -92,6 +92,69 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).protocoltests
         GENERATE_INFOPLIST_FILE: YES
 
+  # Logic tests (no host app) for the watch recorder's pure parts: stop reasons / state
+  # (RecorderPolicy, #15) and the send queue (ChunkOutbox + ChunkSendTracker, #17). These files
+  # use Foundation/AVFoundation only, so they are compiled for the iPhone simulator here.
+  WatchLogicTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Shared
+      - WatchLogicTests
+      - path: WatchApp/Recording/RecorderPolicy.swift
+      - path: WatchApp/Recording/ChunkSendTracker.swift
+      - path: WatchApp/Recording/ChunkOutbox.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).watchlogictests
+        GENERATE_INFOPLIST_FILE: YES
+
+  # SpeechAnalyzer / SpeechTranscriber (ja_JP) on the simulator (#21). Hosted by the iOS app so
+  # the Speech framework sees the app's bundle and usage descriptions; the test bundle compiles
+  # its own copy of SpeechTranscription.swift and does not touch the Kotlin framework.
+  SpeechTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - SpeechTests
+      - TestSupport
+      - path: iosApp/SpeechTranscription.swift
+    dependencies:
+      - target: iosApp
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).speechtests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/WatchAudio.app/WatchAudio
+        BUNDLE_LOADER: $(TEST_HOST)
+        EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
+
+  # Real playback through the app's own IosAppServices (AVAudioPlayer) in the app process (#19):
+  # the Kotlin/Native test executable cannot start AVAudioPlayer. Hosted by the iOS app, whose
+  # IosAppGraph is started at launch. The Kotlin framework is static and linked into the app only:
+  # this bundle sees its headers, resolves its symbols through BUNDLE_LOADER and must not autolink
+  # a second copy of the Kotlin runtime.
+  PlaybackTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - PlaybackTests
+      - TestSupport
+    dependencies:
+      - target: iosApp
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).playbacktests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/WatchAudio.app/WatchAudio
+        BUNDLE_LOADER: $(TEST_HOST)
+        FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
+        OTHER_SWIFT_FLAGS: [$(inherited), -Xfrontend, -disable-autolink-framework, -Xfrontend, ComposeApp]
+        CLANG_MODULES_AUTOLINK: NO
+        EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
+
 schemes:
   # The watch app is built and embedded through iosApp's target dependency; listing it
   # here as well would restrict the scheme to watchOS destinations.
@@ -103,9 +166,23 @@ schemes:
     build:
       targets:
         WatchApp: all
-  ProtocolTests:
+  # Hostless Swift logic tests (CI: "Swift unit tests (iOS Simulator)").
+  SwiftUnitTests:
     build:
       targets:
         ProtocolTests: [test]
+        WatchLogicTests: [test]
     test:
-      targets: [ProtocolTests]
+      targets: [ProtocolTests, WatchLogicTests]
+  SpeechTests:
+    build:
+      targets:
+        SpeechTests: [test]
+    test:
+      targets: [SpeechTests]
+  PlaybackTests:
+    build:
+      targets:
+        PlaybackTests: [test]
+    test:
+      targets: [PlaybackTests]

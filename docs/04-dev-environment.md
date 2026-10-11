@@ -124,8 +124,11 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 | `emulator.yml`（phone） | 同上（`phone-scenarios.sh`） | 通知権限をシステムのダイアログで拒否 → 理由と「設定を開く」が表示され、押すとアプリの設定画面が開く（`PermissionDeniedTest`、#32） | `PERMISSION_CHECK` 行、スクリーンショット `permission-system-dialog.png` / `onboarding-permission-denied.png` / `app-settings-opened.png` |
 | `emulator.yml`（phone） | 同上（`phone-scenarios.sh`） | 文字起こしの途中で `am force-stop` → 再起動で全チャンクが 1 回ずつ文字起こしされる（欠落・重複 0、中断したチャンクは 2 回目で完了）（`ResumeAfterKillTest`、#20） | `RESUME_CHECK` 行、成果物 `logcat-phone` の `scenario-logs/` |
 | `emulator.yml`（wear） | 同上（`wear-surfaces.sh`） | Tile とコンプリケーションの表示（停止中 → Tile のタップでアプリが開き録音開始 → 録音中）（#41） | `WEAR_SURFACE_CHECK` 行、スクリーンショット `wear-tile-*.png` / `wear-complication-*.png` |
-| `ios.yml` | Shared tests (iOS simulator) | 共通ロジックを iOS シミュレータで実行（SQLite を使う core-db / Ingestor のテストを含む） | ジョブサマリーのテスト一覧 |
+| `ios.yml` | Shared tests (iOS simulator) | 共通ロジックを iOS シミュレータで実行（SQLite を使う core-db / Ingestor のテストを含む）。composeApp の `IosPlaybackTest`: `IosAppServices.play` 直接・共有 UI で前日のタイムラインの発話タップ／検索結果の 1 タップのそれぞれで、そのチャンクの AAC が AVAudioPlayer に指定位置（±0.2 秒）・正しい長さで用意される（#19, #25。テスト実行ファイルはアプリではないので再生開始 `started=` は記録のみ）。`IosTranscriberBridgeTest`: Swift の文字起こし結果が絶対時刻つきで DB・FTS に入る（#21） | ジョブサマリーのテスト一覧と `PLAYBACK_CHECK` 行 |
 | `ios.yml` | Launch iOS app / Launch watchOS app | ビルドした iOS・watchOS アプリをシミュレータに入れて起動し、15 秒後もプロセスが生きていてクラッシュレポートがない | ジョブサマリー、成果物 `simulator-smoke`（スクリーンショット・ログ） |
+| `ios.yml` | Swift unit tests (iOS Simulator) | `SwiftUnitTests` スキーム（ホストなし）: Swift のワイヤ形式が Kotlin のテストベクタと一致（`ProtocolTests`）、Watch の停止理由・状態判定と終了理由のマニフェストへの記録（`RecorderPolicyTests`、#15）、送信キューの ACK・再送・再起動後の再送・強制終了からの復旧（`ChunkOutboxTests`、#17） | ジョブサマリーのテスト一覧（`.github/scripts/xcresult-summary.py`） |
+| `ios.yml` | Japanese test speech / Speech transcription on the iOS simulator | macOS の `say` で作った日本語音声（Watch と同じ AAC 16 kHz モノラル）を SpeechTranscriber（ja_JP）で文字起こしし、時刻と文字の再現率を確認（`SpeechTests`、iOS アプリがホスト、#21）。シミュレータで使えなければ理由を残してスキップ（実機確認は #60） | ジョブサマリーのテスト一覧と「Speech check logs」、成果物 `swift-evidence` |
+| `ios.yml` | Playback in the iOS app (simulator) | `PlaybackTests`（iOS アプリがホストの XCTest）: アプリが起動時に作った本物の `IosAppServices` で AAC 16 kHz の音声を 8 秒から再生し、再生位置がそこから始まり 2 秒後に 1 秒以上進む（#19） | ジョブサマリーのテスト一覧と `PLAYBACK_CHECK check=hosted_player` 行、成果物 `swift-evidence` |
 
 スクリーンショットは成果物 `screenshots-phone` / `screenshots-wear`（30 日保存）、`*_CHECK` 行はジョブサマリーにまとめて出す。
 
@@ -133,22 +136,26 @@ SQLite（bundled ドライバ）を開くテストは `src/sqliteTest` に置く
 
 - core-db（`LocalStoreTest`・`StorageQueriesTest`）と core-pipeline（`IngestorTest`・`TranscriptionPipelineTest`・`StorageManagerTest`）: JVM・iOS シミュレータ・Android 端末/エミュレータ。
 - composeApp（`GapAlertEvaluatorTest`）: JVM・iOS シミュレータ（`watchaudio.kmp.sqlite-tests-jvm-ios`）。Compose Multiplatform のリソースプラグインが KMP ライブラリの Android デバイステスト用バリアントを構成できないため、Android 端末では実行しない。
-- composeApp の `ViewModelTest`・`AppUiTest` は JVM のみ（`Dispatchers.Main` に Swing、描画にデスクトップの Skia を使うため）。
+- composeApp の `ViewModelTest`・`AppUiTest` は JVM のみ（`Dispatchers.Main` に Swing、描画にデスクトップの Skia を使うため）。iOS では `src/iosTest` の `IosPlaybackTest` が実際の `IosAppServices` で同じ流れ（タイムライン・検索 → 再生の準備）を確かめる。Kotlin/Native のテスト実行ファイルはアプリのプロセスではなく `AVAudioPlayer.play()` が false を返すため、再生が進むことはアプリをホストにした XCTest（`iosApp/PlaybackTests`）で確かめる。Kotlin/Native のテストはメインスレッドで動き、`Dispatchers.Main` はメインのランループが回るときだけ進むので、待ち合わせ中にランループを回している（`IosPlaybackFixture.pumpMainRunLoop`）。
 
 手元での実行:
 
 ```bash
 # iOS 向けテストのコンパイル確認（Linux、リンクなし）
 ./gradlew --max-workers=2 :shared:core-db:compileTestKotlinIosSimulatorArm64 :shared:core-pipeline:compileTestKotlinIosSimulatorArm64 \
-  -Pkotlin.native.enableKlibsCrossCompilation=true
+  :composeApp:compileTestKotlinIosSimulatorArm64 -Pkotlin.native.enableKlibsCrossCompilation=true
 # Android エミュレータ / 実機を接続して（KVM のある環境）
 ./gradlew :androidApp:connectedDebugAndroidTest :shared:core-db:connectedAndroidDeviceTest :shared:core-pipeline:connectedAndroidDeviceTest
 adb logcat -d | grep -E "[A-Z_]+_CHECK"
 # Mac: ビルド済みアプリをシミュレータで起動確認
 .github/scripts/simulator-smoke.sh iOS iPhone build/DerivedData/Build/Products/Debug-iphonesimulator/WatchAudio.app app.watchaudio
+# Mac: Swift のテスト（cd iosApp && xcodegen generate の後）
+.github/scripts/xcode-test.sh SwiftUnitTests "Swift unit tests"
+.github/scripts/make-ja-speech.sh build/ja-speech && .github/scripts/xcode-test.sh SpeechTests "SpeechTranscriber"
+ERASE_SIMULATOR=1 .github/scripts/xcode-test.sh PlaybackTests "Playback in the iOS app"
 ```
 
-未対応: iOS の再生（`IosAppServices.play`）を確かめるシミュレータテスト。テスト用の AAC の生成と XCTest のホストアプリ設定が必要で、macOS の CI 時間（10 倍課金）もかかるため、現状はシミュレータでの起動確認までとする。
+Swift のテストを Linux で実行する手段はない（Xcode が必要）。変更したら CI（macOS、10 倍課金）で確認する前に、Kotlin 側は上のクロスコンパイル、Swift 側は差分の読み直しで型・並行性のエラーを潰しておく。
 
 ### 6.1 エミュレータでの音声認識モデル
 
@@ -172,6 +179,23 @@ adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
 ./gradlew :androidApp:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.requireModels=true
 adb pull /data/local/tmp/watchaudio-screenshots
 ```
+
+### 6.3 どの変更でどのワークフローが動くか（#92）
+
+PR の CI 待ちを減らすため、変更したファイルに関係するワークフローだけを動かす。`workflow_dispatch` からはいつでも手動で全部動かせる。
+
+| 変更したファイル | `android.yml` | `emulator.yml` | `ios.yml` | `deliver.yml`（main のみ） |
+| --- | --- | --- | --- | --- |
+| ドキュメントだけ（`docs/**`、`**/*.md`、Issue / PR テンプレート、`tools/roadmap-view/**`、`research/**`、`spikes/**`） | 動かない | 動かない | 動かない | 動かない |
+| iOS 専用（`iosApp/**`、`src/iosMain`・`src/iosTest`、iOS 用スクリプト） | 動く | 動かない | 動く | 動く |
+| Android 専用（`androidApp/**`、`wearApp/**`、`src/androidMain`・`androidHostTest`・`androidDeviceTest`、Android 用スクリプト） | 動く | 動く | 動かない | 動く |
+| JVM 専用（`src/jvmMain`・`src/jvmTest`） | 動く | 動かない | 動かない | 動く |
+| 共通コード（`src/commonMain` など）・Gradle の設定・`build-logic/**` | 動く | 動く | 動く | 動く |
+
+- `android.yml` と `deliver.yml` は除外リスト（`paths-ignore`）。ドキュメント以外の変更では必ず動く。
+- `emulator.yml` と `ios.yml` は対象リスト（`paths`）に除外（`!`）を足している。除外は後ろに書いたものが優先されるので、新しい除外は対象リストより後ろに書く。
+- 新しいスクリプトを `.github/scripts/` に足すときは、片方のプラットフォーム専用なら、もう片方のワークフローの除外に追加する。
+- フォルダ構成を変えるとき（#49）は、上の表のパスもあわせて直す。
 
 ## 7. CI の設定と成果物の扱い（公開リポジトリ）
 

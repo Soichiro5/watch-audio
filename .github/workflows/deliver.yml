@@ -6,6 +6,14 @@ name: Deliver (main)
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
+      - "tools/roadmap-view/**"
+      - "research/**"
+      - "spikes/**"
   workflow_dispatch:
 
 permissions:

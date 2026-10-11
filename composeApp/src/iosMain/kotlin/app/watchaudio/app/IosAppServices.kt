@@ -5,7 +5,15 @@ import app.watchaudio.core.pipeline.DiagnosticsLog
 import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.platform.IoDispatcher
 import kotlin.time.Clock
+import kotlin.math.abs
+import kotlinx.cinterop.BetaInteropApi
+import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.ObjCObjectVar
+import kotlinx.cinterop.alloc
+import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.ptr
+import kotlinx.cinterop.value
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.io.files.Path
@@ -14,6 +22,7 @@ import platform.AVFAudio.AVAudioPlayer
 import platform.AVFAudio.AVAudioSession
 import platform.AVFAudio.AVAudioSessionCategoryPlayback
 import platform.AVFAudio.setActive
+import platform.Foundation.NSError
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSURL
@@ -40,6 +49,15 @@ class IosAppServices internal constructor(
     private val diagnostics: DiagnosticsLog,
 ) : AppServices {
     private var player: AVAudioPlayer? = null
+
+    /** Absolute path of the file in [player]. */
+    private var playerPath: String? = null
+
+    /** Whether `AVAudioPlayer.play()` returned true for the current [player]. */
+    private var playerStarted = false
+
+    /** What the last [play] call did, for diagnosing playback in simulator checks. */
+    private var lastPlay = "not called"
 
     override fun requestTranscription() = onRequestTranscription()
 
@@ -97,20 +115,77 @@ class IosAppServices internal constructor(
     override fun play(audioPath: String, offsetMs: Long) {
         stopPlayback()
         val absolute = if (audioPath.startsWith("/")) audioPath else "$audioRoot/$audioPath"
-        if (!NSFileManager.defaultManager.fileExistsAtPath(absolute)) return
+        if (!NSFileManager.defaultManager.fileExistsAtPath(absolute)) {
+            lastPlay = "file missing: $absolute"
+            return
+        }
         val session = AVAudioSession.sharedInstance()
-        session.setCategory(AVAudioSessionCategoryPlayback, null)
-        session.setActive(true, null)
+        val sessionError = nsErrorOf { session.setCategory(AVAudioSessionCategoryPlayback, it) }
+            ?: nsErrorOf { session.setActive(true, it) }
         val next = runCatching { AVAudioPlayer(contentsOfURL = NSURL.fileURLWithPath(absolute), error = null) }
-            .getOrNull() ?: return
+            .getOrNull()
+        if (next == null) {
+            lastPlay = "AVAudioPlayer cannot open $absolute (session error: $sessionError)"
+            return
+        }
+        val offset = offsetMs.coerceAtLeast(0) / 1000.0
         next.prepareToPlay()
-        next.currentTime = offsetMs.coerceAtLeast(0) / 1000.0
-        next.play()
+        next.currentTime = offset
+        val started = next.play()
+        // A seek before play() is not honoured for every file; seek again once it plays.
+        if (started && abs(next.currentTime - offset) > 0.5) next.currentTime = offset
         player = next
+        playerPath = absolute
+        playerStarted = started
+        lastPlay = "play(offset=${offset}s) started=$started duration=${next.duration}s position=${next.currentTime}s" +
+            (sessionError?.let { " session error: $it" } ?: "")
+    }
+
+    @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
+    private fun nsErrorOf(call: (CPointer<ObjCObjectVar<NSError?>>) -> Boolean): String? = memScoped {
+        val error = alloc<ObjCObjectVar<NSError?>>()
+        if (call(error.ptr)) null else (error.value?.localizedDescription ?: "failed")
     }
 
     override fun stopPlayback() {
         player?.stop()
         player = null
+        playerPath = null
+        playerStarted = false
+    }
+
+    /**
+     * Position of the current playback in ms, or -1 when nothing is playing. Read by the
+     * app-hosted XCTest (`iosApp/PlaybackTests`, #19), whose process can actually start the player.
+     */
+    val playbackPositionMs: Long
+        get() = player?.takeIf { it.playing }?.let { (it.currentTime * 1000).toLong() } ?: -1
+
+    /** The last [play] outcome and the player's current state (simulator checks). */
+    fun playbackDiagnostics(): String =
+        "$lastPlay; now " + (player?.let { "playing=${it.playing} position=${it.currentTime}s" } ?: "no player")
+
+    /**
+     * The player [play] prepared, whether or not it could start: in a process that is not an app
+     * (the Kotlin/Native test executable) `play()` returns false, but the player is opened and seeked.
+     */
+    internal fun preparedPlayback(): PreparedPlayback? {
+        val current = player ?: return null
+        return PreparedPlayback(
+            absolutePath = playerPath ?: return null,
+            positionMs = (current.currentTime * 1000).toLong(),
+            durationMs = (current.duration * 1000).toLong(),
+            started = playerStarted,
+            playing = current.playing,
+        )
     }
 }
+
+/** State of the player prepared by [IosAppServices.play] (simulator checks). */
+internal data class PreparedPlayback(
+    val absolutePath: String,
+    val positionMs: Long,
+    val durationMs: Long,
+    val started: Boolean,
+    val playing: Boolean,
+)

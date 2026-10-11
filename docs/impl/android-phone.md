@@ -15,7 +15,7 @@
 | `ChunkReceiver` / `FrameReader` | `transfer/` | `ChunkFrame` を解析 → 音声を `cacheDir/incoming/*.part` にストリーム保存 → `Ingestor.ingest` → `MessageClient` で `ChunkAck` を返す |
 | `AndroidSherpaTranscriber` | `asr/` | sherpa-onnx（AAR の Kotlin API）。Silero VAD → ReazonSpeech Zipformer int8。認識器は初回に読み込み、ワーカー 1 回分の間は使い回す。入力は音声パーツのリスト（チャンク単体、または境界付近の隣のチャンクの音声と連結したもの。[02 §6.3](../02-architecture.md#63-処理パイプラインphone)）で、各ファイルを `AudioDecoder` でデコードして `concatenateParts` で切り出し・連結する |
 | `AudioDecoder` | `asr/` | `MediaExtractor` + `MediaCodec` で m4a(AAC)/ogg(Opus) を 16 kHz モノラル float PCM に。ダウンミックスと線形リサンプルは `core-pipeline` の `Pcm.kt`（共通コード・単体テストあり） |
-| `ModelManager` / `ModelDownloadWorker` / `ModelArchive` | `asr/` | モデルの用意（adb サイドロード取り込み・ダウンロード・展開・原子的な配置） |
+| `ModelManager` / `ModelDownloadWorker` / `ModelManifest` / `ModelDownloader` | `asr/` | モデルの用意（adb サイドロード取り込み・ファイル単位のダウンロード（途中再開・SHA-256 検証）・原子的な配置） |
 | `TranscriptionScheduler` / `TranscriptionWorker` | `work/` | WorkManager による文字起こしの起動 |
 | `GapAlertMonitor` / `GapAlertWorker` | `alert/` | 録音の途絶アラート（#43）。判定は共通の `GapAlertEvaluator`、ここでは WorkManager でのチェックと通知の表示のみ（§4.1） |
 | `MainActivity` | `MainActivity.kt` | `App(services)` をホスト。オンボーディングの権限要求用に Activity Result の launcher を `AndroidAppServices` に渡す |
@@ -76,9 +76,21 @@ files/models/
 
 ### 3.1 ダウンロード（受信のみ）
 
-- 取得元: `https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01.tar.bz2`（**約 713 MB**）と `.../asr-models/silero_vad.onnx`。
-- `commons-compress` で bzip2 + tar を**ストリーミング展開**し、int8 の encoder/decoder/joiner と tokens.txt だけを書き出す（アーカイブ全体はディスクにもメモリにも置かない）。必要な 4 ファイルが揃った時点で読み取りを打ち切るが、int8 encoder はアーカイブの末尾付近にあるため、実際にはほぼ全量の通信が発生する。
-- 書き込み先は `files/models/.tmp-download/`。全ファイルが揃ってから `rename` で所定の場所へ移すので、途中で落ちても「不完全なのに揃って見える」状態にならない。次回起動時に `.tmp-*` は掃除する。
+- **必要な 5 ファイルだけを個別に取得する**（合計 161,016,054 バイト ≒ **161 MB**。以前は fp32 モデルも含む約 713 MB の tar.bz2 をほぼ全量受信していた）。対象は `ModelManifest`（URL・サイズ・SHA-256）に固定で持つ:
+
+  | ファイル | サイズ（バイト） | 取得元 |
+  | --- | ---: | --- |
+  | `silero_vad.onnx` | 643,854 | `https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx`（従来と同じ） |
+  | `tokens.txt` | 45,754 | Hugging Face `csukuangfj/reazonspeech-k2-v2` |
+  | `decoder-epoch-99-avg-1.int8.onnx` | 2,959,337 | 同上 |
+  | `joiner-epoch-99-avg-1.int8.onnx` | 2,696,970 | 同上 |
+  | `encoder-epoch-99-avg-1.int8.onnx` | 154,670,139 | 同上 |
+
+- ASR の 4 ファイルは sherpa-onnx の作者が公開している Hugging Face リポジトリ `csukuangfj/reazonspeech-k2-v2`（リリースの tar.bz2 の元になったもの）から、**コミットを固定した URL**（`https://huggingface.co/csukuangfj/reazonspeech-k2-v2/resolve/7ebed8f70b8ef67f656aa08e3084e5885202d0e6/<ファイル名>`）で取得する。SHA-256 はそのコミットの Git LFS のハッシュで、リリースの tar.bz2 に入っているファイル・公式の `reazon-research/reazonspeech-k2-v2` のファイルとも一致することを確認済み。
+- **途中再開**: 受信中のバイトは `files/models/.partial/<SHA-256>.part` に追記し、再試行時（同じワーカー内のリトライ・ワーカーの再実行・アプリ再起動後）は `Range: bytes=<既存サイズ>-` で続きだけを要求する。206 の `Content-Range` の開始位置が合わなければ破棄してやり直し、サーバーが Range を無視して 200 を返した場合は先頭から書き直す。`.part` の名前は内容のハッシュなので、モデルが更新されても古い版の途中データを続きとして使うことはない。
+- **検証と配置**: 受信し終えたファイルはサイズと SHA-256 を検証してから `rename`（`ATOMIC_MOVE`）で所定の場所に置く。所定の場所には検証済みのファイルしか現れないので、途中で落ちても「不完全なのに揃って見える」状態にならない。続きから受信した結果が一致しない場合（途中データが壊れていた等）は `.part` を消して一度だけ最初から取り直し、それでも一致しなければ失敗としてリトライに回す。全ファイルが揃ったら `.partial/` を消す。
+- ダウンロードは受信のみで、ユーザーデータは送らない（リクエストに含まれるのは URL と Range ヘッダだけ）。
+- ハーネス（`tools/harness/download-models.sh`）も同じ URL・SHA-256 のファイルを取得する（加えて E2E 用の `test_wavs/` を同じリポジトリから取得）。両者の一致は `ModelManifestTest` で検査しているので、ハーネスの E2E（CI の「End-to-end without devices」）がアプリと同じファイルで文字起こしできることの確認になる。
 - 実行は `ModelDownloadWorker`（WorkManager、`setForeground` で dataSync の前景ワーカーにする。バックグラウンドから開始されて前景化できない場合は通常ワーカーとして続行）。各ファイルは 3 回までその場でリトライし、さらにワーカーとして指数バックオフで最大 5 回まで再試行。
 - **従量制ネットワークでは自動ダウンロードしない**: 起動時の自動取得（`downloadIfMissing()`）は `NetworkType.UNMETERED` 制約付き。モバイル通信で取得するのはユーザー操作で `AndroidAppServices.downloadModels(allowMetered = true)` が呼ばれたときだけ。Wi-Fi 待ちの間は `status.message` に案内文が入る。
 - 進捗は `ModelState.Downloading(progress)` として `AppServices.status.asrModel` に流れる。完了すると `Ready` になり、保留中のチャンクの文字起こしを自動で要求する。
@@ -167,7 +179,7 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 
 ```bash
 ./gradlew --max-workers=2 jvmTest testAndroidHostTest   # 共通コード（フレーム読み取り・Pcm・VAD 区間の分割など）
-./gradlew --max-workers=2 :androidApp:testDebugUnitTest  # FrameReader / ModelArchive / CrashRecorder・PreviousExits（JVM）
+./gradlew --max-workers=2 :androidApp:testDebugUnitTest  # FrameReader / ModelDownloader（途中切断するフェイクサーバーからの再開）/ ModelManifest / CrashRecorder・PreviousExits（JVM）
 ./gradlew --max-workers=2 :tools:harness:test            # 実モデルでの E2E（Android と同じ AsrSettings）
 ./gradlew --max-workers=2 :androidApp:assembleDebug :androidApp:lintDebug
 ```
@@ -225,8 +237,7 @@ Watch が無くても、ADB 経由の Wear OS エミュレータとスマホエ�
 
 - **実機での動作確認は未実施**（#61）。エミュレータ（CI、§6.1）では起動・再生・MediaCodec デコード + sherpa-onnx AAR での文字起こし・モデル待ち・強制終了からの再開・充電時の定期ジョブ（WorkManager のテストドライバ）・途絶通知の表示を確認している（この開発環境には KVM がないため手元では動かせない）。Data Layer 受信、実機の速度・発熱、Doze 中の WorkManager の挙動は実機で確認が必要。
 - `TransferPaths.SYNC_REQUEST_MESSAGE`（Watch からの ACK 再送依頼）は未対応。ペイロードがなく対象チャンクが分からないため、現状は Watch がチャンクを再送 → `DUPLICATE` ACK で回復する。必要なら chunkId 一覧をペイロードに持たせる仕様にする。
-- モデルのダウンロードが約 713 MB と大きい（必要なのは約 160 MB）。int8 ファイルを個別に配布しているミラー（Hugging Face 等）からの取得や、自前の配布形態にすると通信量を約 1/4 にできる。ダウンロードの途中再開（Range）は未対応（bzip2 ストリームのため最初からやり直し）。
-- モデルファイルのハッシュ検証なし（公式のチェックサムが公開されていない）。
+- モデルの取得元は外部（Hugging Face の個人リポジトリと k2-fsa の GitHub Release）に依存している。コミット固定 + SHA-256 検証なので内容が差し替わることはないが、公開が取り下げられると取得できなくなる。その場合は `ModelManifest` と `tools/harness/download-models.sh` の URL を自前の配布先（このリポジトリの GitHub Release 等）に差し替える（ハッシュはそのまま）。
 - `ModelDownloadWorker` の通知には進捗を出していない（状態は `AppServices.status` で UI に出す）。Android 13+ で通知権限がないと通知は表示されないが、ダウンロードは続く。
 - 録音の途絶アラートは WorkManager の精度に依存する（タイマーは Doze で遅れうる、定期チェックは最短 15 分）。厳密な時刻が必要なら `AlarmManager` を検討。実機での確認（Watch の録音を強制停止 → 10〜25 分以内に通知）が必要。
 - 通知権限の「拒否済み」は同じプロセス内で拒否された場合しか区別できない（再起動後は「未許可」と表示し、要求すると OS が即座に拒否を返して「拒否済み」になる）。
