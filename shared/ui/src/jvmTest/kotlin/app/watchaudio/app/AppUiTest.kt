@@ -10,12 +10,14 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import androidx.lifecycle.Lifecycle
@@ -27,6 +29,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import app.watchaudio.app.logic.dayWindow
 import app.watchaudio.app.state.NowProvider
+import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.ModelState
 import app.watchaudio.core.pipeline.PauseReason
@@ -253,6 +256,28 @@ class AppUiTest {
         assertTrue(onAllNodes(hasText("HTTP 404", substring = true)).fetchSemanticsNodes().isEmpty())
         assertNoEnglish()
         screenshot("status-model-failed")
+    }
+
+    /** #144: a failed chunk shows a fixed Japanese note, never the exception message stored in the DB. */
+    @Test
+    fun timelineFailureShowsNoExceptionMessage() = runDesktopComposeUiTest(width = 412, height = 915) {
+        runBlocking {
+            DemoData.seed(store, day, tokyo, until = now - 20 * 60_000L)
+            store.updateSettings { it.copy(onboardingCompleted = true) }
+        }
+        val failed = runBlocking { store.read { chunksBetween(dayWindow(day, tokyo).start, now) } }
+            .filter { it.state == ChunkState.FAILED }
+        assertTrue(failed.isNotEmpty() && failed.all { it.lastError == DemoData.DEMO_FAILURE })
+        showApp(services)
+
+        val row = hasText("文字起こし失敗", substring = true)
+        waitForText("2026年10月10日(土)")
+        onNode(hasScrollToNodeAction()).performScrollToNode(row)
+        waitForText(Strings.FAILED_CHUNKS_NOTE)
+        assertTrue(onAllNodes(hasText("IOException", substring = true)).fetchSemanticsNodes().isEmpty())
+        assertTrue(onAllNodes(hasText("MediaCodec", substring = true)).fetchSemanticsNodes().isEmpty())
+        assertNoEnglish()
+        screenshot("timeline-failed")
     }
 
     /** Fails on any text on screen (scrolled away or not) with an English word and no Japanese. */

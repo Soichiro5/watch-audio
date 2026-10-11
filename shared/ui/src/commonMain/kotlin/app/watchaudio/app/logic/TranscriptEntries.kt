@@ -22,14 +22,16 @@ sealed interface TranscriptEntry {
         override val key: String get() = "s${segment.id}"
     }
 
-    /** Consecutive chunks that are not transcribed (yet), shown as one row. */
+    /**
+     * Consecutive chunks that are not transcribed (yet), shown as one row. A failure's exception
+     * message stays in the database (`ChunkRecord.lastError`) and the diagnostics log; the row
+     * only shows a fixed text (#144).
+     */
     data class Untranscribed(
         val kind: Kind,
         val from: Long,
         val to: Long,
         val chunkIds: List<String>,
-        /** Last error of the group (only for [Kind.FAILED]). */
-        val error: String?,
     ) : TranscriptEntry {
         enum class Kind { PENDING, TRANSCRIBING, FAILED }
 
@@ -71,11 +73,10 @@ fun buildTranscriptEntries(chunks: List<ChunkRecord>, segments: List<SegmentReco
             open.copy(
                 to = maxOf(open.to, chunk.endedAt),
                 chunkIds = open.chunkIds + chunk.id,
-                error = chunk.lastError ?: open.error,
             )
         } else {
             open?.let(groups::add)
-            TranscriptEntry.Untranscribed(kind, chunk.startedAt, chunk.endedAt, listOf(chunk.id), chunk.lastError)
+            TranscriptEntry.Untranscribed(kind, chunk.startedAt, chunk.endedAt, listOf(chunk.id))
         }
     }
     open?.let(groups::add)

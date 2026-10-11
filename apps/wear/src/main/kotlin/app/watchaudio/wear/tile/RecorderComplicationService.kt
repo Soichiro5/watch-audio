@@ -13,7 +13,7 @@ import app.watchaudio.wear.R
 import app.watchaudio.wear.ui.statusShort
 import app.watchaudio.wear.ui.statusText
 
-/** SHORT_TEXT complication: REC / OFF / CHG / … at a glance; tap opens the app. */
+/** SHORT_TEXT complication: 録音中 / 未装着 / 充電中 / … at a glance; tap opens the app. */
 class RecorderComplicationService : SuspendingComplicationDataSourceService() {
     override suspend fun onComplicationRequest(request: ComplicationRequest): ComplicationData? {
         if (request.complicationType != ComplicationType.SHORT_TEXT) return null
@@ -32,7 +32,7 @@ class RecorderComplicationService : SuspendingComplicationDataSourceService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return ShortTextComplicationData.Builder(
-            PlainComplicationText.Builder(statusShort(key, armed)).build(),
+            PlainComplicationText.Builder(statusShort(this, key, armed)).build(),
             PlainComplicationText.Builder(statusText(this, key, armed)).build(),
         )
             .setTitle(PlainComplicationText.Builder(getString(R.string.app_name)).build())

@@ -45,6 +45,9 @@ object Strings {
     fun transcribingChunks(range: String, count: Int) = "文字起こし中 $range（${count}件）"
     fun failedChunks(range: String, count: Int) = "文字起こし失敗 $range（${count}件）"
 
+    /** Under a failed row instead of the exception message, which stays in the DB and the diagnostics log (#144). */
+    const val FAILED_CHUNKS_NOTE = "この時間の音声を文字起こしできませんでした。原因は診断ログに記録されています。"
+
     // Gap causes
     fun endReason(reason: ChunkEndReason): String = when (reason) {
         ChunkEndReason.ROTATION -> "継続"

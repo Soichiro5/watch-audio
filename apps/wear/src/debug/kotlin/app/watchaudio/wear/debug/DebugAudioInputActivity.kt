@@ -36,6 +36,7 @@ import app.watchaudio.wear.R
 import app.watchaudio.wear.recording.RecorderStore
 import app.watchaudio.wear.recording.RecordingService
 import app.watchaudio.wear.recording.statusKey
+import app.watchaudio.wear.ui.statusText
 import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -139,7 +140,7 @@ class DebugAudioInputActivity : ComponentActivity() {
                 item { Text(getString(R.string.debug_input_title), style = MaterialTheme.typography.titleSmall) }
                 item {
                     val current = playback
-                    val status = if (recorder.serviceRunning) recorder.mode.statusKey() else "stopped"
+                    val status = statusText(this@DebugAudioInputActivity, if (recorder.serviceRunning) recorder.mode.statusKey() else "stopped", armed = false)
                     SmallText(
                         if (current == null) {
                             getString(R.string.debug_input_status_mic, status)
