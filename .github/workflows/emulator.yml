@@ -5,7 +5,8 @@ name: Emulator smoke test
 # fail on crashes of our own process (system apps such as the Wear setup wizard sometimes crash on
 # CI images and must not fail the check): .github/scripts/launch-smoke.sh. Runs on Linux runners (KVM), 1x minutes.
 # On the phone, the release build also transcribes a known Japanese chunk into its database (#78):
-# .github/scripts/release-asr.sh runs ReleaseAsrTest against it.
+# .github/scripts/release-asr.sh runs ReleaseAsrTest against it, with the APKs that the release-test-apks job builds
+# on its own runner in parallel (#92).
 # On the phone emulator it also runs the instrumented tests: real MediaPlayer playback and
 # the search -> one tap -> play flow (#19, #25), the shared SQLite tests of core-db and
 # core-pipeline on Android (#14), on-device ASR with the real models and the wait without a model
@@ -66,6 +67,8 @@ on:
 
 permissions:
   contents: read
+  # release-asr.sh downloads the release-test-apks artifact of the same run.
+  actions: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -91,9 +94,7 @@ jobs:
             device-test-modules: androidApp shared/core-db shared/core-pipeline
             # The ASR tests must not skip for lack of models (pushed by phone-scenarios.sh).
             device-test-args: -Pandroid.testInstrumentationRunnerArguments.requireModels=true
-            # #78: ReleaseAsrTest against the R8 release APK, from a test APK built for the release build type.
-            # assembleRelease too: the test APK only depends on the app's R8 mapping, not on its packaged APK.
-            release-test-apks: :androidApp:assembleRelease :androidApp:assembleReleaseAndroidTest
+            # #78: ReleaseAsrTest against the R8 release APK, with the APKs of the release-test-apks job.
             release-checks: .github/scripts/release-asr.sh
             scenarios: .github/scripts/phone-scenarios.sh
           - name: wear
@@ -162,9 +163,8 @@ jobs:
 
       # The release build (R8, #78) is signed with a throwaway key made here: it only has to install
       # on the emulator, and the real release key (android.yml) never reaches this job.
-      # The shipped release APK is set aside in release-apk/ for the launch check. The release ASR check (#78) needs a
-      # second invocation (one test build type per build) that rebuilds the release APK with the keep rules of its
-      # test (androidApp/proguard-release-test.pro) and builds the test APK for it.
+      # The shipped release APK is set aside in release-apk/ for the launch check. The APKs of the release ASR check
+      # (#78) need a second build (one test build type per build); the release-test-apks job makes them (#92).
       - name: Build release and debug APKs (and instrumented test APKs)
         env:
           WATCHAUDIO_RELEASE_STORE_FILE: ${{ runner.temp }}/throwaway.jks
@@ -176,7 +176,6 @@ jobs:
             -keypass ci-throwaway -alias ci -keyalg RSA -keysize 2048 -validity 1 -dname "CN=watch-audio CI throwaway"
           ./gradlew :${{ matrix.module }}:assembleRelease :${{ matrix.module }}:assembleDebug ${{ matrix.device-test-apks }}
           mkdir -p release-apk && cp ${{ matrix.module }}/build/outputs/apk/release/${{ matrix.module }}-release.apk release-apk/
-          if [ -n "${{ matrix.release-test-apks }}" ]; then ./gradlew ${{ matrix.release-test-apks }} -Pwatchaudio.testBuildType=release; fi
 
       - name: Wait for the emulator download
         run: |
@@ -187,6 +186,10 @@ jobs:
 
       - name: Install, launch and check for crashes
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        env:
+          # release-asr.sh waits for this artifact of the same run (job release-test-apks) and downloads it.
+          RELEASE_TEST_ARTIFACT: release-test-apks
+          GH_TOKEN: ${{ github.token }}
         with:
           api-level: ${{ matrix.api-level }}
           target: ${{ matrix.target }}
@@ -255,3 +258,46 @@ jobs:
           path: screenshots-${{ matrix.name }}/
           if-no-files-found: ignore
           retention-days: 30
+
+  # #78: the release ASR check (release-asr.sh, end of the phone job) runs ReleaseAsrTest against the R8 release APK
+  # rebuilt with the keep rules of its test (androidApp/proguard-release-test.pro), with the test APK built for the
+  # release build type. That is a second Gradle build (one test build type per build; ~1-2 min of R8), so it runs
+  # here, on its own runner, while the phone job boots the emulator and runs the other checks (#92).
+  # Signed with a throwaway key made here (both APKs with the same key; the phone job uninstalls its own builds first).
+  release-test-apks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          # Reads the smoke jobs' caches; saving its own would only duplicate them.
+          cache-read-only: true
+
+      # assembleRelease too: the test APK only depends on the app's R8 mapping, not on its packaged APK.
+      - name: Build the release APK and the test APK for the release ASR check
+        env:
+          WATCHAUDIO_RELEASE_STORE_FILE: ${{ runner.temp }}/throwaway.jks
+          WATCHAUDIO_RELEASE_STORE_PASSWORD: ci-throwaway
+          WATCHAUDIO_RELEASE_KEY_ALIAS: ci
+          WATCHAUDIO_RELEASE_KEY_PASSWORD: ci-throwaway
+        run: |
+          keytool -genkeypair -noprompt -keystore "$WATCHAUDIO_RELEASE_STORE_FILE" -storepass ci-throwaway \
+            -keypass ci-throwaway -alias ci -keyalg RSA -keysize 2048 -validity 1 -dname "CN=watch-audio CI throwaway"
+          ./gradlew :androidApp:assembleRelease :androidApp:assembleReleaseAndroidTest -Pwatchaudio.testBuildType=release
+          mkdir -p release-test-apks
+          cp androidApp/build/outputs/apk/release/androidApp-release.apk \
+            androidApp/build/outputs/apk/androidTest/release/androidApp-release-androidTest.apk release-test-apks/
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-test-apks
+          path: release-test-apks/
+          if-no-files-found: error
+          retention-days: 1
