@@ -1,6 +1,7 @@
 package app.watchaudio.core.db
 
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import app.watchaudio.testing.TempDir
 import java.io.File
 import java.util.Locale
 import kotlin.test.AfterTest
@@ -17,8 +18,9 @@ import kotlinx.coroutines.runBlocking
  * Not part of `jvmTest`; run it with `./gradlew :shared:db:jvmBenchmark`. Prints a
  * `SEARCH_BENCHMARK key=value ...` line and writes a Markdown summary to the path in the
  * `benchmark.report` system property. Fails if the p95 latency of any query exceeds the
- * 300 ms target. `-Pbenchmark.segments=N` changes the data size and `-Pbenchmark.profile=sentences`
- * switches to the #23 segment shape ([TranscriptGenerator.Profile]).
+ * 300 ms target. `-Pbenchmark.segments=N` changes the data size, `-Pbenchmark.profile=sentences`
+ * switches to the #23 segment shape ([TranscriptGenerator.Profile]) and
+ * `-Pbenchmark.keepDb=<path>` copies the database there afterwards.
  */
 class SearchBenchmark {
     private val dir = TempDir("search-benchmark")
@@ -27,6 +29,10 @@ class SearchBenchmark {
     @AfterTest
     fun tearDown() {
         store.close()
+        // -Pbenchmark.keepDb=<path> keeps the database for a size breakdown (e.g. sqlite3 dbstat).
+        System.getProperty("benchmark.keepDb")?.let { target ->
+            File(dir.resolve(LocalStore.FILE_NAME).toString()).copyTo(File(target), overwrite = true)
+        }
         dir.deleteRecursively()
     }
 

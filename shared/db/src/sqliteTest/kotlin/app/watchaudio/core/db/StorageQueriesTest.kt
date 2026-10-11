@@ -2,11 +2,7 @@ package app.watchaudio.core.db
 
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
-import app.watchaudio.core.protocol.AudioCodec
-import app.watchaudio.core.protocol.AudioFile
-import app.watchaudio.core.protocol.ChunkEndReason
-import app.watchaudio.core.protocol.ChunkManifest
-import app.watchaudio.core.protocol.SourcePlatform
+import app.watchaudio.testing.TempDir
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -26,21 +22,8 @@ class StorageQueriesTest {
         dir.deleteRecursively()
     }
 
-    private fun manifest(id: String, start: Long, audio: Boolean = true) = ChunkManifest(
-        chunkId = id,
-        sessionId = "s1",
-        deviceId = "watch",
-        source = SourcePlatform.WEAROS,
-        startedAtEpochMs = start,
-        durationMs = 300_000,
-        timeZone = "Asia/Tokyo",
-        audio = if (audio) AudioFile("$id.m4a", AudioCodec.AAC, 16_000, 1, 24_000, 1_000, "00") else null,
-        markOffsetsMs = listOf(1_000),
-        endReason = ChunkEndReason.ROTATION,
-    )
-
     private suspend fun insert(id: String, start: Long, audio: Boolean = true) =
-        store.transaction { insertChunk(manifest(id, start, audio), if (audio) "$id.m4a" else null, 0) }
+        store.registerChunk(id, start, audio, marks = listOf(1_000))
 
     private suspend fun transcribe(id: String, text: String = "会議の資料を送ります") = store.transaction {
         val start = chunk(id)!!.startedAt
@@ -105,6 +88,25 @@ class StorageQueriesTest {
     }
 
     @Test
+    fun compactKeepsSegmentsWithTheirChunks() = runTest {
+        repeat(4) { i ->
+            insert("c$i", i * 300_000L)
+            transcribe("c$i", "発話$i")
+        }
+        store.transaction { deleteChunks(listOf("c0", "c2")) }
+        store.compact()
+
+        assertEquals(
+            listOf("c1" to "発話1", "c3" to "発話3"),
+            store.read { segmentsBetween(0, Long.MAX_VALUE) }.map { it.chunkId to it.text },
+        )
+        insert("c4", 4 * 300_000L)
+        transcribe("c4", "発話4")
+        assertEquals(listOf("c4"), store.read { search("発話4") }.map { it.segment.chunkId })
+        assertEquals(setOf("test"), store.read { segmentsBetween(0, Long.MAX_VALUE) }.map { it.engine }.toSet())
+    }
+
+    @Test
     fun deleteAllKeepsSettingsAndCompacts() = runTest {
         repeat(200) { i ->
             insert("c$i", i * 300_000L)
@@ -147,7 +149,7 @@ class StorageQueriesTest {
         }
         LocalStore.open(path).use { migrated ->
             assertEquals("true", migrated.read { setting("onboarded") })
-            migrated.transaction { insertChunk(manifest("a", 0), "a.m4a", 0) }
+            migrated.registerChunk("a", 0)
             assertNull(migrated.read { chunk("a") }!!.audioPurgedAt)
         }
     }

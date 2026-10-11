@@ -3,11 +3,9 @@ package app.watchaudio.core.pipeline
 import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.PolicyGatedTranscription.Companion.batteryBudget
-import app.watchaudio.core.protocol.AudioCodec
-import app.watchaudio.core.protocol.AudioFile
-import app.watchaudio.core.protocol.ChunkEndReason
-import app.watchaudio.core.protocol.ChunkManifest
-import app.watchaudio.core.protocol.SourcePlatform
+import app.watchaudio.testing.TempDir
+import app.watchaudio.testing.testAudio
+import app.watchaudio.testing.testManifest
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -55,12 +53,7 @@ class PolicyGatedTranscriptionTest {
     private suspend fun addChunks(vararg ids: String) = ids.forEachIndexed { index, id ->
         store.transaction {
             insertChunk(
-                ChunkManifest(
-                    chunkId = id, sessionId = "s", deviceId = "w", source = SourcePlatform.WEAROS,
-                    startedAtEpochMs = index * 10 * minute, durationMs = 5 * minute, timeZone = "UTC",
-                    audio = AudioFile("$id.m4a", AudioCodec.AAC, 16_000, 1, 24_000, 1, "00"),
-                    endReason = ChunkEndReason.ROTATION,
-                ),
+                testManifest(id, index * 10 * minute, durationMs = 5 * minute, audio = testAudio(id, sizeBytes = 1)),
                 "$id.m4a",
                 0,
             )

@@ -1,4 +1,4 @@
-package app.watchaudio.core.db
+package app.watchaudio.testing
 
 import kotlin.random.Random
 import kotlinx.io.files.Path
