@@ -129,16 +129,10 @@ object SpeechFixtures {
     }
 
     /**
-     * Stores [samples] as a watch chunk (AAC in .m4a) through [ingestor], like the phone does on
-     * receipt, without asking for transcription.
+     * Encodes [samples] as a watch chunk (AAC in .m4a, in the app's cache) and returns its
+     * manifest and audio file, as the watch would send them.
      */
-    fun ingest(
-        ingestor: Ingestor,
-        chunkId: String,
-        sessionId: String,
-        startedAt: Long,
-        samples: ShortArray,
-    ): ChunkManifest {
+    fun chunk(chunkId: String, sessionId: String, startedAt: Long, samples: ShortArray): Pair<ChunkManifest, File> {
         val file = File(context.cacheDir, "$chunkId.m4a")
         TestAudio.writeM4a(file, samples, SAMPLE_RATE)
         val manifest = ChunkManifest(
@@ -152,6 +146,21 @@ object SpeechFixtures {
             audio = AudioFile(file.name, AudioCodec.AAC, SAMPLE_RATE, 1, 32_000, file.length(), sha256Of(Path(file.path))),
             endReason = ChunkEndReason.ROTATION,
         )
+        return manifest to file
+    }
+
+    /**
+     * Stores [samples] as a watch chunk through [ingestor], like the phone does on receipt,
+     * without asking for transcription.
+     */
+    fun ingest(
+        ingestor: Ingestor,
+        chunkId: String,
+        sessionId: String,
+        startedAt: Long,
+        samples: ShortArray,
+    ): ChunkManifest {
+        val (manifest, file) = chunk(chunkId, sessionId, startedAt, samples)
         assertEquals(AckStatus.STORED, runBlocking { ingestor.ingest(manifest, Path(file.path)) }.status)
         return manifest
     }

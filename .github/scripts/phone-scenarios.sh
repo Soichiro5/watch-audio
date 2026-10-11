@@ -7,7 +7,9 @@
 #   2. #32 PermissionDeniedTest: refuses the notification permission in the system dialog on a
 #      fresh install (revoking a permission kills the app, so it must come first),
 #   3. #20 ResumeAfterKillTest: seeds chunks, opens the app, force-stops it in the middle of the
-#      transcription run and verifies that every chunk is transcribed exactly once after the restart.
+#      transcription run and verifies that every chunk is transcribed exactly once after the restart,
+#   4. #77 DiagnosticsScenarioTest: receives and transcribes a chunk, force-stops the app and checks
+#      the diagnostics log (events, previous exit reason) and its export from the Status tab.
 #
 # Evidence: *_CHECK lines in scenario-logs/ (logcat and `am instrument` output), screenshots in
 # /data/local/tmp/watchaudio-screenshots (pulled by the workflow). Exit status 1 if a check failed.
@@ -80,6 +82,27 @@ else
     -e transcribedBeforeKill "$transcribed"
 fi
 save_logcat
+
+# 4. Diagnostics log (#77): a chunk is received and transcribed, the running app is force-stopped,
+#    and the next start finds the events and the exit reason in the log and exports it.
+instrument diagnostics-receive -e class app.watchaudio.android.DiagnosticsScenarioTest#receive -e scenario diagnostics-receive -e requireModels true
+save_logcat
+adb shell am start -W -n "$PKG/app.watchaudio.android.MainActivity"
+sleep 3
+stopped_from=$(adb shell date +%s | tr -d '\r')
+adb shell am force-stop "$PKG"
+stopped_until=$(adb shell date +%s | tr -d '\r')
+log "DIAGNOSTICS_CHECK phase=stopped command='am force-stop $PKG' device_time_s=$stopped_from..$stopped_until"
+save_logcat
+instrument diagnostics-verify -e class app.watchaudio.android.DiagnosticsScenarioTest#verify -e scenario diagnostics-verify \
+  -e stoppedFrom "${stopped_from}000" -e stoppedUntil "${stopped_until}999"
+save_logcat
+# The exported CSV (debug build, so run-as can read the app's cache) and an excerpt for the summary.
+adb exec-out "run-as $PKG sh -c 'cat cache/diagnostics-export/*.csv'" > "$OUT/diagnostics-export.csv" 2>/dev/null || true
+if [ -s "$OUT/diagnostics-export.csv" ]; then
+  log "DIAGNOSTICS_EXPORT rows=$(($(wc -l < "$OUT/diagnostics-export.csv") - 1)) file=$OUT/diagnostics-export.csv; excerpt:"
+  grep -E "chunk=diagnostics-check|,app_start,|,previous_exit," "$OUT/diagnostics-export.csv" | tail -n 8 | sed 's/^/  /' | tee -a "$OUT/summary.txt"
+fi
 
 # Lines can be logged twice (Log + System.out); keep the first of each.
 grep -ho "[A-Z_]*_CHECK .*\|SCREENSHOT .*\|MODEL_INSTALL .*" "$OUT/logcat-scenarios.txt" | awk '!seen[$0]++' >> "$OUT/summary.txt" || true

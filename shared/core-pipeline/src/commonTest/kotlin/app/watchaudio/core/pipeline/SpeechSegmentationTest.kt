@@ -147,4 +147,57 @@ class SpeechSegmentationTest {
         assertEquals(2, padSpeechSpans(listOf(0 to audio.size), audio).size)
         assertEquals(1, padSpeechSpans(listOf(0 to audio.size), speech(5)).size)
     }
+
+    /**
+     * Steady background noise (amplitude 0.01) with "speech" 20 dB louder at [speechRanges]
+     * (start to length in samples): the gaps between utterances hold noise, not silence.
+     */
+    private fun noisy(seconds: Int, vararg speechRanges: Pair<Int, Int>): FloatArray {
+        val random = Random(seconds + 1)
+        val audio = FloatArray(seconds * rate) { random.nextFloat() * 0.02f - 0.01f }
+        for ((start, length) in speechRanges) for (i in start until start + length) audio[i] *= 10f
+        return audio
+    }
+
+    @Test
+    fun turnTakingPauseFilledWithNoiseSplitsAtTheNoiseFloor() {
+        // Two utterances 0.35 s apart in noise (#71): the gap is only 20 dB below the speech, so
+        // only the noise floor rule finds it.
+        val gap = (0.35 * rate).toInt()
+        val audio = noisy(8, 2 * rate to 2 * rate, 4 * rate + gap to 2 * rate)
+        val vad = listOf(2 * rate to 4 * rate + gap)
+        val spans = padSpeechSpans(vad, audio)
+        assertEquals(2, spans.size)
+        assertTrue(abs(4 * rate + gap / 2 - spans[1].startSample) <= 160, "cut at ${spans[1].startSample}")
+        assertEquals(1, padSpeechSpans(vad, audio, pauseFloorDb = Float.NEGATIVE_INFINITY).size)
+    }
+
+    @Test
+    fun noisyPausesMustLastLongerThanSilentOnes() {
+        // A gap between the two minimums splits when it is silent, not when it holds noise.
+        val gap = ((AsrSettings.MIN_PAUSE_SECONDS + AsrSettings.MIN_NOISY_PAUSE_SECONDS) / 2 * rate).toInt()
+        val noisy = noisy(8, 2 * rate to 2 * rate, 4 * rate + gap to 2 * rate)
+        val vad = listOf(2 * rate to 4 * rate + gap)
+        assertEquals(1, padSpeechSpans(vad, noisy).size)
+        val silent = noisy.copyOf().also { it.fill(0f, 4 * rate, 4 * rate + gap) }
+        assertEquals(2, padSpeechSpans(vad, silent).size)
+    }
+
+    @Test
+    fun noiseAloneAndShortDipsInNoiseDoNotSplit() {
+        val shortGap = (AsrSettings.MIN_PAUSE_SECONDS * rate).toInt() - 480
+        val audio = noisy(8, 2 * rate to 2 * rate, 4 * rate + shortGap to 2 * rate)
+        assertEquals(1, padSpeechSpans(listOf(2 * rate to 4 * rate + shortGap), audio).size)
+        // A VAD false alarm on noise only: every frame is near the floor, so there is no pause inside.
+        assertEquals(1, padSpeechSpans(listOf(rate to 5 * rate), noisy(8)).size)
+    }
+
+    @Test
+    fun noiseFloorIsTakenFromTheQuietFramesAroundTheSegment() {
+        // A segment that is all speech still finds the noise in the seconds around it.
+        val audio = noisy(12, 4 * rate to 4 * rate)
+        val floor = noiseFloor(audio, 4 * rate, 8 * rate)
+        val noiseEnergy = 0.01 * 0.01 / 3 // mean square of uniform noise in [-0.01, 0.01]
+        assertTrue(floor in noiseEnergy * 0.5..noiseEnergy * 1.5, "floor $floor")
+    }
 }

@@ -14,6 +14,7 @@ import com.google.android.gms.wearable.ChannelClient
 import com.google.android.gms.wearable.Wearable
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -53,43 +54,14 @@ class ChunkReceiver(
     }
 
     private suspend fun handle(channel: ChannelClient.Channel) {
-        val temp = File(incomingDir.apply { mkdirs() }, "${UUID.randomUUID()}.part")
         try {
             if (!isNearby(channel.nodeId)) {
                 Log.w(TAG, "ignoring ${channel.path}: node is not directly connected")
                 diagnostics.log(DiagnosticEvents.CHUNK_REJECTED, "path=${channel.path} reason=not_nearby")
                 return
             }
-            val job = currentCoroutineContext()
-            val manifest = try {
-                channelClient.getInputStream(channel).await().buffered().use { input ->
-                    FrameReader.read(input, temp) { job.ensureActive() }
-                }
-            } catch (e: IllegalArgumentException) {
-                Log.w(TAG, "malformed frame on ${channel.path}; no ACK", e)
-                diagnostics.log(DiagnosticEvents.CHUNK_REJECTED, "path=${channel.path} reason=malformed_frame")
-                return
-            } catch (e: IOException) {
-                Log.w(TAG, "transfer of ${channel.path} broke off; no ACK", e)
-                diagnostics.log(
-                    DiagnosticEvents.CHUNK_REJECTED,
-                    "path=${channel.path} reason=transfer_broke_off error=${DiagnosticsLog.typeName(e)}",
-                )
-                return
-            }
-            if (channel.path.removePrefix(TransferPaths.CHUNK_CHANNEL_PREFIX) != manifest.chunkId) {
-                Log.w(TAG, "channel ${channel.path} carries chunk ${manifest.chunkId}")
-            }
-
-            val ack = ingestor.ingest(manifest, if (manifest.audio != null) Path(temp.path) else null)
-            Log.i(TAG, "chunk ${manifest.chunkId}: ${ack.status}${ack.detail?.let { " ($it)" }.orEmpty()}")
-            diagnostics.log(
-                DiagnosticEvents.CHUNK_RECEIVED,
-                "chunk=${manifest.chunkId} status=${ack.status} audio_ms=${manifest.durationMs} " +
-                    "bytes=${manifest.audio?.sizeBytes ?: 0}${ack.detail?.let { " detail=$it" }.orEmpty()}",
-            )
-            if (ack.status == AckStatus.STORED) onStored()
-            sendAck(channel.nodeId, ack)
+            val ack = channelClient.getInputStream(channel).await().buffered().use { input -> store(channel.path, input) }
+            if (ack != null) sendAck(channel.nodeId, ack)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -100,8 +72,51 @@ class ChunkReceiver(
                 "path=${channel.path} reason=ingest_failed error=${DiagnosticsLog.typeName(e)}",
             )
         } finally {
-            temp.delete()
             runCatching { channelClient.close(channel).await() }
+        }
+    }
+
+    /**
+     * Reads one framed chunk from [input] (the body of the channel [path]), ingests it, logs it to
+     * the diagnostics log and, once it is stored, asks for transcription. The channel-independent
+     * part of a transfer, so the emulator checks can drive it without a watch (#77).
+     *
+     * @return the ACK to send, or null if the frame was malformed or broke off (no ACK: the watch resends).
+     * @throws Exception if the chunk could not be ingested (also no ACK).
+     */
+    suspend fun store(path: String, input: InputStream): ChunkAck? {
+        val temp = File(incomingDir.apply { mkdirs() }, "${UUID.randomUUID()}.part")
+        try {
+            val job = currentCoroutineContext()
+            val manifest = try {
+                FrameReader.read(input, temp) { job.ensureActive() }
+            } catch (e: IllegalArgumentException) {
+                Log.w(TAG, "malformed frame on $path; no ACK", e)
+                diagnostics.log(DiagnosticEvents.CHUNK_REJECTED, "path=$path reason=malformed_frame")
+                return null
+            } catch (e: IOException) {
+                Log.w(TAG, "transfer of $path broke off; no ACK", e)
+                diagnostics.log(
+                    DiagnosticEvents.CHUNK_REJECTED,
+                    "path=$path reason=transfer_broke_off error=${DiagnosticsLog.typeName(e)}",
+                )
+                return null
+            }
+            if (path.removePrefix(TransferPaths.CHUNK_CHANNEL_PREFIX) != manifest.chunkId) {
+                Log.w(TAG, "channel $path carries chunk ${manifest.chunkId}")
+            }
+
+            val ack = ingestor.ingest(manifest, if (manifest.audio != null) Path(temp.path) else null)
+            Log.i(TAG, "chunk ${manifest.chunkId}: ${ack.status}${ack.detail?.let { " ($it)" }.orEmpty()}")
+            diagnostics.log(
+                DiagnosticEvents.CHUNK_RECEIVED,
+                "chunk=${manifest.chunkId} status=${ack.status} audio_ms=${manifest.durationMs} " +
+                    "bytes=${manifest.audio?.sizeBytes ?: 0}${ack.detail?.let { " detail=$it" }.orEmpty()}",
+            )
+            if (ack.status == AckStatus.STORED) onStored()
+            return ack
+        } finally {
+            temp.delete()
         }
     }
 

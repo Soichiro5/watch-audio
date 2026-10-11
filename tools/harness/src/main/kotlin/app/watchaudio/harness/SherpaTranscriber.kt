@@ -7,6 +7,7 @@ import app.watchaudio.core.pipeline.TimedText
 import app.watchaudio.core.pipeline.Transcriber
 import app.watchaudio.core.pipeline.concatenateParts
 import app.watchaudio.core.pipeline.padSpeechSpans
+import app.watchaudio.core.pipeline.speechSegments
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
@@ -68,45 +69,26 @@ class SherpaTranscriber(modelsDir: File, numThreads: Int = 2) : Transcriber, Aut
         }
     }
 
-    /** Runs Silero VAD over the whole input and pads the detected utterances. */
+    /**
+     * Runs Silero VAD over the whole input, finds speech from its probabilities
+     * ([speechSegments]) and cuts the recognizer inputs ([padSpeechSpans]).
+     */
     private fun speechSpans(samples: FloatArray): List<SpeechSpan> {
         val config = VadModelConfig.builder()
             .setSileroVadModelConfig(
-                SileroVadModelConfig.builder()
-                    .setModel(vadModel)
-                    .setThreshold(AsrSettings.VAD_THRESHOLD)
-                    .setMinSilenceDuration(AsrSettings.VAD_MIN_SILENCE_SECONDS)
-                    .setMinSpeechDuration(AsrSettings.VAD_MIN_SPEECH_SECONDS)
-                    .setMaxSpeechDuration(AsrSettings.VAD_MAX_SPEECH_SECONDS)
-                    .setWindowSize(AsrSettings.VAD_WINDOW_SIZE)
-                    .build(),
+                SileroVadModelConfig.builder().setModel(vadModel).setWindowSize(AsrSettings.VAD_WINDOW_SIZE).build(),
             )
             .setSampleRate(AsrSettings.SAMPLE_RATE)
             .setNumThreads(1)
             .build()
         val vad = Vad(config)
-        val segments = mutableListOf<Pair<Int, Int>>()
-        fun drain() {
-            while (!vad.empty()) {
-                val front = vad.front()
-                segments += front.start to front.samples.size
-                vad.pop()
-            }
-        }
-        try {
-            var offset = 0
-            while (offset < samples.size) {
-                val end = minOf(offset + AsrSettings.VAD_WINDOW_SIZE, samples.size)
-                vad.acceptWaveform(samples.copyOfRange(offset, end))
-                drain()
-                offset = end
-            }
-            vad.flush()
-            drain()
+        val window = AsrSettings.VAD_WINDOW_SIZE
+        val probabilities = try {
+            FloatArray(samples.size / window) { vad.compute(samples.copyOfRange(it * window, (it + 1) * window)) }
         } finally {
             vad.release()
         }
-        return padSpeechSpans(segments, samples)
+        return padSpeechSpans(speechSegments(probabilities), samples)
     }
 
     override fun close() = recognizer.release()
