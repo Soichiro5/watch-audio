@@ -77,6 +77,8 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 ./gradlew :tools:harness:run --args="show /tmp/wa-data"
 ```
 
+正解テキスト付きの日本語会話（オフライン TTS）を Watch 録音を模して加工した検証用音声セットと、それをハーネスに流して条件ごとの CER・検出漏れ・処理時間を出す `evaluate` コマンドがある（#56）。生成手順・条件・ライセンス・結果は [docs/test-audio.md](test-audio.md)。
+
 ## 5. 検索の性能ベンチマーク（#23）
 
 1 年分相当（約 50 万セグメント）の日本語の文字起こしを決定的に生成し（仕事・家庭・用事の語彙を組み合わせた会話文、5 分チャンク × 約 10 発話）、`StoreTransaction.search` の応答時間を測る。通常の `jvmTest` には含めない（データ投入に約 30 秒かかるため）。
@@ -111,10 +113,20 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 | --- | --- | --- | --- |
 | `android.yml` | Unit tests | 共通ロジック（JVM・Android ホスト）。SQLite を使う core-db / Ingestor / パイプラインのテストは JVM で実行 | テスト結果 |
 | `android.yml` | Search benchmark | 50 万セグメントでの検索応答時間（§5） | ジョブサマリーの表と `SEARCH_BENCHMARK` 行 |
+| `android.yml` | Unit tests（composeApp の `AppUiTest`） | 画面の描画（タイムライン・検索・状態・オンボーディング。権限拒否時の「設定を開く」#32 を含む） | 成果物 `ui-screenshots`（`composeApp/build/screenshots/*.png`） |
 | `emulator.yml`（phone / wear） | Install, launch and check for crashes | スマホ・Wear OS アプリがエミュレータで起動し、15 秒後もクラッシュしていない | ジョブのログ、成果物 `logcat-*` |
 | `emulator.yml`（phone） | 同上（続けて実行） | 計装テスト: 実際の音声（AAC）を MediaPlayer で指定位置から再生できる・検索結果を 1 タップでその発話から再生できる（`PlaybackTest`）、SQLite のテストを Android 上で実行（core-db / core-pipeline） | ジョブサマリーのテスト一覧と `PLAYBACK_CHECK` 行、成果物 `logcat-phone`（テストレポート） |
+| `emulator.yml`（phone） | 同上（計装テスト） | 実モデルでの文字起こし: `AndroidSherpaTranscriber`（MediaCodec + sherpa-onnx AAR）が日本語の参照音声チャンクを文字起こしして DB に保存・検索できる（`SherpaTranscriberTest`、#22） | `ASR_CHECK` / `ASR_SEGMENT` 行 |
+| `emulator.yml`（phone） | 同上（計装テスト） | モデルなしでも受信・再生でき文字起こしは待機（チャンクは処理待ちのまま・失敗扱いにしない）、モデルを置くと自動で処理が進む（`ModelWaitTest`、#22） | `MODEL_CHECK` 行、スクリーンショット `status-model-missing.png` / `status-model-ready.png` |
+| `emulator.yml`（phone） | 同上（計装テスト） | 定期ジョブ（6 時間ごと・充電中のみ）は充電されるまで動かず、充電条件を満たすと溜まったチャンクを文字起こしする（WorkManager の `TestDriver`、`ChargingWorkTest`、#20） | `CHARGING_CHECK` 行 |
+| `emulator.yml`（phone） | 同上（計装テスト） | 録音の途絶アラートが本番の `GapAlertMonitor` から通知され、通知シェードに表示される（`GapAlertNotificationTest`、#43） | `GAP_ALERT_CHECK` 行、スクリーンショット `gap-alert-notification.png` |
+| `emulator.yml`（phone） | 同上（`phone-scenarios.sh`） | 通知権限をシステムのダイアログで拒否 → 理由と「設定を開く」が表示され、押すとアプリの設定画面が開く（`PermissionDeniedTest`、#32） | `PERMISSION_CHECK` 行、スクリーンショット `permission-system-dialog.png` / `onboarding-permission-denied.png` / `app-settings-opened.png` |
+| `emulator.yml`（phone） | 同上（`phone-scenarios.sh`） | 文字起こしの途中で `am force-stop` → 再起動で全チャンクが 1 回ずつ文字起こしされる（欠落・重複 0、中断したチャンクは 2 回目で完了）（`ResumeAfterKillTest`、#20） | `RESUME_CHECK` 行、成果物 `logcat-phone` の `scenario-logs/` |
+| `emulator.yml`（wear） | 同上（`wear-surfaces.sh`） | Tile とコンプリケーションの表示（停止中 → Tile のタップでアプリが開き録音開始 → 録音中）（#41） | `WEAR_SURFACE_CHECK` 行、スクリーンショット `wear-tile-*.png` / `wear-complication-*.png` |
 | `ios.yml` | Shared tests (iOS simulator) | 共通ロジックを iOS シミュレータで実行（SQLite を使う core-db / Ingestor のテストを含む） | ジョブサマリーのテスト一覧 |
 | `ios.yml` | Launch iOS app / Launch watchOS app | ビルドした iOS・watchOS アプリをシミュレータに入れて起動し、15 秒後もプロセスが生きていてクラッシュレポートがない | ジョブサマリー、成果物 `simulator-smoke`（スクリーンショット・ログ） |
+
+スクリーンショットは成果物 `screenshots-phone` / `screenshots-wear`（30 日保存）、`*_CHECK` 行はジョブサマリーにまとめて出す。
 
 SQLite（bundled ドライバ）を開くテストは `src/sqliteTest` に置く（`watchaudio.kmp.sqlite-tests` プラグイン）。`jvmTest`・`iosTest`・`androidDeviceTest` から共有され、JVM・iOS シミュレータ・Android 端末/エミュレータで実行される。Android のホストテスト（`testAndroidHostTest`）では実行しない: Android 版の `sqlite-bundled` は Android の ABI 向けネイティブライブラリしか含まず、ホストの JVM では読み込めないため。
 
@@ -130,19 +142,63 @@ SQLite（bundled ドライバ）を開くテストは `src/sqliteTest` に置く
   -Pkotlin.native.enableKlibsCrossCompilation=true
 # Android エミュレータ / 実機を接続して（KVM のある環境）
 ./gradlew :androidApp:connectedDebugAndroidTest :shared:core-db:connectedAndroidDeviceTest :shared:core-pipeline:connectedAndroidDeviceTest
-adb logcat -d | grep PLAYBACK_CHECK
+adb logcat -d | grep -E "[A-Z_]+_CHECK"
 # Mac: ビルド済みアプリをシミュレータで起動確認
 .github/scripts/simulator-smoke.sh iOS iPhone build/DerivedData/Build/Products/Debug-iphonesimulator/WatchAudio.app app.watchaudio
 ```
 
 未対応: iOS の再生（`IosAppServices.play`）を確かめるシミュレータテスト。テスト用の AAC の生成と XCTest のホストアプリ設定が必要で、macOS の CI 時間（10 倍課金）もかかるため、現状はシミュレータでの起動確認までとする。
 
-## 7. 実機検証の手順
+### 6.1 エミュレータでの音声認識モデル
+
+phone ジョブは `android.yml` と同じキャッシュ（`tools/harness/models`、キーは `download-models.sh` のハッシュ）からモデルを復元し、なければ `download-models.sh` で取得する（int8 の約 160 MB と参照音声のみ展開）。`phone-scenarios.sh` が `adb push` で `/data/local/tmp/watchaudio-test/models/` に置き、計装テスト（`SpeechFixtures.ensureModels`）がそれをアプリの `files/models/`（ダウンロード先と同じ場所）にコピーしてから使う。`/data/local/tmp` を経由するのは、テストエンジンが計装テストの前にアプリをアンインストール・再インストールしてアプリの領域を消すため。コピーはシェル権限の `cat` をパイプで読む（アプリから `/data/local/tmp` を直接読めるかは SELinux の設定に依存するため）。
+
+- モデルがない環境（手元の `connectedDebugAndroidTest` など）では、モデルを使うテストはスキップされる。CI は `-Pandroid.testInstrumentationRunnerArguments.requireModels=true` を渡すので、モデルがなければ失敗する。
+- テスト中はアプリの自動モデルダウンロード（`model-download`）を取り消す（テスト中にファイルが置き換わらないように）。
+- エミュレータは x86_64 で CPU 推論のみ。`ASR_CHECK` の `rtf`（処理時間 ÷ 音声長）は実機の目安にはならない。
+
+### 6.2 1 回の計装テストでは確かめられないもの（`phone-scenarios.sh`）
+
+- **権限の拒否（#32）**: 権限を取り消すとアプリのプロセスが終了するため、計装テストの中ではリセットできない。インストール直後（権限が一度も付与されていない状態）に `am instrument -e scenario permission-denied` で最初に実行する。
+- **強制終了からの再開（#20）**: 計装テストは強制終了されるプロセスの中で動くため、3 段階に分ける。① `ResumeAfterKillTest#seed` が参照音声のチャンクを 8 件保存（文字起こしは要求しない）、② スクリプトがアプリを起動（起動時に未処理チャンクの処理を要求）し、`TranscriptionWorker` のログに最初の `transcribed chunk` が出たら `adb shell am force-stop app.watchaudio`、③ `ResumeAfterKillTest#verify` が再起動後に全件の完了を待ち、各チャンクの発話が重複なく揃っていること・強制終了時に処理中だったチャンクの試行回数が 2 であることを確認する。
+
+手元で同じことをする場合（KVM のある環境、`tools/harness/download-models.sh` 済み）:
+
+```bash
+./gradlew :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest
+adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
+.github/scripts/phone-scenarios.sh            # モデルの push、権限拒否、強制終了からの再開
+./gradlew :androidApp:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.requireModels=true
+adb pull /data/local/tmp/watchaudio-screenshots
+```
+
+## 7. CI の設定と成果物の扱い（公開リポジトリ）
+
+リポジトリは公開なので、CI のログと成果物（artifact）は GitHub にログインした人なら誰でも見られる・ダウンロードできる（#79）。
+
+- **ランナーは固定**: Linux は `ubuntu-24.04`（`ubuntu-latest` の Ubuntu 26 への切り替えで壊れないように）、macOS は `macos-26`。新しいイメージへは、全ジョブが通ることを PR で確かめてから移る。
+- **権限は最小**: 各 workflow は `permissions: contents: read`。書き込みが必要なジョブを足すときは、そのジョブにだけ付ける。`pull_request_target` は使わない（fork の PR に secret が渡るため）。
+- **外部アクションは SHA で固定**し、`.github/dependabot.yml` が週 1 回まとめて更新 PR を出す。
+- **秘密情報**: 必要になったら GitHub Actions の Secrets に置き、ログに出さない（加工して出力すると伏せ字を回避してしまうので注意）。現時点で secret を使う workflow はない。
+
+成果物の中身（どれも実データ・個人データ・秘密情報を含まない）:
+
+| 成果物 | workflow | 中身 | 保持 |
+| --- | --- | --- | --- |
+| `debug-apks` / `watch-audio-android-<sha>` | android.yml / deliver.yml | debug 署名の APK（スマホ・Wear OS）。API キーは入っていない。モデルは同梱せず初回にダウンロード | 7 / 30 日 |
+| `ui-screenshots` | android.yml | JVM の UI テストが描いた画面（テスト用の合成データ） | 30 日 |
+| `logcat-phone` / `logcat-wear` | emulator.yml | エミュレータの logcat・計装テストのレポート（合成音声・テスト用 DB のみ。文字起こし本文はテスト音声の正解文） | 7 日 |
+| `screenshots-phone` / `screenshots-wear` | emulator.yml | エミュレータのスクリーンショット | 30 日 |
+| `xcodebuild-logs` / `simulator-smoke` | ios.yml | ビルドログ、シミュレータのスクリーンショットとアプリログ | 7 日 |
+
+成果物を Issue の証跡として参照する場合、保持期間を過ぎると消える点に注意する（コメントには数値・ログ行を本文として残す）。
+
+## 8. 実機検証の手順
 
 - M0-3 / M0-4 電池計測: [docs/spikes/m0-3-m0-4-battery-protocol.md](spikes/m0-3-m0-4-battery-protocol.md)
 - Wear OS 録音アプリ（常時録音・転送）の手動テスト: [docs/impl/wearos.md §10](impl/wearos.md#10-実機での手動テスト-チェックリスト)
 
-## 8. 検証データの扱い
+## 9. 検証データの扱い
 
 - 録音検証では、**参加者全員に録音・文字起こしの目的を説明し同意を得る**。
 - 実際の会話音声はリポジトリにコミットしない（個人情報）。評価用の正解テキストと集計結果のみ共有する。
