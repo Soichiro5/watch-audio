@@ -26,7 +26,7 @@ struct ContentView: View {
             let minutes = Int(now.timeIntervalSince(recorder.recordingSince ?? now) / 60)
             Text("● REC \(minutes / 60)h \(minutes % 60)m").foregroundStyle(.red)
         case .paused(let reason):
-            Text(Self.pausedLabel(reason)).foregroundStyle(.orange)
+            Text(RecorderStatusText.pausedLabel(reason)).foregroundStyle(.orange)
         case .idle:
             Text("watch-audio")
         }
@@ -75,14 +75,4 @@ struct ContentView: View {
         }
     }
     #endif
-
-    private static func pausedLabel(_ reason: ChunkEndReason) -> String {
-        switch reason {
-        case .charging: "充電中（外すと再開）"
-        case .lowBattery: "電池残量不足"
-        case .lowStorage: "空き容量不足"
-        case .interruption: "中断中（通話・Siri など）"
-        default: "停止中（\(reason.rawValue)）"
-        }
-    }
 }

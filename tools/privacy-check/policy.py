@@ -146,11 +146,25 @@ IOS_TARGETS = {
             "WKCompanionAppBundleIdentifier": "paired iPhone app",
             "NSMicrophoneUsageDescription": "the recorder",
             "UIBackgroundModes": "see background_modes",
+            "CFBundleURLTypes": "watchaudio:// URL the complication opens to start recording (#41); app-internal",
+            "WatchAudioAppGroup": "App Group id shared with the complication (on-device container)",
         },
         "background_modes": {"audio": "keep recording with the screen off"},
     },
+    "WatchWidget": {
+        "info": {
+            "CFBundleDisplayName": "complication name",
+            "NSExtension": "WidgetKit extension point (#41)",
+            "WatchAudioAppGroup": "App Group id to read the recorder state written by the app",
+        },
+        "background_modes": {},
+    },
 }
 
-# Entitlement keys (project.yml `entitlements` or committed *.entitlements). None are needed:
-# WatchConnectivity and on-device Speech work without entitlements.
-IOS_ENTITLEMENTS = {}
+# Entitlement keys (project.yml `entitlements` or committed *.entitlements). WatchConnectivity
+# and on-device Speech work without entitlements.
+IOS_ENTITLEMENTS = {
+    "com.apple.security.application-groups":
+        "watch app <-> complication share the recorder state (#41) in an on-device App Group container; "
+        "no iCloud / network",
+}

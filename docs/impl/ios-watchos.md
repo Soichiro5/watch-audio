@@ -2,7 +2,7 @@
 
 Apple Watch で装着中ずっと録音 → WatchConnectivity で iPhone へ（ローカルのみ）→ iPhone 上の Speech フレームワーク（SpeechAnalyzer / SpeechTranscriber, iOS 26, 日本語）でオンデバイス文字起こし → Kotlin 共有コードのローカル SQLite に保存、までの Apple 側の実装。充電中・睡眠中などの欠損は許容する。
 
-関連 Issue: #15（watchOS 録音）、#17（転送 + ACK）、#21（iOS 文字起こし）
+関連 Issue: #15（watchOS 録音）、#17（転送 + ACK）、#21（iOS 文字起こし）、#41（コンプリケーション、§14）
 
 ## 1. コンポーネント
 
@@ -184,6 +184,8 @@ Android と同じ共通の `DiagnosticsLog`（`shared/core-pipeline`、形式・
 | WatchApp | `NSMicrophoneUsageDescription` | 録音 |
 | 〃 | `UIBackgroundModes: [audio]` | 画面消灯中の録音継続 |
 | 〃 | `WKApplication`, `WKCompanionAppBundleIdentifier` | iPhone アプリの付属 watch アプリ |
+| 〃 | `CFBundleURLTypes`（スキーム `watchaudio`） | コンプリケーションのタップ（`watchaudio://record`）で開始・再開（§14） |
+| WatchApp / WatchWidget | `WatchAudioAppGroup` + entitlement `com.apple.security.application-groups` | 録音状態を共有する App Group（`APP_GROUP_ID`、§14） |
 
 実行時の許可: Watch でマイク（初回開始時）と通知（初回録音開始時）。iPhone ではオンボーディングの「許可の設定」で通知（alert + sound、途絶アラート用）と音声認識を要求する（`IosPermissions`。拒否済みなら設定アプリへの案内を表示）。スパイク用の `UIFileSharingEnabled` / `LSSupportsOpeningDocumentsInPlace` は削除した。
 
@@ -217,7 +219,8 @@ Android と同じ共通の `DiagnosticsLog`（`shared/core-pipeline`、形式・
    - 途絶アラート: 録音中に Watch アプリを強制終了（`terminated` チャンクが届かない状態）→ iPhone をロックして 10 分後に「録音が届いていません（最後の受信: HH:mm）…」の通知が来る。次のチャンクが届くと予約が取り消される。Watch を充電器に置いた（`charging`）場合は通知が来ない。おやすみ時間中は終了時刻に来る。
 11. iPhone を充電しながらロック → BGProcessingTask で文字起こしが進む（Xcode の `e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"app.watchaudio.transcribe"]` で強制起動も可）。
 12. Watch の `diagnostics.csv` で電池消費（%/時）を確認（M0-3 と比較）。
-13. iPhone の状態タブ「診断ログを書き出す」→ 共有シートが開き、ファイルに保存した CSV に受信・文字起こし（RTF）・BGTask の開始/終了が残っている（本文は含まれない）。長時間の検証ではこのファイルを証拠に添える。
+13. コンプリケーション（§14、#60）: 文字盤に「watch-audio / 録音状態」を追加 → 停止中は「停止中」、録音開始で「録音中」+ 経過時間、充電器に置くと「一時停止（充電中）」に変わる。停止中にタップ → アプリが開いて録音が始まる。通話などで中断した後にタップ → 1 タップで再開する。
+14. iPhone の状態タブ「診断ログを書き出す」→ 共有シートが開き、ファイルに保存した CSV に受信・文字起こし（RTF）・BGTask の開始/終了が残っている（本文は含まれない）。長時間の検証ではこのファイルを証拠に添える。
 
 ## 12. 既知のリスク・制約
 
@@ -280,3 +283,45 @@ cat "$DATA/Library/Application Support/WatchAudio/diagnostics.csv"
 
 - Linux では Swift をコンパイルできないため、API 名（`AVAudioFile(forReading:)`、`init(forWriting:settings:commonFormat:interleaved:)`、`read(into:frameCount:)`、`write(from:)`、`close()`（watchOS 11+）、`framePosition` / `length`、`AVAudioPCMBuffer.floatChannelData` / `frameLength`）は developer.apple.com の宣言で確認したのみ。Debug 構成のビルドは CI（`ios.yml`）で確認する。CI では watchOS アプリを Release 構成でもビルドし、バイナリに `DebugAudioFileInput` が含まれないこと（Debug 側には含まれること）を確かめる（ステップ「watchOS Release build has no debug audio input」）。
 - 実際にシミュレータで流してチャンク・manifest を確かめるのは macOS 上で行う（Wear OS 側のチャンク化・無音判定・manifest の流れは [wearos.md §11.4](wearos.md#114-開発環境でのテストエミュレータ不要) の JVM テストで確認している）。
+
+## 14. コンプリケーション（#41）
+
+文字盤（とスマートスタック）に録音状態を常時表示し、タップでアプリを開いて録音を開始・再開する。WidgetKit のウィジェット拡張（watchOS 26）。
+
+### 14.1 構成
+
+| ファイル | ターゲット | 役割 |
+| --- | --- | --- |
+| `iosApp/WatchApp/Complication/RecorderStatus.swift` | WatchApp / WatchWidget / ProtocolTests | 共有する状態 `RecorderStatus`（`recording` + 開始時刻 / `paused` + 理由 / `stopped`）、App Group への保存 `RecorderStatusStore`、タップ URL `ComplicationLink`、状態 → 表示の純粋な対応 `ComplicationDisplay`、停止理由の文言 `RecorderStatusText`（アプリ画面と共通） |
+| `iosApp/WatchApp/Complication/ComplicationViews.swift` | WatchWidget / ProtocolTests（WatchApp にも含まれる） | 円形・長方形・インラインのレイアウト（ウィジェットファミリーに依存しない SwiftUI） |
+| `iosApp/WatchApp/Complication/RecorderStatusPublisher.swift` | WatchApp | `RecorderController` の `phase` / `recordingSince` を Observation で追い、変化したら App Group に書いて `WidgetCenter.reloadTimelines(ofKind:)`（バックグラウンドでの中断・充電にも追従） |
+| `iosApp/WatchWidget/RecorderWidget.swift` | WatchWidget（`app-extension`、watch アプリに埋め込み） | `StaticConfiguration`。ファミリー: `accessoryCircular` / `accessoryRectangular` / `accessoryInline` / `accessoryCorner`。タイムラインは 1 エントリ・`.never`（アプリが状態変化時に再読み込みを要求）、経過時間は `Text(_, style: .timer)` で自動更新 |
+| `iosApp/ProtocolTests/ComplicationDisplayTests.swift` | ProtocolTests | 対応表・保存・URL のテストと、レイアウトの PNG 書き出し |
+
+### 14.2 表示とタップ
+
+| 録音状態 | 円形 | 長方形（2 行目） | インライン |
+| --- | --- | --- | --- |
+| 録音中 | 赤 `record.circle` + 「録音中」 | 「経過 h:mm:ss」 | 「録音中」 |
+| 一時停止（理由あり） | 橙 `pause.circle` + 「一時停止」 | 「充電中・タップで再開」など（充電中 / 電池不足 / 容量不足 / 通話等で中断 / エラー） | 「一時停止（充電中）」 |
+| 停止中 | 灰 `mic.slash` + 「停止中」 | 「タップで録音開始」 | 「録音停止中」 |
+
+- タップは全状態で `widgetURL(watchaudio://record)`。アプリの `onOpenURL` が `RecorderController.start()` を呼ぶ（録音中なら何もしない＝アプリが開くだけ、一時停止中・停止中なら開始。充電中などは従来どおり `paused` のまま理由を表示）。前面に来たときの自動再開（`appBecameActive`）とは競合しない（`start` 側で二重開始を防いでいる）。
+- 状態はアプリが書いた最後の値。アプリが OS に終了された場合、次に起動するまで表示は古いまま（録音中の表示が残り得る）。次回起動時に `terminated` の確定と同時に正しい状態に戻る。
+- Ultra のアクションボタン対応は未実装（完了条件外）。
+
+### 14.3 App Group と署名
+
+- `Configuration/Config.xcconfig` の `APP_GROUP_ID`（既定 `group.$(BUNDLE_ID_PREFIX)`）を、両ターゲットの entitlement（`com.apple.security.application-groups`）と Info.plist の `WatchAudioAppGroup` に入れる。コードは Info.plist から読む。
+- **実機**: Apple Developer で App Group（例 `group.<自分の BUNDLE_ID_PREFIX>`）を作り、watch アプリ（`…watchkitapp`）とウィジェット（`…watchkitapp.widget`）の App ID に割り当てる。別の ID を使うときは `Configuration/Local.xcconfig` で `APP_GROUP_ID` を上書きする。entitlement が無いとアプリとウィジェットで値が共有されず、コンプリケーションは常に「停止中」になる。
+- **CI**（`CODE_SIGNING_ALLOWED=NO`）: entitlement は適用されないが、ビルドは通る。シミュレータでは App Group の代わりにアプリ自身の領域の suite に書かれる（タップ経路とアプリ側の書き込みの確認には十分）。
+
+### 14.4 検証状況
+
+| 項目 | 方法 | 状況 |
+| --- | --- | --- |
+| 状態 → 表示の対応、保存の往復、タップ URL の判定 | `ComplicationDisplayTests`（`ProtocolTests`、iOS シミュレータ） | CI で確認 |
+| 表示（録音中・一時停止・停止中） | 同テストの `testRendersPreviewImages` が各レイアウトを `ImageRenderer` で PNG に書き出す → 成果物 `watch-complication-previews`（`complication-recording.png` / `-paused-charging.png` / `-paused-interruption.png` / `-stopped.png` / `-all.png`）。文字盤へのコンプリケーション追加はコマンドラインから操作できないため、この描画を証跡とする | CI で確認 |
+| ウィジェット拡張の埋め込みとタップ経路 | CI ステップ「watchOS complication tap on an Apple Watch simulator」（`.github/scripts/watch-complication-smoke.sh`）: `WatchAudio.app/PlugIns/WatchAudioWidget.appex`（`com.apple.widgetkit-extension`）の存在を確認 → 通常起動（停止中）のスクリーンショット → `simctl openurl watchaudio://record`（watchOS シミュレータはアプリの URL スキームを開けず LSApplicationWorkspaceErrorDomain 115 になるため、その場合は **Debug 限定**の起動引数 `-complicationURL watchaudio://record` で `onOpenURL` と同じ処理に URL を渡す）→ 録音開始（またはその理由付きの不可）が診断ログに記録されることを確認し、スクリーンショットとアプリが書いた共有状態を成果物 `simulator-smoke` に残す（`watchos-complication-*.png` / `-diagnostics.csv` / `-defaults.txt`）。タップ後のスクリーンショットは初回開始時の通知許可ダイアログが前面に出る（simctl では通知を事前許可できない）ため、開始の判定は診断ログの `start` と共有状態 `{"state":"recording",…}` で行う | CI で確認（[run 38113587458](https://github.com/Soichiro5/watch-audio/actions/runs/38113587458)） |
+| 実機の文字盤での表示、システムからの `widgetURL` の受け渡し、中断後の 1 タップ再開 | 実機のみ（§11 の 13、#60） | 要確認 |
+
