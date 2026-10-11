@@ -90,7 +90,8 @@ jobs:
             # The ASR tests must not skip for lack of models (pushed by phone-scenarios.sh).
             device-test-args: -Pandroid.testInstrumentationRunnerArguments.requireModels=true
             # #78: ReleaseAsrTest against the R8 release APK, from a test APK built for the release build type.
-            release-test-apks: :androidApp:assembleReleaseAndroidTest
+            # assembleRelease too: the test APK only depends on the app's R8 mapping, not on its packaged APK.
+            release-test-apks: :androidApp:assembleRelease :androidApp:assembleReleaseAndroidTest
             release-checks: .github/scripts/release-asr.sh
             scenarios: .github/scripts/phone-scenarios.sh
           - name: wear
