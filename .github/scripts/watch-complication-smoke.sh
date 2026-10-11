@@ -37,7 +37,7 @@ device_name=$(xcrun simctl list devices --json | jq -r --arg u "$udid" '.devices
 echo "Simulator: $device_name ($udid)"
 
 SECONDS=0
-xcrun simctl boot "$udid" 2>/dev/null || true # usually already booting (boot-simulators.sh)
+xcrun simctl boot "$udid" 2>/dev/null || true # already booted is fine
 xcrun simctl bootstatus "$udid" -b
 echo "Timing: waited ${SECONDS}s for the boot"
 xcrun simctl uninstall "$udid" "$bundle_id" 2>/dev/null || true # start from "stopped"

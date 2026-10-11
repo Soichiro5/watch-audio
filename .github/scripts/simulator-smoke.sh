@@ -23,7 +23,7 @@ udid=$("$(dirname "$0")/simulator-udid.sh" "$platform" "$device_prefix")
 device_name=$(xcrun simctl list devices --json | jq -r --arg u "$udid" '.devices[][] | select(.udid == $u) | .name')
 echo "Simulator: $device_name ($udid)"
 
-# Usually booted in the background by boot-simulators.sh; booting here also works (slower).
+# Booted by an earlier step on the same device (simulator-udid.sh), or booted here.
 SECONDS=0
 xcrun simctl boot "$udid" 2>/dev/null || true # already booted (or booting) is fine
 xcrun simctl bootstatus "$udid" -b

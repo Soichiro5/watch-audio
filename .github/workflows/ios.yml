@@ -114,14 +114,6 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # #92: a first simulator boot spends 1-2 min in data migration. Start the iPhone and Apple
-      # Watch boots now (after the Kotlin tests, which boot and shut down their own device) so they
-      # overlap the Xcode builds; the simulator steps below wait for them and keep them booted.
-      - name: Boot simulators (background)
-        if: success() || failure()
-        continue-on-error: true # the simulator steps boot the device themselves if this did not
-        run: .github/scripts/boot-simulators.sh
-
       # The Xcode steps also run when a Kotlin test failed: one macOS run should report everything.
       - name: Generate Xcode project
         id: xcodegen
@@ -165,6 +157,10 @@ jobs:
           if grep -rla DebugAudioFileInput "$RELEASE_APP"; then echo "DebugAudioFileInput leaked into the Release app"; exit 1; fi
           echo "OK: DebugAudioFileInput is in the Debug app and absent from the Release app" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # #92: one simulator at a time, each booted once. The Apple Watch steps run first and share
+      # one boot; the watch is then shut down, and the iPhone, booted by the iOS launch smoke, stays
+      # up for the Swift test steps below. (Two booted simulators on the 3-core runner, or a boot
+      # next to a build, made every step 2-3x slower.)
       # #41: the complication's widget extension is embedded, and its tap URL launches the watch
       # app and starts the recorder (screenshots and the recorder log go to simulator-smoke).
       - name: watchOS complication tap on an Apple Watch simulator
@@ -175,17 +171,20 @@ jobs:
 
       # #7: the apps must start, not only build. Install the products above on a booted
       # simulator, launch, wait 15 s, fail if the process died or a crash report appeared.
+      - name: Launch watchOS app on an Apple Watch simulator
+        if: (success() || failure()) && steps.build-watch.outcome == 'success'
+        run: |
+          status=0
+          .github/scripts/simulator-smoke.sh watchOS "Apple Watch" \
+            build/DerivedData/Build/Products/Debug-watchsimulator/WatchAudio.app app.watchaudio.watchkitapp || status=$?
+          xcrun simctl shutdown all || true # free the runner for the iPhone simulator
+          exit $status
+
       - name: Launch iOS app on an iPhone simulator
         if: (success() || failure()) && steps.build-ios.outcome == 'success'
         run: |
           .github/scripts/simulator-smoke.sh iOS iPhone \
             build/DerivedData/Build/Products/Debug-iphonesimulator/WatchAudio.app app.watchaudio
-
-      - name: Launch watchOS app on an Apple Watch simulator
-        if: (success() || failure()) && steps.build-watch.outcome == 'success'
-        run: |
-          .github/scripts/simulator-smoke.sh watchOS "Apple Watch" \
-            build/DerivedData/Build/Products/Debug-watchsimulator/WatchAudio.app app.watchaudio.watchkitapp
 
       # Hostless Swift logic tests (no Kotlin build): the wire protocol vs. shared/core-protocol/testdata
       # (ProtocolTests), the watch recorder's stop reasons / state (#15) and send queue (#17)

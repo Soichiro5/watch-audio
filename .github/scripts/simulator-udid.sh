@@ -2,7 +2,7 @@
 # Prints the UDID of the simulator the iOS CI steps use for a platform: the first device named
 # <device name prefix>* on the newest runtime of that platform (the apps need iOS/watchOS 26+).
 # Every simulator step picks its device through this script, so they all share one iPhone and
-# one Apple Watch simulator (booted once by boot-simulators.sh, #92).
+# one Apple Watch simulator, each booted once per job (#92).
 #
 # Usage: simulator-udid.sh <iOS|watchOS> <device name prefix>
 #   e.g. simulator-udid.sh iOS iPhone

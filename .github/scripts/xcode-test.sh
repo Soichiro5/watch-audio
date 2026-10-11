@@ -15,6 +15,7 @@ set -uo pipefail
 scheme=$1
 title=$2
 shift 2
+extra_settings=("$@")
 derived_data=${DERIVED_DATA:-build/DerivedData}
 results_dir=${RESULTS_DIR:-build/xcresults}
 result="$results_dir/$scheme.xcresult"
@@ -45,17 +46,28 @@ elif [ -n "${UNINSTALL_APP:-}" ]; then
 fi
 
 SECONDS=0
-xcrun simctl boot "$udid" 2>/dev/null || true # usually already booted (boot-simulators.sh)
+xcrun simctl boot "$udid" 2>/dev/null || true # usually already booted by the launch smoke step
 xcrun simctl bootstatus "$udid" -b > /dev/null
 echo "Timing: waited ${SECONDS}s for the boot"
 
+# Build and run separately so the log shows where the time goes (#92).
+xcode() {
+  xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme "$scheme" \
+    -destination "platform=iOS Simulator,id=$udid" -derivedDataPath "$derived_data" \
+    CODE_SIGNING_ALLOWED=NO ${extra_settings[@]+"${extra_settings[@]}"} "$@"
+}
 SECONDS=0
-xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme "$scheme" \
-  -destination "platform=iOS Simulator,id=$udid" \
-  -derivedDataPath "$derived_data" -resultBundlePath "$result" \
-  CODE_SIGNING_ALLOWED=NO ${@+"$@"} test > "$log" 2>&1
+xcode build-for-testing > "$log" 2>&1
 status=$?
-echo "Timing: xcodebuild test took ${SECONDS}s"
+echo "Timing: build-for-testing took ${SECONDS}s"
+if [ $status -eq 0 ]; then
+  SECONDS=0
+  xcode -resultBundlePath "$result" test-without-building >> "$log" 2>&1
+  status=$?
+  echo "Timing: test-without-building took ${SECONDS}s"
+else
+  echo "::error::$scheme did not build, no tests ran"
+fi
 
 # Keep the console readable: test progress, our check logs, errors and the final verdict.
 grep -E "^Test (Case|Suite)|^\[[a-z-]+\] |error:|\*\* TEST" "$log" || true

@@ -192,7 +192,7 @@ adb logcat -d | grep -E "[A-Z_]+_CHECK"
 UNINSTALL_APP=app.watchaudio .github/scripts/xcode-test.sh PlaybackTests "Playback in the iOS app"
 ```
 
-`ios.yml` のシミュレータは 1 ジョブの中で使い回す（#92）。Kotlin のテスト（自分でシミュレータを起動・終了する）の後に `boot-simulators.sh` が iPhone と Apple Watch の起動をバックグラウンドで始め、初回起動のデータ移行（1〜2 分）を Xcode のビルドと重ねる。各ステップ（`simulator-smoke.sh`・`watch-complication-smoke.sh`・`xcode-test.sh`）は同じ端末（`simulator-udid.sh` が選ぶ最新ランタイムの iPhone / Apple Watch）の起動完了を待ち、終わってもシャットダウンしない。アプリがホストのテスト（Speech・Playback）は、起動確認で入れたアプリが残っているとテストバンドルを読み込めないため、端末を消去（`ERASE_SIMULATOR=1`、再起動でデータ移行がやり直しになる）する代わりにアプリをアンインストールしてから（`UNINSTALL_APP`）実行する。アンインストールでアプリのコンテナとデータ・権限の状態は消去と同じく初期化される。
+`ios.yml` のシミュレータは 1 ジョブの中で使い回す（#92）。起動は端末ごとに 1 回で、同時に起動するのは 1 台だけ（3 コアのランナーでは、2 台同時やビルドと並行した起動で各ステップが 2〜3 倍遅くなった）。Apple Watch のステップ（コンプリケーション → 起動確認）を先に同じ起動で続けて実行してシャットダウンし、次に iPhone の起動確認で起動した iPhone を Swift のテスト（SwiftUnitTests・Speech・Playback）でそのまま使う。各スクリプト（`simulator-smoke.sh`・`watch-complication-smoke.sh`・`xcode-test.sh`）は `simulator-udid.sh` が選ぶ同じ端末（最新ランタイムの iPhone / Apple Watch）を使い、終わってもシャットダウンしない。アプリがホストのテスト（Speech・Playback）は、前のステップで入れたアプリが残っているとテストバンドルを読み込めないため、端末を消去（`ERASE_SIMULATOR=1`。再起動でデータ移行（1〜2 分）がやり直しになる）する代わりにアプリをアンインストールしてから（`UNINSTALL_APP`）実行する。アンインストールでアプリのコンテナ・データ・権限の状態は消去と同じく初期化される。`xcode-test.sh` は `build-for-testing` と `test-without-building` に分けて実行し、それぞれの所要時間をログに出す。
 
 Swift のテストを Linux で実行する手段はない（Xcode が必要）。変更したら CI（macOS、10 倍課金）で確認する前に、Kotlin 側は上のクロスコンパイル、Swift 側は差分の読み直しで型・並行性のエラーを潰しておく。
 
