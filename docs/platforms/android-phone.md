@@ -13,16 +13,20 @@
 | `AndroidAppServices` | `AndroidAppServices.kt` | 共通 UI 向け契約 `AppServices` の Android 実装。`status`（モデル状態・処理中・最終チャンク受信時刻・メッセージ）、`requestTranscription()`（WorkManager）、`play/stopPlayback`（`MediaPlayer` でオフセットへシーク）。追加で `downloadModels(allowMetered)`、権限（Android 13+ の `POST_NOTIFICATIONS`。`permissionStatus` / `requestPermission`）、`gapAlertSettingsChanged()` |
 | `ChunkReceiverService` | `transfer/` | `WearableListenerService`。`/watch-audio/chunk/` 配下のチャネルを受け、処理を `ChunkReceiver` に渡す |
 | `ChunkReceiver` / `FrameReader` | `transfer/` | `ChunkFrame` のヘッダ（manifest JSON）を読む → 共通の `ChunkIntake.decode` → 音声を `cacheDir/incoming/*.part` にストリーム保存 → `ChunkIntake.accept`（`Ingestor.ingest`・診断ログ・文字起こしの要求。iOS と共通）→ `MessageClient` で `ChunkAck` を返す |
-| `AndroidSherpaTranscriber` | `asr/` | sherpa-onnx（AAR の Kotlin API）。Silero VAD → ReazonSpeech Zipformer int8。認識器は初回に読み込み、ワーカー 1 回分の間は使い回す。入力は音声パーツのリスト（チャンク単体、または境界付近の隣のチャンクの音声と連結したもの。[02 §6.3](../architecture/02-architecture.md#63-処理パイプラインphone)）で、各ファイルを `AudioDecoder` でデコードして `concatenateParts` で切り出し・連結する |
+| `AndroidSherpaTranscriber` | `asr/` | sherpa-onnx（AAR の Kotlin API）。Silero VAD → `ModelFiles.spec`（`AsrModelSpec.JA_REAZONSPEECH` = ReazonSpeech Zipformer int8）。Android 固有なのは VAD と認識器（`RecognizerKind` ごと）を作る部分だけで、確率の列から `TimedText` までは共通の `transcribeSpeech`（`VadSettings.DEFAULT`）。認識器は初回に読み込み、ワーカー 1 回分の間は使い回す。入力は音声パーツのリスト（チャンク単体、または境界付近の隣のチャンクの音声と連結したもの。[02 §6.3](../architecture/02-architecture.md#63-処理パイプラインphone)）で、各ファイルを `AudioDecoder` でデコードして `concatenateParts` で切り出し・連結する |
 | `AudioDecoder` | `asr/` | `MediaExtractor` + `MediaCodec` で m4a(AAC)/ogg(Opus) を 16 kHz モノラル float PCM に。ダウンミックスと線形リサンプルは `shared/pipeline` の `Pcm.kt`（共通コード・単体テストあり） |
-| `ModelManager` / `ModelDownloadWorker` / `ModelManifest` / `ModelDownloader` | `asr/` | モデルの用意（adb サイドロード取り込み・ファイル単位のダウンロード（途中再開・SHA-256 検証）・原子的な配置） |
+| `ModelManager` / `ModelDownloadWorker` / `ModelManifest` / `ModelDownloader` / `ModelFiles` | `asr/` | モデルの用意（adb サイドロード取り込み・ファイル単位のダウンロード（途中再開・SHA-256 検証）・原子的な配置）。ダウンロードするモデルは `ModelManifest.spec`、ファイルの場所（`ModelFiles`）とパスはその `AsrModelSpec` から作る |
 | `TranscriptionScheduler` / `TranscriptionWorker` / `AndroidDeviceConditions` | `work/` | WorkManager による文字起こしの起動。ワーカーは共通の `TranscriptionRun` を呼び、その `FollowUp` を WorkManager の予約に対応づけるだけ（§4）。電池と発熱の方針の端末の状態の読み取り（§4.0） |
 | `GapAlertMonitor` / `GapAlertWorker` | `alert/` | 録音の途絶アラート（#43）。判定は共通の `GapAlertEvaluator`、ここでは WorkManager でのチェックと通知の表示のみ（§4.1） |
 | `MainActivity` | `MainActivity.kt` | `App(services)` をホスト。オンボーディングの権限要求用に Activity Result の launcher を `AndroidAppServices` に渡す |
 
 共通コードの追加:
 
-- `shared/pipeline/SpeechSegmentation.kt`: `AsrSettings`（VAD しきい値 0.15、パディング 0.3 s、入力の上限 20 s、間の分割 0.22 s / 30 dB と雑音の床から 9 dB・0.3 s など）と `padSpeechSpans`（VAD 区間 → 余白付け・結合・話者交代の間での分割・上限での分割。[02 §6.3](../architecture/02-architecture.md#発話区間の切り出しandroid--jvm-ハーネス6871)）。**JVM ハーネスと Android で同一の分割**を使うため。
+- `shared/pipeline/AsrModelSpec.kt`: `AsrModelSpec`（sherpa-onnx の ASR モデルの記述: ディレクトリ名・`engineId`・言語・認識器の種類・役割ごとのファイル名）。Android の `ModelFiles`・`ModelManifest` とハーネスはこれからファイルの場所を作る（#136）。
+- `shared/pipeline/VadSettings.kt`: `VadSettings`（発話の検出と区間の切り出しの設定のデータクラス。既定値は VAD しきい値 0.15、パディング 0.3 s、入力の上限 20 s、間の分割 0.22 s / 30 dB と雑音の床から 9 dB・0.3 s など）。
+- `shared/pipeline/VadTranscription.kt`: `transcribeSpeech`（VAD の確率の列 → `speechSegments` → `padSpeechSpans` → 区間ごとの認識 → `TimedText`。発話確率の平均を `TimedText.speechProbability` に付ける）と `speechProbabilities`（窓ごとの VAD 呼び出し）。Android とハーネスで共通（#136）。
+- `shared/pipeline/SegmentFilter.kt`: 保存の前に `TranscriptionPipeline` が通すフィルタ。既定は何も捨てない（#105 の誤認識の除去を入れる場所）。
+- `shared/pipeline/SpeechSegmentation.kt`: `padSpeechSpans`（VAD 区間 → 余白付け・結合・話者交代の間での分割・上限での分割。[02 §6.3](../architecture/02-architecture.md#発話区間の切り出しandroid--jvm-ハーネス6871)）。**JVM ハーネスと Android で同一の分割**を使うため。
 - `shared/pipeline/SpeechDetection.kt`: `speechSegments`（Silero の発話確率 → 発話区間。開始と終了のしきい値を別々に持つ。#71）。Android は `Vad.compute` で 32 ms ごとの確率だけを求める。
 - `shared/pipeline/Pcm.kt`: `downmixToMono` / `pcm16ToFloat` / `LinearResampler`（ストリーミング）/ `concatenateParts`（パーツの範囲を切り出して連結。足りない分は無音）。
 - `shared/pipeline/BoundaryJoin.kt`: チャンク境界をまたぐ発話を 1 つとして認識するための連結範囲の決定と、結果のチャンクへの振り分け（#45）。
@@ -200,7 +204,7 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 ```bash
 ./gradlew --max-workers=2 jvmTest testAndroidHostTest   # 共通コード（フレーム読み取り・Pcm・VAD 区間の分割など）
 ./gradlew --max-workers=2 :apps:android:testDebugUnitTest  # FrameReader / ModelDownloader（途中切断するフェイクサーバーからの再開）/ ModelManifest / CrashRecorder・PreviousExits（JVM）
-./gradlew --max-workers=2 :tools:harness:test            # 実モデルでの E2E（Android と同じ AsrSettings）
+./gradlew --max-workers=2 :tools:harness:test            # 実モデルでの E2E（Android と同じ AsrModelSpec・VadSettings）
 ./gradlew --max-workers=2 :apps:android:assembleDebug :apps:android:lintDebug
 ```
 
@@ -233,7 +237,7 @@ adb logcat -d | grep PLAYBACK_CHECK                # 再生位置の記録
 
 計測した再生位置は `PLAYBACK_CHECK check=… requested_ms=… first_ms=… after_2s_ms=…` としてログに出し、CI のジョブサマリーにも載る。エミュレータの音声出力を有効にしておく必要がある（`-noaudio` を付けない）。
 
-ハーネスの `SherpaTranscriber` と `AndroidSherpaTranscriber` は同じ `AsrSettings`・`padSpeechSpans`・`concatenateParts` を使うので、ハーネスの認識結果は端末上の結果の目安になる（デコーダが ffmpeg か MediaCodec かの差、速度の差はある）。
+ハーネスの `SherpaTranscriber` と `AndroidSherpaTranscriber` は同じ `AsrModelSpec`・`VadSettings`・`transcribeSpeech`・`concatenateParts` を使うので、ハーネスの認識結果は端末上の結果の目安になる（デコーダが ffmpeg か MediaCodec かの差、速度の差はある）。
 
 ### 6.2 実機（adb）
 

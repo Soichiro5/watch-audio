@@ -131,6 +131,13 @@
   public static java.util.List search$default(app.watchaudio.core.db.StoreTransaction, java.lang.String, int, int, java.lang.Object);
   public java.util.List segmentsBetween(long, long);
 }
+-keep,allowobfuscation class app.watchaudio.core.pipeline.AsrModelSpec$Companion {
+  public app.watchaudio.core.pipeline.AsrModelSpec getJA_REAZONSPEECH();
+}
+-keep,allowobfuscation class app.watchaudio.core.pipeline.AsrModelSpec {
+  public java.lang.String getId();
+  app.watchaudio.core.pipeline.AsrModelSpec$Companion Companion;
+}
 -keep,allowobfuscation class app.watchaudio.core.pipeline.Ingestor {
   public java.lang.Object ingest(app.watchaudio.core.protocol.ChunkManifest, kotlinx.io.files.Path, kotlin.coroutines.Continuation);
 }

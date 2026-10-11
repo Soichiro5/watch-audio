@@ -16,7 +16,7 @@ class ModelManifestTest {
 
     @Test
     fun coversExactlyTheFilesTheTranscriberNeeds() {
-        val files = ModelFiles(File("/models"))
+        val files = ModelFiles(File("/models"), ModelManifest.spec)
         assertEquals(files.all.toSet(), ModelManifest.files.map(files::fileFor).toSet())
         assertEquals(ModelManifest.files.size, ModelManifest.files.map { it.path }.distinct().size)
     }

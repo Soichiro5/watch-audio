@@ -122,6 +122,32 @@ class TranscriptionPipelineTest {
     }
 
     @Test
+    fun storesOnlyWhatTheSegmentFilterKeeps() = runTest {
+        addChunk("a", 0)
+        val transcriber = object : Transcriber {
+            override val engineId = "fake"
+
+            override suspend fun transcribe(parts: List<AudioPart>) = listOf(
+                TimedText(1_000, 1_300, "えっ", "ja", speechProbability = 0.2f),
+                TimedText(2_000, 4_000, "会議を始めます", "ja", speechProbability = 0.9f),
+            )
+        }
+        val filter = SegmentFilter { (it.speechProbability ?: 1f) >= 0.5f }
+        val result = TranscriptionPipeline(store, dir.path, transcriber, segmentFilter = filter).processPending()
+
+        assertEquals(TranscriptionPipeline.RunResult(transcribed = 1, failed = 0), result)
+        assertEquals(listOf(Triple("a", 2_000L to 4_000L, "会議を始めます")), transcript())
+        assertEquals(ChunkState.TRANSCRIBED, store.read { chunk("a") }?.state)
+    }
+
+    @Test
+    fun theDefaultFilterKeepsEverything() = runTest {
+        addChunk("a", 0)
+        TranscriptionPipeline(store, dir.path, FakeTranscriber()).processPending()
+        assertEquals(listOf(Triple("a", 1_000L to 2_500L, "こんにちは a")), transcript())
+    }
+
+    @Test
     fun observerHearsEachChunkStartAndFinish() = runTest {
         addChunk("a", 0)
         addChunk("b", 600_000)

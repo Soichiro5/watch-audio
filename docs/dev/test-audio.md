@@ -26,6 +26,9 @@ tools/test-audio/.venv/bin/python tools/test-audio/generate.py
 #   特定の録音だけ:  --args="evaluate tools/test-audio/cache/out/manifest.json build/test-audio-eval clean day"
 #   録音ごとに別々に実行してもよい（メモリが少ない環境向け）。results.md は作業ディレクトリ内の
 #   評価済みの録音すべてをまとめ直す
+#   VAD・区間の切り出しの設定を変えて比べる（再コンパイル不要。名前は VadSettings のプロパティ名、既定はアプリと同じ値）:
+#   --args="evaluate tools/test-audio/cache/out/manifest.json build/eval-th03 --vad threshold=0.3,negThreshold=0.3 office cafe"
+#   （--vad は繰り返してもよい。設定ごとに作業ディレクトリを分ける。使った設定は最初に「VAD: VadSettings(...)」と表示される）
 #   固定サンプルで動作確認（1 分×3 条件、数十秒で終わる）:
 #   --args="evaluate tools/test-audio/fixtures/manifest.json build/test-audio-fixture"
 ```
@@ -99,7 +102,7 @@ B: {Zoom|ズーム}のリンクを{Slack|スラック}に貼っておきまし�
 ## 4. 結果
 
 2026-10-10〜11、この開発環境（Linux、4 コア、ASR 2 スレッド）で全条件を評価した結果（`--seed 56`）。
-ASR は Android と同じ sherpa-onnx + Zipformer ReazonSpeech int8、発話の検出と区間の切り出しも同じ設定（`AsrSettings`、`speechSegments`、`padSpeechSpans`）。
+ASR は Android と同じ sherpa-onnx + Zipformer ReazonSpeech int8、発話の検出と区間の切り出しも同じ設定とコード（`VadSettings.DEFAULT`、`transcribeSpeech` = `speechSegments` → `padSpeechSpans`）。
 
 ### 現在（#71 の修正後）
 
@@ -118,6 +121,8 @@ ASR は Android と同じ sherpa-onnx + Zipformer ReazonSpeech int8、発話の�
 - 文字起こし時間・RTF は、2 つの評価を並行し、さらに別の作業と CPU を分け合った状態での値（clean・reazon_clean は特に遅く出ている）。速度の比較には使えない。
 - 認識器への入力（保存されたセグメント）の長さの中央値 / 最大: clean 1.7 / 5.5 秒、wrist 1.9 / 7.3 秒、office 1.7 / 5.8 秒、cafe 1.6 / 7.5 秒、outdoor 1.8 / 9.5 秒、rub 1.9 / 9.4 秒、day 1.7 / 7.1 秒、reazon_clean 4.2 / 18.9 秒、reazon_cafe 1.9 / 10.8 秒。
 - day の「発話外の誤認識」58 文字は、会話の間の長い無音（15 分・7 分）ではなく、環境音を挟んだ区間で、しきい値を下げたぶん拾うようになったもの（#68 の修正後は 7 文字）。
+
+#136（モデルと VAD の設定をデータ化し、確率 → 区間 → 文字起こしを共通関数にしたリファクタリング）の前後で、office・cafe・outdoor・day の保存されたセグメント（開始・終了・本文・言語・エンジン）が完全に一致することを確認した（同じ PC で生成し直した音声セット、2026-10-11）。そのとき CER は office 25.5%・cafe 41.0%・outdoor 38.7%・day 29.5% で、上の表と最大 0.7 ポイント違う。リファクタリング前のコードでも同じ値なので、差は音声セットの生成し直し（office は「正解区間で切った場合」も 25.6% → 26.1% と変わった）や環境によるもので、コードの変更によるものではない。
 
 ### 修正前後の比較（#71）
 

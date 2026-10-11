@@ -1,13 +1,17 @@
 package app.watchaudio.harness
 
+import app.watchaudio.core.pipeline.AsrModelFile
+import app.watchaudio.core.pipeline.AsrModelSpec
 import app.watchaudio.core.pipeline.AsrSettings
 import app.watchaudio.core.pipeline.AudioPart
-import app.watchaudio.core.pipeline.SpeechSpan
+import app.watchaudio.core.pipeline.Recognition
+import app.watchaudio.core.pipeline.RecognizerKind
 import app.watchaudio.core.pipeline.TimedText
 import app.watchaudio.core.pipeline.Transcriber
+import app.watchaudio.core.pipeline.VadSettings
 import app.watchaudio.core.pipeline.concatenateParts
-import app.watchaudio.core.pipeline.padSpeechSpans
-import app.watchaudio.core.pipeline.speechSegments
+import app.watchaudio.core.pipeline.speechProbabilities
+import app.watchaudio.core.pipeline.transcribeSpeech
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
@@ -20,30 +24,42 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * sherpa-onnx on the JVM: Silero VAD splits the chunk into utterances, then the Japanese
- * ReazonSpeech Zipformer (int8) transcribes each one. Same models and [AsrSettings] as the
- * Android app, so results here predict on-device accuracy (not speed).
+ * sherpa-onnx on the JVM: Silero VAD finds the utterances, then the ASR model [spec] (by default
+ * the Japanese ReazonSpeech Zipformer, int8) transcribes each one. Everything after the VAD
+ * probabilities is the shared [transcribeSpeech], as in the Android app, so with the same
+ * [spec] and [vadSettings] results here predict on-device accuracy (not speed).
+ *
+ * Models are read from [modelsDir] in the layout of `tools/harness/download-models.sh`.
  */
-class SherpaTranscriber(modelsDir: File, numThreads: Int = 2) : Transcriber, AutoCloseable {
-    override val engineId = AsrSettings.JA_ENGINE_ID
+class SherpaTranscriber(
+    modelsDir: File,
+    numThreads: Int = 2,
+    val spec: AsrModelSpec = AsrModelSpec.DEFAULT,
+    val vadSettings: VadSettings = VadSettings.DEFAULT,
+) : Transcriber, AutoCloseable {
+    override val engineId = spec.engineId
 
-    private val vadModel = File(modelsDir, "silero_vad.onnx").path
+    private val vadModel = File(modelsDir, AsrModelSpec.VAD_FILE).path
     private val recognizer: OfflineRecognizer
 
     init {
-        val dir = File(modelsDir, AsrSettings.JA_MODEL_NAME)
-        require(File(dir, "tokens.txt").exists()) { "ASR model not found in $dir (run tools/harness/download-models.sh)" }
-        val model = OfflineModelConfig.builder()
-            .setTransducer(
-                OfflineTransducerModelConfig.builder()
-                    .setEncoder(File(dir, "encoder-epoch-99-avg-1.int8.onnx").path)
-                    .setDecoder(File(dir, "decoder-epoch-99-avg-1.int8.onnx").path)
-                    .setJoiner(File(dir, "joiner-epoch-99-avg-1.int8.onnx").path)
-                    .build(),
-            )
-            .setTokens(File(dir, "tokens.txt").path)
-            .setNumThreads(numThreads)
-            .build()
+        fun file(role: AsrModelFile) = File(modelsDir, spec.path(role)).path
+        require(File(file(AsrModelFile.TOKENS)).exists()) {
+            "ASR model not found in ${File(modelsDir, spec.id)} (run tools/harness/download-models.sh)"
+        }
+        val model = when (spec.kind) {
+            RecognizerKind.TRANSDUCER -> OfflineModelConfig.builder()
+                .setTransducer(
+                    OfflineTransducerModelConfig.builder()
+                        .setEncoder(file(AsrModelFile.ENCODER))
+                        .setDecoder(file(AsrModelFile.DECODER))
+                        .setJoiner(file(AsrModelFile.JOINER))
+                        .build(),
+                )
+                .setTokens(file(AsrModelFile.TOKENS))
+                .setNumThreads(numThreads)
+                .build()
+        }
         recognizer = OfflineRecognizer(
             OfflineRecognizerConfig.builder().setOfflineModelConfig(model).setDecodingMethod("greedy_search").build(),
         )
@@ -51,10 +67,7 @@ class SherpaTranscriber(modelsDir: File, numThreads: Int = 2) : Transcriber, Aut
 
     override suspend fun transcribe(parts: List<AudioPart>): List<TimedText> = withContext(Dispatchers.Default) {
         val samples = concatenateParts(parts) { Ffmpeg.decode(File(it.file.toString())) }
-        speechSpans(samples).mapNotNull { span ->
-            val text = recognize(span.samples)
-            if (text.isEmpty()) null else TimedText(span.startMs, span.endMs, text, lang = "ja")
-        }
+        transcribeSpeech(samples, vadProbabilities(samples), vadSettings, spec.language) { Recognition(recognize(it)) }
     }
 
     /** Recognizes [samples] (16 kHz) as one utterance, without VAD. */
@@ -69,26 +82,21 @@ class SherpaTranscriber(modelsDir: File, numThreads: Int = 2) : Transcriber, Aut
         }
     }
 
-    /**
-     * Runs Silero VAD over the whole input, finds speech from its probabilities
-     * ([speechSegments]) and cuts the recognizer inputs ([padSpeechSpans]).
-     */
-    private fun speechSpans(samples: FloatArray): List<SpeechSpan> {
+    /** Silero VAD speech probabilities of the whole input (see [speechProbabilities]). */
+    private suspend fun vadProbabilities(samples: FloatArray): FloatArray {
         val config = VadModelConfig.builder()
             .setSileroVadModelConfig(
-                SileroVadModelConfig.builder().setModel(vadModel).setWindowSize(AsrSettings.VAD_WINDOW_SIZE).build(),
+                SileroVadModelConfig.builder().setModel(vadModel).setWindowSize(vadSettings.windowSize).build(),
             )
             .setSampleRate(AsrSettings.SAMPLE_RATE)
             .setNumThreads(1)
             .build()
         val vad = Vad(config)
-        val window = AsrSettings.VAD_WINDOW_SIZE
-        val probabilities = try {
-            FloatArray(samples.size / window) { vad.compute(samples.copyOfRange(it * window, (it + 1) * window)) }
+        try {
+            return speechProbabilities(samples, vadSettings.windowSize, vad::compute)
         } finally {
             vad.release()
         }
-        return padSpeechSpans(speechSegments(probabilities), samples)
     }
 
     override fun close() = recognizer.release()

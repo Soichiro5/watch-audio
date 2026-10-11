@@ -4,77 +4,12 @@ import kotlin.math.abs
 import kotlin.math.pow
 
 /**
- * Settings shared by every sherpa-onnx based transcriber (Android app and the JVM harness), so
- * that harness results predict on-device behaviour.
+ * Audio format shared by every sherpa-onnx based transcriber (Android app and the JVM harness):
+ * the decoded audio, the Silero VAD and the recognizer all work at [SAMPLE_RATE]. The model is
+ * described by [AsrModelSpec], speech detection and segmentation by [VadSettings].
  */
 object AsrSettings {
     const val SAMPLE_RATE = 16_000
-
-    /**
-     * Speech starts where the Silero probability reaches this ([speechSegments]). The M0-5 spike
-     * chose 0.3 on clean speech; 0.15 also hears a conversation partner in noise (#71: 8 dB
-     * quieter than the wearer, at 2–7 dB SNR), which 0.3 misses or cuts short.
-     */
-    const val VAD_THRESHOLD = 0.15f
-
-    /** Speech ends where the probability stays below this for [VAD_MIN_SILENCE_SECONDS]. */
-    const val VAD_NEG_THRESHOLD = 0.15f
-
-    /**
-     * Long, so that a quiet voice whose probability dips is not cut; pauses and turn-taking
-     * inside a segment are split by [padSpeechSpans] instead.
-     */
-    const val VAD_MIN_SILENCE_SECONDS = 2f
-    const val VAD_MIN_SPEECH_SECONDS = 0.25f
-    const val VAD_WINDOW_SIZE = 512
-
-    /** Context added around each VAD segment; without it word onsets get clipped. */
-    const val SEGMENT_PAD_SECONDS = 0.3f
-
-    /**
-     * Upper bound on one recognizer input, padding included. The ReazonSpeech Zipformer drops
-     * whole sentences from long inputs (#68), so longer speech is split (see [padSpeechSpans]).
-     */
-    const val MAX_SEGMENT_SECONDS = 20f
-
-    /** A near-silent pause this long inside a VAD segment splits it (turn-taking gaps). */
-    const val MIN_PAUSE_SECONDS = 0.22f
-
-    /** How far below the segment's loud frames a pause must be, in dB. */
-    const val PAUSE_DB = 30f
-
-    /**
-     * A pause may instead be this close to the noise floor, in dB (#71). In noise, turn-taking
-     * gaps are filled with noise and never get [PAUSE_DB] below the speech.
-     */
-    const val PAUSE_FLOOR_DB = 9f
-
-    /**
-     * A pause found only near the noise floor must last this long; noise has more short dips
-     * than silence does, and shorter pieces lose the context the recognizer needs.
-     */
-    const val MIN_NOISY_PAUSE_SECONDS = 0.3f
-
-    /**
-     * However close to the noise floor, a pause must stay this far below the segment's loud
-     * frames, in dB, so that speech as loud as the noise is never taken for a pause.
-     */
-    const val PAUSE_MIN_CONTRAST_DB = 6f
-
-    /**
-     * Pauses are compared with the loud frames within this distance (not of the whole segment),
-     * so that a quiet speaker next to a loud one is not cut at every dip.
-     */
-    const val PAUSE_LOUD_WINDOW_SECONDS = 1f
-
-    /** Percentile of the 10 ms frame energies around a segment taken as its noise floor. */
-    const val NOISE_FLOOR_PERCENTILE = 10
-
-    /** Audio on each side of a segment that its noise floor is estimated over. */
-    const val NOISE_FLOOR_CONTEXT_SECONDS = 5f
-
-    const val JA_MODEL_NAME = "sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01"
-    const val JA_ENGINE_ID = "sherpa-zipformer-ja-reazonspeech-int8"
 }
 
 /** A detected utterance: offset into the chunk (in samples) and its samples. */
@@ -100,19 +35,22 @@ class SpeechSpan(val startSample: Int, val samples: FloatArray) {
  *   quietest points into pieces of at most [maxSamples].
  *
  * No returned span is longer than [maxSamples] (unless [maxSamples] is not positive), and spans
- * never overlap.
+ * never overlap. The noise floor is the [noiseFloorPercentile]th percentile of the frame energies
+ * over the range and [noiseFloorContextSamples] on each side ([noiseFloor]).
  */
 fun padSpeechSpans(
     vadSegments: List<Pair<Int, Int>>,
     audio: FloatArray,
-    padSamples: Int = (AsrSettings.SEGMENT_PAD_SECONDS * AsrSettings.SAMPLE_RATE).toInt(),
-    maxSamples: Int = (AsrSettings.MAX_SEGMENT_SECONDS * AsrSettings.SAMPLE_RATE).toInt(),
-    minPauseSamples: Int = (AsrSettings.MIN_PAUSE_SECONDS * AsrSettings.SAMPLE_RATE).toInt(),
-    pauseDb: Float = AsrSettings.PAUSE_DB,
-    pauseFloorDb: Float = AsrSettings.PAUSE_FLOOR_DB,
-    pauseMinContrastDb: Float = AsrSettings.PAUSE_MIN_CONTRAST_DB,
-    minNoisyPauseSamples: Int = (AsrSettings.MIN_NOISY_PAUSE_SECONDS * AsrSettings.SAMPLE_RATE).toInt(),
-    pauseLoudWindowSamples: Int = (AsrSettings.PAUSE_LOUD_WINDOW_SECONDS * AsrSettings.SAMPLE_RATE).toInt(),
+    padSamples: Int = VadSettings.DEFAULT.padSamples,
+    maxSamples: Int = VadSettings.DEFAULT.maxSamples,
+    minPauseSamples: Int = VadSettings.DEFAULT.minPauseSamples,
+    pauseDb: Float = VadSettings.DEFAULT.pauseDb,
+    pauseFloorDb: Float = VadSettings.DEFAULT.pauseFloorDb,
+    pauseMinContrastDb: Float = VadSettings.DEFAULT.pauseMinContrastDb,
+    minNoisyPauseSamples: Int = VadSettings.DEFAULT.minNoisyPauseSamples,
+    pauseLoudWindowSamples: Int = VadSettings.DEFAULT.pauseLoudWindowSamples,
+    noiseFloorPercentile: Int = VadSettings.DEFAULT.noiseFloorPercentile,
+    noiseFloorContextSamples: Int = VadSettings.DEFAULT.noiseFloorContextSamples,
 ): List<SpeechSpan> {
     val limit = if (maxSamples > 0) maxSamples else Int.MAX_VALUE
     val speech = vadSegments
@@ -144,11 +82,33 @@ fun padSpeechSpans(
     }
 
     return ranges
-        .flatMap { splitAtPauses(audio, it[0], it[1], minPauseSamples, pauseDb, pauseFloorDb, pauseMinContrastDb, minNoisyPauseSamples, pauseLoudWindowSamples) }
+        .flatMap {
+            splitAtPauses(
+                audio, it[0], it[1], minPauseSamples, pauseDb, pauseFloorDb, pauseMinContrastDb, minNoisyPauseSamples,
+                pauseLoudWindowSamples, noiseFloorPercentile, noiseFloorContextSamples,
+            )
+        }
         .flatMap { (from, to) -> splitLongRange(audio, from, to, limit) }
         .filter { (from, to) -> to > from }
         .map { (from, to) -> SpeechSpan(from, audio.copyOfRange(from, to)) }
 }
+
+/** [padSpeechSpans] with the padding, limit and pause splitting of [settings]. */
+fun padSpeechSpans(vadSegments: List<Pair<Int, Int>>, audio: FloatArray, settings: VadSettings): List<SpeechSpan> =
+    padSpeechSpans(
+        vadSegments,
+        audio,
+        padSamples = settings.padSamples,
+        maxSamples = settings.maxSamples,
+        minPauseSamples = settings.minPauseSamples,
+        pauseDb = settings.pauseDb,
+        pauseFloorDb = settings.pauseFloorDb,
+        pauseMinContrastDb = settings.pauseMinContrastDb,
+        minNoisyPauseSamples = settings.minNoisyPauseSamples,
+        pauseLoudWindowSamples = settings.pauseLoudWindowSamples,
+        noiseFloorPercentile = settings.noiseFloorPercentile,
+        noiseFloorContextSamples = settings.noiseFloorContextSamples,
+    )
 
 /** Length of the frames whose energy [splitAtPauses] compares (10 ms). */
 private const val PAUSE_FRAME = AsrSettings.SAMPLE_RATE / 100
@@ -159,7 +119,8 @@ private const val PAUSE_FRAME = AsrSettings.SAMPLE_RATE / 100
  * percentile of the range, or of the frames within [loudWindowSamples] if positive), lasting at
  * least [minPauseSamples]; or a run of frames at most
  * [pauseFloorDb] above the [noiseFloor] around the range (and still [pauseMinContrastDb] below
- * the loud frames) lasting at least [minNoisyPauseSamples]. The first catches turn-taking gaps
+ * the loud frames) lasting at least [minNoisyPauseSamples]; the floor is the
+ * [noiseFloorPercentile]th percentile over the range and [noiseFloorContextSamples] on each side. The first catches turn-taking gaps
  * the VAD rides through after reverberant speech, where Silero stays above its threshold for
  * over a second; the second catches them in noise, which fills the gaps (#71).
  */
@@ -170,14 +131,16 @@ internal fun splitAtPauses(
     minPauseSamples: Int,
     pauseDb: Float,
     pauseFloorDb: Float = Float.NEGATIVE_INFINITY,
-    pauseMinContrastDb: Float = AsrSettings.PAUSE_MIN_CONTRAST_DB,
+    pauseMinContrastDb: Float = VadSettings.DEFAULT.pauseMinContrastDb,
     minNoisyPauseSamples: Int = minPauseSamples,
     loudWindowSamples: Int = 0,
+    noiseFloorPercentile: Int = VadSettings.DEFAULT.noiseFloorPercentile,
+    noiseFloorContextSamples: Int = VadSettings.DEFAULT.noiseFloorContextSamples,
 ): List<Pair<Int, Int>> {
     val frames = (to - from) / PAUSE_FRAME
     if (minPauseSamples <= 0 || frames < 3) return listOf(from to to)
     val energy = DoubleArray(frames) { frameEnergy(audio, from + it * PAUSE_FRAME) }
-    val floor = if (pauseFloorDb == Float.NEGATIVE_INFINITY) 0.0 else noiseFloor(audio, from, to) * 10.0.pow(pauseFloorDb / 10.0)
+    val floor = if (pauseFloorDb == Float.NEGATIVE_INFINITY) 0.0 else noiseFloor(audio, from, to, noiseFloorPercentile, noiseFloorContextSamples) * 10.0.pow(pauseFloorDb / 10.0)
     // Loudness reference: the 95th percentile of the whole range, or of the frames within
     // [loudWindowSamples] of each 100 ms block.
     val window = loudWindowSamples / PAUSE_FRAME
@@ -241,18 +204,23 @@ private fun frameEnergy(audio: FloatArray, start: Int): Double {
 }
 
 /**
- * Energy of the background noise around `[from, to)`: the [AsrSettings.NOISE_FLOOR_PERCENTILE]th
- * percentile of the 10 ms frame energies over the range and [AsrSettings.NOISE_FLOOR_CONTEXT_SECONDS]
- * on each side, which in a conversation includes the gaps between utterances.
+ * Energy of the background noise around `[from, to)`: the [percentile]th percentile of the 10 ms
+ * frame energies over the range and [contextSamples] on each side, which in a conversation
+ * includes the gaps between utterances.
  */
-internal fun noiseFloor(audio: FloatArray, from: Int, to: Int): Double {
-    val context = (AsrSettings.NOISE_FLOOR_CONTEXT_SECONDS * AsrSettings.SAMPLE_RATE).toInt()
-    val start = maxOf(0, from - context)
-    val frames = (minOf(audio.size, to + context) - start) / PAUSE_FRAME
+internal fun noiseFloor(
+    audio: FloatArray,
+    from: Int,
+    to: Int,
+    percentile: Int = VadSettings.DEFAULT.noiseFloorPercentile,
+    contextSamples: Int = VadSettings.DEFAULT.noiseFloorContextSamples,
+): Double {
+    val start = maxOf(0, from - contextSamples)
+    val frames = (minOf(audio.size, to + contextSamples) - start) / PAUSE_FRAME
     if (frames <= 0) return 0.0
     val energy = DoubleArray(frames) { frameEnergy(audio, start + it * PAUSE_FRAME) }
     energy.sort()
-    return energy[(frames - 1) * AsrSettings.NOISE_FLOOR_PERCENTILE / 100]
+    return energy[(frames - 1) * percentile / 100]
 }
 
 /** Splits `[from, to)` at its quietest points into pieces no longer than [limit]. */

@@ -45,7 +45,7 @@ class ModelManager(
     private val diagnostics: Diagnostics,
     private val onReady: () -> Unit,
 ) {
-    val files = ModelFiles(File(context.filesDir, "models"))
+    val files = ModelFiles(File(context.filesDir, "models"), ModelManifest.spec)
 
     private val _state = MutableStateFlow<ModelState>(ModelState.Unknown)
     val state: StateFlow<ModelState> = _state.asStateFlow()
@@ -177,7 +177,7 @@ class ModelManager(
 
     /** Copies models pushed by a developer to the external files dir (see docs/platforms/android-phone.md). */
     private fun importSideloaded() {
-        val source = context.getExternalFilesDir(null)?.let { ModelFiles(File(it, "models")) } ?: return
+        val source = context.getExternalFilesDir(null)?.let { ModelFiles(File(it, "models"), files.spec) } ?: return
         val pairs = source.all.zip(files.all).filter { (from, _) -> from.isFile && from.length() > 0 }
         if (pairs.isEmpty()) return
         val temp = File(files.root, TEMP_PREFIX + "sideload").apply { mkdirs() }

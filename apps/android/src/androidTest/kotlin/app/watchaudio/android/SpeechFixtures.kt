@@ -8,7 +8,7 @@ import app.watchaudio.android.asr.ModelFiles
 import app.watchaudio.android.asr.ModelManager
 import app.watchaudio.android.work.TranscriptionScheduler
 import app.watchaudio.core.db.LocalStore
-import app.watchaudio.core.pipeline.AsrSettings
+import app.watchaudio.core.pipeline.AsrModelSpec
 import app.watchaudio.core.pipeline.Ingestor
 import app.watchaudio.core.platform.sha256Of
 import app.watchaudio.core.protocol.AckStatus
@@ -118,7 +118,7 @@ object SpeechFixtures {
     /** 16 kHz mono PCM of the reference recording `test_wavs/<n>.wav`. */
     fun wav(n: Int): ShortArray {
         val local = File(context.cacheDir, "test_wavs/$n.wav")
-        if (!local.isFile) Evidence.copyFromDevice("$DEVICE_DIR/${AsrSettings.JA_MODEL_NAME}/test_wavs/$n.wav", local)
+        if (!local.isFile) Evidence.copyFromDevice("$DEVICE_DIR/${AsrModelSpec.JA_REAZONSPEECH.id}/test_wavs/$n.wav", local)
         return readWav(local.readBytes())
     }
 

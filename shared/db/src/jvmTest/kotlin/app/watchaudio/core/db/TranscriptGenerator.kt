@@ -172,7 +172,7 @@ internal class TranscriptGenerator(seed: Int, private val profile: Profile) {
         /** 16 worn hours a day (docs/research/m0-5-asr-desktop.md §5). */
         const val WORN_CHUNKS_PER_DAY = 192
 
-        /** Same length as the Android engine id (`AsrSettings.JA_ENGINE_ID`). */
+        /** Same length as the Android engine id (`AsrModelSpec.JA_REAZONSPEECH.engineId`). */
         const val ENGINE = "sherpa-zipformer-ja-reazonspeech-int8"
 
         val REPLIES = listOf(

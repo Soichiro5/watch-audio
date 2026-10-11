@@ -5,6 +5,7 @@ import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.AsrSettings
 import app.watchaudio.core.pipeline.Ingestor
 import app.watchaudio.core.pipeline.TranscriptionPipeline
+import app.watchaudio.core.pipeline.VadSettings
 import app.watchaudio.core.protocol.AckStatus
 import java.io.File
 import kotlinx.io.files.Path
@@ -16,8 +17,15 @@ import kotlinx.io.files.Path
  *
  * As a diagnostic it also transcribes every ground-truth utterance on its own (cut from the
  * same AAC-coded audio, without VAD), which separates segmentation problems from acoustic ones.
+ *
+ * Speech is found and cut with [vadSettings] (the app's settings unless overridden).
  */
-class TestSetEvaluator(private val models: File, private val workDir: File, private val chunkSeconds: Int = 300) {
+class TestSetEvaluator(
+    private val models: File,
+    private val workDir: File,
+    private val chunkSeconds: Int = 300,
+    private val vadSettings: VadSettings = VadSettings.DEFAULT,
+) {
 
     /** Outcome for one recording; times in seconds. */
     data class Result(
@@ -44,7 +52,7 @@ class TestSetEvaluator(private val models: File, private val workDir: File, priv
         val manifest = TestSetManifest.load(manifestFile)
         val recordings = manifest.recordings.filter { only.isEmpty() || it.id in only }
         require(recordings.isNotEmpty()) { "no recordings $only in $manifestFile" }
-        return SherpaTranscriber(models).use { transcriber ->
+        return SherpaTranscriber(models, vadSettings = vadSettings).use { transcriber ->
             recordings.map { recording ->
                 evaluate(File(manifestFile.absoluteFile.parentFile, recording.audio), recording, transcriber).also {
                     File(workDir, "${recording.id}/row.md").writeText(markdownRow(it))
@@ -95,7 +103,7 @@ class TestSetEvaluator(private val models: File, private val workDir: File, priv
         val audio = Ffmpeg.decode(coded)
         coded.delete()
         val perMs = AsrSettings.SAMPLE_RATE / 1000
-        val padMs = (AsrSettings.SEGMENT_PAD_SECONDS * 1000).toLong()
+        val padMs = (vadSettings.segmentPadSeconds * 1000).toLong()
         return recording.segments.map { s ->
             val from = ((s.startMs - padMs) * perMs).toInt().coerceIn(0, audio.size)
             val to = ((s.endMs + padMs) * perMs).toInt().coerceIn(from, audio.size)
