@@ -157,14 +157,23 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 | `emulator.yml`（phone） | 同上（`phone-scenarios.sh`） | 通知権限をシステムのダイアログで拒否 → 理由と「設定を開く」が表示され、押すとアプリの設定画面が開く（`PermissionDeniedTest`、#32） | `PERMISSION_CHECK` 行、スクリーンショット `permission-system-dialog.png` / `onboarding-permission-denied.png` / `app-settings-opened.png` |
 | `emulator.yml`（phone） | 同上（`phone-scenarios.sh`） | 文字起こしの途中で `am force-stop` → 再起動で全チャンクが 1 回ずつ文字起こしされる（欠落・重複 0、中断したチャンクは 2 回目で完了）（`ResumeAfterKillTest`、#20） | `RESUME_CHECK` 行、成果物 `logcat-phone` の `scenario-logs/` |
 | `emulator.yml`（wear） | 同上（`wear-surfaces.sh`） | Tile とコンプリケーションの表示（停止中 → Tile のタップでアプリが開き録音開始 → 録音中）（#41） | `WEAR_SURFACE_CHECK` 行、スクリーンショット `wear-tile-*.png` / `wear-complication-*.png` |
-| `ios.yml` | Shared tests (iOS simulator) | 共通ロジックを iOS シミュレータで実行（SQLite を使う core-db / Ingestor のテストを含む）。composeApp の `IosPlaybackTest`: `IosAppServices.play` 直接・共有 UI で前日のタイムラインの発話タップ／検索結果の 1 タップのそれぞれで、そのチャンクの AAC が AVAudioPlayer に指定位置（±0.2 秒）・正しい長さで用意される（#19, #25。テスト実行ファイルはアプリではないので再生開始 `started=` は記録のみ）。`IosTranscriberBridgeTest`: Swift の文字起こし結果が絶対時刻つきで DB・FTS に入る（#21） | ジョブサマリーのテスト一覧と `PLAYBACK_CHECK` 行 |
-| `ios.yml` | Shared tests (iOS simulator) / Swift unit tests | iPhone の DB・音声・受信ディレクトリ（`LocalDataDirectoryTest`）と Watch の送信待ちディレクトリ（`LocalDataProtectionTests`、`ChunkOutboxTests`）がバックアップ対象外で、保護クラス `CompleteUntilFirstUserAuthentication` を設定できる（シミュレータは保護クラスを報告しないことがあるため、値は報告される場合だけ比較。#76） | ジョブサマリーのテスト一覧、ログ |
-| `ios.yml` | Launch iOS app / Launch watchOS app | ビルドした iOS・watchOS アプリをシミュレータに入れて起動し、15 秒後もプロセスが生きていてクラッシュレポートがない | ジョブサマリー、成果物 `simulator-smoke`（スクリーンショット・ログ） |
-| `ios.yml` | Swift unit tests (iOS Simulator) | `SwiftUnitTests` スキーム（ホストなし）: Swift のワイヤ形式が Kotlin のテストベクタと一致（`ProtocolTests`）、Watch の停止理由・状態判定と終了理由のマニフェストへの記録（`RecorderPolicyTests`、#15）、送信キューの ACK・再送・再起動後の再送・強制終了からの復旧（`ChunkOutboxTests`、#17） | ジョブサマリーのテスト一覧（`.github/scripts/xcresult-summary.py`） |
-| `ios.yml` | Japanese test speech / Speech transcription on the iOS simulator | macOS の `say` で作った日本語音声（Watch と同じ AAC 16 kHz モノラル）を SpeechTranscriber（ja_JP）で文字起こしし、時刻と文字の再現率を確認（`SpeechTests`、iOS アプリがホスト、#21）。シミュレータで使えなければ理由を残してスキップ（実機確認は #60） | ジョブサマリーのテスト一覧と「Speech check logs」、成果物 `swift-evidence` |
-| `ios.yml` | Playback in the iOS app (simulator) | `PlaybackTests`（iOS アプリがホストの XCTest）: アプリが起動時に作った本物の `IosAppServices` で AAC 16 kHz の音声を 8 秒から再生し、再生位置がそこから始まり 2 秒後に 1 秒以上進む（#19） | ジョブサマリーのテスト一覧と `PLAYBACK_CHECK check=hosted_player` 行、成果物 `swift-evidence` |
+| `ios.yml`（unit-tests） | Shared tests (iOS simulator) | 共通ロジックを iOS シミュレータで実行（SQLite を使う core-db / Ingestor のテストを含む）。composeApp の `IosPlaybackTest`: `IosAppServices.play` 直接・共有 UI で前日のタイムラインの発話タップ／検索結果の 1 タップのそれぞれで、そのチャンクの AAC が AVAudioPlayer に指定位置（±0.2 秒）・正しい長さで用意される（#19, #25。テスト実行ファイルはアプリではないので再生開始 `started=` は記録のみ）。`IosTranscriberBridgeTest`: Swift の文字起こし結果が絶対時刻つきで DB・FTS に入る（#21） | ジョブサマリーのテスト一覧と `PLAYBACK_CHECK` 行 |
+| `ios.yml`（unit-tests） | Shared tests (iOS simulator) / Swift unit tests | iPhone の DB・音声・受信ディレクトリ（`LocalDataDirectoryTest`）と Watch の送信待ちディレクトリ（`LocalDataProtectionTests`、`ChunkOutboxTests`）がバックアップ対象外で、保護クラス `CompleteUntilFirstUserAuthentication` を設定できる（シミュレータは保護クラスを報告しないことがあるため、値は報告される場合だけ比較。#76） | ジョブサマリーのテスト一覧、ログ |
+| `ios.yml`（ios-app / watch-app） | Launch iOS app on an iPhone simulator / Launch watchOS app on an Apple Watch simulator | ビルドした iOS・watchOS アプリをシミュレータに入れて起動し、15 秒後もプロセスが生きていてクラッシュレポートがない | ジョブサマリー、成果物 `simulator-smoke`（スクリーンショット・ログ） |
+| `ios.yml`（watch-app） | watchOS Release build has no debug audio input | watchOS アプリを Release 構成でもビルドし、debug 専用の音声ファイル入力 `DebugAudioFileInput`（#57）が Release のバイナリに含まれない（Debug 側には含まれる＝検索が効いている） | ジョブサマリーの `OK: DebugAudioFileInput …` 行 |
+| `ios.yml`（watch-app） | watchOS complication tap on an Apple Watch simulator | コンプリケーションのウィジェット拡張が埋め込まれ、タップ URL（`watchaudio://record`）でアプリが開き録音が始まる（`watch-complication-smoke.sh`、#41） | ジョブサマリー、成果物 `simulator-smoke`（`watchos-complication-*`） |
+| `ios.yml`（unit-tests） | Swift unit tests (iOS Simulator) | `SwiftUnitTests` スキーム（ホストなし）: Swift のワイヤ形式が Kotlin のテストベクタと一致（`ProtocolTests`）、Watch の停止理由・状態判定と終了理由のマニフェストへの記録（`RecorderPolicyTests`、#15）、送信キューの ACK・再送・再起動後の再送・強制終了からの復旧（`ChunkOutboxTests`、#17）、コンプリケーションの状態対応と表示（`ComplicationDisplayTests`、#41） | ジョブサマリーのテスト一覧（`.github/scripts/xcresult-summary.py`）、成果物 `watch-complication-previews` |
+| `ios.yml`（ios-app） | Japanese test speech / Speech transcription on the iOS simulator | macOS の `say` で作った日本語音声（Watch と同じ AAC 16 kHz モノラル）を SpeechTranscriber（ja_JP）で文字起こしし、時刻と文字の再現率を確認（`SpeechTests`、iOS アプリがホスト、#21）。シミュレータで使えなければ理由を残してスキップ（実機確認は #60） | ジョブサマリーのテスト一覧と「Speech check logs」、成果物 `swift-evidence` |
+| `ios.yml`（ios-app） | Playback in the iOS app (simulator) | `PlaybackTests`（iOS アプリがホストの XCTest）: アプリが起動時に作った本物の `IosAppServices` で AAC 16 kHz の音声を 8 秒から再生し、再生位置がそこから始まり 2 秒後に 1 秒以上進む（#19） | ジョブサマリーのテスト一覧と `PLAYBACK_CHECK check=hosted_player` 行、成果物 `swift-evidence` |
 
 スクリーンショットは成果物 `screenshots-phone` / `screenshots-wear`（30 日保存）、`*_CHECK` 行はジョブサマリーにまとめて出す。
+
+`ios.yml` は待ち時間を減らすため、互いのビルド結果を使わない 3 つの macOS ジョブを並列に動かす（#92）。1 つのジョブが失敗しても他のジョブは最後まで動く。
+
+- `unit-tests`: Kotlin の共通テスト（iOS シミュレータ）とホストなしの Swift テスト（`SwiftUnitTests`）。Kotlin のビルドが要るので Java・Gradle・Kotlin/Native のキャッシュを使う。成果物 `kotlin-ios-test-results` / `watch-complication-previews`。
+- `ios-app`: iOS アプリのビルド（ビルドフェーズで Kotlin のフレームワークをリンクし、watchOS アプリを埋め込む）、起動確認、アプリをホストにした `SpeechTests` / `PlaybackTests`。成果物 `swift-evidence`。
+- `watch-app`: watchOS アプリ単体のビルド（Kotlin 不要なので Java・Gradle の準備はしない）、Release 構成の確認、コンプリケーションのタップ、起動確認。
+- `artifacts`（ubuntu）: `ios-app` と `watch-app` が別々に上げた `simulator-smoke-*` を 1 つの成果物 `simulator-smoke` に、失敗したジョブの `xcodebuild-logs-*` を `xcodebuild-logs` にまとめる（`actions/upload-artifact/merge`、まとめた元は削除）。成果物の名前は分割前と同じ。
 
 SQLite（bundled ドライバ）を開くテストは `src/sqliteTest` に置く（`watchaudio.kmp.sqlite-tests` プラグイン）。`jvmTest`・`iosTest`・`androidDeviceTest` から共有され、JVM・iOS シミュレータ・Android 端末/エミュレータで実行される。Android のホストテスト（`testAndroidHostTest`）では実行しない: Android 版の `sqlite-bundled` は Android の ABI 向けネイティブライブラリしか含まず、ホストの JVM では読み込めないため。
 
@@ -283,7 +292,7 @@ python3 tools/privacy-check/check.py --resolved-deps wearApp=/tmp/deps-wearApp.t
 | `ui-screenshots` | android.yml | JVM の UI テストが描いた画面（テスト用の合成データ） | 30 日 |
 | `logcat-phone` / `logcat-wear` | emulator.yml | エミュレータの logcat・計装テストのレポート（合成音声・テスト用 DB のみ。文字起こし本文はテスト音声の正解文） | 7 日 |
 | `screenshots-phone` / `screenshots-wear` | emulator.yml | エミュレータのスクリーンショット | 30 日 |
-| `xcodebuild-logs` / `simulator-smoke` | ios.yml | ビルドログ、シミュレータのスクリーンショットとアプリログ | 7 日 |
+| `xcodebuild-logs` / `simulator-smoke` | ios.yml | ビルドログ、シミュレータのスクリーンショットとアプリログ（各ジョブの分を `artifacts` ジョブが 1 つにまとめる、§6） | 7 日 |
 
 成果物を Issue の証跡として参照する場合、保持期間を過ぎると消える点に注意する（コメントには数値・ログ行を本文として残す）。
 
