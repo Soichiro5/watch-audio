@@ -24,7 +24,7 @@ struct ContentView: View {
         switch recorder.phase {
         case .recording:
             let minutes = Int(now.timeIntervalSince(recorder.recordingSince ?? now) / 60)
-            Text("● REC \(minutes / 60)h \(minutes % 60)m").foregroundStyle(.red)
+            Text("● 録音中 \(minutes / 60)時間\(minutes % 60)分").foregroundStyle(.red)
         case .paused(let reason):
             Text(RecorderStatusText.pausedLabel(reason)).foregroundStyle(.orange)
         case .idle:
@@ -37,7 +37,7 @@ struct ContentView: View {
         switch recorder.phase {
         case .recording:
             HStack {
-                Button("Mark") { recorder.mark() }
+                Button("マーク") { recorder.mark() }
                 Button("停止", role: .destructive) { recorder.stop() }
             }
         case .paused:
@@ -51,7 +51,7 @@ struct ContentView: View {
     private var status: some View {
         VStack(alignment: .leading) {
             Text("未送信 \(recorder.pendingCount)・受領 \(recorder.chunksAcked)")
-            Text("チャンク \(recorder.chunksClosed)（無音 \(recorder.silentChunks)）Mark \(recorder.marks)")
+            Text("チャンク \(recorder.chunksClosed)（無音 \(recorder.silentChunks)）マーク \(recorder.marks)")
             Text("電池 \(recorder.batteryPercent.map { "\($0)%" } ?? "-")")
             Text(recorder.lastEvent).lineLimit(2)
         }
