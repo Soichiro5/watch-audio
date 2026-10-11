@@ -174,7 +174,7 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 - **release ビルド（#78）**: R8 でコードとリソースを縮小・難読化する（`watchaudio.android.release` プラグイン、設定と署名は [docs/04 §7.1](../04-dev-environment.md#71-android-の-release-ビルドと署名78)）。keep ルール（`androidApp/proguard-rules.pro`）:
   - sherpa-onnx: パッケージ `com.k2fsa.sherpa.onnx` 全体を keep（JNI がフィールド名で設定を読み、結果のオブジェクトをクラス名で作るため）。
   - それ以外は各ライブラリが同梱するルールで足りる: kotlinx.serialization（`@Serializable` の生成シリアライザ）、WorkManager（`Worker` のコンストラクタ）、bundled SQLite（JNI）、Data Layer の受信サービス（manifest から参照されるので R8 が残す）。
-  - CI: `android.yml` で `assembleRelease`、`emulator.yml` で release の APK を入れて起動し、クラッシュしないことを確認する（`launch-smoke.sh`）。release での文字起こし（取り込み → ASR → DB）の確認は未実装（#78 の残り）。
+  - CI: `android.yml` で `assembleRelease`、`emulator.yml` で release の APK を入れて起動し、クラッシュしないことを確認する（`launch-smoke.sh`）。続けて release ビルドに対して計装テスト `ReleaseAsrTest` を実行し、既知の日本語チャンクが取り込み → WorkManager の文字起こし（sherpa-onnx）→ DB の経路で保存・検索できることを確認する（`release-asr.sh`。テストが呼ぶものを残す keep ルール `proguard-release-test.pro` はそのビルドでだけ足す。docs/04 §7.1）。
 
 ## 6. 検証方法
 

@@ -149,6 +149,7 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 | `android.yml` | Unit tests（composeApp の `AppUiTest`） | 画面の描画（タイムライン・検索・状態・オンボーディング。権限拒否時の「設定を開く」#32 を含む） | 成果物 `ui-screenshots`（`composeApp/build/screenshots/*.png`） |
 | `android.yml` | Assemble release (R8) + debug input leak check | スマホ・Wear OS の release ビルド（R8 で縮小・難読化）が通る。Wear OS の debug 専用の音声ファイル入力（#57）が release に入っていない（`verifyReleaseDebugInput`）（#78） | ジョブサマリーの APK 一覧と `debug-input/release.txt` の内容 |
 | `emulator.yml`（phone / wear） | Install, launch and check for crashes | release ビルド（R8、CI で作る使い捨ての鍵で署名）→ debug ビルドの順に入れて起動し、15 秒後もクラッシュしていない（`launch-smoke.sh`。R8 の keep 漏れによる起動時のクラッシュを検出、#78） | ジョブサマリーの `LAUNCH_CHECK` 行、成果物 `logcat-*`（`logcat-release.txt` / `logcat.txt`） |
+| `emulator.yml`（phone） | 同上（`release-asr.sh`） | release ビルド（R8）が既知の日本語チャンクを本番の経路（取り込み → WorkManager の文字起こし → sherpa-onnx）で文字起こしして DB に保存し、検索できる（`ReleaseAsrTest`、#78。§7.1） | `RELEASE_ASR_CHECK` 行（`debuggable=false` と文字起こし結果）、成果物 `logcat-phone` の `release-asr/` |
 | `emulator.yml`（phone） | 同上（続けて実行） | 計装テスト: 実際の音声（AAC）を MediaPlayer で指定位置から再生できる・検索結果を 1 タップでその発話から再生できる（`PlaybackTest`）、SQLite のテストを Android 上で実行（core-db / core-pipeline） | ジョブサマリーのテスト一覧と `PLAYBACK_CHECK` 行、成果物 `logcat-phone`（テストレポート） |
 | `emulator.yml`（phone） | 同上（計装テスト） | 実モデルでの文字起こし: `AndroidSherpaTranscriber`（MediaCodec + sherpa-onnx AAR）が日本語の参照音声チャンクを文字起こしして DB に保存・検索できる（`SherpaTranscriberTest`、#22） | `ASR_CHECK` / `ASR_SEGMENT` 行 |
 | `emulator.yml`（phone） | 同上（計装テスト） | モデルなしでも受信・再生でき文字起こしは待機（チャンクは処理待ちのまま・失敗扱いにしない）、モデルを置くと自動で処理が進む（`ModelWaitTest`、#22） | `MODEL_CHECK` 行、スクリーンショット `status-model-missing.png` / `status-model-ready.png` |
@@ -164,6 +165,7 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 | `ios.yml` | Swift unit tests (iOS Simulator) | `SwiftUnitTests` スキーム（ホストなし）: Swift のワイヤ形式が Kotlin のテストベクタと一致（`ProtocolTests`）、Watch の停止理由・状態判定と終了理由のマニフェストへの記録（`RecorderPolicyTests`、#15）、送信キューの ACK・再送・再起動後の再送・強制終了からの復旧（`ChunkOutboxTests`、#17） | ジョブサマリーのテスト一覧（`.github/scripts/xcresult-summary.py`） |
 | `ios.yml` | Japanese test speech / Speech transcription on the iOS simulator | macOS の `say` で作った日本語音声（Watch と同じ AAC 16 kHz モノラル）を SpeechTranscriber（ja_JP）で文字起こしし、時刻と文字の再現率を確認（`SpeechTests`、iOS アプリがホスト、#21）。シミュレータで使えなければ理由を残してスキップ（実機確認は #60） | ジョブサマリーのテスト一覧と「Speech check logs」、成果物 `swift-evidence` |
 | `ios.yml` | Playback in the iOS app (simulator) | `PlaybackTests`（iOS アプリがホストの XCTest）: アプリが起動時に作った本物の `IosAppServices` で AAC 16 kHz の音声を 8 秒から再生し、再生位置がそこから始まり 2 秒後に 1 秒以上進む（#19） | ジョブサマリーのテスト一覧と `PLAYBACK_CHECK check=hosted_player` 行、成果物 `swift-evidence` |
+| `ios.yml`（`release` ジョブ） | Build iOS / watchOS app, Release, device | Release 構成の iOS アプリ（watchOS アプリを同梱。Kotlin フレームワークは iosArm64 の release）と watchOS アプリが実機向け（`generic/platform=iOS` / `watchOS`）に署名なし（`CODE_SIGNING_ALLOWED=NO`）でビルドできる。Release のバイナリに debug 専用の音声ファイル入力（#57）が入っていない（#78） | ジョブサマリーの `RELEASE_BUILD_CHECK` 行（アーキテクチャ・サイズ） |
 
 スクリーンショットは成果物 `screenshots-phone` / `screenshots-wear`（30 日保存）、`*_CHECK` 行はジョブサマリーにまとめて出す。
 
@@ -194,7 +196,7 @@ Swift のテストを Linux で実行する手段はない（Xcode が必要）�
 
 ### 6.1 エミュレータでの音声認識モデル
 
-phone ジョブは `android.yml` と同じキャッシュ（`tools/harness/models`、キーは `download-models.sh` のハッシュ）からモデルを復元し、なければ `download-models.sh` で取得する（int8 の約 160 MB と参照音声のみ展開）。`phone-scenarios.sh` が `adb push` で `/data/local/tmp/watchaudio-test/models/` に置き、計装テスト（`SpeechFixtures.ensureModels`）がそれをアプリの `files/models/`（ダウンロード先と同じ場所）にコピーしてから使う。`/data/local/tmp` を経由するのは、テストエンジンが計装テストの前にアプリをアンインストール・再インストールしてアプリの領域を消すため。コピーはシェル権限の `cat` をパイプで読む（アプリから `/data/local/tmp` を直接読めるかは SELinux の設定に依存するため）。
+phone ジョブは `android.yml` と同じキャッシュ（`tools/harness/models`、キーは `download-models.sh` のハッシュ）からモデルを復元し、なければ `download-models.sh` で取得する（int8 の約 160 MB と参照音声のみ展開）。`push-models.sh`（`release-asr.sh` と `phone-scenarios.sh` から呼ぶ。2 回目は省略）が `adb push` で `/data/local/tmp/watchaudio-test/models/` に置き、計装テスト（`SpeechFixtures.ensureModels`）がそれをアプリの `files/models/`（ダウンロード先と同じ場所）にコピーしてから使う。`/data/local/tmp` を経由するのは、テストエンジンが計装テストの前にアプリをアンインストール・再インストールしてアプリの領域を消すため。コピーはシェル権限の `cat` をパイプで読む（アプリから `/data/local/tmp` を直接読めるかは SELinux の設定に依存するため）。
 
 - モデルがない環境（手元の `connectedDebugAndroidTest` など）では、モデルを使うテストはスキップされる。CI は `-Pandroid.testInstrumentationRunnerArguments.requireModels=true` を渡すので、モデルがなければ失敗する。
 - テスト中はアプリの自動モデルダウンロード（`model-download`）を取り消す（テスト中にファイルが置き換わらないように）。
@@ -285,7 +287,7 @@ python3 tools/privacy-check/check.py --resolved-deps wearApp=/tmp/deps-wearApp.t
 | `ui-screenshots` | android.yml | JVM の UI テストが描いた画面（テスト用の合成データ） | 30 日 |
 | `logcat-phone` / `logcat-wear` | emulator.yml | エミュレータの logcat・計装テストのレポート（合成音声・テスト用 DB のみ。文字起こし本文はテスト音声の正解文） | 7 日 |
 | `screenshots-phone` / `screenshots-wear` | emulator.yml | エミュレータのスクリーンショット | 30 日 |
-| `xcodebuild-logs` / `simulator-smoke` | ios.yml | ビルドログ、シミュレータのスクリーンショットとアプリログ | 7 日 |
+| `xcodebuild-logs` / `xcodebuild-release-logs` / `simulator-smoke` | ios.yml | ビルドログ（`xcodebuild-release-logs` は Release ビルドが失敗したときだけ）、シミュレータのスクリーンショットとアプリログ | 7 日 |
 
 成果物を Issue の証跡として参照する場合、保持期間を過ぎると消える点に注意する（コメントには数値・ログ行を本文として残す）。
 
@@ -302,6 +304,10 @@ python3 tools/privacy-check/check.py --resolved-deps wearApp=/tmp/deps-wearApp.t
 | `WATCHAUDIO_RELEASE_KEY_PASSWORD` | 鍵のパスワード | `ANDROID_RELEASE_KEY_PASSWORD` |
 
 - **CI の動き**: `android.yml` は毎回 `:androidApp:assembleRelease :wearApp:assembleRelease` を実行する（Wear OS の `verifyReleaseDebugInput` もここで走る）。secret があれば release 鍵で署名して成果物 `release-apks` に上げ、なければ（現在の状態。fork からの PR にも secret は渡らない）署名なしでビルドだけ確認する。`emulator.yml` は release 鍵を使わず、ジョブ内で `keytool` で作った使い捨ての鍵で署名して起動確認する（鍵とパスワードはそのジョブ限りで、配布物には使わない）。
+- **release での文字起こしの確認**（`emulator.yml` の phone、`release-asr.sh`）: 計装テスト `ReleaseAsrTest` を R8 の release ビルドに対して実行する。既知の日本語チャンク（ReazonSpeech の参照音声 1・3・5）を `AppGraph.ingestor`（Watch から受信したときと同じ経路）で保存し、アプリ自身の WorkManager の文字起こし（`TranscriptionWorker` → sherpa-onnx の JNI）で DB に保存され、FTS で検索できることを確かめる。アプリが debuggable でないこと（release であること）もテストで確認する。証拠は `RELEASE_ASR_CHECK` 行。
+  - 計装テストの APK は、テスト対象のアプリの R8 の mapping に合わせて R8 で処理され、アプリの中のクラスを呼ぶ。R8 はテストだけが使うメソッドを消してしまうため、`-Pwatchaudio.testBuildType=release` を付けたビルドでだけ、テストが呼ぶものを残す keep ルール `androidApp/proguard-release-test.pro`（難読化は許可）をアプリに足す。このファイルは `tools/release-test-keep/generate.sh` が R8 の `tracereferences` で生成する（`ReleaseAsrTest` や使っているテスト用ヘルパーを変えたら再生成する）。テスト APK 自体の R8 ルールは `androidApp/proguard-test-rules.pro`。
+  - 配布する APK にはこの keep ルールは入らない。起動確認（`launch-smoke.sh`）は配布するものと同じ release APK（プロパティなしのビルド）で行う。プロパティ付きで作り直した APK での文字起こしの確認は、phone ジョブの最後（シナリオと debug の計装テストの後）に行い、それまでの確認の端末の状態を変えない。debug 専用のフックは追加していない（テストはアプリの公開されたクラスを呼ぶだけ）。
+  - 手元では（KVM のある環境、`tools/harness/download-models.sh` 済み）: 4 つの環境変数で署名してから `./gradlew :androidApp:assembleRelease :androidApp:assembleReleaseAndroidTest -Pwatchaudio.testBuildType=release` → `.github/scripts/release-asr.sh`。
 - **鍵の作り方**（一度だけ。リポジトリの外で作業し、キーストアをコミットしない）:
 
 ```bash
@@ -315,6 +321,7 @@ base64 -w0 watch-audio-release.jks > keystore.b64   # macOS: base64 -i watch-aud
 - **保管**: キーストアとパスワードはパスワードマネージャーなど、リポジトリ・Issue・CI ログ以外の場所に保管する。**鍵をなくすと同じアプリとして更新できない**（Play で配信する場合は Play App Signing を使い、ここでの鍵はアップロード鍵として扱う。#35）。
 - **更新・漏えい時**: 新しい鍵を作って 4 つの secret を上書きする。既に入れた端末では署名が変わるため、スマホ・Watch とも一度アンインストールしてから入れ直す（Play App Signing を使っていればアップロード鍵のリセットを申請する）。
 - **手元での release ビルド**: 署名なしなら `./gradlew --max-workers=2 :androidApp:assembleRelease :wearApp:assembleRelease`。署名する場合は上の 4 つの環境変数を設定してから実行する。
+- **iOS / watchOS の Release 構成**: `ios.yml` の `release` ジョブ（シミュレータでの確認をする `build` ジョブと並列）が、iOS アプリ（watchOS アプリを同梱）と watchOS アプリを Release 構成・実機向けに署名なし（`CODE_SIGNING_ALLOWED=NO`）でビルドし、`RELEASE_BUILD_CHECK` 行（バンドル ID・アーキテクチャ・サイズ・debug 専用の音声ファイル入力がないこと）をジョブサマリーに出す。証明書・プロビジョニングプロファイルを secret に置いた署名付きのアーカイブ（TestFlight）は #35 で扱う。
 
 ## 8. 実機検証の手順
 

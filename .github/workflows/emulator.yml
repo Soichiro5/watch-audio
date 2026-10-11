@@ -4,6 +4,8 @@ name: Emulator smoke test
 # signed with a throwaway key generated in the job; #78) and then the debug builds, launch each and
 # fail on crashes of our own process (system apps such as the Wear setup wizard sometimes crash on
 # CI images and must not fail the check): .github/scripts/launch-smoke.sh. Runs on Linux runners (KVM), 1x minutes.
+# On the phone, the release build also transcribes a known Japanese chunk into its database (#78):
+# .github/scripts/release-asr.sh runs ReleaseAsrTest against it.
 # On the phone emulator it also runs the instrumented tests: real MediaPlayer playback and
 # the search -> one tap -> play flow (#19, #25), the shared SQLite tests of core-db and
 # core-pipeline on Android (#14), on-device ASR with the real models and the wait without a model
@@ -87,6 +89,10 @@ jobs:
             device-test-modules: androidApp shared/core-db shared/core-pipeline
             # The ASR tests must not skip for lack of models (pushed by phone-scenarios.sh).
             device-test-args: -Pandroid.testInstrumentationRunnerArguments.requireModels=true
+            # #78: ReleaseAsrTest against the R8 release APK, from a test APK built for the release build type.
+            # assembleRelease too: the test APK only depends on the app's R8 mapping, not on its packaged APK.
+            release-test-apks: :androidApp:assembleRelease :androidApp:assembleReleaseAndroidTest
+            release-checks: .github/scripts/release-asr.sh
             scenarios: .github/scripts/phone-scenarios.sh
           - name: wear
             module: wearApp
@@ -132,13 +138,21 @@ jobs:
 
       # The release build (R8, #78) is signed with a throwaway key made here: it only has to install
       # on the emulator, and the real release key (android.yml) never reaches this job.
+      # The shipped release APK is set aside in release-apk/ for the launch check. The release ASR check (#78) needs a
+      # second invocation (one test build type per build) that rebuilds the release APK with the keep rules of its
+      # test (androidApp/proguard-release-test.pro) and builds the test APK for it.
       - name: Build release and debug APKs (and instrumented test APKs)
+        env:
+          WATCHAUDIO_RELEASE_STORE_FILE: ${{ runner.temp }}/throwaway.jks
+          WATCHAUDIO_RELEASE_STORE_PASSWORD: ci-throwaway
+          WATCHAUDIO_RELEASE_KEY_ALIAS: ci
+          WATCHAUDIO_RELEASE_KEY_PASSWORD: ci-throwaway
         run: |
-          keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/throwaway.jks" -storepass ci-throwaway \
+          keytool -genkeypair -noprompt -keystore "$WATCHAUDIO_RELEASE_STORE_FILE" -storepass ci-throwaway \
             -keypass ci-throwaway -alias ci -keyalg RSA -keysize 2048 -validity 1 -dname "CN=watch-audio CI throwaway"
-          WATCHAUDIO_RELEASE_STORE_FILE="$RUNNER_TEMP/throwaway.jks" WATCHAUDIO_RELEASE_STORE_PASSWORD=ci-throwaway \
-            WATCHAUDIO_RELEASE_KEY_ALIAS=ci WATCHAUDIO_RELEASE_KEY_PASSWORD=ci-throwaway \
-            ./gradlew :${{ matrix.module }}:assembleRelease :${{ matrix.module }}:assembleDebug ${{ matrix.device-test-apks }}
+          ./gradlew :${{ matrix.module }}:assembleRelease :${{ matrix.module }}:assembleDebug ${{ matrix.device-test-apks }}
+          mkdir -p release-apk && cp ${{ matrix.module }}/build/outputs/apk/release/${{ matrix.module }}-release.apk release-apk/
+          if [ -n "${{ matrix.release-test-apks }}" ]; then ./gradlew ${{ matrix.release-test-apks }} -Pwatchaudio.testBuildType=release; fi
 
       - name: Install, launch and check for crashes
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
@@ -151,13 +165,15 @@ jobs:
           disk-size: 3072M
           emulator-options: ${{ matrix.emulator-options }}
           script: |
-            bash .github/scripts/launch-smoke.sh ${{ matrix.module }}/build/outputs/apk/release/${{ matrix.module }}-release.apk logcat-release.txt
+            bash .github/scripts/launch-smoke.sh release-apk/${{ matrix.module }}-release.apk logcat-release.txt
             adb uninstall app.watchaudio
             bash .github/scripts/launch-smoke.sh ${{ matrix.module }}/build/outputs/apk/debug/${{ matrix.module }}-debug.apk logcat.txt
             if [ -n "${{ matrix.scenarios }}" ]; then bash ${{ matrix.scenarios }} || touch device-tests-failed; fi
             # The test engine reinstalls both APKs itself; remove the earlier installs (smoke test, scenarios) so a signature mismatch cannot skip the tests.
             if [ -n "${{ matrix.device-tests }}" ]; then adb uninstall app.watchaudio || true; adb uninstall app.watchaudio.test || true; fi
             if [ -n "${{ matrix.device-tests }}" ]; then adb logcat -c; ./gradlew ${{ matrix.device-tests }} ${{ matrix.device-test-args }} || touch device-tests-failed; adb logcat -d > logcat-device-tests.txt || true; fi
+            # Last, so the launch checks, scenarios and debug tests run on the same device state as without it (#78).
+            if [ -n "${{ matrix.release-checks }}" ]; then bash ${{ matrix.release-checks }} || touch device-tests-failed; fi
             if [ ! -d screenshots-${{ matrix.name }} ]; then adb pull /data/local/tmp/watchaudio-screenshots screenshots-${{ matrix.name }} || true; fi
             if [ -f device-tests-failed ]; then echo "instrumented tests failed"; exit 1; fi
             for m in ${{ matrix.device-test-modules }}; do n=$(find "$m/build/outputs/androidTest-results/connected" -name '*.xml' -exec grep -o '<testcase ' {} + 2>/dev/null | wc -l); echo "$m: $n instrumented test cases"; if [ "$n" -eq 0 ]; then echo "no instrumented tests ran for $m"; exit 1; fi; done
@@ -190,6 +206,7 @@ jobs:
             logcat.txt
             logcat-device-tests.txt
             scenario-logs/
+            release-asr/
             wear-surfaces/
             androidApp/build/reports/androidTests/
             shared/*/build/reports/androidTests/

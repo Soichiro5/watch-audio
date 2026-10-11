@@ -3,7 +3,7 @@
 # Runs against the app the smoke step installed (built in the same job as the test APK):
 #
 #   1. pushes the speech models and reference recordings (tools/harness/models) to
-#      /data/local/tmp/watchaudio-test/models; the instrumented tests copy them into the app,
+#      /data/local/tmp/watchaudio-test/models (push-models.sh); the instrumented tests copy them into the app,
 #   2. #32 PermissionDeniedTest: refuses the notification permission in the system dialog on a
 #      fresh install (revoking a permission kills the app, so it must come first),
 #   3. #20 ResumeAfterKillTest: seeds chunks, opens the app, force-stops it in the middle of the
@@ -18,9 +18,6 @@ set -uo pipefail
 PKG=app.watchaudio
 RUNNER=app.watchaudio.test/androidx.test.runner.AndroidJUnitRunner
 TEST_APK=androidApp/build/outputs/apk/androidTest/debug/androidApp-debug-androidTest.apk
-MODELS=tools/harness/models
-ASR=sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01
-DEVICE_MODELS=/data/local/tmp/watchaudio-test/models
 OUT=scenario-logs
 mkdir -p "$OUT"
 status=0
@@ -47,20 +44,9 @@ instrument() {
 adb logcat -G 16M || true
 adb logcat -c || true
 
-# 1. Models and reference recordings.
-if [ -f "$MODELS/$ASR/tokens.txt" ] && [ -f "$MODELS/silero_vad.onnx" ]; then
-  adb shell mkdir -p "$DEVICE_MODELS/$ASR/test_wavs"
-  adb push "$MODELS/silero_vad.onnx" "$DEVICE_MODELS/"
-  for f in encoder-epoch-99-avg-1.int8.onnx decoder-epoch-99-avg-1.int8.onnx joiner-epoch-99-avg-1.int8.onnx tokens.txt; do
-    adb push "$MODELS/$ASR/$f" "$DEVICE_MODELS/$ASR/"
-  done
-  adb push "$MODELS/$ASR/test_wavs/." "$DEVICE_MODELS/$ASR/test_wavs/"
-  adb shell chmod -R a+rX /data/local/tmp/watchaudio-test
-  log "MODELS pushed to $DEVICE_MODELS"
-else
-  log "MODELS missing in $MODELS (run tools/harness/download-models.sh)"
-  status=1
-fi
+# 1. Models and reference recordings (release-asr.sh reuses them later).
+bash .github/scripts/push-models.sh > "$OUT/push-models.txt" 2>&1 || status=1
+log "$(tail -1 "$OUT/push-models.txt")"
 
 adb install -r -t "$TEST_APK" || { log "SCENARIO install of the test APK FAILED"; exit 1; }
 
