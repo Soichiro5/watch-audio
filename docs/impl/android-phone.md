@@ -22,7 +22,8 @@
 
 共通コードの追加:
 
-- `core-pipeline/SpeechSegmentation.kt`: `AsrSettings`（VAD しきい値 0.3、パディング 0.3 s、入力の上限 20 s、間の分割 0.22 s / 30 dB など）と `padSpeechSpans`（VAD 区間 → 余白付け・結合・話者交代の間での分割・上限での分割。[02 §6.3](../02-architecture.md#発話区間の切り出しandroid--jvm-ハーネス68)）。**JVM ハーネスと Android で同一の分割**を使うため。
+- `core-pipeline/SpeechSegmentation.kt`: `AsrSettings`（VAD しきい値 0.15、パディング 0.3 s、入力の上限 20 s、間の分割 0.22 s / 30 dB と雑音の床から 9 dB・0.3 s など）と `padSpeechSpans`（VAD 区間 → 余白付け・結合・話者交代の間での分割・上限での分割。[02 §6.3](../02-architecture.md#発話区間の切り出しandroid--jvm-ハーネス6871)）。**JVM ハーネスと Android で同一の分割**を使うため。
+- `core-pipeline/SpeechDetection.kt`: `speechSegments`（Silero の発話確率 → 発話区間。開始と終了のしきい値を別々に持つ。#71）。Android は `Vad.compute` で 32 ms ごとの確率だけを求める。
 - `core-pipeline/Pcm.kt`: `downmixToMono` / `pcm16ToFloat` / `LinearResampler`（ストリーミング）/ `concatenateParts`（パーツの範囲を切り出して連結。足りない分は無音）。
 - `core-pipeline/BoundaryJoin.kt`: チャンク境界をまたぐ発話を 1 つとして認識するための連結範囲の決定と、結果のチャンクへの振り分け（#45）。
 - `core-db/StoreTransaction.previousInSession` / `nextInSession` / `replaceSegments`: 同じセッションの隣のチャンクと、範囲内のセグメントの置き換え（境界の再認識用）。
