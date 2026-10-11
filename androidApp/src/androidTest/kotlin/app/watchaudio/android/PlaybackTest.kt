@@ -3,7 +3,6 @@ package app.watchaudio.android
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
@@ -56,13 +55,7 @@ class PlaybackTest {
         runBlocking { PlaybackFixtures.graph.store.updateSettings { it.copy(onboardingCompleted = true) } }
 
         ActivityScenario.launch(MainActivity::class.java).use {
-            // The settings load asynchronously (an empty surface until then) and the first launch after
-            // a fresh install is slow, so wait for the tab. Its label is merged into the navigation item,
-            // which is why the unmerged tree is searched.
-            compose.waitUntil(timeoutMillis = 20_000) {
-                compose.onAllNodes(hasText(Strings.TAB_SEARCH), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-            }
-            compose.onNodeWithText(Strings.TAB_SEARCH, useUnmergedTree = true).performClick()
+            compose.openTab(Strings.TAB_SEARCH)
             compose.onNode(hasSetTextAction()).performTextInput(word)
             compose.waitUntil(timeoutMillis = 10_000) {
                 compose.onAllNodes(hasText("の発話です", substring = true)).fetchSemanticsNodes().isNotEmpty()
