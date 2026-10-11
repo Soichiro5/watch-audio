@@ -59,6 +59,10 @@ object DiagnosticEvents {
     const val GAP_ALERT = "gap_alert"
     const val GAP_ALERT_BLOCKED = "gap_alert_blocked"
     const val GAP_ALERT_SCHEDULED = "gap_alert_scheduled"
+
+    /** A deletion from the status tab failed (#33); the UI shows a fixed text, not the error (#135). */
+    const val STORAGE_ACTION_FAILED = "storage_action_failed"
+    const val DIAGNOSTICS_EXPORT_FAILED = "diagnostics_export_failed"
 }
 
 /**

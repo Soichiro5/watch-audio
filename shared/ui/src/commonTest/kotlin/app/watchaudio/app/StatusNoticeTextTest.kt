@@ -9,7 +9,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** #135: the status card's notes and the notifications are worded in Japanese, in one place. */
+/** #135: the status card's notes, failures and the notifications are worded in Japanese, in one place. */
 class StatusNoticeTextTest {
     @Test
     fun everyNoticeIsJapanese() {
@@ -24,6 +24,16 @@ class StatusNoticeTextTest {
     @Test
     fun failedChunksAreCounted() {
         assertTrue(Strings.statusNotice(StatusNotice.TranscriptionFailed(3)).startsWith("3件の"))
+    }
+
+    @Test
+    fun failuresOnTheStatusTabAreJapanese() {
+        listOf(
+            Strings.modelFailed(ModelSetup.DOWNLOAD),
+            Strings.modelFailed(ModelSetup.OS_MANAGED),
+            Strings.STORAGE_ACTION_FAILED,
+            Strings.DIAGNOSTICS_EXPORT_FAILED,
+        ).forEach { assertJapanese(it, it) }
     }
 
     @Test

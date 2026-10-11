@@ -57,7 +57,7 @@ class AndroidAppServices(
     lastChunkReceivedAt: StateFlow<Long?>,
     transcriptionPause: StateFlow<PauseReason?>,
     scope: CoroutineScope,
-    private val diagnostics: DiagnosticsLog,
+    override val diagnostics: DiagnosticsLog,
     private val onGapAlertSettingsChanged: () -> Unit,
 ) : AppServices {
     override val audioRoot: String = audioRootDir.absolutePath

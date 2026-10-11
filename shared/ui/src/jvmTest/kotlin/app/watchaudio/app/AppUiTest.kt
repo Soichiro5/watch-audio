@@ -218,7 +218,7 @@ class AppUiTest {
         waitForText(Strings.MODEL_SETUP_TITLE)
     }
 
-    /** #135: the status tab's notes are Japanese, and nothing on the tab is worded in English. */
+    /** #135: the status tab's notes and failures are Japanese, and nothing on the tab is worded in English. */
     @Test
     fun statusNoticesAreJapanese() = runDesktopComposeUiTest(width = 412, height = 915) {
         runBlocking {
@@ -244,6 +244,13 @@ class AppUiTest {
         waitForText(Strings.statusNotice(StatusNotice.TranscriptionFailed(2)))
         assertNoEnglish()
         screenshot("status-notice")
+
+        // A failed download shows a fixed text, never the platform's (English) reason.
+        services.mutableStatus.value = ProcessingStatus(asrModel = ModelState.Failed("HTTP 404 for https://example.invalid/model.onnx"))
+        waitForText(Strings.modelFailed(ModelSetup.DOWNLOAD))
+        assertTrue(onAllNodes(hasText("HTTP 404", substring = true)).fetchSemanticsNodes().isEmpty())
+        assertNoEnglish()
+        screenshot("status-model-failed")
     }
 
     /** Fails on any text on screen (scrolled away or not) with an English word and no Japanese. */

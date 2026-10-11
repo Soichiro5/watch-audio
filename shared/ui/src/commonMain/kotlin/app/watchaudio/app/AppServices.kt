@@ -1,6 +1,7 @@
 package app.watchaudio.app
 
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.Diagnostics
 import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageManager
 import kotlinx.coroutines.flow.StateFlow
@@ -72,6 +73,12 @@ interface AppServices {
      * @return false if there is nothing to export (or the platform keeps no log).
      */
     suspend fun exportDiagnostics(): Boolean = false
+
+    /**
+     * The on-device diagnostics log, for failures the UI itself sees (error types only, never
+     * messages or user data). [Diagnostics.NONE] where the platform keeps no log.
+     */
+    val diagnostics: Diagnostics get() = Diagnostics.NONE
 }
 
 enum class ModelSetup {

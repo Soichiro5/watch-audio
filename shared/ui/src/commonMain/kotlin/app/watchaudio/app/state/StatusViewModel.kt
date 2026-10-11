@@ -14,6 +14,8 @@ import app.watchaudio.core.db.AudioUsage
 import app.watchaudio.core.db.ChunkRecord
 import app.watchaudio.core.db.StoreStats
 import app.watchaudio.core.pipeline.AudioRetention
+import app.watchaudio.core.pipeline.DiagnosticEvents
+import app.watchaudio.core.pipeline.DiagnosticsLog
 import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageBreakdown
 import kotlin.coroutines.cancellation.CancellationException
@@ -127,7 +129,8 @@ class StatusViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Strings.diagnosticsExportFailed(e.message ?: e::class.simpleName.orEmpty())
+                services.diagnostics.log(DiagnosticEvents.DIAGNOSTICS_EXPORT_FAILED, "error=${DiagnosticsLog.typeName(e)}")
+                Strings.DIAGNOSTICS_EXPORT_FAILED
             }
             diagnosticsExport.value = DiagnosticsExport(message = message)
         }
@@ -156,7 +159,7 @@ class StatusViewModel(
     /** Stores the confirmed shorter retention and deletes the audio it no longer keeps. */
     fun confirmRetention() {
         val pending = actions.value.pendingRetention ?: return
-        runDestructive {
+        runDestructive("retention") {
             services.storage.setRetention(pending.target)
             val result = services.storage.applyRetention()
             Strings.audioPurged(result.purgedChunks, formatBytes(result.freedBytes))
@@ -179,14 +182,15 @@ class StatusViewModel(
     fun confirmDeleteAll(): Boolean {
         if (!actions.value.canConfirmDeleteAll) return false
         services.stopPlayback()
-        runDestructive {
+        runDestructive("delete_all") {
             services.storage.deleteAll()
             Strings.DELETED_ALL
         }
         return true
     }
 
-    private fun runDestructive(block: suspend () -> String) {
+    /** @param action names the deletion in the diagnostics log if it fails. */
+    private fun runDestructive(action: String, block: suspend () -> String) {
         if (actions.value.busy) return
         actions.value = StorageActions(busy = true)
         viewModelScope.launch {
@@ -195,7 +199,11 @@ class StatusViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Strings.storageActionFailed(e.message ?: e::class.simpleName.orEmpty())
+                services.diagnostics.log(
+                    DiagnosticEvents.STORAGE_ACTION_FAILED,
+                    "action=$action error=${DiagnosticsLog.typeName(e)}",
+                )
+                Strings.STORAGE_ACTION_FAILED
             }
             actions.value = StorageActions(message = message)
         }

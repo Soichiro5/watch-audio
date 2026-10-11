@@ -51,6 +51,10 @@ sealed interface ModelState {
 
     data object Ready : ModelState
 
-    /** Installing failed; [reason] is the platform's description, for the status tab. */
+    /**
+     * Installing failed. [reason] is the platform's description, for developers (tests, debugging);
+     * the UI shows a fixed Japanese text instead because it may be English (#135), and the
+     * diagnostics log has `model_download_failed`.
+     */
     data class Failed(val reason: String) : ModelState
 }
