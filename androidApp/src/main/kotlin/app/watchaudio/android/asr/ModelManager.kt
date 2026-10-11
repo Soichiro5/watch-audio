@@ -10,12 +10,8 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import app.watchaudio.app.ModelState
-import app.watchaudio.core.pipeline.AsrSettings
 import java.io.File
 import java.io.IOException
-import java.io.InputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.TimeUnit
@@ -34,11 +30,11 @@ import kotlinx.coroutines.withContext
 
 /**
  * Provides the on-device speech models in [files]: imports a developer's `adb push` copy, or
- * downloads them from the sherpa-onnx GitHub releases through [ModelDownloadWorker]. This is a
- * download only; nothing about the user is sent.
+ * downloads the files of [ModelManifest] through [ModelDownloadWorker]. This is a download
+ * only; nothing about the user is sent.
  *
- * New files are written to a temporary directory next to the target and renamed into place, so
- * a crash never leaves a half-written model that looks complete.
+ * New files are written next to the target and renamed into place only when complete (and,
+ * for downloads, verified), so a crash never leaves a half-written model that looks complete.
  */
 class ModelManager(
     private val context: Context,
@@ -51,6 +47,14 @@ class ModelManager(
     val state: StateFlow<ModelState> = _state.asStateFlow()
 
     private val workManager: WorkManager get() = WorkManager.getInstance(context)
+
+    private val downloader = ModelDownloader()
+
+    /** Unfinished downloads; unlike `.tmp-*` they survive restarts so they can be resumed. */
+    private val partialDir = File(files.root, PARTIAL_DIR)
+
+    /** Named by content hash, so a part of an older model version is never resumed. */
+    private fun partFile(source: ModelSource) = File(partialDir, "${source.sha256}.part")
 
     /** True while a download is queued, waiting for its network constraint (e.g. Wi-Fi). */
     val downloadWaiting: Flow<Boolean> = workManager.getWorkInfosForUniqueWorkFlow(WORK_NAME)
@@ -70,12 +74,13 @@ class ModelManager(
         } catch (e: IOException) {
             Log.w(TAG, "sideloaded models could not be imported", e)
         }
+        if (isReady()) partialDir.deleteRecursively()
         publishPresence()
     }
 
     /**
      * Downloads missing models. Without [allowMetered] the download waits for an unmetered
-     * network (the archive is several hundred MB); the user can opt in to mobile data.
+     * network (about 160 MB); the user can opt in to mobile data.
      * A download that is already running is left alone.
      */
     fun download(allowMetered: Boolean) = enqueue(allowMetered, ExistingWorkPolicy.REPLACE)
@@ -101,40 +106,34 @@ class ModelManager(
         }
     }
 
-    /** Called by [ModelDownloadWorker]. Throws on failure so the worker can retry. */
+    /**
+     * Called by [ModelDownloadWorker]. Downloads each missing file of [ModelManifest] with
+     * resume (`.partial/<sha256>.part`, kept across retries and restarts) and SHA-256
+     * verification. Throws on failure so the worker can retry.
+     */
     internal suspend fun performDownload() = withContext(Dispatchers.IO) {
         if (isReady()) return@withContext publishPresence()
         val downloadContext = coroutineContext
         val checkActive = { downloadContext.ensureActive() }
-        val temp = File(files.root, TEMP_PREFIX + "download").apply {
-            deleteRecursively()
-            mkdirs()
-        }
-        val staged = ModelFiles(temp)
-        val vadShare = if (files.hasVad()) 0f else VAD_SHARE
+        val missing = ModelManifest.files.filterNot { files.isPresent(files.fileFor(it)) }
+        val total = missing.sumOf { it.size }.coerceAtLeast(1)
+        var done = 0L
+        var published = -1f
         try {
             _state.value = ModelState.Downloading(0f)
-            if (!files.hasVad()) {
+            for (source in missing) {
                 retrying {
-                    fetch(VAD_URL) { input, total ->
-                        staged.vad.outputStream().use { output ->
-                            ModelArchive.copy(progress(input, total, 0f, vadShare), output, checkActive)
+                    downloader.download(source, files.fileFor(source), partFile(source), checkActive) { bytes ->
+                        val value = ((done + bytes).toFloat() / total).coerceIn(0f, 1f)
+                        if (value - published >= 0.005f) {
+                            published = value
+                            _state.value = ModelState.Downloading(value)
                         }
                     }
                 }
-                moveIntoPlace(staged.vad, files.vad)
+                done += source.size
             }
-            if (!files.hasAsr()) {
-                retrying {
-                    fetch(ASR_URL) { input, total ->
-                        val wanted = ModelFiles.ASR_ARCHIVE_ENTRIES.associateWith { File(temp, it) }
-                        ModelArchive.extract(progress(input, total, vadShare, 1f), wanted, checkActive)
-                    }
-                }
-                // The model directory is replaced with a single rename.
-                files.asrDir.deleteRecursively()
-                moveIntoPlace(staged.asrDir, files.asrDir)
-            }
+            partialDir.deleteRecursively()
             publishPresence()
         } catch (e: CancellationException) {
             _state.value = if (isReady()) ModelState.Ready else ModelState.Missing
@@ -143,8 +142,6 @@ class ModelManager(
             Log.w(TAG, "model download failed", e)
             _state.value = ModelState.Failed(e.message ?: e.javaClass.simpleName)
             throw e
-        } finally {
-            temp.deleteRecursively()
         }
     }
 
@@ -175,19 +172,6 @@ class ModelManager(
         if (ready && !wasReady) onReady()
     }
 
-    /** Wraps [input] so that reading it advances the published progress from [from] to [to]. */
-    private fun progress(input: InputStream, total: Long, from: Float, to: Float): InputStream {
-        if (total <= 0) return input
-        var published = -1f
-        return CountingInputStream(input) { read ->
-            val value = from + (to - from) * (read.toFloat() / total).coerceAtMost(1f)
-            if (value - published >= 0.005f) {
-                published = value
-                _state.value = ModelState.Downloading(value)
-            }
-        }
-    }
-
     private suspend fun <T> retrying(block: () -> T): T {
         var attempt = 0
         while (true) {
@@ -198,20 +182,6 @@ class ModelManager(
                 Log.i(TAG, "download attempt $attempt failed, retrying", e)
                 delay(RETRY_DELAY_MS * attempt)
             }
-        }
-    }
-
-    private fun <T> fetch(url: String, block: (InputStream, Long) -> T): T {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        connection.connectTimeout = 30_000
-        connection.readTimeout = 60_000
-        connection.instanceFollowRedirects = true
-        try {
-            val code = connection.responseCode
-            if (code != HttpURLConnection.HTTP_OK) throw IOException("HTTP $code for $url")
-            return connection.inputStream.use { block(it, connection.contentLengthLong) }
-        } finally {
-            connection.disconnect()
         }
     }
 
@@ -226,11 +196,6 @@ class ModelManager(
         private const val ATTEMPTS = 3
         private const val RETRY_DELAY_MS = 5_000L
 
-        /** silero_vad.onnx is ~2 MB against hundreds of MB for the ASR archive. */
-        private const val VAD_SHARE = 0.01f
-
-        private const val RELEASES = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models"
-        const val ASR_URL = "$RELEASES/${AsrSettings.JA_MODEL_NAME}.tar.bz2"
-        const val VAD_URL = "$RELEASES/silero_vad.onnx"
+        private const val PARTIAL_DIR = ".partial"
     }
 }
