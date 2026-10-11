@@ -5,6 +5,7 @@ import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.ChunkIntake
 import app.watchaudio.core.pipeline.DiagnosticEvents
 import app.watchaudio.core.pipeline.DiagnosticsLog
+import app.watchaudio.core.pipeline.FalsePositiveFilter
 import app.watchaudio.core.pipeline.Ingestor
 import app.watchaudio.core.pipeline.ModelState
 import app.watchaudio.core.pipeline.PolicyGatedTranscription
@@ -138,7 +139,9 @@ object IosAppGraph {
         val audioRoot = audioDirectory
         cleanInbox()
         store = LocalStore.open("$rootDirectory/${LocalStore.FILE_NAME}")
-        val pipeline = TranscriptionPipeline(store, Path(audioRoot), IosTranscriberAdapter(transcriber))
+        // SpeechAnalyzer reports neither a speech probability nor a noise level, so the filter keeps
+        // everything for now; it applies as soon as the Swift side supplies them (#105).
+        val pipeline = TranscriptionPipeline(store, Path(audioRoot), IosTranscriberAdapter(transcriber), segmentFilter = FalsePositiveFilter.DEFAULT)
         storage = StorageManager(store, Path(audioRoot), IosStorageEnvironment(rootDirectory))
         gapAlerts = IosGapAlerts(GapAlertEvaluator(store), diagnostics)
         intake = ChunkIntake(Ingestor(store, Path(audioRoot)), diagnostics, onStored = { chunkStored() })
