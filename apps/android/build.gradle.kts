@@ -1,21 +1,13 @@
 plugins {
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.compose.compiler)
-    id("watchaudio.android.release")
+    // applicationId, SDK levels, version (gradle.properties), Java, Compose, release: build-logic (#138)
+    id("watchaudio.android.app")
 }
 
 android {
     namespace = "app.watchaudio.android"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        // Must match apps/wear's applicationId: the Wearable Data Layer only pairs apps
-        // with the same package name and signing key.
-        applicationId = "app.watchaudio"
         minSdk = libs.versions.android.minSdk.get().toInt()
-        targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
@@ -40,15 +32,6 @@ android {
     buildTypes.getByName("release") {
         if (testBuildTypeName == "release") proguardFiles("proguard-release-test.pro")
         testProguardFiles("proguard-test-rules.pro")
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    buildFeatures {
-        compose = true
     }
 }
 
