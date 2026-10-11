@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Downloads the on-device ASR models used by the harness into tools/harness/models/: the same
-# files, URLs and SHA-256 as the Android app (androidApp/.../asr/ModelManifest.kt; the unit test
+# files, URLs and SHA-256 as the Android app (apps/android/.../asr/ModelManifest.kt; the unit test
 # ModelManifestTest checks that they match), plus the model's test_wavs for EndToEndTest.
 # Only a download: nothing is ever uploaded. Interrupted downloads resume from <file>.part.
 set -euo pipefail

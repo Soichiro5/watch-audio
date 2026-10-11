@@ -21,7 +21,7 @@ import kotlinx.io.files.Path
  *   ./gradlew :tools:harness:run --args="show <dataDir>"
  *   ./gradlew :tools:harness:run --args="evaluate <manifest.json> <workDir> [recordingIds...]"
  *
- * `evaluate` scores a test audio set from tools/test-audio (see docs/test-audio.md).
+ * `evaluate` scores a test audio set from tools/test-audio (see docs/dev/test-audio.md).
  */
 fun main(args: Array<String>) = runBlocking {
     if (args.size < 2) usage()

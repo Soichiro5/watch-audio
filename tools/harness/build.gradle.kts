@@ -9,7 +9,7 @@ kotlin {
 }
 
 dependencies {
-    implementation(projects.shared.corePipeline)
+    implementation(projects.shared.pipeline)
     implementation(libs.sherpa.onnx.jvm)
     runtimeOnly(libs.sherpa.onnx.native.linux.x64)
     implementation(libs.kotlinx.coroutines.core)

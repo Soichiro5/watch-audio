@@ -14,4 +14,4 @@ Closes #
 - [ ] 実機・エミュレータでの確認（該当する場合は機種と OS を記載。未確認なら「実機未確認」と書く）
 
 ## ドキュメント
-- [ ] 関係するドキュメント（docs/impl/*, docs/02, docs/03 の進捗表, README）を更新した
+- [ ] 関係するドキュメント（docs/platforms/*, docs/architecture/02, docs/product/03 の進捗表, README）を更新した

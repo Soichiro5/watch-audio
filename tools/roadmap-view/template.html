@@ -3,7 +3,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;700&family=Zen+Kaku+Gothic+New:wght@700;900&display=swap">
 <style>
-/* Layout: summary strip → releases (Milestones) → use cases → work issues → dev-flow → unclassified health check */
+/* Layout: header (goal, status legend, per-release use-case counts) → releases (current first: headline + use-case rows,
+   work issues collapsed) → dev-flow → unclassified health check */
 :root {
   --bg: #f5f6f8; --surface: #ffffff; --ink: #1b2130; --muted: #5f6879; --line: #dde1e8; --accent: #2f5fb3;
   --done: #2f7d4f; --done-bg: #e3f2e8;
@@ -11,7 +12,7 @@
   --ready: #9a6c00; --ready-bg: #fff3cf;
   --waiting: #6b7385; --waiting-bg: #eceef3;
   --device: #b4461f; --device-bg: #fbe4da;
-  --later: #8a8f99; --later-bg: #f0f1f3;
+  --later: #6b7385; --later-bg: #eceef3;
   --p0: #b42318; --p1: #9a6c00; --p2: #8a8f99; --warn: #b42318; --warn-bg: #fde4e1;
   --font-display: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
   --font-body: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
@@ -22,7 +23,7 @@
     --bg: #12151b; --surface: #1a1f28; --ink: #e6e9ef; --muted: #9aa3b4; --line: #2b3240; --accent: #8fb0f0;
     --done: #7fd19f; --done-bg: #183324; --doing: #8fb0f0; --doing-bg: #1b2a47;
     --ready: #f0c560; --ready-bg: #3a2f10; --waiting: #a3abbb; --waiting-bg: #232936;
-    --device: #f0987a; --device-bg: #3d2117; --later: #8a909c; --later-bg: #20242c;
+    --device: #f0987a; --device-bg: #3d2117; --later: #a3abbb; --later-bg: #232936;
     --p0: #ff8f85; --p1: #f0c560; --p2: #8a909c; --warn: #ff8f85; --warn-bg: #3d1a17;
     color-scheme: dark;
   }
@@ -31,47 +32,70 @@
   --bg: #12151b; --surface: #1a1f28; --ink: #e6e9ef; --muted: #9aa3b4; --line: #2b3240; --accent: #8fb0f0;
   --done: #7fd19f; --done-bg: #183324; --doing: #8fb0f0; --doing-bg: #1b2a47;
   --ready: #f0c560; --ready-bg: #3a2f10; --waiting: #a3abbb; --waiting-bg: #232936;
-  --device: #f0987a; --device-bg: #3d2117; --later: #8a909c; --later-bg: #20242c;
+  --device: #f0987a; --device-bg: #3d2117; --later: #a3abbb; --later-bg: #232936;
   --p0: #ff8f85; --p1: #f0c560; --p2: #8a909c; --warn: #ff8f85; --warn-bg: #3d1a17;
   color-scheme: dark;
 }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.6; margin: 0; }
 a { color: inherit; }
-.wrap { max-width: 1100px; margin: 0 auto; padding-inline: 16px; padding-block: 24px 48px; display: grid; gap: 24px; }
+.wrap { max-width: 1000px; margin: 0 auto; padding-inline: 16px; padding-block: 24px 48px; display: grid; gap: 20px; }
 h1 { font-family: var(--font-display); font-weight: 900; font-size: 1.9rem; margin: 0; letter-spacing: .01em; text-wrap: balance; }
-h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; margin: 0; text-wrap: balance; display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
 h2 a { text-decoration: none; }
 h2 a:hover { text-decoration: underline; }
+h4 { margin: 8px 0 4px; font-size: .8rem; font-weight: 500; color: var(--muted); }
 .sub { color: var(--muted); margin: 4px 0 0; }
-.goal { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
-@media (max-width: 720px) { .goal, .rel-head { grid-template-columns: 1fr !important; } }
-.meter { display: grid; gap: 6px; min-width: 240px; }
-.meter-label { display: flex; justify-content: space-between; gap: 12px; font-size: .85rem; color: var(--muted); }
-.meter-label b { color: var(--ink); font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.bar { height: 10px; border-radius: 6px; background: var(--line); overflow: hidden; display: flex; }
-.bar span { display: block; height: 100%; }
+header { display: grid; gap: 12px; }
+.legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: .8rem; color: var(--muted); }
+.legend li { display: inline-flex; gap: 6px; align-items: center; }
 .counts { display: flex; flex-wrap: wrap; gap: 8px; }
-.count { display: inline-flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: .85rem; background: var(--surface); border: 1px solid var(--line); text-decoration: none; }
+.count { display: inline-flex; gap: 6px; align-items: center; padding: 4px 12px; border-radius: 999px; font-size: .85rem; background: var(--surface); border: 1px solid var(--line); text-decoration: none; }
 a.count:hover, a.count:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.count b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; display: grid; gap: 14px; }
-.rel-head { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) 280px; align-items: end; }
+.count b { font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; display: grid; gap: 12px; }
+.release.current { border: 2px solid var(--accent); padding: 20px; gap: 16px; }
+.release.current h2 { font-size: 1.45rem; }
+.release.compact { padding: 12px 16px; gap: 10px; }
+.release.compact h2 { font-size: 1.05rem; }
 .desc { color: var(--muted); margin: 4px 0 0; white-space: pre-line; }
-.due { font-family: var(--font-body); font-weight: 400; font-size: .8rem; color: var(--muted); margin-left: 8px; }
-.ucs { display: grid; gap: 12px; }
-.uc { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 10px; min-width: 0; }
-.uc.is-closed { opacity: .8; }
-.uc-head { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; }
-.uc-title { font-weight: 700; font-size: 1rem; text-decoration: none; overflow-wrap: anywhere; }
+.due { font-family: var(--font-body); font-weight: 400; font-size: .8rem; color: var(--muted); }
+.pill { flex: none; font-family: var(--font-body); font-size: .72rem; padding: 1px 8px; border-radius: 999px; font-weight: 500; background: var(--waiting-bg); color: var(--waiting); }
+.pill.cur { background: var(--accent); color: var(--surface); }
+.ucs-badge { flex: none; display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; font-size: .78rem; font-weight: 500; padding: 1px 9px; border-radius: 999px; background: var(--b-bg); color: var(--b); }
+.ucs-badge.done { --b: var(--done); --b-bg: var(--done-bg); }
+.ucs-badge.device { --b: var(--device); --b-bg: var(--device-bg); }
+.ucs-badge.doing { --b: var(--doing); --b-bg: var(--doing-bg); }
+.ucs-badge.later { --b: var(--later); --b-bg: var(--later-bg); }
+.ucs-badge.big { font-size: .95rem; font-weight: 700; padding: 4px 14px; }
+.headline { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); }
+.compact .headline { padding: 6px 10px; }
+.compact .ucs-badge.big { font-size: .82rem; padding: 2px 10px; }
+.next { margin: 0; flex: 1 1 320px; min-width: 0; overflow-wrap: anywhere; }
+.current .next { font-size: 1rem; }
+.next .k { font-weight: 700; }
+.next .sep { color: var(--muted); margin: 0 8px; }
+.owner b { font-weight: 700; }
+.uc-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.uc { display: grid; grid-template-columns: 9.5em minmax(0, 1fr); gap: 4px 12px; align-items: start; padding: 10px 0; border-top: 1px solid var(--line); }
+.uc .ucs-badge { justify-self: start; margin-top: 2px; }
+.compact .uc { padding: 6px 0; }
+.uc-body { min-width: 0; display: grid; gap: 2px; }
+.uc-title { font-weight: 700; text-decoration: none; overflow-wrap: anywhere; }
+.compact .uc-title { font-weight: 500; }
 .uc-title:hover { text-decoration: underline; }
 .code { font-family: var(--font-mono); font-size: .8rem; color: var(--muted); font-weight: 600; }
-.pill { flex: none; font-size: .75rem; padding: 1px 8px; border-radius: 999px; font-weight: 500; }
-.pill.open { background: var(--doing-bg); color: var(--doing); }
-.pill.done { background: var(--done-bg); color: var(--done); }
-.note { margin: 0; font-size: .85rem; color: var(--device); background: var(--device-bg); border-radius: 6px; padding: 4px 10px; justify-self: start; }
+.rest { margin: 0; font-size: .85rem; color: var(--muted); overflow-wrap: anywhere; }
+.ilink { text-decoration: none; color: var(--ink); }
+.ilink:hover, .ilink:focus-visible { text-decoration: underline; }
+.mini { font-size: .68rem; padding: 0 5px; border-radius: 4px; margin-left: 4px; vertical-align: 1px; }
+.mini.doing { background: var(--doing-bg); color: var(--doing); }
+.mini.device { background: var(--device-bg); color: var(--device); }
+.more { color: var(--muted); }
+details.work > summary { cursor: pointer; color: var(--muted); font-size: .8rem; padding: 2px 0; width: fit-content; }
+details.work > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+details.work[open] { padding-bottom: 4px; }
 .rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; grid-template-areas: "num title state" ". meta meta"; column-gap: 10px; row-gap: 2px; align-items: baseline; padding: 7px 10px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--stripe, var(--line)); text-decoration: none; }
+.row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; grid-template-areas: "num title state" ". meta meta"; column-gap: 10px; row-gap: 2px; align-items: baseline; padding: 6px 10px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--stripe, var(--line)); text-decoration: none; }
 .row:hover, .row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .row .num { grid-area: num; }
 .row .title { grid-area: title; }
@@ -93,36 +117,35 @@ a.count:hover, a.count:focus-visible { outline: 2px solid var(--accent); outline
 .badge.later { background: var(--later-bg); color: var(--later); }
 .badge.warn { background: var(--warn-bg); color: var(--warn); }
 .deps { font-size: .75rem; color: var(--device); }
-details.closed > summary { cursor: pointer; color: var(--muted); font-size: .85rem; padding: 2px 0; }
-details.closed[open] > summary { margin-bottom: 6px; }
-details.closed > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.flow { margin: 0; padding-left: 1.2em; display: grid; gap: 2px; }
 .section-head { display: flex; gap: 10px; align-items: baseline; }
+.section-head h2 { font-size: 1.05rem; }
 .section-head .n { font-family: var(--font-mono); color: var(--muted); }
 .lead { color: var(--muted); margin: 0; font-size: .85rem; }
 .empty { color: var(--muted); font-size: .85rem; margin: 0; }
 .empty.ok { color: var(--done); }
 .foot { color: var(--muted); font-size: .8rem; }
-@media (max-width: 560px) { .row { grid-template-columns: 40px minmax(0, 1fr); grid-template-areas: "num title" ". state" ". meta"; } .uc-head { flex-direction: column; gap: 4px; } }
-@media (prefers-reduced-motion: no-preference) { .row { transition: transform .12s ease; } .row:hover { transform: translateY(-1px); } }
+@media (max-width: 560px) {
+  .uc { grid-template-columns: minmax(0, 1fr); }
+  .row { grid-template-columns: 40px minmax(0, 1fr); grid-template-areas: "num title" ". state" ". meta"; }
+}
 </style>
 
 <div class="wrap">
-  <header class="goal">
+  <header>
     <div>
       <h1>watch-audio ロードマップ</h1>
       <p class="sub">__GOAL__</p>
     </div>
-    __GOAL_METER__
+    <ul class="legend" aria-label="ユースケースの状態の凡例">__LEGEND__</ul>
+    <div class="counts" aria-label="リリースごとのユースケースの状態">__RELEASE_COUNTS__</div>
   </header>
-
-  <div class="counts" aria-label="リリースごとの作業 Issue の完了数">__RELEASE_COUNTS__</div>
-  <div class="counts" aria-label="作業 Issue の状態">__STATUS_COUNTS__</div>
 
   __RELEASES__
 
   <section class="panel" aria-labelledby="devflow-h">
     <div class="section-head"><h2 id="devflow-h">開発の進め方</h2><span class="n">未完了 __DEVFLOW_COUNT__</span></div>
-    <p class="lead">CI・開発フロー・リポジトリ構成の Issue（<code>dev-flow</code>）。ユースケースには属さず、機能の作業より先に扱う。</p>
+    <p class="lead">CI・開発フロー・リポジトリ構成の Issue（<code>dev-flow</code>）。機能の作業より先に扱う。</p>
     __DEVFLOW__
   </section>
 

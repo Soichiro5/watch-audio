@@ -8,8 +8,8 @@ name: Emulator smoke test
 # .github/scripts/release-asr.sh runs ReleaseAsrTest against it, with the APKs that the release-test-apks job builds
 # on its own runner in parallel (#92).
 # On the phone emulator it also runs the instrumented tests: real MediaPlayer playback and
-# the search -> one tap -> play flow (#19, #25), the shared SQLite tests of core-db and
-# core-pipeline on Android (#14), on-device ASR with the real models and the wait without a model
+# the search -> one tap -> play flow (#19, #25), the shared SQLite tests of shared/db and
+# shared/pipeline on Android (#14), on-device ASR with the real models and the wait without a model
 # (#22), the charging job and resuming after a force-stop (#20), the battery/thermal policy (#75),
 # the gap alert notification (#43) and the refused permission (#32); see .github/scripts/phone-scenarios.sh.
 # On the Wear OS emulator it shows the tile and the complication and taps the tile (#41):
@@ -18,9 +18,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "androidApp/**"
-      - "wearApp/**"
-      - "composeApp/**"
+      - "apps/android/**"
+      - "apps/wear/**"
       - "shared/**"
       - "gradle/**"
       - "*.gradle.kts"
@@ -42,9 +41,8 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "androidApp/**"
-      - "wearApp/**"
-      - "composeApp/**"
+      - "apps/android/**"
+      - "apps/wear/**"
       - "shared/**"
       - "gradle/**"
       - "*.gradle.kts"
@@ -85,22 +83,26 @@ jobs:
       matrix:
         include:
           - name: phone
-            module: androidApp
+            module: apps/android
+            gradle-path: :apps:android
+            apk: android
             api-level: 35
             target: google_apis
             # Audio stays enabled: the playback tests need a working audio output.
             emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
-            device-test-apks: :androidApp:assembleDebugAndroidTest :shared:core-db:assembleAndroidDeviceTest :shared:core-pipeline:assembleAndroidDeviceTest
-            device-tests: :androidApp:connectedDebugAndroidTest :shared:core-db:connectedAndroidDeviceTest :shared:core-pipeline:connectedAndroidDeviceTest
+            device-test-apks: :apps:android:assembleDebugAndroidTest :shared:db:assembleAndroidDeviceTest :shared:pipeline:assembleAndroidDeviceTest
+            device-tests: :apps:android:connectedDebugAndroidTest :shared:db:connectedAndroidDeviceTest :shared:pipeline:connectedAndroidDeviceTest
             # Each of these must report at least one test case: the test engine can end green with 0 tests (e.g. a failed APK install).
-            device-test-modules: androidApp shared/core-db shared/core-pipeline
+            device-test-modules: apps/android shared/db shared/pipeline
             # The ASR tests must not skip for lack of models (pushed by phone-scenarios.sh).
             device-test-args: -Pandroid.testInstrumentationRunnerArguments.requireModels=true
             # #78: ReleaseAsrTest against the R8 release APK, with the APKs of the release-test-apks job.
             release-checks: .github/scripts/release-asr.sh
             scenarios: .github/scripts/phone-scenarios.sh
           - name: wear
-            module: wearApp
+            module: apps/wear
+            gradle-path: :apps:wear
+            apk: wear
             api-level: 34
             target: android-wear
             # Audio enabled so that recording started from the tile gets a (silent) microphone.
@@ -177,8 +179,8 @@ jobs:
         run: |
           keytool -genkeypair -noprompt -keystore "$WATCHAUDIO_RELEASE_STORE_FILE" -storepass ci-throwaway \
             -keypass ci-throwaway -alias ci -keyalg RSA -keysize 2048 -validity 1 -dname "CN=watch-audio CI throwaway"
-          ./gradlew :${{ matrix.module }}:assembleRelease :${{ matrix.module }}:assembleDebug ${{ matrix.device-test-apks }}
-          mkdir -p release-apk && cp ${{ matrix.module }}/build/outputs/apk/release/${{ matrix.module }}-release.apk release-apk/
+          ./gradlew ${{ matrix.gradle-path }}:assembleRelease ${{ matrix.gradle-path }}:assembleDebug ${{ matrix.device-test-apks }}
+          mkdir -p release-apk && cp ${{ matrix.module }}/build/outputs/apk/release/${{ matrix.apk }}-release.apk release-apk/
 
       - name: Wait for the emulator download
         run: |
@@ -204,9 +206,9 @@ jobs:
           # Not in the matrix values: changing them changes setup-gradle's cache key for the job.
           emulator-options: ${{ matrix.emulator-options }} -no-snapshot
           script: |
-            bash .github/scripts/launch-smoke.sh release-apk/${{ matrix.module }}-release.apk logcat-release.txt
+            bash .github/scripts/launch-smoke.sh release-apk/${{ matrix.apk }}-release.apk logcat-release.txt
             adb uninstall app.watchaudio
-            bash .github/scripts/launch-smoke.sh ${{ matrix.module }}/build/outputs/apk/debug/${{ matrix.module }}-debug.apk logcat.txt
+            bash .github/scripts/launch-smoke.sh ${{ matrix.module }}/build/outputs/apk/debug/${{ matrix.apk }}-debug.apk logcat.txt
             if [ -n "${{ matrix.scenarios }}" ]; then bash ${{ matrix.scenarios }} || touch device-tests-failed; fi
             # The test engine reinstalls both APKs itself; remove the earlier installs (smoke test, scenarios) so a signature mismatch cannot skip the tests.
             if [ -n "${{ matrix.device-tests }}" ]; then adb uninstall app.watchaudio || true; adb uninstall app.watchaudio.test || true; fi
@@ -222,7 +224,7 @@ jobs:
         run: |
           if [ -n "${{ matrix.device-tests }}" ]; then
             python3 .github/scripts/junit-summary.py "Instrumented tests on the ${{ matrix.name }} emulator (API ${{ matrix.api-level }})" \
-              'androidApp/build/outputs/androidTest-results/connected/**/*.xml' \
+              'apps/android/build/outputs/androidTest-results/connected/**/*.xml' \
               'shared/*/build/outputs/androidTest-results/connected/**/*.xml' >> "$GITHUB_STEP_SUMMARY"
           fi
           {
@@ -247,7 +249,7 @@ jobs:
             scenario-logs/
             release-asr/
             wear-surfaces/
-            androidApp/build/reports/androidTests/
+            apps/android/build/reports/androidTests/
             shared/*/build/reports/androidTests/
           if-no-files-found: ignore
           retention-days: 7
@@ -261,7 +263,7 @@ jobs:
           retention-days: 30
 
   # #78: the release ASR check (release-asr.sh, end of the phone job) runs ReleaseAsrTest against the R8 release APK
-  # rebuilt with the keep rules of its test (androidApp/proguard-release-test.pro), with the test APK built for the
+  # rebuilt with the keep rules of its test (apps/android/proguard-release-test.pro), with the test APK built for the
   # release build type. That is a second Gradle build (one test build type per build; ~1-2 min of R8), so it runs
   # here, on its own runner, while the phone job boots the emulator and runs the other checks (#92).
   # Signed with a throwaway key made here (both APKs with the same key; the phone job uninstalls its own builds first).
@@ -291,10 +293,10 @@ jobs:
         run: |
           keytool -genkeypair -noprompt -keystore "$WATCHAUDIO_RELEASE_STORE_FILE" -storepass ci-throwaway \
             -keypass ci-throwaway -alias ci -keyalg RSA -keysize 2048 -validity 1 -dname "CN=watch-audio CI throwaway"
-          ./gradlew :androidApp:assembleRelease :androidApp:assembleReleaseAndroidTest -Pwatchaudio.testBuildType=release
+          ./gradlew :apps:android:assembleRelease :apps:android:assembleReleaseAndroidTest -Pwatchaudio.testBuildType=release
           mkdir -p release-test-apks
-          cp androidApp/build/outputs/apk/release/androidApp-release.apk \
-            androidApp/build/outputs/apk/androidTest/release/androidApp-release-androidTest.apk release-test-apks/
+          cp apps/android/build/outputs/apk/release/android-release.apk \
+            apps/android/build/outputs/apk/androidTest/release/android-release-androidTest.apk release-test-apks/
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

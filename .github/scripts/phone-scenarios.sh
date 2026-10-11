@@ -17,7 +17,7 @@ set -uo pipefail
 
 PKG=app.watchaudio
 RUNNER=app.watchaudio.test/androidx.test.runner.AndroidJUnitRunner
-TEST_APK=androidApp/build/outputs/apk/androidTest/debug/androidApp-debug-androidTest.apk
+TEST_APK=apps/android/build/outputs/apk/androidTest/debug/android-debug-androidTest.apk
 OUT=scenario-logs
 mkdir -p "$OUT"
 status=0
