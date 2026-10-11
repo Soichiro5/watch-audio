@@ -111,6 +111,7 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 
 | ワークフロー | ステップ | 確認できること | 証拠の場所 |
 | --- | --- | --- | --- |
+| `android.yml` | Local-only check (static) / (merged manifests, resolved dependencies) | 「データは端末内のみ」: 権限・バックアップ設定・通信 API と URL・依存 SDK・iOS の Info.plist と entitlements が許可リストの範囲内（§6.3、#76） | ジョブのログ、ジョブサマリーの「Local-only check」（通信箇所の一覧） |
 | `android.yml` | Unit tests | 共通ロジック（JVM・Android ホスト）。SQLite を使う core-db / Ingestor / パイプラインのテストは JVM で実行 | テスト結果 |
 | `android.yml` | Search benchmark | 50 万セグメントでの検索応答時間（§5） | ジョブサマリーの表と `SEARCH_BENCHMARK` 行 |
 | `android.yml` | Unit tests（composeApp の `AppUiTest`） | 画面の描画（タイムライン・検索・状態・オンボーディング。権限拒否時の「設定を開く」#32 を含む） | 成果物 `ui-screenshots`（`composeApp/build/screenshots/*.png`） |
@@ -124,6 +125,7 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 | `emulator.yml`（phone） | 同上（`phone-scenarios.sh`） | 文字起こしの途中で `am force-stop` → 再起動で全チャンクが 1 回ずつ文字起こしされる（欠落・重複 0、中断したチャンクは 2 回目で完了）（`ResumeAfterKillTest`、#20） | `RESUME_CHECK` 行、成果物 `logcat-phone` の `scenario-logs/` |
 | `emulator.yml`（wear） | 同上（`wear-surfaces.sh`） | Tile とコンプリケーションの表示（停止中 → Tile のタップでアプリが開き録音開始 → 録音中）（#41） | `WEAR_SURFACE_CHECK` 行、スクリーンショット `wear-tile-*.png` / `wear-complication-*.png` |
 | `ios.yml` | Shared tests (iOS simulator) | 共通ロジックを iOS シミュレータで実行（SQLite を使う core-db / Ingestor のテストを含む） | ジョブサマリーのテスト一覧 |
+| `ios.yml` | Shared tests (iOS simulator) / Swift protocol tests | iPhone の DB・音声・受信ディレクトリ（`LocalDataDirectoryTest`）と Watch の送信待ちディレクトリ（`LocalDataProtectionTests`）がバックアップ対象外で、保護クラスが `CompleteUntilFirstUserAuthentication`（#76） | ジョブサマリーのテスト一覧、ログ |
 | `ios.yml` | Launch iOS app / Launch watchOS app | ビルドした iOS・watchOS アプリをシミュレータに入れて起動し、15 秒後もプロセスが生きていてクラッシュレポートがない | ジョブサマリー、成果物 `simulator-smoke`（スクリーンショット・ログ） |
 
 スクリーンショットは成果物 `screenshots-phone` / `screenshots-wear`（30 日保存）、`*_CHECK` 行はジョブサマリーにまとめて出す。
@@ -171,6 +173,40 @@ adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
 ./gradlew :androidApp:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.requireModels=true
 adb pull /data/local/tmp/watchaudio-screenshots
 ```
+
+### 6.3 Local-only チェック（`tools/privacy-check`、#76）
+
+CLAUDE.md の「Local only」（録音・文字起こし・ユーザーデータを端末の外に出さない。通信はモデルの取得だけ）を CI で守るための静的チェック。Python の標準ライブラリだけで動き、`android.yml` で 2 回実行する。
+
+1. **最初のステップ（ビルド不要、数秒）**: `test_check.py`（違反を 1 つずつ入れたフィクスチャで失敗することを確かめるテスト）と、リポジトリのファイルに対するチェック。
+2. **Assemble の後**: リリースのマージ後マニフェスト（`processReleaseMainManifest`）と、`./gradlew :<app>:dependencies --configuration releaseRuntimeClasspath` の出力（推移的な依存を含む）も検査し、通信箇所の一覧をジョブサマリーに出す。
+
+| 検査 | 対象 | 失敗する例 |
+| --- | --- | --- |
+| 権限 | `androidApp` / `wearApp` の `src/*/AndroidManifest.xml`、マージ後マニフェスト | Wear OS に `INTERNET`、スマホに位置情報・広告 ID、依存が勝手に足した権限 |
+| バックアップ | `<application>` と `res/xml` のルール | `allowBackup="true"`、`dataExtractionRules` なし、除外していないドメイン、`<include>`、`usesCleartextTraffic="true"` |
+| 通信・保護 | `androidApp/src`・`wearApp/src`・`composeApp/src`・`shared`・`iosApp` の `.kt` / `.java` / `.swift`（コメントは除外） | 許可されていないファイルでの `HttpURLConnection`・`URLSession`・ソケット・WebView・`SFSpeech…RecognitionRequest`、`DataClient` / `PutDataRequest`、`.noFileProtection`、許可されていない URL |
+| 依存（宣言） | `gradle/libs.versions.toml` と `*.gradle.kts`（`spikes/` を除く） | firebase・crashlytics・sentry・amplitude などの解析・クラッシュ送信 SDK、okhttp・retrofit・ktor などの HTTP クライアント |
+| 依存（解決結果） | リリースの実行時クラスパス | 許可リスト（AndroidX、Kotlin、Compose、play-services-wearable、sherpa-onnx、commons-compress など）にないモジュール |
+| iOS | `iosApp/project.yml`、コミットされた `*.entitlements` | 許可リストにない Info.plist のキー（`NSAppTransportSecurity`、位置情報など）、`UIBackgroundModes`、entitlements |
+
+手元での実行:
+
+```bash
+python3 -m unittest discover -s tools/privacy-check -v
+python3 tools/privacy-check/check.py
+# ビルド後の検査も（assembleDebug などの後）
+./gradlew --max-workers=2 :androidApp:processReleaseMainManifest :wearApp:processReleaseMainManifest
+./gradlew --max-workers=2 -q :wearApp:dependencies --configuration releaseRuntimeClasspath > /tmp/deps-wearApp.txt
+python3 tools/privacy-check/check.py --resolved-deps wearApp=/tmp/deps-wearApp.txt \
+  --merged-manifest wearApp=wearApp/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml
+```
+
+**許可リストを広げるとき**（新しい権限・依存・通信先が本当に必要な場合）:
+
+1. `tools/privacy-check/policy.py` の該当する表に、理由を添えて追加する（権限は `ANDROID_APPS`、ライブラリが足す権限は `library_permissions`、通信するファイルは `ALLOWED_API_USES`、URL は `ALLOWED_URL_PREFIXES`、依存は `ALLOWED_RESOLVED_DEPENDENCIES`、iOS は `IOS_TARGETS` / `IOS_ENTITLEMENTS`）。拒否パターン（`GUARDED_APIS`・`DENIED_DEPENDENCIES`）は緩めず、許可リスト側に足す。
+2. ユーザーデータが端末の外に出ないことを PR の本文で説明する。データを外に出す変更（AI プロバイダなど P2）は、CLAUDE.md の方針の変更として Issue で合意してから。
+3. [02 §7](02-architecture.md#7-セキュリティプライバシー) の保存場所・通信箇所の一覧を更新し、`test_check.py` の期待値（通信箇所の集合など）も直す。
 
 ## 7. CI の設定と成果物の扱い（公開リポジトリ）
 

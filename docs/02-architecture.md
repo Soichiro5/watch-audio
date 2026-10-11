@@ -19,7 +19,7 @@
 | ベクトル検索 | 埋め込みを int8 BLOB で保存し総当たり cosine | 依存を増やさず十分高速。規模が増えたら sqlite-vec 等へ移行 |
 | 埋め込みモデル | multilingual-e5-small（ONNX, int8）を ONNX Runtime で実行 | 日英対応・軽量。M0 スパイクで最終決定 |
 | ASR | iOS: `SpeechAnalyzer`/`SpeechTranscriber`（iOS 26+）<br>Android: sherpa-onnx + ReazonSpeech Zipformer（int8）+ Silero VAD | iOS はモデルが OS 管理でアプリが軽い。Android は日本語対応の高速 OSS。M0-5 の精度比較で Zipformer を採用（モデルは初回にダウンロード、[実装メモ](impl/android-phone.md)） |
-| HTTP / LLM | Ktor Client + 自前の Provider 抽象 | OpenAI 互換 / Anthropic / Gemini を BYOK で直接呼ぶ |
+| HTTP / LLM（P2） | Ktor Client + 自前の Provider 抽象 | OpenAI 互換 / Anthropic / Gemini を BYOK で直接呼ぶ。v0.1 では依存に入れない（`shared/core-ai` は空。追加時は §7.3 の許可リストを更新） |
 | DI / 非同期 | Koin、Kotlin Coroutines / Flow | KMP 定番 |
 | 秘密情報 | iOS Keychain（device-only）/ Android Keystore + EncryptedFile | API キー保管 |
 | Health（Phase 2） | HealthKit / Health Connect | 読み取りのみ |
@@ -213,12 +213,50 @@ interface LlmProvider {
 
 | 項目 | 方針 |
 | --- | --- |
-| 保存 | アプリサンドボックス内。iOS は `Application Support/WatchAudio`（ファイル保護は既定の `CompleteUntilFirstUserAuthentication`。ロック中の BGTask からも読める）、Android は内部ストレージ（`files/`） |
-| バックアップ | MVP では OS バックアップ対象外（データを端末外に出さないため）。Phase 2 で E2E 暗号化バックアップを提供 |
+| 保存 | アプリサンドボックス内のみ（§7.1）。iOS・watchOS は `Application Support/WatchAudio`（ファイル保護クラス `CompleteUntilFirstUserAuthentication` を明示。ロック中の録音・送信・BGTask からも読める）、Android は内部ストレージ（`files/`） |
+| バックアップ | MVP では OS バックアップ対象外（データを端末外に出さないため。§7.1）。Phase 2 で E2E 暗号化バックアップを提供 |
 | API キー | Keychain（`ThisDeviceOnly`）/ Android Keystore |
-| 外部送信 | AI プロバイダ（テキストのみ）、OS ジオコーダ（Phase 2）。解析 SDK・広告 SDK は入れない |
+| 外部送信 | v0.1 は ASR モデルの取得のみ（§7.2）。AI プロバイダ（テキストのみ）、OS ジオコーダは Phase 2（追加時は §7.3 の許可リストを更新）。解析 SDK・広告 SDK・クラッシュ送信 SDK は入れない |
 | 同意 | 初回オンボーディングで「録音対象者への告知」の注意喚起。Watch に録音中インジケータを常時表示 |
 | 削除 | 「この日のデータを削除」（その日に始まったチャンクの音声・文字起こし・マーク）と「すべてのデータを削除」（全録音・文字起こし・音声ファイル。DB は `VACUUM` で縮める）。どちらもアプリ内の確認ステップ必須（全削除は「削除」と入力）。システムダイアログは使わない。AI 設定・API キーは実装時に全削除の対象に加える |
+
+### 7.1 保存場所と保護（#76）
+
+| 端末 | データ | 場所 | 保存時の保護 | バックアップ |
+| --- | --- | --- | --- | --- |
+| Android スマホ | DB（文字起こし・チャンク）、音声、ASR モデル | `files/watch-audio.db`、`files/audio/`、`files/models/` | 内部ストレージ（ファイルベース暗号化の資格情報暗号化領域。初回ロック解除後に読める） | `allowBackup="false"`。`data_extraction_rules`（Android 12+）と `backup_rules`（11 以下）で全ドメインをクラウドバックアップから除外。機種変更時の端末間転送（ケーブル・ローカル Wi-Fi）は端末間で完結するため許可 |
+| Android スマホ | 受信中のチャンク | `cache/incoming/` | 同上 | 同上 |
+| Wear OS | 録音中・送信待ちのチャンク | `files/recording/`、`files/outbox/` | 同上 | `allowBackup="false"`。`data_extraction_rules` でクラウドバックアップと端末間転送の両方から全ドメインを除外 |
+| Wear OS | 診断ログ（イベントと電池残量の CSV。音声・文字起こしは含まない） | アプリ専用の外部ストレージ `Android/data/app.watchaudio/files/diagnostics/` | 他アプリからは読めない（Android 11+）。adb では取り出せる（電池計測用） | 同上（`external` ドメインも除外） |
+| iPhone | DB、音声、受信直後のファイル | `Application Support/WatchAudio/`（`watch-audio.db`、`audio/`、`inbox/`） | `NSFileProtectionCompleteUntilFirstUserAuthentication` をディレクトリに明示（`LocalDataDirectory`）。中に作るファイルはこのクラスを引き継ぐ | `NSURLIsExcludedFromBackupKey`（ディレクトリに設定すると中身も対象外） |
+| iPhone | 文字起こし用の一時ファイル | `tmp/` | 既定（同上） | 一時ディレクトリはバックアップされない。処理後に削除 |
+| Apple Watch | 録音中・送信待ちのチャンク、診断ログ | `Application Support/WatchAudio/`（`recording/`、`outbox/`、`diagnostics.csv`） | `FileProtectionType.completeUntilFirstUserAuthentication` をディレクトリに明示（`LocalDataProtection`） | `isExcludedFromBackup`（同上） |
+
+- 保護クラスを `Complete`（ロック中は読めない）にしないのは、画面オフ・ロック中の録音継続、送信待ちの再送、充電中の BGTask での文字起こしがロック中に動くため。再起動後に一度もロック解除されていない間だけ読めない。
+- iOS・watchOS の属性は `LocalDataDirectoryTest`（Kotlin、iOS シミュレータ）と `LocalDataProtectionTests`（Swift、`ProtocolTests`）が ios.yml で確認する。
+
+### 7.2 通信箇所の一覧
+
+| 端末 | 通信 | 宛先 | 実装 |
+| --- | --- | --- | --- |
+| Android スマホ | ASR モデル（sherpa-onnx）のダウンロード | `https://github.com/k2-fsa/sherpa-onnx/releases/download/`（GitHub Releases） | `androidApp/.../asr/ModelManager.kt`（`HttpURLConnection`）。INTERNET 権限はこのためだけ |
+| Wear OS → スマホ | チャンクと ACK | 直接つながっているペアのスマホ（`Node.isNearby`） | `ChannelClient` / `MessageClient`（Wearable Data Layer）。クラウド経由で同期されうる `DataClient` は使わない。Wear OS アプリに INTERNET 権限はない |
+| Apple Watch → iPhone | チャンクと ACK | ペアの iPhone | WatchConnectivity（`transferFile` / `transferUserInfo`）。OS が管理する端末間の転送 |
+| iPhone | 音声認識モデル | Apple（OS が管理） | `SpeechAnalyzer` の `AssetInventory`。アプリは URL を持たない。文字起こし自体は端末上 |
+
+アプリのコードに通信 API・URL があるのは `ModelManager.kt` だけ。CI の `tools/privacy-check` がこの一覧（`policy.py` の `ALLOWED_API_USES` / `ALLOWED_URL_PREFIXES`）とソースを照合し、ジョブサマリーに通信箇所を出す（§7.3）。
+
+### 7.3 CI での検査（`tools/privacy-check`、#76）
+
+`android.yml` の最初と Assemble の後に実行し、許可リスト（`tools/privacy-check/policy.py`）にないものがあると失敗する。
+
+- **権限**: 各アプリのマニフェスト（全ソースセット）と、リリースのマージ後マニフェスト（ライブラリが足す権限）。Wear OS に INTERNET はない。
+- **バックアップ**: `allowBackup="false"`、`dataExtractionRules` があり、全ドメインを除外している（`<include>` は不可）。`usesCleartextTraffic` と独自の `networkSecurityConfig` も不可。
+- **通信・保護**: ソース（Kotlin / Java / Swift、コメントを除く）での HTTP クライアント・ソケット・WebView・`URLSession`・Network.framework・サーバー型の `SFSpeech…RecognitionRequest`・`DataClient`・保護なしのファイル（`.noFileProtection` など）の利用、URL リテラル。
+- **依存**: Gradle ファイルに解析・広告・クラッシュ送信・HTTP クライアントの SDK がない。リリースの実行時クラスパス（推移的な依存を含む）がすべて許可リストの範囲内。
+- **iOS**: `project.yml` の Info.plist のキー・`UIBackgroundModes`、entitlements（現状なし）。
+
+使い方と許可リストの広げ方は [04 §6.3](04-dev-environment.md#63-local-only-チェックtoolsprivacy-check76)。
 
 ## 8. 非機能目標（MVP）
 

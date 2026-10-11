@@ -146,8 +146,9 @@ MainViewControllerKt.MainViewController()                             // Compose
 
 ## 8. 保存場所とプライバシー
 
-- iPhone: `Application Support/WatchAudio/`（`watch-audio.db`、`audio/yyyy/MM/dd/<chunkId>.m4a`、`inbox/`）。ディレクトリに `NSURLIsExcludedFromBackupKey` を設定し、iCloud / PC バックアップに含めない。ファイル保護は iOS 既定（`CompleteUntilFirstUserAuthentication`、BGTask から読める）。
-- Watch: `Application Support/WatchAudio/`（録音中・送信待ちチャンク、診断ログ）。ACK 後に削除。
+- iPhone: `Application Support/WatchAudio/`（`watch-audio.db`、`audio/yyyy/MM/dd/<chunkId>.m4a`、`inbox/`）。`LocalDataDirectory`（composeApp/iosMain）がディレクトリに `NSURLIsExcludedFromBackupKey` を設定して iCloud / PC バックアップに含めず、ファイル保護クラス `CompleteUntilFirstUserAuthentication`（BGTask・ロック中の取り込みから読める）を明示する（#76）。
+- Watch: `Application Support/WatchAudio/`（録音中・送信待ちチャンク、診断ログ）。ACK 後に削除。`ChunkOutbox` が `LocalDataProtection`（iosApp/Shared）で同じくバックアップ除外と `completeUntilFirstUserAuthentication` を設定する（画面オフ・ロック中も録音・再送できる）。
+- 属性は ios.yml のテスト（`LocalDataDirectoryTest`、`LocalDataProtectionTests`）で確認する。一覧は [02 §7.1](../02-architecture.md#71-保存場所と保護76)。
 - 音声・文字起こしとも端末外（自前サーバー・クラウド）には送らない。Speech もオンデバイスモデル。
 
 ## 9. 権限・Info.plist
