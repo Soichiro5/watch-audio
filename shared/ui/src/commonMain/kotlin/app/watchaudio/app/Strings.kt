@@ -108,6 +108,10 @@ object Strings {
         StatusNotice.RetentionFailed -> "保持期間を過ぎた音声を削除できませんでした。次の文字起こしの後にもう一度試します"
     }
 
+    // Model download notification (Android foreground work)
+    const val MODEL_DOWNLOAD_CHANNEL = "文字起こしモデルのダウンロード"
+    const val MODEL_DOWNLOAD_NOTIFICATION_TITLE = "文字起こしモデルをダウンロード中"
+
     const val STORAGE = "保存データ"
     const val STAT_CHUNKS = "チャンク"
     const val STAT_SEGMENTS = "発話"

@@ -10,7 +10,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import app.watchaudio.android.AppGraph
-import app.watchaudio.android.R
+import app.watchaudio.app.Strings
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -42,12 +42,12 @@ class ModelDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         val notifications = NotificationManagerCompat.from(applicationContext)
         notifications.createNotificationChannel(
             NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
-                .setName(applicationContext.getString(R.string.model_download_channel))
+                .setName(Strings.MODEL_DOWNLOAD_CHANNEL)
                 .build(),
         )
         val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle(applicationContext.getString(R.string.model_download_title))
+            .setContentTitle(Strings.MODEL_DOWNLOAD_NOTIFICATION_TITLE)
             .setProgress(0, 0, true)
             .setOngoing(true)
             .setSilent(true)

@@ -1,6 +1,3 @@
 <resources>
     <string name="app_name">watch-audio</string>
-    <string name="model_download_channel">Speech model download</string>
-    <string name="model_download_title">Downloading the on-device speech model</string>
-    <string name="model_waiting_for_wifi">The speech model will download on Wi-Fi</string>
 </resources>
