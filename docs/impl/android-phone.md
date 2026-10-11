@@ -232,7 +232,7 @@ adb shell dumpsys jobscheduler | grep -A3 app.watchaudio
 adb exec-out run-as app.watchaudio cat files/diagnostics/diagnostics.csv.1 files/diagnostics/diagnostics.csv > /tmp/wa-diagnostics.csv
 ```
 
-長時間の実機検証（#61 など）の証拠には、状態タブから書き出した診断ログを添えると、受信の間隔・文字起こしの RTF・ワーカーの停止理由・前回の終了理由（強制終了・メモリ不足など）を後から確認できる。エミュレータ（API 35）では `am force-stop` が `previous_exit` にどう残るかを CI の `DIAGNOSTICS_CHECK` 行（`previous_exit_reason` / `previous_exit_description`）で確認できる（§4.2）。
+長時間の実機検証（#61 など）の証拠には、状態タブから書き出した診断ログを添えると、受信の間隔・文字起こしの RTF・ワーカーの停止理由・前回の終了理由（強制終了・メモリ不足など）を後から確認できる。エミュレータ（API 35）では `am force-stop` は `previous_exit` に `reason=USER_REQUESTED`、`description=[FORCE STOP] stop app.watchaudio due to from pid …` として残る（CI の `DIAGNOSTICS_CHECK` 行、§4.2。計装テストの終了も同じ理由で、説明が `… due to finished inst` になる）。
 
 Watch が無くても、ADB 経由の Wear OS エミュレータとスマホエミュレータをペアリングすれば `ChannelClient` 経由の受信を確認できる（KVM のある環境が必要）。
 
