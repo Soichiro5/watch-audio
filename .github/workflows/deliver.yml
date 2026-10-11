@@ -12,6 +12,8 @@ on:
       - ".github/ISSUE_TEMPLATE/**"
       - ".github/pull_request_template.md"
       - "tools/roadmap-view/**"
+      - "tools/check-links/**"
+      - ".github/workflows/links.yml"
       - "research/**"
       - "spikes/**"
   workflow_dispatch:
