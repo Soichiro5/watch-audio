@@ -4,11 +4,12 @@ import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.platform.Sha256
 import app.watchaudio.core.protocol.AckStatus
-import app.watchaudio.core.protocol.AudioCodec
-import app.watchaudio.core.protocol.AudioFile
 import app.watchaudio.core.protocol.ChunkEndReason
 import app.watchaudio.core.protocol.ChunkManifest
 import app.watchaudio.core.protocol.SourcePlatform
+import app.watchaudio.testing.TempDir
+import app.watchaudio.testing.testAudio
+import app.watchaudio.testing.testManifest
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -37,16 +38,12 @@ class IngestorTest {
 
     private fun incoming(id: String, bytes: ByteArray): Pair<ChunkManifest, Path> {
         val file = dir.resolve("incoming-$id.m4a").also { write(it, bytes) }
-        val manifest = ChunkManifest(
-            chunkId = id,
-            sessionId = "s",
-            deviceId = "watch",
+        val manifest = testManifest(
+            id,
+            startedAt = 1_791_622_800_000, // 2026-10-10T09:00:00Z
+            audio = testAudio(id, bytes.size.toLong(), Sha256().apply { update(bytes) }.digestHex(), fileName = file.name),
             source = SourcePlatform.WATCHOS,
-            startedAtEpochMs = 1_791_622_800_000, // 2026-10-10T09:00:00Z
-            durationMs = 300_000,
             timeZone = "Asia/Tokyo",
-            audio = AudioFile(file.name, AudioCodec.AAC, 16_000, 1, 24_000, bytes.size.toLong(), Sha256().apply { update(bytes) }.digestHex()),
-            endReason = ChunkEndReason.ROTATION,
         )
         return manifest to file
     }

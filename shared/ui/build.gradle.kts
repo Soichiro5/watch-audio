@@ -31,6 +31,7 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)
+            implementation(projects.shared.testing)
         }
         iosTest.dependencies {
             // Compose UI on the iOS simulator over the real IosAppServices player (#19, #25).

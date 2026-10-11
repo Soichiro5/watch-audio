@@ -2,11 +2,7 @@ package app.watchaudio.core.db
 
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
-import app.watchaudio.core.protocol.AudioCodec
-import app.watchaudio.core.protocol.AudioFile
-import app.watchaudio.core.protocol.ChunkEndReason
-import app.watchaudio.core.protocol.ChunkManifest
-import app.watchaudio.core.protocol.SourcePlatform
+import app.watchaudio.testing.TempDir
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -26,21 +22,8 @@ class StorageQueriesTest {
         dir.deleteRecursively()
     }
 
-    private fun manifest(id: String, start: Long, audio: Boolean = true) = ChunkManifest(
-        chunkId = id,
-        sessionId = "s1",
-        deviceId = "watch",
-        source = SourcePlatform.WEAROS,
-        startedAtEpochMs = start,
-        durationMs = 300_000,
-        timeZone = "Asia/Tokyo",
-        audio = if (audio) AudioFile("$id.m4a", AudioCodec.AAC, 16_000, 1, 24_000, 1_000, "00") else null,
-        markOffsetsMs = listOf(1_000),
-        endReason = ChunkEndReason.ROTATION,
-    )
-
     private suspend fun insert(id: String, start: Long, audio: Boolean = true) =
-        store.transaction { insertChunk(manifest(id, start, audio), if (audio) "$id.m4a" else null, 0) }
+        store.registerChunk(id, start, audio, marks = listOf(1_000))
 
     private suspend fun transcribe(id: String, text: String = "会議の資料を送ります") = store.transaction {
         val start = chunk(id)!!.startedAt
@@ -147,7 +130,7 @@ class StorageQueriesTest {
         }
         LocalStore.open(path).use { migrated ->
             assertEquals("true", migrated.read { setting("onboarded") })
-            migrated.transaction { insertChunk(manifest("a", 0), "a.m4a", 0) }
+            migrated.registerChunk("a", 0)
             assertNull(migrated.read { chunk("a") }!!.audioPurgedAt)
         }
     }

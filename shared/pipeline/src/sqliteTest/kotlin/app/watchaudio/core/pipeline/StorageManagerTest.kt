@@ -5,11 +5,9 @@ import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.db.NewSegment
 import app.watchaudio.core.pipeline.AudioRetentionPolicy.DAY_MS
-import app.watchaudio.core.protocol.AudioCodec
-import app.watchaudio.core.protocol.AudioFile
-import app.watchaudio.core.protocol.ChunkEndReason
-import app.watchaudio.core.protocol.ChunkManifest
-import app.watchaudio.core.protocol.SourcePlatform
+import app.watchaudio.testing.TempDir
+import app.watchaudio.testing.testAudio
+import app.watchaudio.testing.testManifest
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -51,12 +49,7 @@ class StorageManagerTest {
         write(relative, ByteArray(size))
         store.transaction {
             insertChunk(
-                ChunkManifest(
-                    chunkId = id, sessionId = "s", deviceId = "w", source = SourcePlatform.WEAROS,
-                    startedAtEpochMs = start, durationMs = 300_000, timeZone = "UTC",
-                    audio = AudioFile("$id.m4a", AudioCodec.AAC, 16_000, 1, 24_000, size.toLong(), "00"),
-                    endReason = ChunkEndReason.ROTATION,
-                ),
+                testManifest(id, start, audio = testAudio(id, sizeBytes = size.toLong())),
                 relative,
                 0,
             )

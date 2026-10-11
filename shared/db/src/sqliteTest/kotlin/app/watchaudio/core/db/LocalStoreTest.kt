@@ -2,11 +2,8 @@ package app.watchaudio.core.db
 
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
-import app.watchaudio.core.protocol.AudioCodec
-import app.watchaudio.core.protocol.AudioFile
-import app.watchaudio.core.protocol.ChunkEndReason
-import app.watchaudio.core.protocol.ChunkManifest
-import app.watchaudio.core.protocol.SourcePlatform
+import app.watchaudio.testing.TempDir
+import app.watchaudio.testing.testManifest
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -26,23 +23,10 @@ class LocalStoreTest {
         dir.deleteRecursively()
     }
 
-    private fun manifest(id: String, start: Long, audio: Boolean = true, marks: List<Long> = emptyList()) = ChunkManifest(
-        chunkId = id,
-        sessionId = "s1",
-        deviceId = "watch",
-        source = SourcePlatform.WEAROS,
-        startedAtEpochMs = start,
-        durationMs = 300_000,
-        timeZone = "Asia/Tokyo",
-        audio = if (audio) AudioFile("$id.m4a", AudioCodec.AAC, 16_000, 1, 24_000, 1_000, "00") else null,
-        markOffsetsMs = marks,
-        endReason = ChunkEndReason.ROTATION,
-    )
-
     @Test
     fun insertIsIdempotent() = runTest {
-        assertTrue(store.transaction { insertChunk(manifest("a", 0, marks = listOf(1_000)), "a.m4a", 10) })
-        assertFalse(store.transaction { insertChunk(manifest("a", 0), "a.m4a", 20) })
+        assertTrue(store.transaction { insertChunk(testManifest("a", 0, marks = listOf(1_000)), "a.m4a", 10) })
+        assertFalse(store.registerChunk("a", 0, receivedAt = 20))
         val chunk = store.read { chunk("a") }!!
         assertEquals(ChunkState.RECEIVED, chunk.state)
         assertEquals(300_000, chunk.endedAt)
@@ -52,15 +36,15 @@ class LocalStoreTest {
     fun lastReceivedAtTracksNewestArrival() = runTest {
         assertNull(store.read { lastReceivedAt() })
         store.transaction {
-            insertChunk(manifest("a", 0), "a.m4a", 20)
-            insertChunk(manifest("b", 300_000), "b.m4a", 10)
+            registerChunk("a", 0, receivedAt = 20)
+            registerChunk("b", 300_000, receivedAt = 10)
         }
         assertEquals(20, store.read { lastReceivedAt() })
     }
 
     @Test
     fun silentChunkIsNotQueued() = runTest {
-        store.transaction { insertChunk(manifest("silent", 0, audio = false), null, 0) }
+        store.registerChunk("silent", 0, audio = false)
         assertEquals(ChunkState.NO_AUDIO, store.read { chunk("silent") }!!.state)
         assertTrue(store.read { pendingChunks(10, 3) }.isEmpty())
     }
@@ -68,8 +52,8 @@ class LocalStoreTest {
     @Test
     fun transcriptionLifecycle() = runTest {
         store.transaction {
-            insertChunk(manifest("a", 0), "a.m4a", 0)
-            insertChunk(manifest("b", 300_000), "b.m4a", 0)
+            registerChunk("a", 0)
+            registerChunk("b", 300_000)
         }
         assertEquals(listOf("a", "b"), store.read { pendingChunks(10, 3) }.map { it.id })
 
@@ -101,11 +85,11 @@ class LocalStoreTest {
     @Test
     fun neighboursStayWithinSessionAndDevice() = runTest {
         store.transaction {
-            insertChunk(manifest("a", 0), "a.m4a", 0)
-            insertChunk(manifest("other-session", 150_000).copy(sessionId = "s2"), "o.m4a", 0)
-            insertChunk(manifest("other-device", 200_000).copy(deviceId = "phone"), "d.m4a", 0)
-            insertChunk(manifest("b", 300_000), "b.m4a", 0)
-            insertChunk(manifest("c", 600_000), "c.m4a", 0)
+            registerChunk("a", 0)
+            insertChunk(testManifest("other-session", 150_000).copy(sessionId = "s2"), "o.m4a", 0)
+            insertChunk(testManifest("other-device", 200_000).copy(deviceId = "phone"), "d.m4a", 0)
+            registerChunk("b", 300_000)
+            registerChunk("c", 600_000)
         }
         val b = store.read { chunk("b") }!!
         assertEquals("a", store.read { previousInSession(b) }?.id)
@@ -117,7 +101,7 @@ class LocalStoreTest {
     @Test
     fun replaceSegmentsOnlyTouchesTheRange() = runTest {
         store.transaction {
-            insertChunk(manifest("a", 0), "a.m4a", 0)
+            registerChunk("a", 0)
             saveTranscript(
                 "a",
                 listOf(NewSegment(1_000, 2_000, "一つ目", "ja"), NewSegment(298_000, 300_000, "途中で切れ", "ja")),
@@ -135,7 +119,7 @@ class LocalStoreTest {
     @Test
     fun japaneseSubstringSearch() = runTest {
         store.transaction {
-            insertChunk(manifest("a", 0), "a.m4a", 0)
+            registerChunk("a", 0)
             saveTranscript(
                 "a",
                 listOf(
@@ -161,7 +145,7 @@ class LocalStoreTest {
     @Test
     fun issueExamplesMatchSubstrings() = runTest {
         store.transaction {
-            insertChunk(manifest("a", 0), "a.m4a", 0)
+            registerChunk("a", 0)
             saveTranscript(
                 "a",
                 listOf(
@@ -184,8 +168,8 @@ class LocalStoreTest {
     @Test
     fun statsAndRanges() = runTest {
         store.transaction {
-            insertChunk(manifest("a", 0), "a.m4a", 0)
-            insertChunk(manifest("silent", 300_000, audio = false), null, 0)
+            registerChunk("a", 0)
+            registerChunk("silent", 300_000, audio = false)
         }
         val stats = store.read { stats() }
         assertEquals(2, stats.chunks)
@@ -207,8 +191,8 @@ class LocalStoreTest {
     @Test
     fun lastChunkBefore() = runTest {
         store.transaction {
-            insertChunk(manifest("a", 0), "a.m4a", 10)
-            insertChunk(manifest("b", 300_000), "b.m4a", 20)
+            registerChunk("a", 0, receivedAt = 10)
+            registerChunk("b", 300_000, receivedAt = 20)
         }
         assertEquals("b", store.read { lastChunkBefore() }!!.id)
         assertEquals("a", store.read { lastChunkBefore(300_000) }!!.id)
@@ -219,7 +203,7 @@ class LocalStoreTest {
     @Test
     fun changesCountCommittedWritesOnly() = runTest {
         assertEquals(0, store.changes.value)
-        store.transaction { insertChunk(manifest("a", 0), "a.m4a", 0) }
+        store.registerChunk("a", 0)
         assertEquals(1, store.changes.value)
         store.read { stats() }
         assertEquals(1, store.changes.value)
@@ -277,7 +261,7 @@ class LocalStoreTest {
     @Test
     fun shortQueriesOutsideTheRecentWindowUseTheTrigramVocabulary() = runTest {
         store.transaction {
-            insertChunk(manifest("a", 0), "a.m4a", 0)
+            registerChunk("a", 0)
             saveTranscript(
                 "a",
                 listOf(
@@ -313,7 +297,7 @@ class LocalStoreTest {
 
     @Test
     fun reopeningKeepsDataAndSchema() = runTest {
-        store.transaction { insertChunk(manifest("a", 0), "a.m4a", 0) }
+        store.registerChunk("a", 0)
         store.close()
         LocalStore.open(dbPath).use { reopened ->
             assertEquals("a", reopened.read { chunk("a") }!!.id)

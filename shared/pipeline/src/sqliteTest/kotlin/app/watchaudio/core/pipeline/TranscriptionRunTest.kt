@@ -4,12 +4,10 @@ import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.db.NewSegment
 import app.watchaudio.core.pipeline.TranscriptionRun.FollowUp
-import app.watchaudio.core.protocol.AudioCodec
-import app.watchaudio.core.protocol.AudioFile
-import app.watchaudio.core.protocol.ChunkEndReason
-import app.watchaudio.core.protocol.ChunkManifest
-import app.watchaudio.core.protocol.SourcePlatform
 import app.watchaudio.core.settings.updateSettings
+import app.watchaudio.testing.TempDir
+import app.watchaudio.testing.testAudio
+import app.watchaudio.testing.testManifest
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -93,12 +91,11 @@ class TranscriptionRunTest {
         SystemFileSystem.sink(Path(dir.path, "$id.m4a")).buffered().use { it.write(ByteArray(100)) }
         store.transaction {
             insertChunk(
-                ChunkManifest(
-                    chunkId = id, sessionId = "s", deviceId = "w", source = SourcePlatform.WEAROS,
-                    startedAtEpochMs = now - daysAgo * 86_400_000L - 3_600_000L + index * 10 * minute,
-                    durationMs = 5 * minute, timeZone = "UTC",
-                    audio = AudioFile("$id.m4a", AudioCodec.AAC, 16_000, 1, 24_000, 100, "00"),
-                    endReason = ChunkEndReason.ROTATION,
+                testManifest(
+                    id,
+                    startedAt = now - daysAgo * 86_400_000L - 3_600_000L + index * 10 * minute,
+                    durationMs = 5 * minute,
+                    audio = testAudio(id, sizeBytes = 100),
                 ),
                 "$id.m4a",
                 0,

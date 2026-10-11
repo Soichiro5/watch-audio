@@ -4,13 +4,12 @@ import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.platform.Sha256
 import app.watchaudio.core.protocol.AckStatus
-import app.watchaudio.core.protocol.AudioCodec
-import app.watchaudio.core.protocol.AudioFile
 import app.watchaudio.core.protocol.ChunkAck
-import app.watchaudio.core.protocol.ChunkEndReason
 import app.watchaudio.core.protocol.ChunkManifest
-import app.watchaudio.core.protocol.SourcePlatform
 import app.watchaudio.core.protocol.toJson
+import app.watchaudio.testing.TempDir
+import app.watchaudio.testing.testAudio
+import app.watchaudio.testing.testManifest
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -46,16 +45,11 @@ class ChunkIntakeTest {
     private fun incoming(id: String, bytes: ByteArray = ByteArray(2048) { it.toByte() }, claimedSize: Long = bytes.size.toLong()): Pair<ChunkManifest, Path> {
         val file = dir.resolve("inbox-$id.part")
         SystemFileSystem.sink(file).buffered().use { it.write(bytes) }
-        val manifest = ChunkManifest(
-            chunkId = id,
-            sessionId = "s",
-            deviceId = "watch",
-            source = SourcePlatform.WEAROS,
-            startedAtEpochMs = 1_791_622_800_000,
-            durationMs = 300_000,
+        val manifest = testManifest(
+            id,
+            startedAt = 1_791_622_800_000,
+            audio = testAudio(id, claimedSize, Sha256().apply { update(bytes) }.digestHex()),
             timeZone = "Asia/Tokyo",
-            audio = AudioFile("$id.m4a", AudioCodec.AAC, 16_000, 1, 24_000, claimedSize, Sha256().apply { update(bytes) }.digestHex()),
-            endReason = ChunkEndReason.ROTATION,
         )
         return manifest to file
     }
