@@ -84,7 +84,7 @@ jobs:
             api-level: 35
             target: google_apis
             # Audio stays enabled: the playback tests need a working audio output.
-            emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
+            emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back none
             device-test-apks: :androidApp:assembleDebugAndroidTest :shared:core-db:assembleAndroidDeviceTest :shared:core-pipeline:assembleAndroidDeviceTest
             device-tests: :androidApp:connectedDebugAndroidTest :shared:core-db:connectedAndroidDeviceTest :shared:core-pipeline:connectedAndroidDeviceTest
             # Each of these must report at least one test case: the test engine can end green with 0 tests (e.g. a failed APK install).
@@ -101,17 +101,25 @@ jobs:
             api-level: 34
             target: android-wear
             # Audio enabled so that recording started from the tile gets a (silent) microphone.
-            emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
+            emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back none
             scenarios: .github/scripts/wear-surfaces.sh
     name: smoke (${{ matrix.name }})
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Must run before setup-java: the tool cache it clears is where the JDK is installed.
+      # Moving the directories aside is instant (same file system); they are deleted in the background
+      # while the job goes on (#92: the synchronous delete took ~40 s).
       - name: Free disk space for the emulator image
         run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android/sdk/ndk "$AGENT_TOOLSDIRECTORY"
           df -h /
+          sudo mkdir -p /ci-trash
+          i=0
+          for d in /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android/sdk/ndk "$AGENT_TOOLSDIRECTORY"; do
+            i=$((i + 1))
+            if [ -e "$d" ]; then sudo mv "$d" "/ci-trash/$i"; fi
+          done
+          sudo nohup nice -n 19 ionice -c 3 rm -rf /ci-trash > /dev/null 2>&1 &
 
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
@@ -119,6 +127,20 @@ jobs:
           java-version: 21
 
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      # The emulator runner installs the emulator and the system image right before it boots (~30 s of
+      # download and unzip); fetch them now, in the background, while the APKs are built (#92).
+      # "Wait for the emulator download" joins it before the emulator runner's own (then no-op) install.
+      - name: Download the emulator and its system image (background)
+        run: |
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          (
+            set +e
+            yes | "$sdkmanager" --licenses > /dev/null 2>&1
+            "$sdkmanager" --install emulator \
+              "system-images;android-${{ matrix.api-level }};${{ matrix.target }};x86_64" --channel=0 > "$RUNNER_TEMP/sdk-prefetch.log" 2>&1
+            echo $? > "$RUNNER_TEMP/sdk-prefetch.status"
+          ) > /dev/null 2>&1 &
 
       - name: Enable KVM
         run: |
@@ -156,6 +178,13 @@ jobs:
           mkdir -p release-apk && cp ${{ matrix.module }}/build/outputs/apk/release/${{ matrix.module }}-release.apk release-apk/
           if [ -n "${{ matrix.release-test-apks }}" ]; then ./gradlew ${{ matrix.release-test-apks }} -Pwatchaudio.testBuildType=release; fi
 
+      - name: Wait for the emulator download
+        run: |
+          for _ in $(seq 1 600); do [ -f "$RUNNER_TEMP/sdk-prefetch.status" ] && break; sleep 1; done
+          tail -n 3 "$RUNNER_TEMP/sdk-prefetch.log" || true
+          echo "sdkmanager exit status: $(cat "$RUNNER_TEMP/sdk-prefetch.status" 2>/dev/null || echo 'still running')"
+          df -h /
+
       - name: Install, launch and check for crashes
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
@@ -163,6 +192,8 @@ jobs:
           target: ${{ matrix.target }}
           arch: x86_64
           disable-animations: true
+          # Nothing else runs on the 4-core runner while the emulator is up (all APKs are built before it boots).
+          cores: 4
           # Room for the speech models (~160 MB, twice while they are copied into the app).
           disk-size: 3072M
           emulator-options: ${{ matrix.emulator-options }}
