@@ -66,6 +66,9 @@ iOS/watchOS apps only build on macOS (CI `ios.yml`, Xcode 26.x): `cd iosApp && x
 - **Parallelize:**
   - Run Gradle builds/tests, the harness, evaluations and model downloads in the background (Bash `run_in_background`) and keep working; read the result when the completion notice arrives. Don't block the conversation on them.
   - Hand multi-minute investigation, implementation or evidence gathering to sub-agents (worktrees); the lead keeps PRs, issues and user reports moving.
+- **Lead vs. sub-agents** — delegate only self-contained, multi-minute work; the lead owns everything that needs judgement or the whole picture:
+  - Lead (do it yourself): priorities and planning; reviewing every sub-agent diff before it is merged (correctness, scope, docs/tests updated, no secrets); merge decisions; CI triage and small CI/config fixes; merge-conflict resolution; posting evidence and closing issues; labels, the docs/03 progress table and the dashboard (after every merge or issue state change); user reports and questions.
+  - Sub-agents: multi-file implementation, long investigations/measurements (evaluations, benchmarks), evidence gathering that needs many CI iterations, bulk mechanical edits. Give them a branch, scope, verification commands and "no merge / no issue edits" unless told otherwise.
   - Wait for CI through PR activity subscriptions / scheduled check-ins, never by polling or `sleep`.
   - The repo is public, so CI minutes are free: push and let CI run the heavy checks (emulator, iOS simulator); before pushing, run only the fast local checks for the touched modules (unit tests, iOS cross-compile).
   - Never leave the user waiting on a long command; reply and continue in the background.
