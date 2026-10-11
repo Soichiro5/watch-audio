@@ -111,7 +111,7 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 
 ### 計測結果
 
-クラウドの Linux（4 CPU、JVM 21）。#23 は 2026-10-10、#72 は 2026-10-11。
+クラウドの Linux（4 CPU、JVM 21）と GitHub Actions の ubuntu-latest（4 CPU、JVM 21。PR #84 の [android.yml の実行](https://github.com/Soichiro5/watch-audio/actions/runs/38114188178)）。#23 は 2026-10-10、#72 は 2026-10-11。
 
 | データ | 対策 | FTS（3 文字以上）p50 / p95 | 2 文字以下 p50 / p95 | 最悪のクエリ p95 | DB |
 | --- | --- | --- | --- | --- | --- |
@@ -119,6 +119,7 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 | `sentences` 50 万 | #23 の改善後 | 30 / 48 ms | 0.8 / 128 ms | 148 ms（2 文字・ヒットなし） | 281 MB |
 | `utterances` 30 万 | #72 の改善前 | 7.2 / 13.5 ms | 1.0 / 49 ms | 62 ms（2 文字・まれ / ヒットなし） | 111 MB（371 B/行） |
 | `utterances` 30 万 | #72 の改善後 | 7.6 / 13.9 ms | 2.0 / 8.9 ms | 22 ms（「ミーティング」） | 101 MB（335 B/行） |
+| **`utterances` 320 万（1 年 384 日分、CI）** | #72 の改善後 | **56.6 / 98.2 ms** | **0.9 / 7.1 ms** | **101 ms（「ミーティング」）** | **1,018 MB（318 B/行）** |
 
 #72 の改善前の 2 文字以下の検索は全文を走査するので、件数に比例して 320 万行では 0.5〜0.7 秒になる見込みだった（30 万行で 62 ms）。
 
