@@ -34,6 +34,10 @@ tools/test-audio/.venv/bin/python tools/test-audio/generate.py
 #   --args="evaluate tools/test-audio/cache/out/manifest.json build/eval-f5 --filter minLevelAboveNoiseDb=5"（値を変える）
 #   除去の規則の候補を、文字起こしをやり直さずに比べる（--filter off で評価した作業ディレクトリが対象）:
 #   --args="filter-study tools/test-audio/cache/out/manifest.json build/eval-nofilter"
+#   録音形式（コーデック・ビットレートなど。名前は RecordingFormat のプロパティ名、既定は Watch と同じ
+#   RecordingFormat.CURRENT = AAC-LC 16 kHz mono 24 kbps・5 分チャンク）を変えて比べる（#52）:
+#   --args="evaluate tools/test-audio/cache/out/manifest.json build/eval-opus16 --format codec=opus,bitrateBps=16000"
+#   （AAC は ffmpeg 内蔵の aac、Opus は libopus（Ogg）で符号化する。保存された音声のサイズは録音ごとの行に MB/h で出る）
 #   固定サンプルで動作確認（1 分×3 条件、数十秒で終わる）:
 #   --args="evaluate tools/test-audio/fixtures/manifest.json build/test-audio-fixture"
 ```

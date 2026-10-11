@@ -2,16 +2,19 @@ package app.watchaudio.harness
 
 import app.watchaudio.core.pipeline.FalsePositiveFilter
 import app.watchaudio.core.pipeline.VadSettings
+import app.watchaudio.core.protocol.AudioCodec
+import app.watchaudio.core.protocol.RecordingFormat
 import java.io.File
 
 /**
  * Arguments of the `evaluate` command:
- * `<manifest.json> <workDir> [--vad name=value[,name=value...]]... [--filter off|name=value[,...]]... [recordingIds...]`.
+ * `<manifest.json> <workDir> [--vad name=value[,name=value...]]... [--filter off|name=value[,...]]... [--format name=value[,...]]... [recordingIds...]`.
  *
  * `--vad` overrides [VadSettings] properties by name (e.g. `--vad threshold=0.3,minSilenceSeconds=1`),
  * so that settings can be compared on the test audio set without recompiling. Likewise `--filter`
  * overrides [FalsePositiveFilter] properties, or turns the filter off (`--filter off`: everything
- * the recognizer returns is stored). [filter] is null when it is off.
+ * the recognizer returns is stored). [filter] is null when it is off. `--format` overrides the
+ * simulated watch's [RecordingFormat] (e.g. `--format codec=opus,bitrateBps=16000`) to compare codecs.
  */
 data class EvaluateArgs(
     val manifest: File,
@@ -19,6 +22,7 @@ data class EvaluateArgs(
     val recordings: Set<String>,
     val vad: VadSettings,
     val filter: FalsePositiveFilter? = FalsePositiveFilter.DEFAULT,
+    val format: RecordingFormat = RecordingFormat.CURRENT,
 ) {
     companion object {
         /** Parses [args] (without the command name); throws [IllegalArgumentException] on bad input. */
@@ -26,6 +30,7 @@ data class EvaluateArgs(
             val positional = mutableListOf<String>()
             var vad = VadSettings.DEFAULT
             var filter: FalsePositiveFilter? = FalsePositiveFilter.DEFAULT
+            var format = RecordingFormat.CURRENT
             fun filterOption(value: String) {
                 filter = if (value == "off") null else (filter ?: FalsePositiveFilter.DEFAULT).withOverrides(value)
             }
@@ -43,12 +48,17 @@ data class EvaluateArgs(
                         filterOption(args[index++])
                     }
                     arg.startsWith("--filter=") -> filterOption(arg.removePrefix("--filter="))
+                    arg == "--format" -> {
+                        require(index < args.size) { "--format needs name=value" }
+                        format = format.withOverrides(args[index++])
+                    }
+                    arg.startsWith("--format=") -> format = format.withOverrides(arg.removePrefix("--format="))
                     arg.startsWith("--") -> throw IllegalArgumentException("unknown option $arg")
                     else -> positional += arg
                 }
             }
             require(positional.size >= 2) { "evaluate needs <manifest.json> <workDir>" }
-            return EvaluateArgs(File(positional[0]), File(positional[1]), positional.drop(2).toSet(), vad, filter)
+            return EvaluateArgs(File(positional[0]), File(positional[1]), positional.drop(2).toSet(), vad, filter, format)
         }
     }
 }
@@ -106,4 +116,23 @@ val FILTER_OPTIONS: Map<String, (FalsePositiveFilter, String) -> FalsePositiveFi
     "minLevelAboveNoiseDb" to { f, v -> f.copy(minLevelAboveNoiseDb = v.toFloat()) },
     "shortTextMaxChars" to { f, v -> f.copy(shortTextMaxChars = v.toInt()) },
     "shortTextMinSpeechProbability" to { f, v -> f.copy(shortTextMinSpeechProbability = v.toFloat()) },
+)
+
+/**
+ * This format with the comma-separated `name=value` [overrides] applied, names being
+ * [RecordingFormat] property names ([FORMAT_OPTIONS]).
+ */
+fun RecordingFormat.withOverrides(overrides: String): RecordingFormat = applyOverrides(this, overrides, FORMAT_OPTIONS, "format")
+
+/** Every [RecordingFormat] property, by name, with how to set it from a string (codec: `aac` or `opus`). */
+val FORMAT_OPTIONS: Map<String, (RecordingFormat, String) -> RecordingFormat> = mapOf(
+    "codec" to { f, v ->
+        val codec = AudioCodec.entries.firstOrNull { it.name.equals(v, ignoreCase = true) }
+            ?: throw IllegalArgumentException("unknown codec '$v' (one of ${AudioCodec.entries.joinToString { it.name.lowercase() }})")
+        f.copy(codec = codec)
+    },
+    "sampleRateHz" to { f, v -> f.copy(sampleRateHz = v.toInt()) },
+    "channels" to { f, v -> f.copy(channels = v.toInt()) },
+    "bitrateBps" to { f, v -> f.copy(bitrateBps = v.toInt()) },
+    "chunkDurationMs" to { f, v -> f.copy(chunkDurationMs = v.toLong()) },
 )
