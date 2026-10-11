@@ -1,14 +1,11 @@
-package app.watchaudio.app
+package app.watchaudio.core.alert
 
-import app.watchaudio.app.alert.GapAlertEvaluator
-import app.watchaudio.app.logic.GapAlertDecision
-import app.watchaudio.app.logic.QuietHours
-import app.watchaudio.app.logic.dayWindow
-import app.watchaudio.app.settings.updateSettings
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.TempDir
 import app.watchaudio.core.protocol.ChunkEndReason
 import app.watchaudio.core.protocol.ChunkManifest
 import app.watchaudio.core.protocol.SourcePlatform
+import app.watchaudio.core.settings.updateSettings
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -16,12 +13,13 @@ import kotlin.test.assertNull
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
 
 class GapAlertEvaluatorTest {
     private val dir = TempDir("gap-alert")
     private val store = LocalStore.open(dir.resolve(LocalStore.FILE_NAME).toString())
     private val tokyo = TimeZone.of("Asia/Tokyo")
-    private val start = dayWindow(LocalDate(2026, 10, 10), tokyo).start
+    private val start = LocalDate(2026, 10, 10).atStartOfDayIn(tokyo).toEpochMilliseconds()
     private val evaluator = GapAlertEvaluator(store) { tokyo }
 
     @AfterTest
@@ -59,7 +57,6 @@ class GapAlertEvaluatorTest {
         receive("a", at(14, 50), receivedAt = at(14, 56))
         assertEquals(at(15, 6), evaluator.alertAt())
         assertEquals(GapAlertDecision.Notify(at(14, 56)), evaluator.decide(at(15, 30)))
-        assertEquals("録音が届いていません（最後の受信: 14:56）。Watch を確認してください", evaluator.message(at(14, 56)))
 
         evaluator.markShown(at(14, 56))
         assertEquals(GapAlertDecision.None, evaluator.decide(at(15, 45)))

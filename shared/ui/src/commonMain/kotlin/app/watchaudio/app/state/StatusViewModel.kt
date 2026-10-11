@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.watchaudio.app.AppServices
 import app.watchaudio.app.ModelSetup
-import app.watchaudio.app.ProcessingStatus
 import app.watchaudio.app.Strings
 import app.watchaudio.app.logic.ArrivalState
 import app.watchaudio.app.logic.arrivalState
@@ -15,6 +14,7 @@ import app.watchaudio.core.db.AudioUsage
 import app.watchaudio.core.db.ChunkRecord
 import app.watchaudio.core.db.StoreStats
 import app.watchaudio.core.pipeline.AudioRetention
+import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageBreakdown
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope

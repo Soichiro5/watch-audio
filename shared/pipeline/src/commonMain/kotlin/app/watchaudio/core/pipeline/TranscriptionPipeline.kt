@@ -23,10 +23,17 @@ class TranscriptionPipeline(
     private val store: LocalStore,
     private val audioRoot: Path,
     private val transcriber: Transcriber,
-    private val maxAttempts: Int = 3,
+    private val maxAttempts: Int = DEFAULT_MAX_ATTEMPTS,
 ) {
-    /** Call once per process start: re-queues chunks a previous process died on. */
+    /**
+     * Re-queues chunks left TRANSCRIBING by a run that was killed or cancelled. Only call it while
+     * no run is in progress ([TranscriptionRun] does so at the start of every run).
+     * @return the number of chunks re-queued.
+     */
     suspend fun recoverInterrupted(): Int = store.transaction { resetInterrupted() }
+
+    /** True if a chunk waits for transcription (new, or failed fewer than `maxAttempts` times). */
+    suspend fun hasPending(): Boolean = store.read { pendingChunks(limit = 1, maxAttempts = maxAttempts) }.isNotEmpty()
 
     /**
      * Processes pending chunks until none are left or [shouldContinue] returns false.
@@ -111,6 +118,11 @@ class TranscriptionPipeline(
     }
 
     data class RunResult(val transcribed: Int, val failed: Int)
+
+    companion object {
+        /** Attempts per chunk before it stays FAILED (it is no longer pending then). */
+        const val DEFAULT_MAX_ATTEMPTS = 3
+    }
 
     /**
      * How one chunk went: [audioMs] is its recorded length, [elapsedMs] the time spent on it

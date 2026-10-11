@@ -79,7 +79,7 @@ watch-audio/
 │   ├── protocol/              #   ChunkManifest / ChunkAck / ChunkFrame（Wear OS・スマホ共通。testdata/ は Swift 側と共有）
 │   ├── platform/              #   expect/actual: SHA-256、IoDispatcher など
 │   ├── db/                    #   LocalStore（手書き SQL）、Schema.kt のマイグレーション、FTS5 検索
-│   ├── pipeline/              #   Ingestor、TranscriptionPipeline、Transcriber、発話区間の切り出し、境界の連結、StorageManager
+│   ├── pipeline/              #   Ingestor・ChunkIntake（受信の入口）、TranscriptionPipeline・TranscriptionRun（文字起こし 1 回分）、Transcriber、発話区間の切り出し、境界の連結、StorageManager、設定（AppSettings）・状態（ProcessingStatus）・途絶アラートの判定
 │   └── ui/                    #   スマホ UI（Compose MP、Android/iOS 共通）、AppServices、ViewModel。iosMain に IosAppGraph と Swift とのブリッジ
 ├── build-logic/               # Gradle の convention plugin（KMP ライブラリ共通設定、SQLite テストを JVM/Android/iOS で動かす設定）
 ├── gradle/libs.versions.toml  # 依存バージョンのカタログ
@@ -160,6 +160,7 @@ erDiagram
 - **iOS**: `WCSession.transferFile(_:metadata:)`（無音チャンクは `transferUserInfo`）。Phone 側で保存完了後、`transferUserInfo` で ACK → Watch がファイル削除。
 - **Android**: `ChannelClient` でファイルストリーム送信（`ChunkFrame`: 4 byte 長 + manifest JSON + 音声）→ Phone 側で保存・ハッシュ検証後に `MessageClient` で ACK。直接接続（`isNearby`）のノードとだけやり取りし、Data Layer のクラウド経路は使わない。フレームが壊れている・転送が途切れた場合は ACK を返さず、Watch の再送に任せる。
 - **冪等性**: チャンク UUID で重複受信を無視。ACK 未着のチャンクは Watch 側で再送キューに残す。
+- **受信後の処理は共通**（#134）: どちらのスマホも、受け取った manifest と音声ファイルを `ChunkIntake`（`shared/pipeline`）に渡し、返ってきた ACK を送るだけ。manifest が読めない（新しい形式など）がチャンク ID は読めるときは `REJECTED` を返す（両 Watch ともチャンクを保持し、数分おきの再送をやめて後で再試行する: Wear OS は 6 時間後、watchOS は次の起動時）。チャンク ID も読めない・DB に書けないときは ACK を返さず、Watch の再送に任せる。受け取った一時ファイルは結果にかかわらず、アーカイブへ移すか削除する。
 - **プロトコル定義**は `shared/protocol` に置き、Wear OS とスマホ側で同一コードを使う（watchOS 側は同仕様を Swift で実装し、テストベクタで互換性を保証）。
 
 ### 6.3 処理パイプライン（Phone）
@@ -172,7 +173,8 @@ no_audio（無音チャンク。文字起こししない）
 
 - ジョブはべき等・再開可能（各チャンクの `state` で進捗管理）。将来（P2）は文字起こしの後に埋め込み・要約などの段を追加する。
 - iOS: 前景時は即時処理、バックグラウンドは `BGProcessingTask`（充電中、`requiresExternalPower = true`）。
-- Android: WorkManager。チャンク受信ごとに unique な 1 回限りジョブ（実行中なら後続を 1 つだけ追加）、保険として充電中に 6 時間ごとの定期ジョブ。プロセス起動時に中断チャンクを再キュー（詳細は [docs/platforms/android-phone.md](../platforms/android-phone.md)）。
+- Android: WorkManager。チャンク受信ごとに unique な 1 回限りジョブ（実行中なら後続を 1 つだけ追加）、保険として充電中に 6 時間ごとの定期ジョブ（詳細は [docs/platforms/android-phone.md](../platforms/android-phone.md)）。
+- **文字起こし 1 回分は共通**（#134）: `TranscriptionRun`（`shared/pipeline`）が、① 前回中断したチャンク（`TRANSCRIBING`）をキューに戻す（毎回、実行の直列化ロックの中で）、② モデルの確認（`SpeechModel`。未準備なら文字起こしをしない）、③ 電池と発熱の方針つきの文字起こし（失敗したチャンクがあればモデルを確認し直す）、④ 音声の保持期間による削除、⑤ 診断ログ（`worker_start` / `worker_stop`、チャンクごとの `transcription_*`）、⑥ 次の予約の判定（`FollowUp`: なし / すぐ再実行 / 方針による休止（遅延・充電時）/ OS による停止 / モデル待ち）を行う。Android（WorkManager）と iOS（前面実行・BGTask）は `FollowUp` を自分のスケジューラに対応づけるだけ。試行回数の上限（3 回）は `TranscriptionPipeline.DEFAULT_MAX_ATTEMPTS` の 1 か所。
 - 電池と発熱の方針（#75）: どのプラットフォームでも、文字起こしは下の「充電していないときの処理方針」に従い、**チャンクごとに**処理してよいかを判定する（下記）。
 
 #### 充電していないときの処理方針（#75）
@@ -196,7 +198,7 @@ no_audio（無音チャンク。文字起こししない）
 - **目標値と根拠（推定、#61 で実測）**: 本アプリの文字起こしによるスマホの電池消費は、**充電していない間で 1 日あたり 3% 以下**。根拠: スマホでの処理時間は録音時間の約 3〜6%（[M0-5 §5](../research/m0-5-asr-desktop.md#5-1-日分の処理時間の見積もりスマホ) の 1 日 25〜50 分/装着 16 時間に、#68 の区間の細分化による約 1 割増し）。電池駆動で 16 時間 × 10 分 = 録音 160 分を処理すると CPU 時間は 5〜10 分。処理中の消費電力を 2〜3 W（2 スレッド + メモリ）、実行ごとのモデル読み込み（1 時間に 2 回程度、数秒）を足すと 1 日 約 0.2〜0.55 Wh で、4,500 mAh（約 17 Wh）の電池の約 1〜3%。受信（Bluetooth）や画面の消費は含まない。
 - 充電時の処理量: 16 時間装着の録音 960 分のうち電池駆動で処理するのは最大 160 分（約 17%）。残り約 800 分を充電中に処理すると約 25〜50 分で、§8 の「充電中に 8 時間分を 1 時間以内」に収まる。
 - 制約（ジョブ側）: Android の 1 回限りジョブは「電池残量低下でないこと」（設定「充電中のみ」がオンなら「充電中」）を WorkManager の制約にし、方針で止まったときは理由に応じて「遅延付きの再実行」（発熱・上限）と「充電中を条件にした実行」（`transcription-on-charge`）を予約する。iOS の `BGProcessingTask` はもともと外部電源が条件なので、止まるのは発熱のときだけ（再予約で `earliestBeginDate` を 15 分後にする）。iOS の前面実行は Android と同じ判定を使い、時間で再判定する止まり方なら前面にいる間だけ再試行する。
-- 音声の保持期間ポリシー（#33）: 文字起こし完了済みのチャンクのみ削除対象。文字起こしの後に同じバックグラウンド処理（Android `TranscriptionWorker`、iOS `BGProcessingTask` / 前面実行）で `StorageManager.applyRetention()` を実行する。詳細は §9.3。
+- 音声の保持期間ポリシー（#33）: 文字起こし完了済みのチャンクのみ削除対象。文字起こしの後に同じ実行（共通の `TranscriptionRun`。Android `TranscriptionWorker`、iOS `BGProcessingTask` / 前面実行から呼ぶ）で `StorageManager.applyRetention()` を実行する。詳細は §9.3。
 - 文字起こしエンジンは共通インターフェース `Transcriber`（`shared/pipeline`）の裏に置く。入力は「音声パーツ（ファイル + 範囲 `[fromMs, toMs)`）のリスト」で、エンジンはそれを連結した 1 本の録音として認識し、連結先頭からの相対時刻で発話を返す（各パーツはちょうど `toMs - fromMs` の長さにする。ファイルが短ければ無音で埋める）。実装: Android = sherpa-onnx（各ファイルを `MediaCodec` でデコードして PCM を連結）、iOS = SpeechAnalyzer（Swift 側で一時 CAF ファイルに連結）、JVM ハーネス = sherpa-onnx（ffmpeg でデコード）。
 
 #### 発話区間の切り出し（Android / JVM ハーネス、#68・#71）

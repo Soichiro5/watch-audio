@@ -18,7 +18,7 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import app.watchaudio.app.logic.formatClock
-import app.watchaudio.app.settings.updateSettings
+import app.watchaudio.core.settings.updateSettings
 import kotlin.random.Random
 import kotlin.test.AfterTest
 import kotlin.test.Test

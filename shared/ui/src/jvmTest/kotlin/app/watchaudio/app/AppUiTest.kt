@@ -1,11 +1,12 @@
 package app.watchaudio.app
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.toAwtImage
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
@@ -13,9 +14,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
-import androidx.compose.ui.graphics.toAwtImage
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -24,10 +23,12 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import app.watchaudio.app.logic.dayWindow
-import app.watchaudio.app.settings.loadSettings
-import app.watchaudio.app.settings.updateSettings
 import app.watchaudio.app.state.NowProvider
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.ModelState
+import app.watchaudio.core.pipeline.ProcessingStatus
+import app.watchaudio.core.settings.loadSettings
+import app.watchaudio.core.settings.updateSettings
 import java.io.File
 import java.nio.file.Files
 import javax.imageio.ImageIO

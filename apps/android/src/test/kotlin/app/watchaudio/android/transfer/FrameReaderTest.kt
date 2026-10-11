@@ -65,4 +65,14 @@ class FrameReaderTest {
         val header = ChunkFrame.header(manifest(10))
         assertFailsWith<EOFException> { FrameReader.read(ByteArrayInputStream(header.copyOf(header.size - 2)), target) }
     }
+
+    @Test
+    fun headerIsReturnedUndecoded() {
+        val json = """{"chunkId":"c1","schemaVersion":"broken"}"""
+        val bytes = json.encodeToByteArray()
+        val frame = byteArrayOf(0, 0, 0, bytes.size.toByte()) + bytes + ByteArray(5)
+        val input = ByteArrayInputStream(frame)
+        assertEquals(json, FrameReader.readHeader(input))
+        assertEquals(5, input.available()) // the audio bytes are left for readAudio
+    }
 }

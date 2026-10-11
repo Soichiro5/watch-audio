@@ -1,12 +1,13 @@
-package app.watchaudio.app.settings
+package app.watchaudio.core.settings
 
-import app.watchaudio.app.logic.GapAlertSettings
-import app.watchaudio.app.logic.QuietHours
+import app.watchaudio.core.alert.GapAlertSettings
+import app.watchaudio.core.alert.QuietHours
 import app.watchaudio.core.db.LocalStore
 
 /**
  * Phone app preferences, stored in the local database's key-value `app_setting` table so they stay
- * on the device like everything else (no platform backup).
+ * on the device like everything else (no platform backup). Read by the UI and by background work
+ * (transcription runs, gap alerts), so it lives outside `shared/ui` (#134).
  */
 data class AppSettings(
     val onboardingCompleted: Boolean = false,

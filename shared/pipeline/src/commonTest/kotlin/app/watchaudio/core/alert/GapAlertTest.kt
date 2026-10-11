@@ -1,4 +1,4 @@
-package app.watchaudio.app.logic
+package app.watchaudio.core.alert
 
 import app.watchaudio.core.protocol.ChunkEndReason
 import kotlin.test.Test
@@ -6,8 +6,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toInstant
 
 class GapAlertTest {
@@ -110,5 +112,15 @@ class GapAlertTest {
             GapAlertDecision.None,
             gapAlertDecision(ChunkEndReason.ROTATION, at(15), at(18), settings.copy(enabled = false), TOKYO),
         )
+    }
+
+    private companion object {
+        val TOKYO = TimeZone.of("Asia/Tokyo")
+        const val MIN = 60_000L
+        const val HOUR = 60 * MIN
+        val DAY_START = LocalDate(2026, 10, 10).atStartOfDayIn(TOKYO).toEpochMilliseconds()
+
+        /** Epoch ms of [hour]:[minute] on 2026-10-10 in Tokyo. */
+        fun at(hour: Int, minute: Int = 0): Long = DAY_START + hour * HOUR + minute * MIN
     }
 }

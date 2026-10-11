@@ -1,7 +1,7 @@
-package app.watchaudio.app.settings
+package app.watchaudio.core.settings
 
-import app.watchaudio.app.logic.GapAlertSettings
-import app.watchaudio.app.logic.QuietHours
+import app.watchaudio.core.alert.GapAlertSettings
+import app.watchaudio.core.alert.QuietHours
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

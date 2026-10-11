@@ -1,6 +1,7 @@
 package app.watchaudio.app
 
-import app.watchaudio.app.alert.GapAlertEvaluator
+import app.watchaudio.app.alert.GapAlertText
+import app.watchaudio.core.alert.GapAlertEvaluator
 import app.watchaudio.core.pipeline.DiagnosticEvents
 import app.watchaudio.core.pipeline.Diagnostics
 import kotlin.time.Clock
@@ -40,8 +41,8 @@ internal class IosGapAlerts(
         if (at <= now) return // already overdue: the status tab shows it; do not alert on launch
 
         val content = UNMutableNotificationContent()
-        content.setTitle(evaluator.title)
-        content.setBody(evaluator.message(lastReceivedAt))
+        content.setTitle(GapAlertText.title)
+        content.setBody(GapAlertText.message(lastReceivedAt))
         content.setSound(UNNotificationSound.defaultSound())
         val trigger = UNTimeIntervalNotificationTrigger.triggerWithTimeInterval((at - now) / 1000.0, repeats = false)
         center.addNotificationRequest(UNNotificationRequest.requestWithIdentifier(NOTIFICATION_ID, content, trigger), null)

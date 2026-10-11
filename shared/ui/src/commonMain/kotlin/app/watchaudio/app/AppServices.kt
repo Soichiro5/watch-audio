@@ -1,7 +1,7 @@
 package app.watchaudio.app
 
 import app.watchaudio.core.db.LocalStore
-import app.watchaudio.core.pipeline.PauseReason
+import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageManager
 import kotlinx.coroutines.flow.StateFlow
 
@@ -31,7 +31,7 @@ interface AppServices {
 
     /**
      * Start (or resume) downloading the ASR model; progress is reported through [status] as
-     * [ModelState.Downloading]. Platforms whose model is managed by the OS keep the no-op.
+     * [app.watchaudio.core.pipeline.ModelState.Downloading]. Platforms whose model is managed by the OS keep the no-op.
      * @param allowMetered also download over mobile data, not only Wi-Fi.
      */
     fun downloadModels(allowMetered: Boolean) {}
@@ -98,21 +98,4 @@ enum class PermissionStatus {
 
     /** Refused; it can only be changed in the system settings. */
     DENIED,
-}
-
-data class ProcessingStatus(
-    val asrModel: ModelState = ModelState.Unknown,
-    val transcribing: Boolean = false,
-    val lastChunkReceivedAt: Long? = null,
-    val message: String? = null,
-    /** Why transcription is waiting for the charger or a cooler phone (#75); null while it may run. */
-    val paused: PauseReason? = null,
-)
-
-sealed interface ModelState {
-    data object Unknown : ModelState
-    data object Missing : ModelState
-    data class Downloading(val progress: Float) : ModelState
-    data object Ready : ModelState
-    data class Failed(val reason: String) : ModelState
 }

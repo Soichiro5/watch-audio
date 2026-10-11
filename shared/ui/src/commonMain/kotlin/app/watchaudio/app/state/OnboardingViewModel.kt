@@ -5,8 +5,8 @@ import androidx.lifecycle.viewModelScope
 import app.watchaudio.app.AppPermission
 import app.watchaudio.app.AppServices
 import app.watchaudio.app.ModelSetup
-import app.watchaudio.app.ModelState
 import app.watchaudio.app.PermissionStatus
+import app.watchaudio.core.pipeline.ModelState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted

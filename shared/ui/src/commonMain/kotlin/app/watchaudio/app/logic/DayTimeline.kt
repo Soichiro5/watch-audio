@@ -1,5 +1,6 @@
 package app.watchaudio.app.logic
 
+import app.watchaudio.core.alert.GapAlertTiming
 import app.watchaudio.core.db.ChunkRecord
 import app.watchaudio.core.protocol.ChunkEndReason
 
@@ -15,7 +16,7 @@ object Thresholds {
     const val AWAITING_TRANSFER_MS = 25 * 60_000L
 
     /** No chunk for this long while the watch should be recording raises a warning (#43). */
-    const val ARRIVAL_WARNING_MS = 10 * 60_000L
+    const val ARRIVAL_WARNING_MS = GapAlertTiming.SILENCE_MS
 }
 
 /** Why nothing was recorded during a gap. */

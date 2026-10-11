@@ -15,7 +15,7 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import app.watchaudio.app.Strings
-import app.watchaudio.app.settings.updateSettings
+import app.watchaudio.core.settings.updateSettings
 import java.util.regex.Pattern
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking

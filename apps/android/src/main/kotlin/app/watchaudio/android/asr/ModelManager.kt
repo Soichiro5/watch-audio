@@ -9,10 +9,10 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import app.watchaudio.app.ModelState
 import app.watchaudio.core.pipeline.DiagnosticEvents
 import app.watchaudio.core.pipeline.Diagnostics
 import app.watchaudio.core.pipeline.DiagnosticsLog
+import app.watchaudio.core.pipeline.ModelState
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
@@ -69,6 +69,14 @@ class ModelManager(
         .map { infos -> infos.any { it.state == WorkInfo.State.ENQUEUED } }
 
     fun isReady(): Boolean = files.isComplete()
+
+    /**
+     * Publishes whether the files are (still) complete, e.g. after chunks failed to transcribe
+     * ([app.watchaudio.core.pipeline.SpeechModel.recheck]). Leaves a running download alone.
+     */
+    fun recheck() {
+        if (_state.value !is ModelState.Downloading) publishPresence()
+    }
 
     /**
      * Startup step: removes leftovers of interrupted downloads, imports sideloaded models and

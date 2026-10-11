@@ -20,13 +20,13 @@ import app.watchaudio.android.asr.ModelManager
 import app.watchaudio.android.work.TranscriptionScheduler
 import app.watchaudio.app.AppPermission
 import app.watchaudio.app.AppServices
-import app.watchaudio.app.ModelState
 import app.watchaudio.app.PermissionStatus
-import app.watchaudio.app.ProcessingStatus
 import app.watchaudio.app.Strings
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.DiagnosticsLog
+import app.watchaudio.core.pipeline.ModelState
 import app.watchaudio.core.pipeline.PauseReason
+import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageManager
 import java.io.File
 import java.text.SimpleDateFormat

@@ -4,6 +4,8 @@ import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.db.NewSegment
 import app.watchaudio.core.pipeline.DiagnosticsLog
 import app.watchaudio.core.pipeline.Ingestor
+import app.watchaudio.core.pipeline.ModelState
+import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.platform.sha256Of
 import app.watchaudio.core.protocol.AckStatus
