@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch smoke test on an Apple simulator (#7): boot a simulator, install an already built
+# Launch smoke test on an Apple simulator (#7): boot a simulator (or wait for its boot), install an already built
 # .app, launch it, wait, then fail if the process is gone or a crash report for it appeared.
 # Leaves a screenshot and the app's log in $OUT_DIR and appends a line to the job summary.
 #
@@ -19,22 +19,18 @@ mkdir -p "$out_dir"
 
 [ -d "$app" ] || { echo "::error::$app not found (build step failed or product path changed)"; exit 1; }
 
-# Newest runtime of the platform first; the apps need iOS/watchOS 26+.
-udid=$(xcrun simctl list devices available --json | jq -r --arg p "$platform" --arg d "$device_prefix" '
-  [.devices | to_entries | sort_by(.key) | reverse | .[]
-   | select(.key | test("SimRuntime\\." + $p + "-"))
-   | .value[] | select(.name | startswith($d))][0].udid')
-if [ -z "$udid" ] || [ "$udid" = "null" ]; then
-  xcrun simctl list devices available
-  echo "::error::no available $platform simulator named $device_prefix*"
-  exit 1
-fi
+udid=$("$(dirname "$0")/simulator-udid.sh" "$platform" "$device_prefix")
 device_name=$(xcrun simctl list devices --json | jq -r --arg u "$udid" '.devices[][] | select(.udid == $u) | .name')
 echo "Simulator: $device_name ($udid)"
 
-xcrun simctl boot "$udid" 2>/dev/null || true # already booted is fine
+# Usually booted in the background by boot-simulators.sh; booting here also works (slower).
+SECONDS=0
+xcrun simctl boot "$udid" 2>/dev/null || true # already booted (or booting) is fine
 xcrun simctl bootstatus "$udid" -b
+boot_wait=$SECONDS
+SECONDS=0
 xcrun simctl install "$udid" "$app"
+echo "Timing: waited ${boot_wait}s for the boot, install took ${SECONDS}s"
 
 marker=$(mktemp)
 crash_dir="$HOME/Library/Logs/DiagnosticReports"
@@ -75,6 +71,6 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   fi
 fi
 
+# The simulator stays booted for the next steps (#92).
 xcrun simctl terminate "$udid" "$bundle_id" 2>/dev/null || true
-xcrun simctl shutdown "$udid" 2>/dev/null || true
 exit $status

@@ -114,6 +114,14 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # #92: a first simulator boot spends 1-2 min in data migration. Start the iPhone and Apple
+      # Watch boots now (after the Kotlin tests, which boot and shut down their own device) so they
+      # overlap the Xcode builds; the simulator steps below wait for them and keep them booted.
+      - name: Boot simulators (background)
+        if: success() || failure()
+        continue-on-error: true # the simulator steps boot the device themselves if this did not
+        run: .github/scripts/boot-simulators.sh
+
       # The Xcode steps also run when a Kotlin test failed: one macOS run should report everything.
       - name: Generate Xcode project
         id: xcodegen
@@ -186,6 +194,11 @@ jobs:
         if: (success() || failure()) && steps.xcodegen.outcome == 'success'
         run: .github/scripts/xcode-test.sh SwiftUnitTests "Swift unit tests on the iOS simulator"
 
+      # Hosted tests (Speech, Playback): the host app is uninstalled first so the test host gets a
+      # fresh container (no erase, which would redo the 1-2 min boot migration; see xcode-test.sh).
+      # OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES skips the Gradle run in the app's "Compile Kotlin
+      # Framework" phase: the framework was built from the same sources by "Build iOS app" above,
+      # which these steps require.
       # #21: SpeechAnalyzer / SpeechTranscriber (ja_JP) on the simulator with known Japanese speech
       # in the watch's format. If the simulator cannot transcribe, the tests skip with the reason
       # (shown in the summary); the device check is then #60.
@@ -199,7 +212,8 @@ jobs:
         timeout-minutes: 15
         run: |
           status=0
-          ERASE_SIMULATOR=1 .github/scripts/xcode-test.sh SpeechTests "SpeechTranscriber (ja_JP) on the iOS simulator" || status=$?
+          UNINSTALL_APP=app.watchaudio .github/scripts/xcode-test.sh SpeechTests "SpeechTranscriber (ja_JP) on the iOS simulator" \
+            OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES || status=$?
           {
             echo "Speech check logs (build/swift-evidence):"
             echo '```'
@@ -216,7 +230,8 @@ jobs:
         timeout-minutes: 15
         run: |
           status=0
-          ERASE_SIMULATOR=1 .github/scripts/xcode-test.sh PlaybackTests "Playback in the iOS app on the simulator (#19)" || status=$?
+          UNINSTALL_APP=app.watchaudio .github/scripts/xcode-test.sh PlaybackTests "Playback in the iOS app on the simulator (#19)" \
+            OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES || status=$?
           {
             echo "Playback check in the app process (PlaybackTests):"
             echo '```'

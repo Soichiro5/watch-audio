@@ -32,20 +32,14 @@ extension_point=$(/usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPoin
 extension_id=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$appex/Info.plist" 2>/dev/null || echo "?")
 echo "Widget extension: $extension_id ($extension_point)"
 
-udid=$(xcrun simctl list devices available --json | jq -r '
-  [.devices | to_entries | sort_by(.key) | reverse | .[]
-   | select(.key | test("SimRuntime\\.watchOS-"))
-   | .value[] | select(.name | startswith("Apple Watch"))][0].udid')
-if [ -z "$udid" ] || [ "$udid" = "null" ]; then
-  xcrun simctl list devices available
-  echo "::error::no available Apple Watch simulator"
-  exit 1
-fi
+udid=$("$(dirname "$0")/simulator-udid.sh" watchOS "Apple Watch") || exit 1
 device_name=$(xcrun simctl list devices --json | jq -r --arg u "$udid" '.devices[][] | select(.udid == $u) | .name')
 echo "Simulator: $device_name ($udid)"
 
-xcrun simctl boot "$udid" 2>/dev/null || true
+SECONDS=0
+xcrun simctl boot "$udid" 2>/dev/null || true # usually already booting (boot-simulators.sh)
 xcrun simctl bootstatus "$udid" -b
+echo "Timing: waited ${SECONDS}s for the boot"
 xcrun simctl uninstall "$udid" "$bundle_id" 2>/dev/null || true # start from "stopped"
 xcrun simctl install "$udid" "$app"
 xcrun simctl privacy "$udid" grant microphone "$bundle_id" || echo "could not pre-grant the microphone"
@@ -105,5 +99,5 @@ fi
 xcrun simctl terminate "$udid" "$bundle_id" 2>/dev/null || true
 # The launch smoke step expects a fresh install that does not want to record.
 xcrun simctl uninstall "$udid" "$bundle_id" 2>/dev/null || true
-xcrun simctl shutdown "$udid" 2>/dev/null || true
+# The simulator stays booted for the launch smoke step (#92).
 exit $status
