@@ -10,16 +10,20 @@ import app.watchaudio.android.asr.ModelManager
 import app.watchaudio.android.transfer.ChunkReceiver
 import app.watchaudio.android.work.AndroidDeviceConditions
 import app.watchaudio.android.work.TranscriptionScheduler
-import app.watchaudio.core.settings.loadSettings
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.ChunkIntake
 import app.watchaudio.core.pipeline.DeviceConditions
 import app.watchaudio.core.pipeline.DiagnosticsLog
 import app.watchaudio.core.pipeline.Ingestor
+import app.watchaudio.core.pipeline.ModelState
 import app.watchaudio.core.pipeline.PauseReason
 import app.watchaudio.core.pipeline.PolicyGatedTranscription
 import app.watchaudio.core.pipeline.ProcessingPolicy
+import app.watchaudio.core.pipeline.SpeechModel
 import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.pipeline.TranscriptionPipeline
+import app.watchaudio.core.pipeline.TranscriptionRun
+import app.watchaudio.core.settings.loadSettings
 import java.io.File
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -30,7 +34,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.io.files.Path
 
 /**
@@ -58,11 +61,8 @@ class AppGraph private constructor(context: Context) {
     val scheduler = TranscriptionScheduler(app, scope, chargingOnly = { store.loadSettings().transcribeOnlyWhileCharging })
     val models = ModelManager(app, scope, diagnostics, onReady = scheduler::requestNow)
     val transcriber = AndroidSherpaTranscriber(models.files)
-    val pipeline = TranscriptionPipeline(store, Path(audioRoot.path), transcriber, maxAttempts = MAX_ATTEMPTS)
+    val pipeline = TranscriptionPipeline(store, Path(audioRoot.path), transcriber)
     val storage = StorageManager(store, Path(audioRoot.path), AndroidStorageEnvironment(models.files.root, app.filesDir))
-
-    /** Serializes pipeline runs between overlapping workers. */
-    val transcriptionLock = Mutex()
 
     /** Battery, battery saver and thermal state for the processing policy (#75); tests substitute their own. */
     @VisibleForTesting
@@ -83,18 +83,40 @@ class AppGraph private constructor(context: Context) {
     val transcriptionPause = MutableStateFlow<PauseReason?>(null)
 
     /** [pipeline] under the battery/thermal policy, with the current [deviceConditions], [processingPolicy] and [clock]. */
-    fun gatedTranscription() = PolicyGatedTranscription(pipeline, store, processingPolicy, deviceConditions, clock, diagnostics)
+    private fun gatedTranscription() = PolicyGatedTranscription(pipeline, store, processingPolicy, deviceConditions, clock, diagnostics)
+
+    /** One transcription run, shared with iOS (#134); [app.watchaudio.android.work.TranscriptionWorker] maps its follow-up to WorkManager. */
+    val transcriptionRun = TranscriptionRun(
+        pipeline,
+        store,
+        storage,
+        model = object : SpeechModel {
+            override suspend fun ensureReady(): ModelState = when {
+                models.isReady() -> ModelState.Ready
+                models.state.value is ModelState.Downloading -> models.state.value
+                else -> ModelState.Missing
+            }
+
+            override fun recheck() = models.recheck()
+        },
+        diagnostics = diagnostics,
+        gate = ::gatedTranscription,
+        releaseTranscriber = transcriber::release,
+    )
 
     private val _lastChunkReceivedAt = MutableStateFlow<Long?>(null)
     val lastChunkReceivedAt: StateFlow<Long?> = _lastChunkReceivedAt.asStateFlow()
 
     val gapAlerts = GapAlertMonitor(app, store, scope, diagnostics)
 
-    val chunkReceiver = ChunkReceiver(app, ingestor, scope, diagnostics) {
+    /** Where chunks from the watch enter, shared with iOS (#134). */
+    val chunkIntake = ChunkIntake(ingestor, diagnostics) {
         _lastChunkReceivedAt.value = System.currentTimeMillis()
         scheduler.requestNow()
         gapAlerts.onChunkStored()
     }
+
+    val chunkReceiver = ChunkReceiver(app, chunkIntake, scope, diagnostics)
 
     val services = AndroidAppServices(
         app,
@@ -111,8 +133,9 @@ class AppGraph private constructor(context: Context) {
     )
 
     /**
-     * Start-up recovery: re-queues chunks a killed process left mid-transcription and publishes
-     * the model state. Workers wait for it before touching the pipeline.
+     * Start-up recovery: re-queues chunks a killed process left mid-transcription (so that
+     * [hasPendingChunks] sees them before the first run, which recovers again) and publishes the
+     * model state. Workers wait for it before touching the pipeline.
      */
     val startup: Job = scope.launch {
         pipeline.recoverInterrupted().let { if (it > 0) Log.i(TAG, "re-queued $it interrupted chunks") }
@@ -120,11 +143,10 @@ class AppGraph private constructor(context: Context) {
         models.refresh()
     }
 
-    suspend fun hasPendingChunks(): Boolean = store.read { pendingChunks(limit = 1, maxAttempts = MAX_ATTEMPTS) }.isNotEmpty()
+    suspend fun hasPendingChunks(): Boolean = pipeline.hasPending()
 
     companion object {
         private const val TAG = "AppGraph"
-        private const val MAX_ATTEMPTS = 3
 
         // Holds only the application context, which lives as long as the process.
         @SuppressLint("StaticFieldLeak")

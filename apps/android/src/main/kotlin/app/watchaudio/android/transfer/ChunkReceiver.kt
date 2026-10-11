@@ -5,8 +5,7 @@ import android.util.Log
 import app.watchaudio.core.pipeline.DiagnosticEvents
 import app.watchaudio.core.pipeline.Diagnostics
 import app.watchaudio.core.pipeline.DiagnosticsLog
-import app.watchaudio.core.pipeline.Ingestor
-import app.watchaudio.core.protocol.AckStatus
+import app.watchaudio.core.pipeline.ChunkIntake
 import app.watchaudio.core.protocol.ChunkAck
 import app.watchaudio.core.protocol.TransferPaths
 import app.watchaudio.core.protocol.toJson
@@ -34,14 +33,14 @@ import kotlinx.io.files.Path
  *
  * Only directly connected ("nearby") watches are served, so audio and ACKs never take the
  * Data Layer's cloud route. A frame that cannot be parsed, or a transfer that breaks off, gets no
- * ACK at all: the watch keeps the chunk and resends it later, and ingest is idempotent.
+ * ACK at all: the watch keeps the chunk and resends it later, and ingest is idempotent. What
+ * happens to a received chunk is shared with iOS ([ChunkIntake]).
  */
 class ChunkReceiver(
     context: Context,
-    private val ingestor: Ingestor,
+    private val intake: ChunkIntake,
     private val scope: CoroutineScope,
     private val diagnostics: Diagnostics,
-    private val onStored: () -> Unit,
 ) {
     private val channelClient = Wearable.getChannelClient(context)
     private val messageClient = Wearable.getMessageClient(context)
@@ -77,19 +76,28 @@ class ChunkReceiver(
     }
 
     /**
-     * Reads one framed chunk from [input] (the body of the channel [path]), ingests it, logs it to
-     * the diagnostics log and, once it is stored, asks for transcription. The channel-independent
-     * part of a transfer, so the emulator checks can drive it without a watch (#77).
+     * Reads one framed chunk from [input] (the body of the channel [path]) and hands it to the
+     * shared [ChunkIntake], which ingests it, logs it to the diagnostics log and, once it is stored,
+     * asks for transcription. The channel-independent part of a transfer, so the emulator checks can
+     * drive it without a watch (#77).
      *
-     * @return the ACK to send, or null if the frame was malformed or broke off (no ACK: the watch resends).
-     * @throws Exception if the chunk could not be ingested (also no ACK).
+     * @return the ACK to send, or null if there is nothing to answer: the frame was malformed or
+     *   broke off, its manifest has no readable chunk id, or the chunk could not be ingested (no
+     *   ACK: the watch resends). A manifest that cannot be decoded but names its chunk is answered
+     *   with REJECTED (see [ChunkIntake]).
      */
     suspend fun store(path: String, input: InputStream): ChunkAck? {
         val temp = File(incomingDir.apply { mkdirs() }, "${UUID.randomUUID()}.part")
         try {
             val job = currentCoroutineContext()
             val manifest = try {
-                FrameReader.read(input, temp) { job.ensureActive() }
+                when (val decoded = intake.decode(FrameReader.readHeader(input))) {
+                    is ChunkIntake.Decoded.Valid -> decoded.manifest
+                    is ChunkIntake.Decoded.Unreadable -> {
+                        Log.w(TAG, "unreadable manifest on $path; ${decoded.ack?.status ?: "no ACK"}")
+                        return decoded.ack
+                    }
+                }.also { FrameReader.readAudio(input, it.audio, temp) { job.ensureActive() } }
             } catch (e: IllegalArgumentException) {
                 Log.w(TAG, "malformed frame on $path; no ACK", e)
                 diagnostics.log(DiagnosticEvents.CHUNK_REJECTED, "path=$path reason=malformed_frame")
@@ -106,15 +114,16 @@ class ChunkReceiver(
                 Log.w(TAG, "channel $path carries chunk ${manifest.chunkId}")
             }
 
-            val ack = ingestor.ingest(manifest, if (manifest.audio != null) Path(temp.path) else null)
-            Log.i(TAG, "chunk ${manifest.chunkId}: ${ack.status}${ack.detail?.let { " ($it)" }.orEmpty()}")
-            diagnostics.log(
-                DiagnosticEvents.CHUNK_RECEIVED,
-                "chunk=${manifest.chunkId} status=${ack.status} audio_ms=${manifest.durationMs} " +
-                    "bytes=${manifest.audio?.sizeBytes ?: 0}${ack.detail?.let { " detail=$it" }.orEmpty()}",
-            )
-            if (ack.status == AckStatus.STORED) onStored()
-            return ack
+            return when (val result = intake.accept(manifest, if (manifest.audio != null) Path(temp.path) else null)) {
+                is ChunkIntake.Result.Failed -> {
+                    // e.g. the database is unavailable: no ACK, the watch resends.
+                    Log.e(TAG, "could not ingest ${manifest.chunkId}", result.error)
+                    null
+                }
+                else -> result.ack?.also { ack ->
+                    Log.i(TAG, "chunk ${ack.chunkId}: ${ack.status}${ack.detail?.let { " ($it)" }.orEmpty()}")
+                }
+            }
         } finally {
             temp.delete()
         }
