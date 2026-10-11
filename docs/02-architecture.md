@@ -23,7 +23,7 @@
 | DI | **手書きの composition root**（DI ライブラリは使わない） | Android スマホ: `AppGraph`（`androidApp`）、iOS: `IosAppGraph`（`composeApp/iosMain`）、Wear OS: `AppGraph`（`wearApp/WearApp.kt`）。グラフが小さく、Worker・Service・BGTask から UI なしで同じオブジェクトに届けばよいため |
 | 非同期 | Kotlin Coroutines / Flow | KMP 定番 |
 | バックグラウンド処理 | Android: WorkManager、iOS: `BGProcessingTask` | 文字起こし・保持期間の適用・途絶チェック |
-| ネットワーク | 専用の HTTP クライアントは使わない | 通信はモデルのダウンロードだけ（Android は `HttpURLConnection`、iOS は OS 管理）。AI 機能（P2）の HTTP クライアントは P2 で決める |
+| ネットワーク | 専用の HTTP クライアントは使わない | 通信はモデルのダウンロードだけ（Android は `HttpURLConnection`、iOS は OS 管理）。AI 機能（P2）の HTTP クライアントは P2 で決める。CI の `tools/privacy-check` が通信 API・依存を検査（§7.3） |
 | CI | GitHub Actions（`android.yml` / `emulator.yml`: ubuntu、`ios.yml`: macOS、`deliver.yml`: `main` で APK を保存） | |
 | 将来（P2） | 埋め込み（multilingual-e5-small, ONNX）によるベクトル検索、BYOK の LLM（要約・チャット）と API キー保管（Keychain / Keystore）、HealthKit / Health Connect | M0-6 で埋め込みモデルを比較済み（[spikes](spikes/m0-6-embedding-desktop.md)）。採用ライブラリは着手時に決める |
 
@@ -110,7 +110,7 @@ erDiagram
 | `audio_chunk` | id（UUID、Watch 採番）, session_id, device_id, source（watchos/wearos…）, started_at, ended_at, time_zone, audio_path（相対。無音チャンクは NULL）, codec, size_bytes, sha256, end_reason（rotation/mark/user_stop/charging/off_body/…）, state（received/transcribing/transcribed/failed/no_audio）, attempts, last_error, received_at, manifest_json, audio_purged_at（保持期間で音声を削除した時刻。文字起こしは残る） |
 | `mark` | chunk_id, at（PK は両方） |
 | `transcript_segment` | id, chunk_id, start_at, end_at, text, lang, engine |
-| `segment_fts` | FTS5(trigram) の外部コンテンツ仮想テーブル（`transcript_segment.text`、トリガで同期） |
+| `segment_fts` | FTS5(trigram) の contentless 仮想テーブル（本文 + 改行 2 つをトリガで索引。語彙 `segment_fts_terms` で 1〜2 文字の検索にも使う。マイグレーション 5、#72） |
 | `app_setting` | key, value（音声の保持期間・通知設定など。`CREATE TABLE IF NOT EXISTS` で冪等に作成） |
 
 時刻はすべてエポックミリ秒。
@@ -247,13 +247,52 @@ interface LlmProvider {
 
 | 項目 | 方針 |
 | --- | --- |
-| 保存 | アプリサンドボックス内。iOS は `Application Support/WatchAudio`（ファイル保護は既定の `CompleteUntilFirstUserAuthentication`。ロック中の BGTask からも読める）、Android は内部ストレージ（`files/`） |
-| バックアップ | OS バックアップの対象外（データを端末外に出さないため）。Android / Wear OS は `allowBackup=false` とバックアップ除外ルール、iOS は保存先に `NSURLIsExcludedFromBackupKey`。E2E 暗号化バックアップは後続フェーズ（#40） |
+| 保存 | アプリサンドボックス内のみ（§7.1）。iOS・watchOS は `Application Support/WatchAudio`（ファイル保護クラス `CompleteUntilFirstUserAuthentication` を明示。ロック中の録音・送信・BGTask からも読める）、Android は内部ストレージ（`files/`） |
+| バックアップ | OS バックアップの対象外（データを端末外に出さないため。§7.1）。Android / Wear OS は `allowBackup=false` とバックアップ除外ルール、iOS・watchOS は保存先に `NSURLIsExcludedFromBackupKey`。E2E 暗号化バックアップは後続フェーズ（#40） |
 | API キー | 現在は扱わない。将来（P2）の BYOK では Keychain（`ThisDeviceOnly`）/ Android Keystore にだけ保存する |
-| 外部送信 | なし（ネットワーク利用は文字起こしモデルのダウンロードのみ）。将来（P2）に AI プロバイダ（テキストのみ、ユーザーが設定した場合）、OS ジオコーダを検討。解析 SDK・広告 SDK は入れない |
+| 外部送信 | なし（ネットワーク利用は文字起こしモデルのダウンロードのみ。§7.2、CI で検査 §7.3）。将来（P2）に AI プロバイダ（テキストのみ、ユーザーが設定した場合）、OS ジオコーダを検討（追加時は §7.3 の許可リストを更新）。解析 SDK・広告 SDK・クラッシュ送信 SDK は入れない |
 | 診断ログ | 処理の記録（時刻・ID・処理時間・エラーの種類、異常終了）を端末内の CSV（上限約 1 MB）に残す。文字起こしの本文・音声・例外メッセージは含めない。端末外へは、ユーザーが状態タブの「診断ログを書き出す」から共有先を選んだときだけ出る（#77、[impl/android-phone.md §4.2](impl/android-phone.md#42-診断ログ77)） |
 | 同意 | 初回オンボーディングで「録音対象者への告知」の注意喚起。Watch に録音中インジケータを常時表示 |
 | 削除 | 「この日のデータを削除」（その日に始まったチャンクの音声・文字起こし・マーク）と「すべてのデータを削除」（全録音・文字起こし・音声ファイル。DB は `VACUUM` で縮める）。どちらもアプリ内の確認ステップ必須（全削除は「削除」と入力）。システムダイアログは使わない。AI 設定・API キーは実装時に全削除の対象に加える |
+
+### 7.1 保存場所と保護（#76）
+
+| 端末 | データ | 場所 | 保存時の保護 | バックアップ |
+| --- | --- | --- | --- | --- |
+| Android スマホ | DB（文字起こし・チャンク）、音声、ASR モデル | `files/watch-audio.db`、`files/audio/`、`files/models/` | 内部ストレージ（ファイルベース暗号化の資格情報暗号化領域。初回ロック解除後に読める） | `allowBackup="false"`。`data_extraction_rules`（Android 12+）と `backup_rules`（11 以下）で全ドメインをクラウドバックアップから除外。機種変更時の端末間転送（ケーブル・ローカル Wi-Fi）は端末間で完結するため許可 |
+| Android スマホ | 受信中のチャンク | `cache/incoming/` | 同上 | 同上 |
+| Wear OS | 録音中・送信待ちのチャンク | `files/recording/`、`files/outbox/` | 同上 | `allowBackup="false"`。`data_extraction_rules` でクラウドバックアップと端末間転送の両方から全ドメインを除外 |
+| Wear OS | 診断ログ（イベントと電池残量の CSV。音声・文字起こしは含まない） | アプリ専用の外部ストレージ `Android/data/app.watchaudio/files/diagnostics/` | 他アプリからは読めない（Android 11+）。adb では取り出せる（電池計測用） | 同上（`external` ドメインも除外） |
+| iPhone | DB、音声、受信直後のファイル | `Application Support/WatchAudio/`（`watch-audio.db`、`audio/`、`inbox/`） | `NSFileProtectionCompleteUntilFirstUserAuthentication` をディレクトリに明示（`LocalDataDirectory`）。中に作るファイルはこのクラスを引き継ぐ | `NSURLIsExcludedFromBackupKey`（ディレクトリに設定すると中身も対象外） |
+| Android スマホ・iPhone | 診断ログ（イベントの CSV。本文・音声・例外メッセージは含まない）（#77） | Android: `files/diagnostics/`、iPhone: `Application Support/WatchAudio/diagnostics/` | 上の DB と同じ | 上の DB と同じ。端末外へはユーザーが共有シートで書き出したときだけ |
+| iPhone | 文字起こし用の一時ファイル | `tmp/` | 既定（同上） | 一時ディレクトリはバックアップされない。処理後に削除 |
+| Apple Watch | 録音中・送信待ちのチャンク、診断ログ | `Application Support/WatchAudio/`（`recording/`、`outbox/`、`diagnostics.csv`） | `FileProtectionType.completeUntilFirstUserAuthentication` をディレクトリに明示（`LocalDataProtection`） | `isExcludedFromBackup`（同上） |
+
+- 保護クラスを `Complete`（ロック中は読めない）にしないのは、画面オフ・ロック中の録音継続、送信待ちの再送、充電中の BGTask での文字起こしがロック中に動くため。再起動後に一度もロック解除されていない間だけ読めない。
+- iOS・watchOS の属性は `LocalDataDirectoryTest`（Kotlin、iOS シミュレータ）と `LocalDataProtectionTests`（Swift、`ProtocolTests`）が ios.yml で確認する。バックアップ除外は値まで確認する。保護クラスは設定 API が成功することを確認し、値はファイルシステムが報告する場合だけ比較する（シミュレータには Data Protection がないため。実際の暗号化は実機でのみ有効）。
+
+### 7.2 通信箇所の一覧
+
+| 端末 | 通信 | 宛先 | 実装 |
+| --- | --- | --- | --- |
+| Android スマホ | ASR・VAD モデル（sherpa-onnx）のダウンロード（ファイル単位・再開可能・SHA-256 検証） | ASR: `https://huggingface.co/csukuangfj/reazonspeech-k2-v2`（コミット固定）、VAD: `https://github.com/k2-fsa/sherpa-onnx/releases/download/`（GitHub Releases） | URL は `androidApp/.../asr/ModelManifest.kt`、通信は `ModelDownloader.kt`（`HttpURLConnection`）。INTERNET 権限はこのためだけ |
+| Wear OS → スマホ | チャンクと ACK | 直接つながっているペアのスマホ（`Node.isNearby`） | `ChannelClient` / `MessageClient`（Wearable Data Layer）。クラウド経由で同期されうる `DataClient` は使わない。Wear OS アプリに INTERNET 権限はない |
+| Apple Watch → iPhone | チャンクと ACK | ペアの iPhone | WatchConnectivity（`transferFile` / `transferUserInfo`）。OS が管理する端末間の転送 |
+| iPhone | 音声認識モデル | Apple（OS が管理） | `SpeechAnalyzer` の `AssetInventory`。アプリは URL を持たない。文字起こし自体は端末上 |
+
+アプリのコード（出荷されるソース。テストコードは除く）で通信 API を使うのは `ModelDownloader.kt`、URL を持つのは `ModelManifest.kt` だけ。CI の `tools/privacy-check` がこの一覧（`policy.py` の `ALLOWED_API_USES` / `ALLOWED_URL_PREFIXES`）とソースを照合し、ジョブサマリーに通信箇所を出す（§7.3）。一覧にあるのに使われなくなった項目も失敗にするので、一覧は実装とずれない。
+
+### 7.3 CI での検査（`tools/privacy-check`、#76）
+
+`android.yml` の最初と Assemble の後に実行し、許可リスト（`tools/privacy-check/policy.py`）にないものがあると失敗する。
+
+- **権限**: 各アプリのマニフェスト（全ソースセット）と、リリースのマージ後マニフェスト（ライブラリが足す権限）。Wear OS に INTERNET はない。
+- **バックアップ**: `allowBackup="false"`、`dataExtractionRules` があり、全ドメインを除外している（`<include>` は不可）。`usesCleartextTraffic` と独自の `networkSecurityConfig` も不可。
+- **通信・保護**: 出荷されるソース（Kotlin / Java / Swift、コメントとテストコードを除く）での HTTP クライアント・ソケット・WebView・`URLSession`・Network.framework・サーバー型の `SFSpeech…RecognitionRequest`・`DataClient`・保護なしのファイル（`.noFileProtection` など）の利用、URL リテラル。
+- **依存**: Gradle ファイルに解析・広告・クラッシュ送信・HTTP クライアントの SDK がない。リリースの実行時クラスパス（推移的な依存を含む）がすべて許可リストの範囲内。
+- **iOS**: `project.yml` の Info.plist のキー・`UIBackgroundModes`、entitlements（現状なし）。
+
+使い方と許可リストの広げ方は [04 §6.4](04-dev-environment.md#64-local-only-チェックtoolsprivacy-check76)。
 
 ## 8. 非機能目標（MVP）
 
@@ -262,7 +301,7 @@ interface LlmProvider {
 | Watch 連続録音 | Apple Watch Series 10 以降で 10 時間以上、Pixel Watch 3 / Galaxy Watch 7 以降で 8 時間以上（M0 で実測し確定） |
 | 転送遅延 | 接続中は録音から 20 分以内に Phone 着 |
 | 文字起こし | 充電中なら 1 日分（8h 録音）を 1 時間以内に処理 |
-| 検索応答 | 1 年分のデータで 300ms 以内（50 万セグメントの JVM ベンチマークで最悪 p95 約 150ms: [04 §5](04-dev-environment.md#5-検索の性能ベンチマーク23)。実機は未計測） |
+| 検索応答 | 1 年分のデータで 300ms 以内（#68 以降の発話単位で 1 年 320 万セグメントの JVM ベンチマークで最悪の p95 が 150ms 以下（CI の実行ごとに約 100〜150ms）: [04 §5](04-dev-environment.md#5-検索の性能ベンチマーク23-72)。実機は未計測） |
 | ストレージ | 8h/日で 1 日 ≈ 120MB 以下（音声）|
 
 ## 9. 常時録音（装着中）の設計
@@ -288,7 +327,15 @@ interface LlmProvider {
 | 24h × AAC 32kbps（無音も保存） | 約 345MB | 約 126GB |
 | 24h、無音区間を捨てる（音声 8h 相当） | 約 115MB | 約 42GB |
 | 同上 + Opus 16kbps | 約 58MB | 約 21GB |
-| 文字起こし + 索引（ベクトル int8 256 次元を含む） | 約 2〜4MB | 約 1〜1.5GB |
+| 文字起こし + 検索索引（SQLite、下記） | 約 2.8MB | 約 1.0GB |
+| 埋め込みベクトル（int8 256 次元、発話 1 行ごとに作る場合。P2） | 約 2.2MB | 約 0.8GB |
+
+**文字起こしの行数と DB 容量（#72）**
+
+- 行数: #68（PR #70）以降、ASR の入力は話者交代の間で切った発話単位になり、1 行が短く多くなった。装着 16 時間・発話 約 31%（約 5 時間、[M0-5 §5](spikes/m0-5-asr-desktop.md#5-1-日分の処理時間の見積もりスマホ)）、検証用音声セットの会話で発話 1 時間あたり約 1,720 セグメント（中央値 1.7〜1.9 秒、1 行 平均約 12 文字）から、**1 日 約 8,600 行・1 年 約 310 万行**（約 3,700 万文字）。雑音の多い場面では区間が長いままなので、これは上限寄りの値。
+- 容量: 1 年分（320 万行）のベンチマークで DB 1,018 MB・1 行あたり約 318 B（本文・チャンク ID（UUID）・エンジン名・索引・FTS を含む）→ **1 日 約 2.8MB・1 年 約 1.0GB**。30 万行での内訳の目安は、`transcript_segment` の表 約 41%・`chunk_id` の索引 約 16%・trigram 索引 約 16%・`start_at` の索引 約 5%、残りはチャンクの表（マニフェストの JSON を含む）など。
+- 検索は 1 年分で 300ms 以内を保つ（CI で最悪のクエリの p95 は 150ms 以下。[04 §5](04-dev-environment.md#5-検索の性能ベンチマーク23-72)）。
+- さらに減らす余地: 行ごとのエンジン名（37 B）と UUID のチャンク ID（表と索引で約 90 B）を整数の参照にすれば 1 年で約 3 割減る見込み。埋め込みは発話 1 行ごとではなく、数十秒の窓ごとに作る方がよい。
 
 → 文字起こしは無期限に保存しても問題ない。音声は「無音を捨てる + 低ビットレート」と、保持期間・バックアップ先へのオフロードで管理する。
 

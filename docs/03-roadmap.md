@@ -34,8 +34,8 @@
 | watchOS 録音・転送（#15, #17） | ✅ クローズ（実機確認は #60） | 停止理由の判定（`RecorderPolicyTests` 15 件）と送信キュー（`ChunkOutboxTests` 13 件）を CI の iPhone シミュレータで実行。Apple Watch シミュレータで起動確認。詳細: [impl/ios-watchos.md](impl/ios-watchos.md) |
 | 文字起こし（#20, #21, #22） | ✅ クローズ（iOS の実際の認識は #60） | 再開可能なパイプライン + WorkManager / BGProcessingTask、sherpa-onnx（エミュレータで実モデル確認）、SpeechAnalyzer（シミュレータでは使えないため、Swift の結果が DB に入るまでを `IosTranscriberBridgeTest` で確認）。詳細: [impl/android-phone.md](impl/android-phone.md) |
 | 会話で文が抜け落ちる問題（#68） | ✅ クローズ | ASR 入力を 20 秒以下に制限し、話者交代の間で分割（clean の CER 53.8% → 15.0%、wrist 84.1% → 21.4%）。詳細: [test-audio.md](test-audio.md) §4 |
-| 雑音下の抜け落ち・セグメント増の影響（#71, #72） | 🟡 着手（P1） | 雑音で話者交代の間が埋まる会話の抜け落ち（#71）、発話区間の細分化でセグメント数が 5〜6 倍になる影響（検索性能・DB 容量）の確認（#72） |
-| 検索（#23） | ✅ クローズ（中位機種の実測は #61） | 50 万セグメントで p95 最大 150 ms 程度（目標 300 ms）。CI で毎回ベンチマーク |
+| 雑音下の抜け落ち・セグメント増の影響（#71, #72） | 🟡 #72 クローズ、#71 着手（P1） | 雑音で話者交代の間が埋まる会話の抜け落ち（#71）、発話区間の細分化でセグメント数が 5〜6 倍になる影響（検索性能・DB 容量）の確認（#72） |
+| 検索（#23, #72） | ✅ クローズ（中位機種の実測は #61） | #68 以降の発話単位で 1 年 320 万セグメント（DB 約 1 GB）でも p95 最大 約 150 ms（目標 300 ms）。1〜2 文字の検索は trigram 索引の語彙を使う。CI で毎回ベンチマーク |
 | スマホ UI・再生（#19, #25） | ✅ クローズ（実機確認は #60・#61） | 日別タイムライン・文字起こし・検索・1 タップ再生。Android エミュレータと iOS シミュレータで、実際のプレーヤーが指定位置から再生することを確認。詳細: [impl/phone-ui.md](impl/phone-ui.md) |
 | チャンク境界の発話分断（#45） | ✅ クローズ | 隣のチャンクの境界付近と連結して認識（[02 §6.3](02-architecture.md#63-処理パイプラインphone)） |
 | 録音途絶の通知・オンボーディング（#43, #32） | ✅ クローズ（実機確認は #59〜#61） | エミュレータで途絶通知の表示（`GAP_ALERT_CHECK`）、権限拒否 →「設定を開く」（`PERMISSION_CHECK`）、Watch 側の通知判定の単体テスト（Wear OS・watchOS） |
@@ -43,6 +43,7 @@
 | ストレージ管理（#33） | ✅ クローズ | 保持期間（既定は無期限、文字起こし済みの音声のみ削除）、容量の内訳・空き容量警告、日単位/全削除 |
 | モデル配布サイズ（#46） | ✅ クローズ | 713 MB → 161 MB（int8 ファイルを個別取得、HTTP Range で途中再開、SHA-256 検証）。詳細: [impl/android-phone.md](impl/android-phone.md#31-ダウンロード受信のみ) |
 | release ビルド・署名（#78） | 🟡 着手（P1） | Android: R8 の release ビルドを CI で毎回作成（Wear OS の debug 入力の混入検査を含む）、エミュレータで release の起動確認、署名は Actions の secret があるときだけ（[04 §7.1](04-dev-environment.md#71-android-の-release-ビルドと署名78)）。残り: release での文字起こしの確認、iOS / watchOS の Release 構成のビルド |
+| データは端末内のみの CI 検査（#76） | ✅ クローズ（iOS の保護クラスの実際の値は #60） | 権限・バックアップ・通信箇所・依存 SDK・iOS の Info.plist/entitlements を許可リストで検査（`tools/privacy-check`）。未使用の ktor を削除。iOS/watchOS のデータにバックアップ除外と保護クラスを明示（[02 §7](02-architecture.md#7-セキュリティプライバシー)） |
 | スマホの診断ログ（#77） | 🟡 実装済み・エミュレータの証跡待ち（P1） | 受信・ACK・文字起こし（RTF）・モデル・途絶通知・異常終了を端末内の CSV（上限約 1 MB）に記録し、状態タブから共有シートで書き出す（本文・音声は含めない）。詳細: [impl/android-phone.md](impl/android-phone.md) §4.2 |
 
 ## 全体の流れ

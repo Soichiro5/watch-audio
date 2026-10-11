@@ -38,6 +38,14 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      # #76: data stays on the device (CLAUDE.md "Local only"). Static part first: seconds, no build.
+      # Permissions, backup rules, network APIs / URLs in code, declared dependencies, iOS
+      # Info.plist keys and entitlements against tools/privacy-check/policy.py (docs/04 §6.4).
+      - name: "Local-only check (static)"
+        run: |
+          python3 -m unittest discover -s tools/privacy-check -v
+          python3 tools/privacy-check/check.py
+
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
@@ -48,12 +56,13 @@ jobs:
       - name: "Unit tests (shared: JVM + Android host; phone and Wear OS app JVM tests)"
         run: ./gradlew jvmTest testAndroidHostTest :androidApp:testDebugUnitTest :wearApp:testDebugUnitTest
 
-      # #23: ~500k generated Japanese segments (a year of transcripts); fails if any query's
-      # p95 exceeds 300 ms. The numbers land in the job summary either way.
-      - name: "Search benchmark (500k segments, target 300 ms)"
+      # #23, #72: a year of generated Japanese utterances as the pipeline cuts them since #68
+      # (~3.2 million segments, ~1 GB); fails if any query's p95 exceeds 300 ms. The numbers land
+      # in the job summary either way.
+      - name: "Search benchmark (3.2M segments, target 300 ms)"
         run: |
           status=0
-          ./gradlew :shared:core-db:jvmBenchmark || status=$?
+          ./gradlew :shared:core-db:jvmBenchmark -Pbenchmark.segments=3200000 || status=$?
           cat shared/core-db/build/reports/search-benchmark/summary.md >> "$GITHUB_STEP_SUMMARY" || true
           exit $status
 
@@ -74,6 +83,21 @@ jobs:
 
       - name: Assemble phone + Wear OS
         run: ./gradlew :androidApp:assembleDebug :wearApp:assembleDebug
+
+      # #76: the same policy on what ships: release merged manifests (permissions added by
+      # libraries) and the resolved release runtime classpath (transitive dependencies).
+      - name: "Local-only check (merged manifests, resolved dependencies)"
+        run: |
+          mkdir -p build/privacy-check
+          ./gradlew :androidApp:processReleaseMainManifest :wearApp:processReleaseMainManifest
+          for app in androidApp wearApp; do
+            ./gradlew -q :$app:dependencies --configuration releaseRuntimeClasspath > build/privacy-check/deps-$app.txt
+          done
+          python3 tools/privacy-check/check.py --summary "$GITHUB_STEP_SUMMARY" \
+            --merged-manifest androidApp=androidApp/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml \
+            --merged-manifest wearApp=wearApp/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml \
+            --resolved-deps androidApp=build/privacy-check/deps-androidApp.txt \
+            --resolved-deps wearApp=build/privacy-check/deps-wearApp.txt
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
