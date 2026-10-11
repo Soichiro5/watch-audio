@@ -24,7 +24,7 @@
 | 領域 | 状態 | 内容 |
 | --- | --- | --- |
 | 基盤・CI（#7, #8） | ✅ クローズ | KMP モノレポ、4 アプリのビルド、エミュレータ/シミュレータでの起動確認（GitHub Actions） |
-| CI の待ち時間短縮（#92） | 🟡 着手（dev-flow） | 変更したファイルに関係するワークフローだけを動かす（ドキュメントだけの変更では CI を動かさない、[04 §6.3](04-dev-environment.md#63-どの変更でどのワークフローが動くか92)）。残り: iOS ジョブの並列化 |
+| CI の待ち時間短縮（#92） | 🟡 着手（dev-flow） | 変更したファイルに関係するワークフローだけを動かす（ドキュメントだけの変更では CI を動かさない、[04 §6.3](04-dev-environment.md#63-どの変更でどのワークフローが動くか92)）。iOS ジョブの 3 分割は効果がなかった（最長ジョブ 20.9 分、macOS の合計使用量 1.7 倍）ため見送り。残り: シミュレータの起動・初期化の繰り返しを減らす |
 | 実機なし検証基盤（#44） | ✅ クローズ | JVM 上の E2E（Watch シミュレータ → 取り込み → 日本語 ASR → SQLite → 検索）、エミュレータでの計装テスト（本番の Ingestor で取り込み → 再生）、iOS シミュレータでの共通テスト |
 | 検証用の音声・ファイル入力（#56, #57） | ✅ クローズ | 正解テキスト付きの日本語会話音声セット（オフライン TTS、16 会話・約 29 分、Watch を模した加工 6 条件 + 1 日分）とハーネスの `evaluate`（#56、[test-audio.md](test-audio.md)）。debug ビルドで Watch のマイク入力を音声ファイルに差し替え（#57） |
 | 技術検証（#9〜#11） | 🟡 実機待ち（needs-device） | デスクトップ比較は完了（[ASR](spikes/m0-5-asr-desktop.md)・[埋め込み](spikes/m0-6-embedding-desktop.md)）。電池計測は実機待ち |
@@ -44,7 +44,7 @@
 | モデル配布サイズ（#46） | ✅ クローズ | 713 MB → 161 MB（int8 ファイルを個別取得、HTTP Range で途中再開、SHA-256 検証）。詳細: [impl/android-phone.md](impl/android-phone.md#31-ダウンロード受信のみ) |
 | release ビルド・署名（#78） | 🟡 着手（P1） | Android: R8 の release ビルドを CI で毎回作成（Wear OS の debug 入力の混入検査を含む）、エミュレータで release の起動確認、署名は Actions の secret があるときだけ（[04 §7.1](04-dev-environment.md#71-android-の-release-ビルドと署名78)）。残り: release での文字起こしの確認、iOS / watchOS の Release 構成のビルド |
 | データは端末内のみの CI 検査（#76） | ✅ クローズ（iOS の保護クラスの実際の値は #60） | 権限・バックアップ・通信箇所・依存 SDK・iOS の Info.plist/entitlements を許可リストで検査（`tools/privacy-check`）。未使用の ktor を削除。iOS/watchOS のデータにバックアップ除外と保護クラスを明示（[02 §7](02-architecture.md#7-セキュリティプライバシー)） |
-| スマホの診断ログ（#77） | 🟡 実装済み・エミュレータの証跡待ち（P1） | 受信・ACK・文字起こし（RTF）・モデル・途絶通知・異常終了を端末内の CSV（上限約 1 MB）に記録し、状態タブから共有シートで書き出す（本文・音声は含めない）。詳細: [impl/android-phone.md](impl/android-phone.md) §4.2 |
+| スマホの診断ログ（#77） | ✅ クローズ | 受信・ACK・文字起こし（RTF）・モデル・途絶通知・異常終了を端末内の CSV（上限約 1 MB）に記録し、状態タブから共有シートで書き出す（本文・音声は含めない）。詳細: [impl/android-phone.md](impl/android-phone.md) §4.2 |
 
 ## 全体の流れ
 
