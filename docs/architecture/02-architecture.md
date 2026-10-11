@@ -76,7 +76,7 @@ watch-audio/
 │       ├── SharedSwift/       #   ChunkProtocol.swift など、Watch・iPhone・テストで共有する Swift コード
 │       └── Tests/             #   Swift のテスト（ProtocolTests・WatchLogicTests・SpeechTests・PlaybackTests）
 ├── shared/                    # KMP: 共通ロジック（Gradle: :shared:<名前>）
-│   ├── protocol/              #   ChunkManifest / ChunkAck / ChunkFrame（Wear OS・スマホ共通。testdata/ は Swift 側と共有）
+│   ├── protocol/              #   ChunkManifest / ChunkAck / ChunkFrame / RecordingFormat（Wear OS・スマホ共通。testdata/ は Swift 側と共有）
 │   ├── platform/              #   expect/actual: SHA-256、IoDispatcher など
 │   ├── db/                    #   LocalStore（手書き SQL）、Schema.kt のマイグレーション、FTS5 検索
 │   ├── pipeline/              #   Ingestor・ChunkIntake（受信の入口）、TranscriptionPipeline・TranscriptionRun（文字起こし 1 回分）、Transcriber、発話区間の切り出し、境界の連結、StorageManager、設定（AppSettings）・状態（ProcessingStatus）・途絶アラートの判定

@@ -88,13 +88,16 @@ enum class SourcePlatform {
     @SerialName("android") ANDROID,
 }
 
-/** Audio encoding of an [AudioFile]. Wire values are the lowercase names. */
+/**
+ * Audio encoding of an [AudioFile]. Wire values are the lowercase names; [fileExtension] is the
+ * extension of files in this encoding (on the watches and in the phone's archive).
+ */
 @Serializable
-enum class AudioCodec {
+enum class AudioCodec(val fileExtension: String) {
     /** AAC-LC in an MPEG-4 (.m4a) container. */
-    @SerialName("aac") AAC,
+    @SerialName("aac") AAC("m4a"),
     /** Opus in an Ogg container. */
-    @SerialName("opus") OPUS,
+    @SerialName("opus") OPUS("ogg"),
 }
 
 /**

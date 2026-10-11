@@ -72,11 +72,7 @@ class Ingestor(
     private fun archive(manifest: ChunkManifest, source: Path, codec: AudioCodec): String {
         val date = Instant.fromEpochMilliseconds(manifest.startedAtEpochMs).toLocalDateTime(TimeZone.UTC).date
         val directory = "${date.year}/${date.month.number.pad2()}/${date.day.pad2()}"
-        val extension = when (codec) {
-            AudioCodec.AAC -> "m4a"
-            AudioCodec.OPUS -> "ogg"
-        }
-        val relative = "$directory/${manifest.chunkId}.$extension"
+        val relative = "$directory/${manifest.chunkId}.${codec.fileExtension}"
         val target = Path(audioRoot, relative)
         SystemFileSystem.createDirectories(Path(audioRoot, directory))
         try {

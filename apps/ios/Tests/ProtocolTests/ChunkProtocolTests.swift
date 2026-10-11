@@ -97,6 +97,18 @@ final class ChunkProtocolTests: XCTestCase {
         XCTAssertTrue(ChunkEndReason.userStop.startsGap)
     }
 
+    /// Both watches record the format in recording-format.json (Kotlin: RecordingFormat.CURRENT).
+    func testRecordingFormatMatchesKotlin() throws {
+        let original = try vector("recording-format")
+        XCTAssertEqual(try ChunkProtocol.decode(RecordingFormat.self, from: original), RecordingFormat.current)
+        XCTAssertEqual(try jsonObject(ChunkProtocol.encode(RecordingFormat.current)), try jsonObject(original))
+        XCTAssertEqual(AudioCodec.allCases.map(\.fileExtension), ["m4a", "ogg"])
+        XCTAssertEqual(
+            RecordingFormat.current.audioFile(fileName: "a.m4a", sizeBytes: 4, sha256: "00"),
+            AudioFile(fileName: "a.m4a", codec: .aac, sampleRateHz: 16_000, channels: 1, bitrateBps: 24_000, sizeBytes: 4, sha256: "00")
+        )
+    }
+
     func testFileDigestMatchesKnownVector() throws {
         let url = FileManager.default.temporaryDirectory.appending(path: "digest-\(UUID().uuidString).bin")
         defer { try? FileManager.default.removeItem(at: url) }

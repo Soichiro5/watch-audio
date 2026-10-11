@@ -41,6 +41,21 @@ class ProtocolTest {
     }
 
     @Test
+    fun recordingFormatMatchesSharedTestVector() {
+        // Same JSON as shared/protocol/testdata/recording-format.json, which the Swift side
+        // compares with its RecordingFormat.current: both watches record the same format.
+        assertEquals(RecordingFormat.CURRENT, ProtocolJson.decodeFromString(RecordingFormat.serializer(), TestVectors.RECORDING_FORMAT))
+        assertEquals("m4a", RecordingFormat.CURRENT.codec.fileExtension)
+    }
+
+    @Test
+    fun recordingFormatDescribesChunkFiles() {
+        val audio = RecordingFormat.CURRENT.audioFile("a.m4a", sizeBytes = 4, sha256 = "00")
+        assertEquals(AudioFile("a.m4a", AudioCodec.AAC, 16_000, 1, 24_000, 4, "00"), audio)
+        assertEquals(listOf("m4a", "ogg"), AudioCodec.entries.map { it.fileExtension })
+    }
+
+    @Test
     fun silentChunkHasNoAudioAndStartsGap() {
         val silent = decodeManifest(TestVectors.MANIFEST_V1_SILENT)
         assertNull(silent.audio)

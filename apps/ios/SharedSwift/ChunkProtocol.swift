@@ -28,11 +28,19 @@ enum SourcePlatform: String, Codable, Sendable {
     case android
 }
 
-enum AudioCodec: String, Codable, Sendable {
+enum AudioCodec: String, Codable, Sendable, CaseIterable {
     /// AAC-LC in an MPEG-4 (.m4a) container.
     case aac
     /// Opus in an Ogg container.
     case opus
+
+    /// Extension of files in this encoding (same as Kotlin's `AudioCodec.fileExtension`).
+    var fileExtension: String {
+        switch self {
+        case .aac: "m4a"
+        case .opus: "ogg"
+        }
+    }
 }
 
 enum ChunkEndReason: String, Codable, Sendable, CaseIterable {
