@@ -48,6 +48,8 @@ ANDROID_APPS = {
 }
 
 # Directories whose .kt/.java/.swift files are scanned (relative to the repository root).
+# Test code is not shipped and is skipped: directories named "test" or containing "Test"
+# (src/test, src/jvmTest, src/androidTest, iosApp/ProtocolTests, iosApp/TestSupport, ...).
 SOURCE_ROOTS = ("androidApp/src", "wearApp/src", "composeApp/src", "shared", "iosApp")
 SOURCE_EXTENSIONS = (".kt", ".java", ".swift")
 
@@ -80,16 +82,18 @@ GUARDED_APIS = (
 )
 
 # file (relative path) -> {api id: reason}. These are the app's only network call sites.
+# An entry that no longer matches anything is reported too, so the list stays accurate.
 ALLOWED_API_USES = {
-    "androidApp/src/main/kotlin/app/watchaudio/android/asr/ModelManager.kt": {
-        "URLConnection": "downloads the sherpa-onnx ASR model archive (GitHub Releases)",
+    "androidApp/src/main/kotlin/app/watchaudio/android/asr/ModelDownloader.kt": {
+        "URLConnection": "downloads the ASR / VAD model files listed in ModelManifest (resumable, SHA-256)",
         "openConnection": "same download",
     },
 }
 
-# URL literals in code must start with one of these prefixes.
+# URL literals in code must start with one of these prefixes (unused prefixes are reported).
 ALLOWED_URL_PREFIXES = {
-    "https://github.com/k2-fsa/sherpa-onnx/releases/download/": "ASR model archives (ModelManager)",
+    "https://huggingface.co/csukuangfj/reazonspeech-k2-v2": "ASR model files, pinned commit (ModelManifest)",
+    "https://github.com/k2-fsa/sherpa-onnx/releases/download/": "Silero VAD model (ModelManifest)",
 }
 
 # Declared dependencies (gradle/libs.versions.toml, *.gradle.kts) must not match these.
@@ -116,8 +120,6 @@ ALLOWED_RESOLVED_DEPENDENCIES = (
      "Wear OS Data Layer (MessageClient/ChannelClient to nearby nodes)"),
     (r"com\.google\.guava:listenablefuture", "AndroidX futures"),
     (r"org\.jspecify:jspecify", "nullness annotations"),
-    (r"org\.apache\.commons:commons-(?:compress|lang3)|commons-(?:io|codec):commons-(?:io|codec)",
-     "extracting the ASR model archive (commons-compress and its dependencies)"),
     (r"com\.github\.k2-fsa\.sherpa-onnx:[\w.-]+", "on-device ASR"),
 )
 

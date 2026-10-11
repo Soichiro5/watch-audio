@@ -232,11 +232,16 @@ def strip_comments(source: str) -> str:
 URL_PATTERN = re.compile(r"\b(?:https?|wss?|ftp)://[^\s\"'`)<>\\]+")
 
 
+def _is_test_directory(name: str) -> bool:
+    """Test source sets and Swift test targets: not shipped, so not scanned."""
+    return name == "test" or "Test" in name
+
+
 def _source_files(root: Path):
     for base in policy.SOURCE_ROOTS:
         for dirpath, dirnames, filenames in os.walk(root / base):
             dirnames[:] = sorted(d for d in dirnames if d not in ("build", ".gradle", "DerivedData")
-                                 and not d.endswith(".xcodeproj"))
+                                 and not d.endswith(".xcodeproj") and not _is_test_directory(d))
             for filename in sorted(filenames):
                 if filename.endswith(policy.SOURCE_EXTENSIONS):
                     yield Path(dirpath) / filename
@@ -244,6 +249,8 @@ def _source_files(root: Path):
 
 def check_sources(root: Path, report: Report) -> None:
     apis = [(api_id, re.compile(pattern, re.MULTILINE), what) for api_id, pattern, what in policy.GUARDED_APIS]
+    used_apis: set[tuple[str, str]] = set()
+    used_prefixes: set[str] = set()
     for path in _source_files(root):
         rel = _rel(root, path)
         code = strip_comments(path.read_text(encoding="utf-8", errors="replace"))
@@ -252,6 +259,7 @@ def check_sources(root: Path, report: Report) -> None:
             for match in regex.finditer(code):
                 line = code.count("\n", 0, match.start()) + 1
                 if api_id in allowed:
+                    used_apis.add((rel, api_id))
                     report.network_sites.append((rel, line, api_id, allowed[api_id]))
                 else:
                     report.add("network", rel, line,
@@ -259,9 +267,21 @@ def check_sources(root: Path, report: Report) -> None:
                                "policy.ALLOWED_API_USES")
         for match in URL_PATTERN.finditer(code):
             url = match.group(0)
-            if not any(url.startswith(prefix) for prefix in policy.ALLOWED_URL_PREFIXES):
+            prefixes = [prefix for prefix in policy.ALLOWED_URL_PREFIXES if url.startswith(prefix)]
+            used_prefixes.update(prefixes)
+            if not prefixes:
                 line = code.count("\n", 0, match.start()) + 1
                 report.add("network", rel, line, f"URL {url} is not in policy.ALLOWED_URL_PREFIXES")
+    # Stale entries would make the list of network call sites (docs/02 §7.2) wrong.
+    for rel, allowed in policy.ALLOWED_API_USES.items():
+        for api_id in allowed:
+            if (rel, api_id) not in used_apis:
+                report.add("network", rel, 0, f"stale allow-list entry: {api_id} is no longer used here "
+                           "(remove it from policy.ALLOWED_API_USES)")
+    for prefix in policy.ALLOWED_URL_PREFIXES:
+        if prefix not in used_prefixes:
+            report.add("network", "tools/privacy-check/policy.py", 0,
+                       f"stale allow-list entry: no URL starts with {prefix} (remove it from ALLOWED_URL_PREFIXES)")
 
 
 # ---------------------------------------------------------------------------------------------

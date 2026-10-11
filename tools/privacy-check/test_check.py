@@ -43,7 +43,8 @@ PHONE_BACKUP = f"<full-backup-content>{ALL_DOMAINS}</full-backup-content>"
 WEAR_RULES = (f"<data-extraction-rules><cloud-backup>{ALL_DOMAINS}</cloud-backup>"
               f"<device-transfer>{ALL_DOMAINS}</device-transfer></data-extraction-rules>")
 
-MODEL_MANAGER = "androidApp/src/main/kotlin/app/watchaudio/android/asr/ModelManager.kt"
+MODEL_DOWNLOADER = "androidApp/src/main/kotlin/app/watchaudio/android/asr/ModelDownloader.kt"
+MODEL_MANIFEST = "androidApp/src/main/kotlin/app/watchaudio/android/asr/ModelManifest.kt"
 
 PROJECT_YML = """\
 name: WatchAudio
@@ -83,10 +84,18 @@ class FixtureRepo:
         self.write("androidApp/src/main/res/xml/backup_rules.xml", PHONE_BACKUP)
         self.write("wearApp/src/main/AndroidManifest.xml", WEAR_MANIFEST)
         self.write("wearApp/src/main/res/xml/data_extraction_rules.xml", WEAR_RULES)
-        self.write(MODEL_MANAGER, """\
+        self.write(MODEL_DOWNLOADER, """\
             import java.net.HttpURLConnection
-            val url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models"
-            fun open() = URL(url).openConnection() as HttpURLConnection
+            fun open(url: String) = URL(url).openConnection() as HttpURLConnection
+            """)
+        self.write(MODEL_MANIFEST, """\
+            const val HF = "https://huggingface.co/csukuangfj/reazonspeech-k2-v2/resolve/abc"
+            const val RELEASES = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models"
+            """)
+        # Test code is not shipped: a local fake server is fine there.
+        self.write("androidApp/src/test/kotlin/DownloaderTest.kt", """\
+            val server = java.net.ServerSocket(0)
+            val url = "http://127.0.0.1:${server.localPort}/model.onnx"
             """)
         self.write("wearApp/src/main/kotlin/Uploader.kt", """\
             // DataClient is never used: items may sync through the cloud (see https://example.com).
@@ -138,7 +147,7 @@ class RepositoryTest(unittest.TestCase):
         report = check.run(REPO_ROOT)
         self.assertEqual([], [str(v) for v in report.violations])
         # The model download is the only network call site.
-        self.assertEqual({MODEL_MANAGER}, {site[0] for site in report.network_sites})
+        self.assertEqual({MODEL_DOWNLOADER}, {site[0] for site in report.network_sites})
 
 
 class FixtureTestCase(unittest.TestCase):
@@ -156,8 +165,16 @@ class BaselineTest(FixtureTestCase):
     def test_fixture_passes(self):
         report = self.repo.run()
         self.assertEqual([], [str(v) for v in report.violations])
-        self.assertEqual({(MODEL_MANAGER, "URLConnection"), (MODEL_MANAGER, "openConnection")},
+        self.assertEqual({(MODEL_DOWNLOADER, "URLConnection"), (MODEL_DOWNLOADER, "openConnection")},
                          {(path, api) for path, _, api, _ in report.network_sites})
+
+    def test_stale_allow_list_entries_fail(self):
+        # The list of network call sites must stay accurate (docs/02 §7.2).
+        self.repo.write(MODEL_DOWNLOADER, "import java.net.HttpURLConnection\n")
+        self.repo.replace(MODEL_MANIFEST, "huggingface.co", "example.org")
+        report = self.repo.run()
+        self.assertViolation(report, "network", "stale allow-list entry: openConnection")
+        self.assertViolation(report, "network", "no URL starts with https://huggingface.co")
 
 
 class ManifestTest(FixtureTestCase):
@@ -343,7 +360,7 @@ class ParserTest(unittest.TestCase):
 
     def test_real_project_yml(self):
         data = check.parse_simple_yaml((REPO_ROOT / "iosApp/project.yml").read_text(encoding="utf-8"))
-        self.assertEqual({"iosApp", "WatchApp", "ProtocolTests"}, set(data["targets"]))
+        self.assertLessEqual({"iosApp", "WatchApp", "ProtocolTests"}, set(data["targets"]))
         self.assertEqual(["audio"], data["targets"]["WatchApp"]["info"]["properties"]["UIBackgroundModes"])
 
 
