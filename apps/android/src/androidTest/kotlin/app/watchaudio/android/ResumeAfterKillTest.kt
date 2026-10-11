@@ -87,7 +87,12 @@ class ResumeAfterKillTest {
         // The kill really happened in the middle of the run.
         assertTrue(transcribedBeforeKill in 1 until CHUNKS, "transcribed before the kill: $transcribedBeforeKill of $CHUNKS")
         // A chunk cut off mid-transcription is re-queued and transcribed once more, not lost.
-        if (interrupted != null) assertEquals(2, interruptedAttempts, "attempts of the interrupted chunk")
+        // At least the attempt that was killed plus the one that finished. Starting this
+        // instrumentation force-stops the app again, so a job that JobScheduler restarted right
+        // after the kill may itself be interrupted and add one more attempt.
+        if (interrupted != null) {
+            assertTrue((interruptedAttempts ?: 0) >= 2, "attempts of the interrupted chunk: $interruptedAttempts")
+        }
         // Every other chunk was transcribed in a single attempt.
         assertTrue(chunks.filter { it.id != interrupted }.all { it.attempts == 1 }, "attempts: ${chunks.map { it.attempts }}")
     }
