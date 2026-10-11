@@ -1,15 +1,21 @@
 package app.watchaudio.android
 
 import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.result.ActivityResultLauncher
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import app.watchaudio.android.asr.ModelManager
 import app.watchaudio.android.work.TranscriptionScheduler
 import app.watchaudio.app.AppPermission
@@ -17,15 +23,23 @@ import app.watchaudio.app.AppServices
 import app.watchaudio.app.ModelState
 import app.watchaudio.app.PermissionStatus
 import app.watchaudio.app.ProcessingStatus
+import app.watchaudio.app.Strings
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.DiagnosticsLog
 import app.watchaudio.core.pipeline.StorageManager
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.withContext
+import kotlinx.io.files.Path
 
 /**
  * [AppServices] for Android: the shared UI reads data from [store] and status from [status];
@@ -40,6 +54,7 @@ class AndroidAppServices(
     private val scheduler: TranscriptionScheduler,
     lastChunkReceivedAt: StateFlow<Long?>,
     scope: CoroutineScope,
+    private val diagnostics: DiagnosticsLog,
     private val onGapAlertSettingsChanged: () -> Unit,
 ) : AppServices {
     override val audioRoot: String = audioRootDir.absolutePath
@@ -102,11 +117,51 @@ class AndroidAppServices(
         pendingPermission = null
     }
 
+    /** The app's page in the system settings ("App info"), where notifications can be allowed. */
+    override fun openAppSettings() {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            context.startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "no settings screen for the app", e)
+        }
+    }
+
     private fun notificationsGranted(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
     override fun gapAlertSettingsChanged() = onGapAlertSettingsChanged()
+
+    /**
+     * Copies the diagnostics log into the cache (`cache/diagnostics-export/`, replacing earlier
+     * exports) and offers it through the share sheet; the user picks the destination. Read access
+     * is granted only to the app they pick, through [FileProvider].
+     */
+    override suspend fun exportDiagnostics(): Boolean {
+        val file = withContext(Dispatchers.IO) {
+            val dir = File(context.cacheDir, DIAGNOSTICS_EXPORT_DIR).apply {
+                deleteRecursively()
+                mkdirs()
+            }
+            val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+            val target = File(dir, "watch-audio-diagnostics-$stamp.csv")
+            target.takeIf { diagnostics.exportTo(Path(it.path)) > 0 }
+        } ?: return false
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}$DIAGNOSTICS_AUTHORITY_SUFFIX", file)
+        val send = Intent(Intent.ACTION_SEND)
+            .setType("text/csv")
+            .putExtra(Intent.EXTRA_STREAM, uri)
+            .putExtra(Intent.EXTRA_SUBJECT, file.name)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        // The grant must also reach the chooser's preview.
+        send.clipData = ClipData.newRawUri(file.name, uri)
+        val chooser = Intent.createChooser(send, Strings.EXPORT_DIAGNOSTICS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        withContext(Dispatchers.Main) { context.startActivity(chooser) }
+        return true
+    }
 
     override fun requestTranscription() = scheduler.requestNow()
 
@@ -165,5 +220,9 @@ class AndroidAppServices(
 
     private companion object {
         const val TAG = "AndroidAppServices"
+
+        /** Must match `res/xml/diagnostics_paths.xml` and the provider in the manifest. */
+        const val DIAGNOSTICS_EXPORT_DIR = "diagnostics-export"
+        const val DIAGNOSTICS_AUTHORITY_SUFFIX = ".diagnostics"
     }
 }

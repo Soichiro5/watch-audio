@@ -2,7 +2,7 @@
 
 Apple Watch で装着中ずっと録音 → WatchConnectivity で iPhone へ（ローカルのみ）→ iPhone 上の Speech フレームワーク（SpeechAnalyzer / SpeechTranscriber, iOS 26, 日本語）でオンデバイス文字起こし → Kotlin 共有コードのローカル SQLite に保存、までの Apple 側の実装。充電中・睡眠中などの欠損は許容する。
 
-関連 Issue: #15（watchOS 録音）、#17（転送 + ACK）、#21（iOS 文字起こし）
+関連 Issue: #15（watchOS 録音）、#17（転送 + ACK）、#21（iOS 文字起こし）、#41（コンプリケーション、§14）
 
 ## 1. コンポーネント
 
@@ -10,16 +10,19 @@ Apple Watch で装着中ずっと録音 → WatchConnectivity で iPhone へ（�
 | --- | --- | --- |
 | watch / iPhone / テスト共通 | `iosApp/Shared/ChunkProtocol.swift` | `ChunkManifest` / `ChunkAck` の Codable 版（`shared/core-protocol` の Swift ミラー） |
 | 〃 | `iosApp/Shared/FileDigest.swift` | ファイルの SHA-256（CryptoKit, 64 KiB ずつ）、WatchConnectivity の辞書キー |
-| watchOS | `iosApp/WatchApp/Recording/RecorderController.swift` | 録音本体（ローテーション・無音判定・停止理由・自動再開・通知） |
+| watchOS | `iosApp/WatchApp/Recording/RecorderController.swift` | 録音本体（ローテーション・メータリング・判定結果の適用・通知） |
+| 〃 | `iosApp/WatchApp/Recording/RecorderPolicy.swift` | 停止理由・自動再開・通知・無音判定の純粋ロジック（WatchKit / AVFoundation に依存しない。Wear OS の `RecorderPolicy` に相当） |
 | 〃 | `iosApp/WatchApp/Recording/ChunkAudioInput.swift` | チャンクを書く入力のプロトコル。本番は `MicrophoneChunkInput`（`AVAudioRecorder` + メータリング） |
 | 〃 | `iosApp/WatchApp/Recording/DebugAudioFileInput.swift` | **Debug 構成のみ**（`#if DEBUG`）: マイクの代わりに音声ファイルを流す入力（§13） |
 | 〃 | `iosApp/WatchApp/Recording/ChunkOutbox.swift` | 永続アウトボックス（録音中チャンクの状態、送信待ちチャンク、異常終了からの復旧） |
+| 〃 | `iosApp/WatchApp/Recording/ChunkSendTracker.swift` | 送信キューの再送判断（ACK の処理、未 ACK の再送時刻、送信中の二重送信防止） |
 | 〃 | `iosApp/WatchApp/Recording/ChunkTransport.swift` | WCSession 送信・ACK 受信 |
 | 〃 | `iosApp/WatchApp/Recording/DiagnosticsLog.swift` | 上限付きのローカル診断ログ（イベント + 電池残量、CSV） |
 | 〃 | `iosApp/WatchApp/WatchAudioApp.swift`, `ContentView.swift` | 画面、scenePhase、WatchConnectivity のバックグラウンド起床 |
 | iOS (Swift) | `iosApp/iosApp/iOSApp.swift` | 起動時に Kotlin グラフ → WatchConnectivity の順で開始、scenePhase を Kotlin に通知、Compose UI をホスト |
 | 〃 | `iosApp/iosApp/WatchReceiver.swift` | WCSession 受信 → Kotlin `Ingestor` → ACK 返信 |
-| 〃 | `iosApp/iosApp/SpeechAnalyzerTranscriber.swift` | SpeechAnalyzer + SpeechTranscriber による文字起こし（Kotlin の `IosSpeechTranscriber` を実装） |
+| 〃 | `iosApp/iosApp/SpeechTranscription.swift` | SpeechAnalyzer + SpeechTranscriber による文字起こし本体（モデル準備・範囲の連結・時刻付きセグメント）。Kotlin に依存しない |
+| 〃 | `iosApp/iosApp/SpeechAnalyzerTranscriber.swift` | 上記を Kotlin の `IosSpeechTranscriber` として公開するブリッジ |
 | iOS (Kotlin) | `composeApp/src/iosMain/.../IosAppGraph.kt` | iOS の composition root（DB・音声置き場・Ingestor・パイプライン・BGTask） |
 | 〃 | `IosAppServices.kt` | 共有 UI 向け `AppServices` 実装（状態 Flow、AVAudioPlayer 再生、権限、モデル準備、通知設定の変更通知） |
 | 〃 | `IosPermissions.kt` | オンボーディングで求める権限（通知 `UNUserNotificationCenter`、音声認識 `SFSpeechRecognizer`）の状態取得と要求 |
@@ -27,6 +30,12 @@ Apple Watch で装着中ずっと録音 → WatchConnectivity で iPhone へ（�
 | 〃 | `IosSpeechTranscriber.kt` | Swift 実装を受けるコールバック型インターフェースと共通 `Transcriber` へのアダプタ |
 | 〃 | `MainViewController.kt` | Compose UI のエントリ（Swift から引数なしで呼ぶ） |
 | テスト | `iosApp/ProtocolTests/ChunkProtocolTests.swift` | Swift プロトコル実装を Kotlin のテストベクタ（`shared/core-protocol/testdata/*.json`）で検証 |
+| 〃 | `iosApp/WatchLogicTests/RecorderPolicyTests.swift` | 停止理由（充電・低電池・ストレージ不足・割り込み・ユーザー停止・レコーダー停止）の判定、ヒステリシス、自動再開、通知、無音判定、停止理由がマニフェストの `endReason` に書かれること（#15） |
+| 〃 | `iosApp/WatchLogicTests/ChunkOutboxTests.swift` | 送信キュー: 最終 ACK で削除、CORRUPT で再送（上限つき）、REJECTED は保持、ACK が無ければ 15 分後に再送、送信中は二重送信しない、再起動後も残り再送される、強制終了からの復旧（#17） |
+| 〃 | `iosApp/SpeechTests/SpeechTranscriptionTests.swift` | シミュレータで SpeechTranscriber（ja_JP）が既知の日本語音声（16 kHz AAC）を時刻付きで文字起こしできるか（#21）。使えなければ理由を記録してスキップ |
+| 〃 | `composeApp/src/iosTest/.../IosPlaybackTest.kt` | `IosAppServices.play` が正しいチャンクのファイルを AVAudioPlayer で開き、指定位置（±0.2 秒）に合わせ、長さも正しいこと。共有 UI で前日のタイムライン → 発話タップ、検索 → 1 タップ → その発話の位置（#19, #25）。テスト実行ファイルはアプリではないため `play()` は false を返し、`started=` は記録のみ |
+| 〃 | `iosApp/PlaybackTests/HostedPlaybackTests.swift` | iOS アプリをホストにした XCTest。アプリが起動時に作った本物の `IosAppServices`（ComposeApp フレームワーク経由）で Watch と同じ形式（AAC 16 kHz モノラル）の音声を 8 秒から再生し、再生位置がそこから始まり 2 秒後に 1 秒以上進むこと（#19） |
+| 〃 | `composeApp/src/iosTest/.../IosTranscriberBridgeTest.kt` | Swift 側の結果（`IosTimedText`）が `IosTranscriberAdapter` → `TranscriptionPipeline` で絶対時刻つきで DB と FTS に保存されること、Swift のエラーでチャンクが FAILED になること（#21） |
 
 ## 2. データフロー
 
@@ -64,7 +73,7 @@ sequenceDiagram
 - `audio` が無い（無音チャンク）場合はキーごと省略（Kotlin の `explicitNulls = false` と同じ）。`markOffsetsMs` は空でも `[]` を出力（Kotlin の `encodeDefaults = true` と同じ）。未知キーは両側で無視。
 - `markOffsetsMs` は `0...durationMs` に収める必要がある（Kotlin 側の `init` で検証されるため、Swift 側で clamp している）。
 - WatchConnectivity の辞書キー: `manifest`（manifest JSON）、`chunkId`（送信中転送の突き合わせ用に JSON 外にも複製）、`ack`（ChunkAck JSON）。
-- 互換性は `ProtocolTests`（CI）で、Kotlin 側と同じテストベクタを decode → encode して JSON が一致することを確認している。
+- 互換性は `ProtocolTests`（CI の `SwiftUnitTests` スキーム）で、Kotlin 側と同じテストベクタを decode → encode して JSON が一致することを確認している。
 
 ## 4. watchOS 録音
 
@@ -82,7 +91,10 @@ sequenceDiagram
 | 空き容量 100 MB 未満 | `low_storage` | 空きが戻ったとき + 通知 |
 | 通話・Siri など（`AVAudioSession.interruptionNotification`） | `interruption` | `.ended` で再開を試行（`shouldResume` が無くても試す）。失敗時はハプティクス + ローカル通知。中断時に 2 分後の通知を予約し、再開できたら取り消す（アプリがサスペンドされても通知が出るように） |
 | レコーダーが通知なしに停止 | `error` | 最大 3 回まで自動再開、超えたら通知 |
+| ローテーションで次のレコーダーを開始できない | `low_storage`（空き不足のとき）/ `error` | 通知 |
 | アプリ強制終了 | `terminated`（次回起動時に確定） | 次に前面に来たとき |
+
+- 判定（どのイベントでどの終了理由で止めるか・再開するか・通知するか）は `RecorderPolicy.decide(event, phase:, wantsRecording:)` に集約し、`RecorderController` は端末の値（電池・充電・空き容量）とイベント（停止ボタン・定期チェック・割り込み・レコーダー停止・ローテーション失敗）を渡して結果を適用するだけにした。判定は `WatchLogicTests` で単体テストしている。
 
 - **充電後の自動再開の制約**: 録音を止めて音声セッションを無効にするとアプリはサスペンドされるため、バックグラウンドで「外れた」ことは検知できない。実際の再開は「アプリが前面に戻ったとき」（手首を上げてアプリが表示されている、またはユーザーが開いたとき）になる。watchOS の「アプリに戻る」設定次第。
 - **装着検出**: watchOS にはサードパーティ向けの手首検出 API が無いため `off_body` は生成しない（外すとウォッチはロックされるが録音は続く）。
@@ -97,7 +109,7 @@ sequenceDiagram
 
 - WatchConnectivity は Apple が管理するペアリング端末間のローカル転送（Bluetooth / P2P Wi-Fi 等、経路は OS が選択・キューイング・バックグラウンド配送）。自前のサーバーやクラウドには一切送らない。
 - 送信条件: `activationState == .activated`（または `isReachable`）のときのみ。`transferFile` / `transferUserInfo` は相手が不在でも OS がキューに保持する。
-- 二重送信防止: `outstandingFileTransfers` / `outstandingUserInfoTransfers` のメタデータ `chunkId` と照合。送信済みで ACK 待ちのものは 15 分間は再送しない。
+- 二重送信防止: `outstandingFileTransfers` / `outstandingUserInfoTransfers` のメタデータ `chunkId` と照合。送信済みで ACK 待ちのものは 15 分間は再送しない（`ChunkSendTracker`。送信失敗の通知を受けたものはすぐ再送対象）。
 - 再送: WCSession が activated になるたび（= アプリ起動ごと）に未 ACK の全チャンクを再送（iPhone は `duplicate` で最終 ACK を返すので安全）。`corrupt` は最大 3 回まで即再送。`rejected`（新しいスキーマ等）は保持して次回起動時に再提示。
 - iPhone 側は `session(_:didReceive:)` 内でファイルを `Application Support/WatchAudio/inbox/` に**同期的に** move してから非同期で取り込む。取り込みは `UIApplication.beginBackgroundTask` で保護。取り込み前にプロセスが落ちた inbox の残骸は次回起動時に削除（Watch が再送する）。
 - Watch がサスペンド中に ACK が届いた場合は `.backgroundTask(.watchConnectivity)` で起こされ、`hasContentPending` が消えるまで起きている。
@@ -121,6 +133,7 @@ MainViewControllerKt.MainViewController()                             // Compose
 
 ## 7. 文字起こし（iOS）
 
+- 実装は `SpeechTranscription.swift`（Speech フレームワークだけに依存）にあり、`SpeechAnalyzerTranscriber.swift` はそれを Kotlin の `IosSpeechTranscriber` として渡す薄いブリッジ。分けてあるのは、シミュレータテスト（`SpeechTests`）が Kotlin フレームワークをリンクせずに同じコードを動かせるようにするため。
 - `SpeechTranscriber(locale:transcriptionOptions: [], reportingOptions: [], attributeOptions: [.audioTimeRange])`。ロケールは `SpeechTranscriber.supportedLocale(equivalentTo: ja_JP)` で解決。`isAvailable` が false の端末ではエラー。
 - モデルは OS 管理: `installedLocales` に無ければ `AssetInventory.reserve(locale:)` → `assetInstallationRequest(supporting:)` → `downloadAndInstall()`。Kotlin 側は各実行の前に `prepareModel` で確認し、失敗したら実行しない（モデル未導入のまま全チャンクがリトライ上限に達するのを防ぐ）。状態は `ProcessingStatus.asrModel`（Downloading / Ready / Failed）。
 - `SpeechAnalyzer(modules:)` → `analyzeSequence(from: AVAudioFile)` → `finalizeAndFinish(through:)`。結果は `transcriber.results` を別 Task で収集し、`isFinal` の各結果を 1 セグメント（`result.range` の開始・終了をミリ秒に変換）とする。
@@ -144,10 +157,20 @@ MainViewControllerKt.MainViewController()                             // Compose
 - 本文「録音が届いていません（最後の受信: HH:mm）。Watch を確認してください」。予約の失敗は ACK を妨げない（`status.message` に出すだけ）。
 - `UNUserNotificationCenterDelegate` を設定していないので、アプリが前面にある間は通知バナーは出ない（その間は状態タブの警告で分かる）。
 
+### 7.2 診断ログ（#77）
+
+Android と同じ共通の `DiagnosticsLog`（`shared/core-pipeline`、形式・上限・記録しないものは [android-phone.md §4.2](android-phone.md#42-診断ログ77)）を `IosAppGraph.start` で開く。
+
+- 場所: `Application Support/WatchAudio/diagnostics/diagnostics.csv`（512 KB で `.1` に回す。最大約 1 MB。バックアップ対象外のディレクトリ内）。
+- 記録: `app_start`（バージョン・OS）、`chunk_received` / `chunk_rejected`（`IosAppGraph.ingest`。ACK の送信自体は Swift 側なので記録しない）、`worker_start` / `worker_stop`（`worker=foreground` / `worker=bgtask`、件数、BGTask の時間切れ）、`transcription_*`（`DiagnosticsPipelineObserver`、RTF 付き）、`retention_purge`、`model_download_start` / `model_ready` / `model_download_failed`（OS によるモデルのインストール）、`gap_alert_scheduled`（`IosGapAlerts` が予約した時刻）、`crash`。
+- 異常終了: Kotlin の未捕捉例外は `setUnhandledExceptionHook` で型名とスタックの先頭を 1 行書いてから元のフック（終了）に渡す。Objective-C / Swift のクラッシュや OS による強制終了（メモリ・時間切れ）は記録できないので、OS のクラッシュレポート（設定 > プライバシーとセキュリティ > 解析と改善 > 解析データ、Xcode Organizer）を見る。`NSSetUncaughtExceptionHandler` は C 関数ポインタとグローバル状態が要るため使っていない。
+- 書き出し: 状態タブの「診断ログを書き出す」→ `IosAppServices.exportDiagnostics()` が一時ディレクトリ（`tmp/diagnostics-export/`、前回分は削除）に 1 つの CSV をまとめ、`UIActivityViewController`（共有シート）を最前面の画面から表示する。送り先はユーザーが選ぶ（AirDrop・ファイルに保存など）。自動では送らない。
+
 ## 8. 保存場所とプライバシー
 
-- iPhone: `Application Support/WatchAudio/`（`watch-audio.db`、`audio/yyyy/MM/dd/<chunkId>.m4a`、`inbox/`）。ディレクトリに `NSURLIsExcludedFromBackupKey` を設定し、iCloud / PC バックアップに含めない。ファイル保護は iOS 既定（`CompleteUntilFirstUserAuthentication`、BGTask から読める）。
-- Watch: `Application Support/WatchAudio/`（録音中・送信待ちチャンク、診断ログ）。ACK 後に削除。
+- iPhone: `Application Support/WatchAudio/`（`watch-audio.db`、`audio/yyyy/MM/dd/<chunkId>.m4a`、`inbox/`、`diagnostics/`（§7.2））。`LocalDataDirectory`（composeApp/iosMain）がディレクトリに `NSURLIsExcludedFromBackupKey` を設定して iCloud / PC バックアップに含めず、ファイル保護クラス `CompleteUntilFirstUserAuthentication`（BGTask・ロック中の取り込みから読める）を明示する（#76）。
+- Watch: `Application Support/WatchAudio/`（録音中・送信待ちチャンク、診断ログ）。ACK 後に削除。`ChunkOutbox` が `LocalDataProtection`（iosApp/Shared）で同じくバックアップ除外と `completeUntilFirstUserAuthentication` を設定する（画面オフ・ロック中も録音・再送できる）。
+- 属性は ios.yml のテスト（`LocalDataDirectoryTest`、`LocalDataProtectionTests`）で確認する（保護クラスの値はシミュレータが報告する場合だけ比較）。一覧は [02 §7.1](../02-architecture.md#71-保存場所と保護76)。
 - 音声・文字起こしとも端末外（自前サーバー・クラウド）には送らない。Speech もオンデバイスモデル。
 
 ## 9. 権限・Info.plist
@@ -155,12 +178,14 @@ MainViewControllerKt.MainViewController()                             // Compose
 | ターゲット | キー | 値・目的 |
 | --- | --- | --- |
 | iosApp | `NSMicrophoneUsageDescription` | 将来のスマホ側録音用（現状はマイク未使用） |
-| 〃 | `NSSpeechRecognitionUsageDescription` | 音声認識の用途説明。オンボーディングで `SFSpeechRecognizer.requestAuthorization` を念のため要求する（SpeechTranscriber に必要かは未確認） |
+| 〃 | `NSSpeechRecognitionUsageDescription` | 音声認識の用途説明。オンボーディングで `SFSpeechRecognizer.requestAuthorization` を念のため要求する（SpeechTranscriber に必要かは未確認。`SpeechTests` は許可状態をログに出す） |
 | 〃 | `UIBackgroundModes: [processing]` | BGProcessingTask |
 | 〃 | `BGTaskSchedulerPermittedIdentifiers: [app.watchaudio.transcribe]` | `IosAppGraph.PROCESSING_TASK_ID` と一致させること |
 | WatchApp | `NSMicrophoneUsageDescription` | 録音 |
 | 〃 | `UIBackgroundModes: [audio]` | 画面消灯中の録音継続 |
 | 〃 | `WKApplication`, `WKCompanionAppBundleIdentifier` | iPhone アプリの付属 watch アプリ |
+| 〃 | `CFBundleURLTypes`（スキーム `watchaudio`） | コンプリケーションのタップ（`watchaudio://record`）で開始・再開（§14） |
+| WatchApp / WatchWidget | `WatchAudioAppGroup` + entitlement `com.apple.security.application-groups` | 録音状態を共有する App Group（`APP_GROUP_ID`、§14） |
 
 実行時の許可: Watch でマイク（初回開始時）と通知（初回録音開始時）。iPhone ではオンボーディングの「許可の設定」で通知（alert + sound、途絶アラート用）と音声認識を要求する（`IosPermissions`。拒否済みなら設定アプリへの案内を表示）。スパイク用の `UIFileSharingEnabled` / `LSSupportsOpeningDocumentsInPlace` は削除した。
 
@@ -171,8 +196,10 @@ MainViewControllerKt.MainViewController()                             // Compose
 | Kotlin iosMain（core-platform / composeApp）のコンパイル | Linux で klib クロスコンパイル `./gradlew :composeApp:compileKotlinIosSimulatorArm64 :composeApp:compileKotlinIosArm64 -Pkotlin.native.enableKlibsCrossCompilation=true` | 通過（リンクは不可） |
 | 共通ロジック（Ingestor ほか） | `./gradlew jvmTest`、CI で `./gradlew iosSimulatorArm64Test`（SQLite を使う core-db / Ingestor のテストを含む。ジョブサマリーにテスト一覧） | JVM は通過、iOS シミュレータは CI で確認 |
 | iOS・watchOS アプリの起動 | CI `ios.yml` の Launch ステップ: ビルド済みの `.app` をシミュレータ（iPhone / Apple Watch）に入れて起動し、15 秒後もプロセスが生きていてクラッシュレポートがないことを確認（`.github/scripts/simulator-smoke.sh`、スクリーンショットは成果物 `simulator-smoke`） | CI で確認 |
-| iOS の再生（`IosAppServices.play`） | 未自動化（シミュレータでの XCTest は未整備） | 要確認 |
-| Swift プロトコル互換 | Linux の Swift 6.2 で同等のテストを実行 | 通過。CI では `ProtocolTests` を iOS シミュレータで実行 |
+| iOS の再生（`IosAppServices.play`、#19 / #25） | 2 段構え。(a) `composeApp` の iOS シミュレータテスト `IosPlaybackTest`（`./gradlew iosSimulatorArm64Test`）: 本番の `Ingestor` で前日 10:00 開始の AAC チャンクを取り込み、(1) `play(path, 45 s)`、(2) 共有 Compose UI で「前の日」→ 発話をタップ → 「HH:mm から再生中」、(3) 検索 → 結果を 1 タップ、のそれぞれで、そのチャンクのファイル（音声ルートからの相対パスを解決したもの）が AVAudioPlayer に開かれ、再生位置が指定位置 ±0.2 秒、長さが正しいことを確認する。Kotlin/Native のテスト実行ファイルはアプリのプロセスではなく `AVAudioPlayer.play()` が false を返すため（CI で確認、シークは効く）、再生が始まったか（`started=`）は `PLAYBACK_CHECK` 行に記録するだけにしている。テストプロセスには UIApplication が無いため `IosAppGraph` ではなく、それが組み立てるのと同じ `IosAppServices` を一時 DB で作る。(b) 実際に再生が進むことは `PlaybackTests`（iOS アプリをホストにした XCTest、`HostedPlaybackTests.swift`）で確認: アプリが起動時に作った `IosAppGraph.shared.services`（本物の `IosAppServices`）に、音声ルート下に置いた AAC 16 kHz モノラル 20 秒のファイルを相対パスで渡して 8 秒から再生し、最初に観測した位置が 8 秒（-0.2〜+1 秒）、2 秒後に 1 秒以上進むことを確認（`PLAYBACK_CHECK check=hosted_player` 行）。ComposeApp は静的フレームワークでアプリにだけリンクされるので、テストバンドルはヘッダだけを参照し、シンボルは `BUNDLE_LOADER`（アプリ）から解決する（Kotlin ランタイムが二重にならないよう自動リンクを無効化）。ランナーに音声出力デバイスが無い場合に備え、CI は BlackHole（仮想デバイス）を入れる | CI で確認（ジョブサマリーの「Playback checks」と「Playback check in the app process」） |
+| Swift プロトコル互換 | Linux の Swift 6.2 で同等のテストを実行 | 通過。CI では `ProtocolTests`（`SwiftUnitTests` スキーム）を iOS シミュレータで実行 |
+| Watch の停止理由・状態判定（#15）、送信キュー（#17） | `WatchLogicTests`（`SwiftUnitTests` スキーム、ホストなし）を iPhone シミュレータで実行。対象の `RecorderPolicy` / `ChunkSendTracker` / `ChunkOutbox` は Foundation / AVFoundation だけを使うので watchOS 以外でもそのまま動く（WatchKit・WatchConnectivity・AVAudioRecorder を使う `RecorderController` / `ChunkTransport` は対象外で、実機確認は #60） | CI で確認 |
+| SpeechTranscriber（ja_JP）の文字起こし（#21） | `SpeechTests`（iOS アプリをホストにした XCTest）。CI が macOS の `say`（日本語音声）→ `afconvert` で Watch と同じ AAC 16 kHz モノラルの音声と正解文を作り、`SpeechTranscription` で文字起こし → セグメントの時刻（0 以上・音声長以内・昇順）と文字の再現率 0.5 以上を確認。3 秒の無音を前に連結した場合に時刻がずれることも確認。DB への保存は `IosTranscriberBridgeTest`（Kotlin、シミュレータ）で確認。シミュレータで使えない（`isAvailable` が false、ja_JP 非対応、モデルを入れられない、解析がエラー）場合は理由をログ（`build/swift-evidence/`、ジョブサマリー）に残してスキップし、実機確認は #60 | CI で確認（結果はジョブサマリーの「Speech check logs」） |
 | Swift の型・Swift 6 並行性チェック | Linux の Swift 6.2 + Apple フレームワークのスタブ（API 名は developer.apple.com で確認）で SIL 診断まで実行 | 通過（SwiftUI の画面ファイルは対象外） |
 | ComposeApp フレームワークのリンク（bundled SQLite を含む）、Xcode ビルド、SwiftUI、実 API との一致 | **CI（macOS）のみ** | 要確認 |
 | 録音・転送・文字起こしの実動作、電池 | **実機のみ** | 下記チェックリスト |
@@ -192,6 +219,8 @@ MainViewControllerKt.MainViewController()                             // Compose
    - 途絶アラート: 録音中に Watch アプリを強制終了（`terminated` チャンクが届かない状態）→ iPhone をロックして 10 分後に「録音が届いていません（最後の受信: HH:mm）…」の通知が来る。次のチャンクが届くと予約が取り消される。Watch を充電器に置いた（`charging`）場合は通知が来ない。おやすみ時間中は終了時刻に来る。
 11. iPhone を充電しながらロック → BGProcessingTask で文字起こしが進む（Xcode の `e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"app.watchaudio.transcribe"]` で強制起動も可）。
 12. Watch の `diagnostics.csv` で電池消費（%/時）を確認（M0-3 と比較）。
+13. コンプリケーション（§14、#60）: 文字盤に「watch-audio / 録音状態」を追加 → 停止中は「停止中」、録音開始で「録音中」+ 経過時間、充電器に置くと「一時停止（充電中）」に変わる。停止中にタップ → アプリが開いて録音が始まる。通話などで中断した後にタップ → 1 タップで再開する。
+14. iPhone の状態タブ「診断ログを書き出す」→ 共有シートが開き、ファイルに保存した CSV に受信・文字起こし（RTF）・BGTask の開始/終了が残っている（本文は含まれない）。長時間の検証ではこのファイルを証拠に添える。
 
 ## 12. 既知のリスク・制約
 
@@ -254,3 +283,45 @@ cat "$DATA/Library/Application Support/WatchAudio/diagnostics.csv"
 
 - Linux では Swift をコンパイルできないため、API 名（`AVAudioFile(forReading:)`、`init(forWriting:settings:commonFormat:interleaved:)`、`read(into:frameCount:)`、`write(from:)`、`close()`（watchOS 11+）、`framePosition` / `length`、`AVAudioPCMBuffer.floatChannelData` / `frameLength`）は developer.apple.com の宣言で確認したのみ。Debug 構成のビルドは CI（`ios.yml`）で確認する。CI では watchOS アプリを Release 構成でもビルドし、バイナリに `DebugAudioFileInput` が含まれないこと（Debug 側には含まれること）を確かめる（ステップ「watchOS Release build has no debug audio input」）。
 - 実際にシミュレータで流してチャンク・manifest を確かめるのは macOS 上で行う（Wear OS 側のチャンク化・無音判定・manifest の流れは [wearos.md §11.4](wearos.md#114-開発環境でのテストエミュレータ不要) の JVM テストで確認している）。
+
+## 14. コンプリケーション（#41）
+
+文字盤（とスマートスタック）に録音状態を常時表示し、タップでアプリを開いて録音を開始・再開する。WidgetKit のウィジェット拡張（watchOS 26）。
+
+### 14.1 構成
+
+| ファイル | ターゲット | 役割 |
+| --- | --- | --- |
+| `iosApp/WatchApp/Complication/RecorderStatus.swift` | WatchApp / WatchWidget / ProtocolTests | 共有する状態 `RecorderStatus`（`recording` + 開始時刻 / `paused` + 理由 / `stopped`）、App Group への保存 `RecorderStatusStore`、タップ URL `ComplicationLink`、状態 → 表示の純粋な対応 `ComplicationDisplay`、停止理由の文言 `RecorderStatusText`（アプリ画面と共通） |
+| `iosApp/WatchApp/Complication/ComplicationViews.swift` | WatchWidget / ProtocolTests（WatchApp にも含まれる） | 円形・長方形・インラインのレイアウト（ウィジェットファミリーに依存しない SwiftUI） |
+| `iosApp/WatchApp/Complication/RecorderStatusPublisher.swift` | WatchApp | `RecorderController` の `phase` / `recordingSince` を Observation で追い、変化したら App Group に書いて `WidgetCenter.reloadTimelines(ofKind:)`（バックグラウンドでの中断・充電にも追従） |
+| `iosApp/WatchWidget/RecorderWidget.swift` | WatchWidget（`app-extension`、watch アプリに埋め込み） | `StaticConfiguration`。ファミリー: `accessoryCircular` / `accessoryRectangular` / `accessoryInline` / `accessoryCorner`。タイムラインは 1 エントリ・`.never`（アプリが状態変化時に再読み込みを要求）、経過時間は `Text(_, style: .timer)` で自動更新 |
+| `iosApp/ProtocolTests/ComplicationDisplayTests.swift` | ProtocolTests | 対応表・保存・URL のテストと、レイアウトの PNG 書き出し |
+
+### 14.2 表示とタップ
+
+| 録音状態 | 円形 | 長方形（2 行目） | インライン |
+| --- | --- | --- | --- |
+| 録音中 | 赤 `record.circle` + 「録音中」 | 「経過 h:mm:ss」 | 「録音中」 |
+| 一時停止（理由あり） | 橙 `pause.circle` + 「一時停止」 | 「充電中・タップで再開」など（充電中 / 電池不足 / 容量不足 / 通話等で中断 / エラー） | 「一時停止（充電中）」 |
+| 停止中 | 灰 `mic.slash` + 「停止中」 | 「タップで録音開始」 | 「録音停止中」 |
+
+- タップは全状態で `widgetURL(watchaudio://record)`。アプリの `onOpenURL` が `RecorderController.start()` を呼ぶ（録音中なら何もしない＝アプリが開くだけ、一時停止中・停止中なら開始。充電中などは従来どおり `paused` のまま理由を表示）。前面に来たときの自動再開（`appBecameActive`）とは競合しない（`start` 側で二重開始を防いでいる）。
+- 状態はアプリが書いた最後の値。アプリが OS に終了された場合、次に起動するまで表示は古いまま（録音中の表示が残り得る）。次回起動時に `terminated` の確定と同時に正しい状態に戻る。
+- Ultra のアクションボタン対応は未実装（完了条件外）。
+
+### 14.3 App Group と署名
+
+- `Configuration/Config.xcconfig` の `APP_GROUP_ID`（既定 `group.$(BUNDLE_ID_PREFIX)`）を、両ターゲットの entitlement（`com.apple.security.application-groups`）と Info.plist の `WatchAudioAppGroup` に入れる。コードは Info.plist から読む。
+- **実機**: Apple Developer で App Group（例 `group.<自分の BUNDLE_ID_PREFIX>`）を作り、watch アプリ（`…watchkitapp`）とウィジェット（`…watchkitapp.widget`）の App ID に割り当てる。別の ID を使うときは `Configuration/Local.xcconfig` で `APP_GROUP_ID` を上書きする。entitlement が無いとアプリとウィジェットで値が共有されず、コンプリケーションは常に「停止中」になる。
+- **CI**（`CODE_SIGNING_ALLOWED=NO`）: entitlement は適用されないが、ビルドは通る。シミュレータでは App Group の代わりにアプリ自身の領域の suite に書かれる（タップ経路とアプリ側の書き込みの確認には十分）。
+
+### 14.4 検証状況
+
+| 項目 | 方法 | 状況 |
+| --- | --- | --- |
+| 状態 → 表示の対応、保存の往復、タップ URL の判定 | `ComplicationDisplayTests`（`ProtocolTests`、iOS シミュレータ） | CI で確認 |
+| 表示（録音中・一時停止・停止中） | 同テストの `testRendersPreviewImages` が各レイアウトを `ImageRenderer` で PNG に書き出す → 成果物 `watch-complication-previews`（`complication-recording.png` / `-paused-charging.png` / `-paused-interruption.png` / `-stopped.png` / `-all.png`）。文字盤へのコンプリケーション追加はコマンドラインから操作できないため、この描画を証跡とする | CI で確認 |
+| ウィジェット拡張の埋め込みとタップ経路 | CI ステップ「watchOS complication tap on an Apple Watch simulator」（`.github/scripts/watch-complication-smoke.sh`）: `WatchAudio.app/PlugIns/WatchAudioWidget.appex`（`com.apple.widgetkit-extension`）の存在を確認 → 通常起動（停止中）のスクリーンショット → `simctl openurl watchaudio://record`（watchOS シミュレータはアプリの URL スキームを開けず LSApplicationWorkspaceErrorDomain 115 になるため、その場合は **Debug 限定**の起動引数 `-complicationURL watchaudio://record` で `onOpenURL` と同じ処理に URL を渡す）→ 録音開始（またはその理由付きの不可）が診断ログに記録されることを確認し、スクリーンショットとアプリが書いた共有状態を成果物 `simulator-smoke` に残す（`watchos-complication-*.png` / `-diagnostics.csv` / `-defaults.txt`）。タップ後のスクリーンショットは初回開始時の通知許可ダイアログが前面に出る（simctl では通知を事前許可できない）ため、開始の判定は診断ログの `start` と共有状態 `{"state":"recording",…}` で行う | CI で確認（[run 38113587458](https://github.com/Soichiro5/watch-audio/actions/runs/38113587458)） |
+| 実機の文字盤での表示、システムからの `widgetURL` の受け渡し、中断後の 1 タップ再開 | 実機のみ（§11 の 13、#60） | 要確認 |
+

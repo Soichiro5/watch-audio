@@ -1,7 +1,7 @@
 # スマホ UI（composeApp）
 
 Compose Multiplatform で Android / iOS 共通のスマホ UI を実装している（#19, #23, #25, #32, #43 の UI 部分、#33 ストレージ管理）。
-目的は「Watch が録り続けたデータがスマホに溜まっていく様子が**見えて**、その中から**探せる**」こと。AI 要約・Chat は対象外。
+目的は「Watch が録り続けたデータがスマホに溜まっていく様子が**見えて**、その中から**探せる**」こと。AI 要約・チャットは対象外。
 
 ## 1. 画面構成
 
@@ -91,7 +91,7 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
 | --- | --- |
 | ようこそ | アプリの仕組み（Watch で録音し続ける → スマホへ届く → 端末内で文字起こし → タイムライン・検索）と「データはこの端末内にのみ保存され、外部に送信されません」（バックアップに含めない・ネットワークはモデル取得のみ） |
 | 録音する前に | 周りの人の声も録音されること、**国・地域により録音に相手の同意が必要な場合があること**、録音が禁止・制限された場所では止めること。「法的助言ではない」旨。チェックボックスに同意しないと先に進めない |
-| 許可の設定 | `AppServices.permissions` を順に表示（状態: 確認中 / 許可する ボタン / 許可済み / 拒否済み → 設定アプリへ）。Android 13+: 通知、iOS: 通知・音声認識。権限が不要なプラットフォームではこのステップ自体を省く。画面復帰時（`LifecycleResumeEffect`）に状態を読み直す |
+| 許可の設定 | `AppServices.permissions` を順に表示（状態: 確認中 / 許可する ボタン / 許可済み / 拒否済み → 理由の表示と「設定を開く」ボタン）。「設定を開く」は `AppServices.openAppSettings()` でアプリの設定画面を開く（Android: `Settings.ACTION_APPLICATION_DETAILS_SETTINGS`、iOS: `UIApplication.openSettingsURLString`。拒否された権限があるときだけ）。Android 13+: 通知、iOS: 通知・音声認識。権限が不要なプラットフォームではこのステップ自体を省く。画面復帰時（`LifecycleResumeEffect`）に状態を読み直す |
 | 文字起こしの準備 | `ModelSetup.DOWNLOAD`（Android）: 「Wi-Fi でダウンロード」「モバイル通信でも許可」と進捗。`ModelSetup.OS_MANAGED`（iOS）: 「モデルを準備」（OS が SpeechTranscriber のモデルをインストール） |
 | Watch で録音を開始 | 「Watch アプリを開いて録音を開始してください」と、届いたデータの確認方法・止まる条件・途絶時の通知の説明。「はじめる」で完了を保存 |
 
@@ -112,6 +112,14 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
 
 読めない値は既定値に戻す。`updateSettings { … }` は 1 トランザクションで読み→変更→差分のみ書き込み。`SettingsViewModel` は `LocalStore.changes` で再読み込みする。
 
+### 1.8 診断ログの書き出し（#77）
+
+状態タブの「プライバシー」の下に「診断ログ」カード。端末内に残している処理の記録（受信・文字起こし・モデルのダウンロード・異常終了などの時刻・ID・処理時間・エラーの種類。**文字起こしの本文や音声は含まない**）の説明と「診断ログを書き出す」ボタン。
+
+- ボタン → `StatusViewModel.exportDiagnostics()` → `AppServices.exportDiagnostics()`。プラットフォームが 1 つの CSV にまとめて共有シートを開く（Android: `ACTION_SEND` + `FileProvider`、iOS: `UIActivityViewController`）。共有先はユーザーが選ぶ。**ボタンを押したときだけ**で、自動では送らない。
+- 状態は `StatusUiState.diagnosticsExport`（`busy` の間はボタンを無効化）。共有シートが開けば追加の表示はなし。記録が 1 件もなければ「書き出せる診断ログがありません」、失敗すると「診断ログを書き出せませんでした: 理由」。
+- 何をどこに記録するかは [android-phone.md §4.2](android-phone.md#42-診断ログ77) と [ios-watchos.md §7.2](ios-watchos.md#72-診断ログ77)。
+
 ## 2. データの流れ
 
 ```mermaid
@@ -126,7 +134,7 @@ flowchart LR
   end
 ```
 
-- プラットフォームとの契約は `AppServices`（`store`, `audioRoot`, `storage`, `status`, `requestTranscription()`, `play()`, `stopPlayback()`, `downloadModels(allowMetered)`, `modelSetup`, `permissions` / `permissionStatus()` / `requestPermission()`, `gapAlertSettingsChanged()`）。追加分はすべてデフォルト実装あり（権限なし・`DOWNLOAD`・no-op）。iOS は `downloadModels` で OS にモデルのインストールを依頼する。
+- プラットフォームとの契約は `AppServices`（`store`, `audioRoot`, `storage`, `status`, `requestTranscription()`, `play()`, `stopPlayback()`, `downloadModels(allowMetered)`, `modelSetup`, `permissions` / `permissionStatus()` / `requestPermission()` / `openAppSettings()`, `gapAlertSettingsChanged()`）。追加分はすべてデフォルト実装あり（権限なし・`DOWNLOAD`・no-op）。iOS は `downloadModels` で OS にモデルのインストールを依頼する。
 - 計算はすべて UI から独立した純粋関数（`logic/`）で、`commonTest` でテストしている。
 - 時刻表示は端末のタイムゾーン（`TimeZone.currentSystemDefault()`、kotlinx-datetime）。チャンクの `timeZone` も DB に保存されているが、表示には使っていない。
 
@@ -157,12 +165,16 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 | --- | --- |
 | `commonTest/…/DayTimelineTest` ほか | タイムライン・カバー率・欠損理由、文字起こしリストのグループ化（削除済み音声は再生不可）、スニペット解析、日付/時刻・容量の書式、受信状況、保持期間変更の確認要否・「削除」入力の判定（`StorageLogicTest`） |
 | `commonTest/…/GapAlertTest`, `AppSettingsTest` | おやすみ時間（日付またぎ・DST）、通知時刻、定期チェックの判定（1 回だけ・おやすみ時間中は待つ・停止理由付きは通知しない）、設定の保存形式と不正値 |
-| `jvmTest/…/ViewModelTest` | 一時ファイルの実 `LocalStore` + 一時ディレクトリの音声 + テストディスパッチャで、日付移動・変更時の再読み込み・周期更新・再試行・検索→該当日へ移動・受信途絶の警告、容量表示と保持期間の確認・適用・空き容量警告、「削除」入力による全削除、確認付きの日単位削除、削除済み音声の発話が再生されないこと、設定の保存、オンボーディングのステップ・同意必須・権限要求 |
+| `jvmTest/…/ViewModelTest` | 一時ファイルの実 `LocalStore` + 一時ディレクトリの音声 + テストディスパッチャで、日付移動・変更時の再読み込み・周期更新・再試行・検索→該当日へ移動・受信途絶の警告、容量表示と保持期間の確認・適用・空き容量警告、「削除」入力による全削除、確認付きの日単位削除、削除済み音声の発話が再生されないこと、設定の保存、オンボーディングのステップ・同意必須・権限要求・拒否時に設定画面を開き戻ったら読み直す（`refusedPermissionLeadsToTheSystemSettingsAndIsReReadOnReturn`）、診断ログの書き出しはボタンでのみ依頼し結果（空・失敗）を表示する（`exportingDiagnosticsAsksThePlatformOnlyOnTapAndReportsTheOutcome`） |
 | `jvmTest/…/GapAlertEvaluatorTest` | 実 DB 上で途絶アラートの判定・通知文・設定の反映 |
-| `jvmTest/…/AppUiTest` | Skia でヘッドレス描画し、(1) タイムライン→再生→検索→結果を開く→状態→おやすみ時間の切り替え→ストレージ（「削除」を入力して全削除）、(2) オンボーディング（同意しないと次へ進めない→通知許可→モデルのダウンロード選択→はじめる→タブ画面→説明をもう一度）を操作。スクリーンショットを `composeApp/build/screenshots/` に出力 |
+| `jvmTest/…/AppUiTest` | Skia でヘッドレス描画し、(1) タイムライン→再生→検索→結果を開く→状態→おやすみ時間の切り替え→ストレージ（「削除」を入力して全削除）→「診断ログを書き出す」、(2) オンボーディング（同意しないと次へ進めない→通知許可→モデルのダウンロード選択→はじめる→タブ画面→説明をもう一度）、(3) 通知を拒否したときの「設定を開く」（`onboarding-permission-denied.png`）を操作。スクリーンショットを `composeApp/build/screenshots/` に出力（CI の成果物 `ui-screenshots`） |
 | `androidApp/src/androidTest/…/PlaybackTest` | エミュレータ上の実アプリで、実際の AAC を MediaPlayer が指定位置から再生すること、検索 → 結果を 1 タップ → 発話の位置から再生されることを確認（CI `emulator.yml`、[android-phone.md §6.1](android-phone.md#61-実機なしlinux--ci)） |
+| `androidApp/src/androidTest/…/PermissionDeniedTest` | エミュレータでオンボーディングから通知の許可を求め、システムのダイアログで拒否 → 理由と「設定を開く」が表示され、押すとアプリの設定画面が開く（インストール直後に `phone-scenarios.sh` から実行。スクリーンショット `onboarding-permission-denied.png` ほか） |
+| `androidApp/src/androidTest/…/ModelWaitTest` | モデルなしの状態タブ（「モデルが未ダウンロードです」・文字起こし待ち）と、モデルを置いた後の「準備完了」のスクリーンショット（`status-model-*.png`） |
+| `composeApp/src/iosTest/…/IosPlaybackTest` | iOS シミュレータで、本番の `Ingestor` で取り込んだ前日の AAC チャンクについて、`IosAppServices.play` 直接・共有 UI（`App`）で「前の日」→ 発話をタップ・検索 → 結果を 1 タップ、のそれぞれで「HH:mm から再生中」が表示され、そのチャンクのファイルが AVAudioPlayer に指定位置（±0.2 秒）・正しい長さで用意されることを確認（CI `ios.yml` の Shared tests、`PLAYBACK_CHECK` 行。`./gradlew iosSimulatorArm64Test`）。テスト実行ファイルはアプリではなく `play()` が false を返すので、再生開始（`started=`）は記録のみ |
+| `iosApp/PlaybackTests/HostedPlaybackTests.swift` | iOS アプリをホストにした XCTest で、アプリの本物の `IosAppServices`（`IosAppGraph.shared.services`）が AAC 16 kHz の音声を指定位置（8 秒）から再生し、2 秒後に 1 秒以上進むこと（CI `ios.yml` の「Playback in the iOS app」、`PLAYBACK_CHECK check=hosted_player` 行） |
 
-共通ロジックのテスト: `shared/core-pipeline` の `AudioRetentionPolicyTest`（未処理・最近の音声は消さない、無期限は何も消さない）と `StorageManagerTest`（一時ディレクトリ + 実 `LocalStore`）、`shared/core-db` の `StorageQueriesTest`（削除の連鎖・FTS・設定・マイグレーションの冪等性）。実 SQLite を使うテストは `src/sqliteTest` にあり、JVM・iOS シミュレータ・Android 端末（composeApp の `GapAlertEvaluatorTest` は JVM と iOS シミュレータのみ）で実行される（[04-dev-environment.md §6](../04-dev-environment.md#6-ci-での自動確認実機なし)）。
+共通ロジックのテスト: `shared/core-pipeline` の `AudioRetentionPolicyTest`（未処理・最近の音声は消さない、無期限は何も消さない）と `StorageManagerTest`（一時ディレクトリ + 実 `LocalStore`）、`DiagnosticsLogTest`（診断ログの書式・上限での切り替え・書き出しの順序・クラッシュ行にメッセージを含めない）と `TranscriptionPipelineTest.diagnosticsGetTimingsAndErrorTypesButNeverTextOrMessages`（文字起こしの本文や例外メッセージがログに入らない）、`shared/core-db` の `StorageQueriesTest`（削除の連鎖・FTS・設定・マイグレーションの冪等性）。実 SQLite を使うテストは `src/sqliteTest` にあり、JVM・iOS シミュレータ・Android 端末（composeApp の `GapAlertEvaluatorTest` は JVM と iOS シミュレータのみ）で実行される（[04-dev-environment.md §6](../04-dev-environment.md#6-ci-での自動確認実機なし)）。
 
 検索のスニペット（一致箇所を `[` `]` で囲んだ文字列）は core-db の `highlightSnippet` が作る。40 文字を超える発話は最初の一致の前後で切り詰め、切った側に `…` を付ける。検索速度は [04-dev-environment.md §5](../04-dev-environment.md#5-検索の性能ベンチマーク23) のベンチマークで確認する。
 

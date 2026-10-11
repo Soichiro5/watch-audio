@@ -4,9 +4,28 @@ name: Android & shared
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
+      - "tools/roadmap-view/**"
+      - "research/**"
+      - "spikes/**"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
+      - "tools/roadmap-view/**"
+      - "research/**"
+      - "spikes/**"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -14,32 +33,41 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-java@v4
+      # #76: data stays on the device (CLAUDE.md "Local only"). Static part first: seconds, no build.
+      # Permissions, backup rules, network APIs / URLs in code, declared dependencies, iOS
+      # Info.plist keys and entitlements against tools/privacy-check/policy.py (docs/04 §6.4).
+      - name: "Local-only check (static)"
+        run: |
+          python3 -m unittest discover -s tools/privacy-check -v
+          python3 tools/privacy-check/check.py
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 21
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - name: "Unit tests (shared: JVM + Android host; phone and Wear OS app JVM tests)"
         run: ./gradlew jvmTest testAndroidHostTest :androidApp:testDebugUnitTest :wearApp:testDebugUnitTest
 
-      # #23: ~500k generated Japanese segments (a year of transcripts); fails if any query's
-      # p95 exceeds 300 ms. The numbers land in the job summary either way.
-      - name: "Search benchmark (500k segments, target 300 ms)"
+      # #23, #72: a year of generated Japanese utterances as the pipeline cuts them since #68
+      # (~3.2 million segments, ~1 GB); fails if any query's p95 exceeds 300 ms. The numbers land
+      # in the job summary either way.
+      - name: "Search benchmark (3.2M segments, target 300 ms)"
         run: |
           status=0
-          ./gradlew :shared:core-db:jvmBenchmark || status=$?
+          ./gradlew :shared:core-db:jvmBenchmark -Pbenchmark.segments=3200000 || status=$?
           cat shared/core-db/build/reports/search-benchmark/summary.md >> "$GITHUB_STEP_SUMMARY" || true
           exit $status
 
       - name: Cache ASR models
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: tools/harness/models
           key: asr-models-${{ hashFiles('tools/harness/download-models.sh') }}
@@ -56,10 +84,84 @@ jobs:
       - name: Assemble phone + Wear OS
         run: ./gradlew :androidApp:assembleDebug :wearApp:assembleDebug
 
-      - uses: actions/upload-artifact@v4
+      # #76: the same policy on what ships: release merged manifests (permissions added by
+      # libraries) and the resolved release runtime classpath (transitive dependencies).
+      - name: "Local-only check (merged manifests, resolved dependencies)"
+        run: |
+          mkdir -p build/privacy-check
+          ./gradlew :androidApp:processReleaseMainManifest :wearApp:processReleaseMainManifest
+          for app in androidApp wearApp; do
+            ./gradlew -q :$app:dependencies --configuration releaseRuntimeClasspath > build/privacy-check/deps-$app.txt
+          done
+          python3 tools/privacy-check/check.py --summary "$GITHUB_STEP_SUMMARY" \
+            --merged-manifest androidApp=androidApp/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml \
+            --merged-manifest wearApp=wearApp/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml \
+            --resolved-deps androidApp=build/privacy-check/deps-androidApp.txt \
+            --resolved-deps wearApp=build/privacy-check/deps-wearApp.txt
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: debug-apks
           path: |
             androidApp/build/outputs/apk/debug/*.apk
             wearApp/build/outputs/apk/debug/*.apk
           retention-days: 7
+
+      # #78: release builds with R8 of both apps. assembleRelease also runs the Wear OS guard
+      # verifyReleaseDebugInput (#57: the debug audio file input must not be in a release build).
+      # Signed only when the release key secrets exist (docs/04 §7.1); fork PRs and a repository
+      # without the secrets build unsigned APKs, which are not uploaded. The key is written to the
+      # runner's temp dir only and removed afterwards; secret values are never echoed.
+      - name: Assemble release (R8) + debug input leak check
+        id: release
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          WATCHAUDIO_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+          WATCHAUDIO_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          WATCHAUDIO_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
+            printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            export WATCHAUDIO_RELEASE_STORE_FILE="$RUNNER_TEMP/release.jks"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            signing="signed with the release key (secrets)"
+          else
+            signing="unsigned (release key secrets are not set)"
+          fi
+          ./gradlew :androidApp:assembleRelease :wearApp:assembleRelease
+          {
+            echo "### Release builds (R8): $signing"
+            echo
+            echo "| APK | Size |"
+            echo "| --- | --- |"
+            for f in androidApp/build/outputs/apk/release/*.apk wearApp/build/outputs/apk/release/*.apk; do
+              echo "| $(basename "$f") | $(du -h "$f" | cut -f1) |"
+            done
+            echo
+            echo "Wear OS debug input guard (verifyReleaseDebugInput, #57):"
+            echo '```'
+            cat wearApp/build/reports/debug-input/release.txt
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the release key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.release.outputs.signed == 'true'
+        with:
+          name: release-apks
+          path: |
+            androidApp/build/outputs/apk/release/*-release.apk
+            wearApp/build/outputs/apk/release/*-release.apk
+          retention-days: 7
+
+      # Screens rendered by composeApp's AppUiTest (onboarding incl. the refused permission #32, tabs).
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ui-screenshots
+          path: composeApp/build/screenshots/
+          if-no-files-found: ignore
+          retention-days: 30

@@ -95,6 +95,7 @@ private fun Onboarding(viewModel: OnboardingViewModel, onFinish: () -> Unit) {
         onFinish = onFinish,
         onConsentChange = viewModel::setConsent,
         onRequestPermission = viewModel::requestPermission,
+        onOpenAppSettings = viewModel::openAppSettings,
         onDownloadModel = viewModel::downloadModels,
     )
 }
@@ -185,6 +186,7 @@ private fun MainTabs(
                         },
                         onCancelDeleteAll = statusViewModel::cancelDeleteAll,
                     ),
+                    onExportDiagnostics = statusViewModel::exportDiagnostics,
                     modifier = modifier,
                 )
             }

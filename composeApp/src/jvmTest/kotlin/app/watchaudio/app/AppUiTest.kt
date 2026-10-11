@@ -118,6 +118,14 @@ class AppUiTest {
         onNodeWithText(Strings.DELETE_ALL_CONFIRM).performScrollTo().performClick()
         waitForText(Strings.DELETED_ALL)
         assertEquals(0, runBlocking { store.read { stats() } }.chunks)
+
+        // Diagnostics log (#77): exported only through the button.
+        assertEquals(0, services.diagnosticsExports)
+        services.diagnosticsExportResult = false
+        onNodeWithText(Strings.EXPORT_DIAGNOSTICS).performScrollTo().performClick()
+        waitForText(Strings.DIAGNOSTICS_EMPTY)
+        assertEquals(1, services.diagnosticsExports)
+        screenshot("diagnostics")
     }
 
     @Test
@@ -167,6 +175,36 @@ class AppUiTest {
         onNodeWithText(Strings.TAB_STATUS).performClick()
         onNodeWithText(Strings.SHOW_ONBOARDING_AGAIN).performScrollTo().performClick()
         waitForText(Strings.WELCOME_TITLE)
+    }
+
+    /** #32: a refused permission explains itself and leads to the system settings. */
+    @Test
+    fun refusedPermissionOffersTheSystemSettings() = runDesktopComposeUiTest(width = 412, height = 915) {
+        val services = FakeAppServices(
+            store,
+            initialStatus = ProcessingStatus(asrModel = ModelState.Missing),
+            permissions = listOf(AppPermission.NOTIFICATIONS),
+        )
+        services.deniesOnRequest = true
+        showApp(services)
+
+        waitForText(Strings.WELCOME_TITLE)
+        onNodeWithText(Strings.ONBOARDING_NEXT).performClick()
+        waitForText(Strings.CONSENT_TITLE)
+        onNodeWithText(Strings.CONSENT_CHECKBOX).performScrollTo().performClick()
+        onNodeWithText(Strings.ONBOARDING_NEXT).performClick()
+
+        waitForText(Strings.PERMISSIONS_TITLE)
+        onNodeWithText(Strings.PERMISSION_ALLOW).performClick()
+        waitForText(Strings.PERMISSION_DENIED)
+        waitForText(Strings.OPEN_SETTINGS)
+        screenshot("onboarding-permission-denied")
+
+        onNodeWithText(Strings.OPEN_SETTINGS).performClick()
+        assertEquals(1, services.appSettingsOpened)
+        // Refusing does not block the rest of the guide.
+        onNodeWithText(Strings.ONBOARDING_SKIP).performClick()
+        waitForText(Strings.MODEL_SETUP_TITLE)
     }
 
     private fun ComposeUiTest.showApp(services: AppServices) {

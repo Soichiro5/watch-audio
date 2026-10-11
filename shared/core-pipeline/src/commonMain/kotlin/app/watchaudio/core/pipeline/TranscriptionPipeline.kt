@@ -6,6 +6,7 @@ import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.db.NewSegment
 import app.watchaudio.core.db.StoreTransaction
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.TimeSource
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.io.files.Path
@@ -29,9 +30,10 @@ class TranscriptionPipeline(
 
     /**
      * Processes pending chunks until none are left or [shouldContinue] returns false.
+     * [observer] hears about each chunk (e.g. for logs).
      * @return number of chunks attempted in this run.
      */
-    suspend fun processPending(shouldContinue: () -> Boolean = { true }): RunResult {
+    suspend fun processPending(observer: Observer = Observer.NONE, shouldContinue: () -> Boolean = { true }): RunResult {
         val attempted = mutableSetOf<String>()
         var transcribed = 0
         var failed = 0
@@ -39,13 +41,26 @@ class TranscriptionPipeline(
             val next = store.read { pendingChunks(limit = attempted.size + 1, maxAttempts = maxAttempts) }
                 .firstOrNull { it.id !in attempted } ?: break
             attempted += next.id
-            if (process(next)) transcribed++ else failed++
+            observer.started(next.id)
+            val startedAt = TimeSource.Monotonic.markNow()
+            val error = process(next)
+            if (error == null) transcribed++ else failed++
+            observer.finished(
+                ChunkOutcome(
+                    chunkId = next.id,
+                    transcribed = error == null,
+                    audioMs = next.endedAt - next.startedAt,
+                    elapsedMs = startedAt.elapsedNow().inWholeMilliseconds,
+                    errorType = error,
+                ),
+            )
         }
         return RunResult(transcribed = transcribed, failed = failed)
     }
 
-    private suspend fun process(chunk: ChunkRecord): Boolean {
-        if (chunk.audioPath == null) return true // silent chunks are never queued
+    /** @return null on success, else the type of the error (the chunk is marked failed). */
+    private suspend fun process(chunk: ChunkRecord): String? {
+        if (chunk.audioPath == null) return null // silent chunks are never queued
         store.transaction { markTranscribing(chunk.id) }
         return try {
             val joined = store.read { planJoin(chunk) }
@@ -59,14 +74,14 @@ class TranscriptionPipeline(
                 transcribe(JoinedTranscription(chunk))
             }
             store.transaction { save(segments) }
-            true
+            null
         } catch (e: CancellationException) {
             // The coroutine is already cancelled; the requeue must still run.
             withContext(NonCancellable) { store.transaction { resetInterrupted() } }
             throw e
         } catch (e: Exception) {
             store.transaction { markFailed(chunk.id, e.message ?: e::class.simpleName.orEmpty()) }
-            false
+            e::class.simpleName ?: "Exception"
         }
     }
 
@@ -96,4 +111,32 @@ class TranscriptionPipeline(
     }
 
     data class RunResult(val transcribed: Int, val failed: Int)
+
+    /**
+     * How one chunk went: [audioMs] is its recorded length, [elapsedMs] the time spent on it
+     * (including joined neighbour audio), [errorType] the failure's exception class (never its
+     * message, which may quote data).
+     */
+    data class ChunkOutcome(
+        val chunkId: String,
+        val transcribed: Boolean,
+        val audioMs: Long,
+        val elapsedMs: Long,
+        val errorType: String? = null,
+    )
+
+    /** Progress of [processPending], chunk by chunk. A chunk interrupted by cancellation never finishes. */
+    interface Observer {
+        fun started(chunkId: String) {}
+
+        /** [transcribed] is false when the attempt failed (see `markFailed`). */
+        fun finished(chunkId: String, transcribed: Boolean) {}
+
+        /** Called instead of the two-argument [finished] (which it calls by default), with timings. */
+        fun finished(outcome: ChunkOutcome) = finished(outcome.chunkId, outcome.transcribed)
+
+        companion object {
+            val NONE: Observer = object : Observer {}
+        }
+    }
 }

@@ -10,9 +10,14 @@ import app.watchaudio.core.protocol.SourcePlatform
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.buffered
 import kotlinx.io.files.Path
+import kotlinx.io.files.SystemFileSystem
+import kotlinx.io.readString
 
 class TranscriptionPipelineTest {
     private val dir = TempDir("pipeline")
@@ -114,6 +119,47 @@ class TranscriptionPipelineTest {
         assertEquals(601_000, segment.startAt)
         assertEquals("こんにちは late", segment.text)
         assertEquals("fake", segment.engine)
+    }
+
+    @Test
+    fun observerHearsEachChunkStartAndFinish() = runTest {
+        addChunk("a", 0)
+        addChunk("b", 600_000)
+        val events = mutableListOf<String>()
+        val observer = object : TranscriptionPipeline.Observer {
+            override fun started(chunkId: String) {
+                events += "start $chunkId"
+            }
+
+            override fun finished(chunkId: String, transcribed: Boolean) {
+                events += "done $chunkId $transcribed"
+            }
+        }
+        TranscriptionPipeline(store, dir.path, FakeTranscriber(failFor = setOf("b"))).processPending(observer = observer)
+        assertEquals(listOf("start a", "done a true", "start b", "done b false"), events)
+    }
+
+    @Test
+    fun diagnosticsGetTimingsAndErrorTypesButNeverTextOrMessages() = runTest {
+        addChunk("a", 0)
+        addChunk("b", 600_000)
+        val log = DiagnosticsLog(dir.resolve("diag/diagnostics.csv"))
+        TranscriptionPipeline(store, dir.path, FakeTranscriber(failFor = setOf("b")))
+            .processPending(observer = DiagnosticsPipelineObserver(log))
+
+        val text = SystemFileSystem.source(log.file).buffered().use { it.readString() }
+        val lines = text.lines().filter { it.isNotBlank() }
+        assertEquals(DiagnosticsLog.HEADER.trim(), lines.first())
+        assertEquals(
+            listOf("transcription_started", "transcription_finished", "transcription_started", "transcription_failed"),
+            lines.drop(1).map { it.split(",")[1] },
+        )
+        assertTrue(lines[2].contains("chunk=a audio_ms=300000 elapsed_ms="), lines[2])
+        assertTrue(lines[2].contains(" rtf="), lines[2])
+        assertTrue(lines[4].endsWith("error=IllegalStateException"), lines[4])
+        // The transcript (こんにちは …) and the exception message must not reach the log.
+        assertFalse(text.contains("こんにちは"))
+        assertFalse(text.contains("exploded"))
     }
 
     @Test

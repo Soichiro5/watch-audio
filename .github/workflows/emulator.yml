@@ -1,11 +1,16 @@
 name: Emulator smoke test
 
-# Device-free check (#44): boot a phone and a Wear OS emulator, install the debug
-# builds, launch them and fail on crashes of our own process (system apps such as the
-# Wear setup wizard sometimes crash on CI images and must not fail the check). Runs on Linux runners (KVM), 1x minutes.
+# Device-free check (#44): boot a phone and a Wear OS emulator, install the release builds (R8,
+# signed with a throwaway key generated in the job; #78) and then the debug builds, launch each and
+# fail on crashes of our own process (system apps such as the Wear setup wizard sometimes crash on
+# CI images and must not fail the check): .github/scripts/launch-smoke.sh. Runs on Linux runners (KVM), 1x minutes.
 # On the phone emulator it also runs the instrumented tests: real MediaPlayer playback and
-# the search -> one tap -> play flow (#19, #25), and the shared SQLite tests of core-db and
-# core-pipeline on Android (#14).
+# the search -> one tap -> play flow (#19, #25), the shared SQLite tests of core-db and
+# core-pipeline on Android (#14), on-device ASR with the real models and the wait without a model
+# (#22), the charging job and resuming after a force-stop (#20), the gap alert notification (#43)
+# and the refused permission (#32); see .github/scripts/phone-scenarios.sh.
+# On the Wear OS emulator it shows the tile and the complication and taps the tile (#41):
+# .github/scripts/wear-surfaces.sh. Screenshots are uploaded as the screenshots-<name> artifact.
 on:
   push:
     branches: [main]
@@ -16,8 +21,20 @@ on:
       - "shared/**"
       - "gradle/**"
       - "*.gradle.kts"
+      - "build-logic/**"
       - ".github/workflows/emulator.yml"
       - ".github/scripts/**"
+      - "!**/*.md"
+      - "!docs/**"
+      - "!**/src/iosMain/**"
+      - "!**/src/iosTest/**"
+      - "!**/src/jvmMain/**"
+      - "!**/src/jvmTest/**"
+      - "!.github/scripts/simulator-smoke.sh"
+      - "!.github/scripts/xcode-test.sh"
+      - "!.github/scripts/make-ja-speech.sh"
+      - "!.github/scripts/xcresult-summary.py"
+      - "!.github/scripts/watch-complication-smoke.sh"
   pull_request:
     branches: [main]
     paths:
@@ -27,9 +44,24 @@ on:
       - "shared/**"
       - "gradle/**"
       - "*.gradle.kts"
+      - "build-logic/**"
       - ".github/workflows/emulator.yml"
       - ".github/scripts/**"
+      - "!**/*.md"
+      - "!docs/**"
+      - "!**/src/iosMain/**"
+      - "!**/src/iosTest/**"
+      - "!**/src/jvmMain/**"
+      - "!**/src/jvmTest/**"
+      - "!.github/scripts/simulator-smoke.sh"
+      - "!.github/scripts/xcode-test.sh"
+      - "!.github/scripts/make-ja-speech.sh"
+      - "!.github/scripts/xcresult-summary.py"
+      - "!.github/scripts/watch-complication-smoke.sh"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -37,8 +69,8 @@ concurrency:
 
 jobs:
   smoke:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -53,14 +85,19 @@ jobs:
             device-tests: :androidApp:connectedDebugAndroidTest :shared:core-db:connectedAndroidDeviceTest :shared:core-pipeline:connectedAndroidDeviceTest
             # Each of these must report at least one test case: the test engine can end green with 0 tests (e.g. a failed APK install).
             device-test-modules: androidApp shared/core-db shared/core-pipeline
+            # The ASR tests must not skip for lack of models (pushed by phone-scenarios.sh).
+            device-test-args: -Pandroid.testInstrumentationRunnerArguments.requireModels=true
+            scenarios: .github/scripts/phone-scenarios.sh
           - name: wear
             module: wearApp
             api-level: 34
             target: android-wear
-            emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+            # Audio enabled so that recording started from the tile gets a (silent) microphone.
+            emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
+            scenarios: .github/scripts/wear-surfaces.sh
     name: smoke (${{ matrix.name }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Must run before setup-java: the tool cache it clears is where the JDK is installed.
       - name: Free disk space for the emulator image
@@ -68,12 +105,12 @@ jobs:
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android/sdk/ndk "$AGENT_TOOLSDIRECTORY"
           df -h /
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 21
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - name: Enable KVM
         run: |
@@ -81,53 +118,88 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Build debug APK (and instrumented test APKs)
-        run: ./gradlew :${{ matrix.module }}:assembleDebug ${{ matrix.device-test-apks }}
+      # Same cache as android.yml; the phone checks push these models to the emulator (#22).
+      - name: Cache ASR models
+        if: matrix.name == 'phone'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tools/harness/models
+          key: asr-models-${{ hashFiles('tools/harness/download-models.sh') }}
+
+      - name: Download ASR models
+        if: matrix.name == 'phone'
+        run: tools/harness/download-models.sh
+
+      # The release build (R8, #78) is signed with a throwaway key made here: it only has to install
+      # on the emulator, and the real release key (android.yml) never reaches this job.
+      - name: Build release and debug APKs (and instrumented test APKs)
+        run: |
+          keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/throwaway.jks" -storepass ci-throwaway \
+            -keypass ci-throwaway -alias ci -keyalg RSA -keysize 2048 -validity 1 -dname "CN=watch-audio CI throwaway"
+          WATCHAUDIO_RELEASE_STORE_FILE="$RUNNER_TEMP/throwaway.jks" WATCHAUDIO_RELEASE_STORE_PASSWORD=ci-throwaway \
+            WATCHAUDIO_RELEASE_KEY_ALIAS=ci WATCHAUDIO_RELEASE_KEY_PASSWORD=ci-throwaway \
+            ./gradlew :${{ matrix.module }}:assembleRelease :${{ matrix.module }}:assembleDebug ${{ matrix.device-test-apks }}
 
       - name: Install, launch and check for crashes
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: ${{ matrix.api-level }}
           target: ${{ matrix.target }}
           arch: x86_64
           disable-animations: true
-          disk-size: 2048M
+          # Room for the speech models (~160 MB, twice while they are copied into the app).
+          disk-size: 3072M
           emulator-options: ${{ matrix.emulator-options }}
           script: |
-            adb install -r ${{ matrix.module }}/build/outputs/apk/debug/*.apk
-            adb logcat -c
-            adb shell monkey -p app.watchaudio -c android.intent.category.LAUNCHER 1
-            sleep 15
-            adb logcat -d > logcat.txt || (sleep 5 && adb wait-for-device && adb logcat -d > logcat.txt)
-            adb shell pidof app.watchaudio || (echo "app is not running"; exit 1)
-            if grep -q "AndroidRuntime: Process: app.watchaudio" logcat.txt; then grep -B2 -A25 "AndroidRuntime: Process: app.watchaudio" logcat.txt; exit 1; fi
-            # The test engine reinstalls the app itself; remove the smoke-test install so a signature mismatch cannot skip the tests.
-            if [ -n "${{ matrix.device-tests }}" ]; then adb uninstall app.watchaudio || true; fi
-            if [ -n "${{ matrix.device-tests }}" ]; then adb logcat -c; ./gradlew ${{ matrix.device-tests }} || touch device-tests-failed; adb logcat -d > logcat-device-tests.txt || true; fi
+            bash .github/scripts/launch-smoke.sh ${{ matrix.module }}/build/outputs/apk/release/${{ matrix.module }}-release.apk logcat-release.txt
+            adb uninstall app.watchaudio
+            bash .github/scripts/launch-smoke.sh ${{ matrix.module }}/build/outputs/apk/debug/${{ matrix.module }}-debug.apk logcat.txt
+            if [ -n "${{ matrix.scenarios }}" ]; then bash ${{ matrix.scenarios }} || touch device-tests-failed; fi
+            # The test engine reinstalls both APKs itself; remove the earlier installs (smoke test, scenarios) so a signature mismatch cannot skip the tests.
+            if [ -n "${{ matrix.device-tests }}" ]; then adb uninstall app.watchaudio || true; adb uninstall app.watchaudio.test || true; fi
+            if [ -n "${{ matrix.device-tests }}" ]; then adb logcat -c; ./gradlew ${{ matrix.device-tests }} ${{ matrix.device-test-args }} || touch device-tests-failed; adb logcat -d > logcat-device-tests.txt || true; fi
+            if [ ! -d screenshots-${{ matrix.name }} ]; then adb pull /data/local/tmp/watchaudio-screenshots screenshots-${{ matrix.name }} || true; fi
             if [ -f device-tests-failed ]; then echo "instrumented tests failed"; exit 1; fi
             for m in ${{ matrix.device-test-modules }}; do n=$(find "$m/build/outputs/androidTest-results/connected" -name '*.xml' -exec grep -o '<testcase ' {} + 2>/dev/null | wc -l); echo "$m: $n instrumented test cases"; if [ "$n" -eq 0 ]; then echo "no instrumented tests ran for $m"; exit 1; fi; done
 
       - name: Instrumented test evidence
-        if: always() && matrix.device-tests != ''
+        if: always()
         run: |
-          python3 .github/scripts/junit-summary.py "Instrumented tests on the ${{ matrix.name }} emulator (API ${{ matrix.api-level }})" \
-            'androidApp/build/outputs/androidTest-results/connected/**/*.xml' \
-            'shared/*/build/outputs/androidTest-results/connected/**/*.xml' >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${{ matrix.device-tests }}" ]; then
+            python3 .github/scripts/junit-summary.py "Instrumented tests on the ${{ matrix.name }} emulator (API ${{ matrix.api-level }})" \
+              'androidApp/build/outputs/androidTest-results/connected/**/*.xml' \
+              'shared/*/build/outputs/androidTest-results/connected/**/*.xml' >> "$GITHUB_STEP_SUMMARY"
+          fi
           {
-            echo "Playback checks (logcat):"
+            echo "Checks on the ${{ matrix.name }} emulator (logcat and scenario scripts):"
             echo '```'
-            grep -ho "PLAYBACK_CHECK.*" logcat-device-tests.txt || echo "no PLAYBACK_CHECK lines"
+            cat launch-checks.txt 2>/dev/null || true
+            grep -ho "[A-Z_]*_CHECK .*\|SCREENSHOT .*\|MODEL_INSTALL .*" logcat-device-tests.txt 2>/dev/null | awk '!seen[$0]++' || true
+            cat scenario-logs/summary.txt wear-surfaces/summary.txt 2>/dev/null || true
             echo '```'
+            echo "Screenshots (artifact screenshots-${{ matrix.name }}):"
+            ls screenshots-${{ matrix.name }} 2>/dev/null || echo "none"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: logcat-${{ matrix.name }}
           path: |
+            logcat-release.txt
             logcat.txt
             logcat-device-tests.txt
+            scenario-logs/
+            wear-surfaces/
             androidApp/build/reports/androidTests/
             shared/*/build/reports/androidTests/
           if-no-files-found: ignore
           retention-days: 7
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: screenshots-${{ matrix.name }}
+          path: screenshots-${{ matrix.name }}/
+          if-no-files-found: ignore
+          retention-days: 30

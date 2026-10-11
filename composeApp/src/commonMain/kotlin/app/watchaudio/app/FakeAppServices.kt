@@ -36,6 +36,8 @@ class FakeAppServices(
     var deniesOnRequest = false
     var gapAlertSettingsChanges = 0
         private set
+    var appSettingsOpened = 0
+        private set
 
     override fun requestTranscription() {
         transcriptionRequests++
@@ -64,8 +66,24 @@ class FakeAppServices(
         return permissionStatus(permission)
     }
 
+    override fun openAppSettings() {
+        appSettingsOpened++
+    }
+
     override fun gapAlertSettingsChanged() {
         gapAlertSettingsChanges++
+    }
+
+    /** What [exportDiagnostics] answers; set [diagnosticsExportFailure] to make it throw instead. */
+    var diagnosticsExportResult = true
+    var diagnosticsExportFailure: Exception? = null
+    var diagnosticsExports = 0
+        private set
+
+    override suspend fun exportDiagnostics(): Boolean {
+        diagnosticsExports++
+        diagnosticsExportFailure?.let { throw it }
+        return diagnosticsExportResult
     }
 
     companion object {

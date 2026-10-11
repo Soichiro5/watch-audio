@@ -11,6 +11,7 @@ import app.watchaudio.app.logic.QuietHours
 import app.watchaudio.app.settings.AppSettings
 import app.watchaudio.app.settings.loadSettings
 import app.watchaudio.app.state.DayDeletion
+import app.watchaudio.app.state.DiagnosticsExport
 import app.watchaudio.app.state.DayViewModel
 import app.watchaudio.app.state.OnboardingStep
 import app.watchaudio.app.state.OnboardingViewModel
@@ -392,6 +393,34 @@ class ViewModelTest {
     }
 
     @Test
+    fun refusedPermissionLeadsToTheSystemSettingsAndIsReReadOnReturn() = runVmTest {
+        val platform = FakeAppServices(store, permissions = listOf(AppPermission.NOTIFICATIONS))
+        platform.deniesOnRequest = true
+        val vm = OnboardingViewModel(platform, scope = backgroundScope)
+        backgroundScope.launch { vm.state.collect {} }
+        vm.refreshPermissions()
+        runCurrent()
+
+        // Nothing refused yet: the system prompt is still available, settings are not opened.
+        vm.openAppSettings()
+        assertEquals(0, platform.appSettingsOpened)
+
+        vm.requestPermission(AppPermission.NOTIFICATIONS)
+        runCurrent()
+        assertEquals(PermissionStatus.DENIED, vm.state.value.permissions[AppPermission.NOTIFICATIONS])
+        vm.openAppSettings()
+        assertEquals(1, platform.appSettingsOpened)
+
+        // The user allows notifications in the settings app; the screen re-reads them on resume.
+        platform.permissionStates[AppPermission.NOTIFICATIONS] = PermissionStatus.GRANTED
+        vm.refreshPermissions()
+        runCurrent()
+        assertEquals(PermissionStatus.GRANTED, vm.state.value.permissions[AppPermission.NOTIFICATIONS])
+        vm.openAppSettings()
+        assertEquals(1, platform.appSettingsOpened)
+    }
+
+    @Test
     fun statusShowsStorageAndConfirmsAShorterRetention() = runVmTest {
         val fortyDaysAgo = at(9) - 40 * 24 * 3_600_000L
         addChunk("old", fortyDaysAgo)
@@ -480,6 +509,32 @@ class ViewModelTest {
         assertFalse(audioFile("a").exists())
         assertTrue(store.read { search("消える発話") }.isEmpty())
         assertEquals(1, services.stopRequests)
+    }
+
+    @Test
+    fun exportingDiagnosticsAsksThePlatformOnlyOnTapAndReportsTheOutcome() = runVmTest {
+        val vm = StatusViewModel(services, clock, scope = backgroundScope)
+        backgroundScope.launch { vm.state.collect {} }
+        runCurrent()
+        assertEquals(0, services.diagnosticsExports) // never on its own
+        assertEquals(DiagnosticsExport(), vm.state.value.diagnosticsExport)
+
+        // Shared: the share sheet is the feedback, no message.
+        vm.exportDiagnostics()
+        runCurrent()
+        assertEquals(1, services.diagnosticsExports)
+        assertEquals(DiagnosticsExport(), vm.state.value.diagnosticsExport)
+
+        services.diagnosticsExportResult = false
+        vm.exportDiagnostics()
+        runCurrent()
+        assertEquals(DiagnosticsExport(message = Strings.DIAGNOSTICS_EMPTY), vm.state.value.diagnosticsExport)
+
+        services.diagnosticsExportFailure = IllegalStateException("disk full")
+        vm.exportDiagnostics()
+        runCurrent()
+        assertEquals(DiagnosticsExport(message = Strings.diagnosticsExportFailed("disk full")), vm.state.value.diagnosticsExport)
+        assertEquals(3, services.diagnosticsExports)
     }
 
     @Test

@@ -15,6 +15,16 @@ on:
       - "gradle.properties"
       - ".github/workflows/ios.yml"
       - ".github/scripts/**"
+      - "!**/*.md"
+      - "!docs/**"
+      - "!**/src/androidMain/**"
+      - "!**/src/androidHostTest/**"
+      - "!**/src/androidDeviceTest/**"
+      - "!**/src/jvmMain/**"
+      - "!**/src/jvmTest/**"
+      - "!.github/scripts/phone-scenarios.sh"
+      - "!.github/scripts/wear-surfaces.sh"
+      - "!.github/scripts/launch-smoke.sh"
   pull_request:
     branches: [main]
     paths:
@@ -27,7 +37,20 @@ on:
       - "gradle.properties"
       - ".github/workflows/ios.yml"
       - ".github/scripts/**"
+      - "!**/*.md"
+      - "!docs/**"
+      - "!**/src/androidMain/**"
+      - "!**/src/androidHostTest/**"
+      - "!**/src/androidDeviceTest/**"
+      - "!**/src/jvmMain/**"
+      - "!**/src/jvmTest/**"
+      - "!.github/scripts/phone-scenarios.sh"
+      - "!.github/scripts/wear-surfaces.sh"
+      - "!.github/scripts/launch-smoke.sh"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -36,25 +59,39 @@ concurrency:
 jobs:
   build:
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: 21
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - name: Cache Kotlin/Native toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.konan
           key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
 
       - name: Show Xcode version
         run: xcodebuild -version
+
+      # The app-hosted playback check (PlaybackTests, #19) needs AVAudioPlayer's clock to run,
+      # i.e. an audio output device on the host; add a virtual one if the runner has none.
+      - name: Audio output for the simulators
+        continue-on-error: true
+        run: |
+          system_profiler SPAudioDataType | tee audio-devices.txt
+          if ! grep -q "Default Output Device: Yes" audio-devices.txt; then
+            echo "No default output device; installing BlackHole (virtual audio device)"
+            brew install --cask blackhole-2ch
+            sudo killall coreaudiod || true
+            sleep 5
+            system_profiler SPAudioDataType
+          fi
 
       - name: Shared tests (iOS simulator)
         run: ./gradlew iosSimulatorArm64Test
@@ -66,15 +103,25 @@ jobs:
           python3 .github/scripts/junit-summary.py "Shared Kotlin tests on the iOS simulator" \
             'shared/*/build/test-results/iosSimulatorArm64Test/*.xml' \
             'composeApp/build/test-results/iosSimulatorArm64Test/*.xml' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "Playback checks on the iOS simulator (IosPlaybackTest, #19 / #25; the player is prepared, started= is informational):"
+            echo '```'
+            grep -ho "PLAYBACK_CHECK[^<&]*" composeApp/build/test-results/iosSimulatorArm64Test/*.xml || echo "no PLAYBACK_CHECK lines"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
+      # The Xcode steps also run when a Kotlin test failed: one macOS run should report everything.
       - name: Generate Xcode project
+        id: xcodegen
+        if: success() || failure()
         run: |
           brew install xcodegen
           cd iosApp && xcodegen generate
 
-      # A fixed -derivedDataPath lets the launch smoke steps below reuse these build products.
+      # A fixed -derivedDataPath lets the launch smoke and hosted test steps below reuse these build products.
       - name: Build iOS app (embeds the watchOS app)
         id: build-ios
+        if: (success() || failure()) && steps.xcodegen.outcome == 'success'
         run: |
           xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme iosApp \
             -configuration Debug -destination 'generic/platform=iOS Simulator' \
@@ -83,7 +130,7 @@ jobs:
 
       - name: Build watchOS app
         id: build-watch
-        if: success() || failure()
+        if: (success() || failure()) && steps.xcodegen.outcome == 'success'
         run: |
           xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme WatchApp \
             -configuration Debug -destination 'generic/platform=watchOS Simulator' \
@@ -93,7 +140,7 @@ jobs:
       # #57: the audio-file input is Debug-only (#if DEBUG). Build Release and make sure it is not in the binary;
       # the Debug build above is the positive control for the search.
       - name: watchOS Release build has no debug audio input
-        if: steps.build-watch.outcome == 'success'
+        if: (success() || failure()) && steps.build-watch.outcome == 'success'
         run: |
           xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme WatchApp \
             -configuration Release -destination 'generic/platform=watchOS Simulator' \
@@ -105,6 +152,14 @@ jobs:
           grep -rqa DebugAudioFileInput "$DEBUG_APP" || { echo "DebugAudioFileInput not found in the Debug app (search is broken)"; exit 1; }
           if grep -rla DebugAudioFileInput "$RELEASE_APP"; then echo "DebugAudioFileInput leaked into the Release app"; exit 1; fi
           echo "OK: DebugAudioFileInput is in the Debug app and absent from the Release app" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # #41: the complication's widget extension is embedded, and its tap URL launches the watch
+      # app and starts the recorder (screenshots and the recorder log go to simulator-smoke).
+      - name: watchOS complication tap on an Apple Watch simulator
+        if: (success() || failure()) && steps.build-watch.outcome == 'success'
+        run: |
+          .github/scripts/watch-complication-smoke.sh \
+            build/DerivedData/Build/Products/Debug-watchsimulator/WatchAudio.app app.watchaudio.watchkitapp
 
       # #7: the apps must start, not only build. Install the products above on a booted
       # simulator, launch, wait 15 s, fail if the process died or a crash report appeared.
@@ -120,29 +175,96 @@ jobs:
           .github/scripts/simulator-smoke.sh watchOS "Apple Watch" \
             build/DerivedData/Build/Products/Debug-watchsimulator/WatchAudio.app app.watchaudio.watchkitapp
 
-      # Hostless logic tests: Swift wire protocol vs. shared/core-protocol/testdata (no Kotlin build).
-      - name: Swift protocol tests (iOS Simulator)
-        if: success() || failure()
-        run: |
-          UDID=$(xcrun simctl list devices available --json \
-            | jq -r '[.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name | startswith("iPhone"))][0].udid')
-          if [ -z "$UDID" ] || [ "$UDID" = "null" ]; then xcrun simctl list devices available; exit 1; fi
-          echo "Simulator: $UDID"
-          xcodebuild -project iosApp/WatchAudio.xcodeproj -scheme ProtocolTests \
-            -destination "platform=iOS Simulator,id=$UDID" \
-            CODE_SIGNING_ALLOWED=NO test -quiet 2>&1 | tee xcodebuild-tests.log; exit ${PIPESTATUS[0]}
+      # Hostless Swift logic tests (no Kotlin build): the wire protocol vs. shared/core-protocol/testdata
+      # (ProtocolTests), the watch recorder's stop reasons / state (#15) and send queue (#17)
+      # (WatchLogicTests). Every test case is listed in the job summary.
+      - name: Swift unit tests (iOS Simulator)
+        if: (success() || failure()) && steps.xcodegen.outcome == 'success'
+        run: .github/scripts/xcode-test.sh SwiftUnitTests "Swift unit tests on the iOS simulator"
 
-      - uses: actions/upload-artifact@v4
+      # #21: SpeechAnalyzer / SpeechTranscriber (ja_JP) on the simulator with known Japanese speech
+      # in the watch's format. If the simulator cannot transcribe, the tests skip with the reason
+      # (shown in the summary); the device check is then #60.
+      - name: Japanese test speech
+        if: (success() || failure()) && steps.build-ios.outcome == 'success'
+        continue-on-error: true # without audio the tests skip and say why
+        run: .github/scripts/make-ja-speech.sh build/ja-speech
+
+      - name: Speech transcription on the iOS simulator
+        if: (success() || failure()) && steps.build-ios.outcome == 'success'
+        timeout-minutes: 15
+        run: |
+          status=0
+          ERASE_SIMULATOR=1 .github/scripts/xcode-test.sh SpeechTests "SpeechTranscriber (ja_JP) on the iOS simulator" || status=$?
+          {
+            echo "Speech check logs (build/swift-evidence):"
+            echo '```'
+            cat build/swift-evidence/speech-*.txt 2>/dev/null || echo "no evidence written"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      # #19: real playback in the app process. The app's own IosAppServices (reached through the
+      # ComposeApp framework) plays a 16 kHz AAC chunk from 8 s; the position must start there and
+      # advance (the Kotlin IosPlaybackTest above cannot start AVAudioPlayer in its test executable).
+      - name: Playback in the iOS app (simulator)
+        if: (success() || failure()) && steps.build-ios.outcome == 'success'
+        timeout-minutes: 15
+        run: |
+          status=0
+          ERASE_SIMULATOR=1 .github/scripts/xcode-test.sh PlaybackTests "Playback in the iOS app on the simulator (#19)" || status=$?
+          {
+            echo "Playback check in the app process (PlaybackTests):"
+            echo '```'
+            cat build/swift-evidence/hosted-playback.txt 2>/dev/null || echo "no evidence written"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: xcodebuild-logs
-          path: xcodebuild-*.log
+          path: |
+            xcodebuild-*.log
+            build/xcresults/
           retention-days: 7
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: kotlin-ios-test-results
+          path: |
+            shared/*/build/test-results/iosSimulatorArm64Test/
+            composeApp/build/test-results/iosSimulatorArm64Test/
+            composeApp/build/reports/tests/iosSimulatorArm64Test/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: swift-evidence
+          path: |
+            build/swift-evidence/
+            build/ja-speech/
+            audio-devices.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: simulator-smoke
           path: simulator-smoke/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # #41: complication layouts rendered by ComplicationDisplayTests (recording / paused / stopped).
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: watch-complication-previews
+          path: build/complication-previews/
           if-no-files-found: ignore
           retention-days: 7

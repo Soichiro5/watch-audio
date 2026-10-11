@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
+    id("watchaudio.android.release")
 }
 
 android {
@@ -20,12 +21,6 @@ android {
         ndk {
             // Real phones (arm64) and the emulator (x86_64); sherpa-onnx ships ~30 MB per ABI.
             abiFilters += listOf("arm64-v8a", "x86_64")
-        }
-    }
-
-    buildTypes {
-        release {
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 
@@ -61,14 +56,17 @@ dependencies {
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.play.services.wearable)
     implementation(libs.sherpa.onnx.android)
-    implementation(libs.commons.compress)
 
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.junit)
 
-    // Emulator checks of real playback and the search -> play flow (#19, #25): emulator.yml.
+    // Emulator checks (emulator.yml): real playback and the search -> play flow (#19, #25),
+    // on-device ASR and the model wait (#22), resuming after a kill and the charging job (#20),
+    // the gap alert notification (#43) and the refused permission (#32).
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.test.uiautomator)
+    androidTestImplementation(libs.androidx.work.testing)
     androidTestImplementation(libs.compose.ui.test.junit4)
     androidTestImplementation(libs.kotlin.test.junit)
 }
