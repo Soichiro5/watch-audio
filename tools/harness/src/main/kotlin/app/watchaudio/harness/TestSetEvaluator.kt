@@ -3,7 +3,9 @@ package app.watchaudio.harness
 import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.AsrSettings
+import app.watchaudio.core.pipeline.FalsePositiveFilter
 import app.watchaudio.core.pipeline.Ingestor
+import app.watchaudio.core.pipeline.SegmentFilter
 import app.watchaudio.core.pipeline.TranscriptionPipeline
 import app.watchaudio.core.pipeline.VadSettings
 import app.watchaudio.core.protocol.AckStatus
@@ -18,14 +20,18 @@ import kotlinx.io.files.Path
  * As a diagnostic it also transcribes every ground-truth utterance on its own (cut from the
  * same AAC-coded audio, without VAD), which separates segmentation problems from acoustic ones.
  *
- * Speech is found and cut with [vadSettings] (the app's settings unless overridden).
+ * Speech is found and cut with [vadSettings] and the results filtered with [segmentFilter] (the
+ * app's settings and filter unless overridden). Each recording's stored segments are listed with
+ * their signals in `<workDir>/<id>/segments.tsv` ([SignalLog]).
  */
 class TestSetEvaluator(
     private val models: File,
     private val workDir: File,
     private val chunkSeconds: Int = 300,
     private val vadSettings: VadSettings = VadSettings.DEFAULT,
+    private val segmentFilter: SegmentFilter = FalsePositiveFilter.DEFAULT,
 ) {
+    private val signals = SignalLog()
 
     /** Outcome for one recording; times in seconds. */
     data class Result(
@@ -52,7 +58,7 @@ class TestSetEvaluator(
         val manifest = TestSetManifest.load(manifestFile)
         val recordings = manifest.recordings.filter { only.isEmpty() || it.id in only }
         require(recordings.isNotEmpty()) { "no recordings $only in $manifestFile" }
-        return SherpaTranscriber(models, vadSettings = vadSettings).use { transcriber ->
+        return SherpaTranscriber(models, vadSettings = vadSettings, signalLog = signals).use { transcriber ->
             recordings.map { recording ->
                 evaluate(File(manifestFile.absoluteFile.parentFile, recording.audio), recording, transcriber).also {
                     File(workDir, "${recording.id}/row.md").writeText(markdownRow(it))
@@ -79,18 +85,27 @@ class TestSetEvaluator(
             val ingestor = Ingestor(store, audioRoot)
             chunks.forEach { check(ingestor.ingest(it.manifest, it.file).status == AckStatus.STORED) }
             outbox.deleteRecursively()
+            signals.clear()
+            signals.chunkStarts = store.read { chunksBetween(0, Long.MAX_VALUE) }
+                .mapNotNull { c -> c.audioPath?.let { Path(audioRoot, it).toString() to c.startedAt } }.toMap()
 
             val started = System.nanoTime()
-            val run = TranscriptionPipeline(store, audioRoot, transcriber).processPending()
+            val run = TranscriptionPipeline(store, audioRoot, transcriber, segmentFilter = segmentFilter).processPending()
             val transcribeSeconds = (System.nanoTime() - started) / 1e9
             check(run.failed == 0) { "${run.failed} chunks failed to transcribe" }
 
-            val hypotheses = store.read { segmentsBetween(0, Long.MAX_VALUE) }
-                .map { Hypothesis(it.startAt - start, it.endAt - start, it.text) }
+            val stored = store.read { segmentsBetween(0, Long.MAX_VALUE) }
+            val hypotheses = stored.map { Hypothesis(it.startAt - start, it.endAt - start, it.text) }
             val silent = store.read { chunksBetween(0, Long.MAX_VALUE) }.count { it.state == ChunkState.NO_AUDIO }
             val score = scoreRecording(recording.segments, hypotheses)
             val oracleScore = scoreRecording(recording.segments, oracle)
             File(dir, "report.md").writeText(detailReport(recording, score, oracle))
+            val outside = score.outside.toSet()
+            File(dir, "segments.tsv").writeText(
+                SignalLog.TSV_HEADER + "\n" + stored.zip(hypotheses).joinToString("") { (segment, h) ->
+                    SignalLog.tsvLine(h, signals.find(segment.startAt, segment.endAt, segment.text), h in outside) + "\n"
+                },
+            )
             val lengths = hypotheses.map { (it.endMs - it.startMs) / 1000.0 }.sorted().ifEmpty { listOf(0.0) }
             Result(recording, score, oracleScore.cer, chunks.size, silent, transcribeSeconds, lengths[lengths.size / 2], lengths.last())
         }

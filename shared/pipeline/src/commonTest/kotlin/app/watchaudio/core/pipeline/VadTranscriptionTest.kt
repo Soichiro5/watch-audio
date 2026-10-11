@@ -78,6 +78,8 @@ class VadTranscriptionTest {
         assertEquals(listOf(null, null), texts.map { it.confidence })
         // Mostly speech (0.9), plus the padding on both sides (0.02).
         texts.forEach { assertTrue(it.speechProbability!! in 0.5f..0.9f, "${it.speechProbability}") }
+        // Tones in digital silence: far above the floor.
+        texts.forEach { assertTrue(it.levelAboveNoiseDb!! > 60f, "${it.levelAboveNoiseDb}") }
     }
 
     @Test
@@ -88,7 +90,8 @@ class VadTranscriptionTest {
         val texts = transcribeSpeech(audio, probabilities, VadSettings.DEFAULT, "ja") {
             if (call++ == 0) Recognition(" ") else Recognition("hello", confidence = 0.8f, lang = "en")
         }
-        assertEquals(listOf(TimedText(texts.single().startMs, texts.single().endMs, "hello", "en", 0.8f, texts.single().speechProbability)), texts)
+        val only = texts.single()
+        assertEquals(listOf(TimedText(only.startMs, only.endMs, "hello", "en", 0.8f, only.speechProbability, only.levelAboveNoiseDb)), texts)
     }
 
     @Test

@@ -14,6 +14,7 @@ import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.ChunkIntake
 import app.watchaudio.core.pipeline.DeviceConditions
 import app.watchaudio.core.pipeline.DiagnosticsLog
+import app.watchaudio.core.pipeline.FalsePositiveFilter
 import app.watchaudio.core.pipeline.Ingestor
 import app.watchaudio.core.pipeline.ModelState
 import app.watchaudio.core.pipeline.PauseReason
@@ -61,7 +62,7 @@ class AppGraph private constructor(context: Context) {
     val scheduler = TranscriptionScheduler(app, scope, chargingOnly = { store.loadSettings().transcribeOnlyWhileCharging })
     val models = ModelManager(app, scope, diagnostics, onReady = scheduler::requestNow)
     val transcriber = AndroidSherpaTranscriber(models.files)
-    val pipeline = TranscriptionPipeline(store, Path(audioRoot.path), transcriber)
+    val pipeline = TranscriptionPipeline(store, Path(audioRoot.path), transcriber, segmentFilter = FalsePositiveFilter.DEFAULT)
     val storage = StorageManager(store, Path(audioRoot.path), AndroidStorageEnvironment(models.files.root, app.filesDir))
 
     /** Battery, battery saver and thermal state for the processing policy (#75); tests substitute their own. */

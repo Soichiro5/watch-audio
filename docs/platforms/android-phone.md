@@ -24,8 +24,8 @@
 
 - `shared/pipeline/AsrModelSpec.kt`: `AsrModelSpec`（sherpa-onnx の ASR モデルの記述: ディレクトリ名・`engineId`・言語・認識器の種類・役割ごとのファイル名）。Android の `ModelFiles`・`ModelManifest` とハーネスはこれからファイルの場所を作る（#136）。
 - `shared/pipeline/VadSettings.kt`: `VadSettings`（発話の検出と区間の切り出しの設定のデータクラス。既定値は VAD しきい値 0.15、パディング 0.3 s、入力の上限 20 s、間の分割 0.22 s / 30 dB と雑音の床から 9 dB・0.3 s など）。
-- `shared/pipeline/VadTranscription.kt`: `transcribeSpeech`（VAD の確率の列 → `speechSegments` → `padSpeechSpans` → 区間ごとの認識 → `TimedText`。発話確率の平均を `TimedText.speechProbability` に付ける）と `speechProbabilities`（窓ごとの VAD 呼び出し）。Android とハーネスで共通（#136）。
-- `shared/pipeline/SegmentFilter.kt`: 保存の前に `TranscriptionPipeline` が通すフィルタ。既定は何も捨てない（#105 の誤認識の除去を入れる場所）。
+- `shared/pipeline/VadTranscription.kt`: `transcribeSpeech`（VAD の確率の列 → `speechSegments` → `padSpeechSpans` → 区間ごとの認識 → `TimedText`。発話確率の平均を `TimedText.speechProbability`、雑音の床からの差を `TimedText.levelAboveNoiseDb` に付ける）と `speechProbabilities`（窓ごとの VAD 呼び出し）。Android とハーネスで共通（#136）。
+- `shared/pipeline/SegmentFilter.kt`: 保存の前に `TranscriptionPipeline` が通すフィルタ。`AppGraph` は `FalsePositiveFilter.DEFAULT` を使い、雑音の床から 7 dB 未満の結果と、発話らしくない（Silero の確率の平均 0.2 未満の）1 文字を捨てる（#105、[02 §6.3](../architecture/02-architecture.md#会話以外の誤認識の除去105)）。
 - `shared/pipeline/SpeechSegmentation.kt`: `padSpeechSpans`（VAD 区間 → 余白付け・結合・話者交代の間での分割・上限での分割。[02 §6.3](../architecture/02-architecture.md#発話区間の切り出しandroid--jvm-ハーネス6871)）。**JVM ハーネスと Android で同一の分割**を使うため。
 - `shared/pipeline/SpeechDetection.kt`: `speechSegments`（Silero の発話確率 → 発話区間。開始と終了のしきい値を別々に持つ。#71）。Android は `Vad.compute` で 32 ms ごとの確率だけを求める。
 - `shared/pipeline/Pcm.kt`: `downmixToMono` / `pcm16ToFloat` / `LinearResampler`（ストリーミング）/ `concatenateParts`（パーツの範囲を切り出して連結。足りない分は無音）。

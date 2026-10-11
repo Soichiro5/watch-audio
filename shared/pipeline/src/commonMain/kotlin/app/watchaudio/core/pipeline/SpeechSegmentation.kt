@@ -1,6 +1,7 @@
 package app.watchaudio.core.pipeline
 
 import kotlin.math.abs
+import kotlin.math.log10
 import kotlin.math.pow
 
 /**
@@ -222,6 +223,33 @@ internal fun noiseFloor(
     energy.sort()
     return energy[(frames - 1) * percentile / 100]
 }
+
+/**
+ * How far `[from, to)` of [audio] rises above the background noise, in dB: the 95th percentile
+ * of its 10 ms frame energies over the [noiseFloor] around it (the [noiseFloorPercentile]th
+ * percentile over the range and [noiseFloorContextSamples] on each side). Speech near the watch
+ * stands well above the floor; a "word" recognized from distant chatter, air conditioning or
+ * silence does not (#105). Null if the range is shorter than one frame.
+ */
+fun levelAboveNoiseFloorDb(
+    audio: FloatArray,
+    from: Int,
+    to: Int,
+    noiseFloorPercentile: Int = VadSettings.DEFAULT.noiseFloorPercentile,
+    noiseFloorContextSamples: Int = VadSettings.DEFAULT.noiseFloorContextSamples,
+): Float? {
+    val start = from.coerceIn(0, audio.size)
+    val end = to.coerceIn(start, audio.size)
+    val frames = (end - start) / PAUSE_FRAME
+    if (frames <= 0) return null
+    val energy = DoubleArray(frames) { frameEnergy(audio, start + it * PAUSE_FRAME) }.apply { sort() }
+    val loud = energy[(frames - 1) * 95 / 100]
+    val floor = noiseFloor(audio, start, end, noiseFloorPercentile, noiseFloorContextSamples)
+    return (10 * log10((loud + ENERGY_EPSILON) / (floor + ENERGY_EPSILON))).toFloat()
+}
+
+/** Keeps [levelAboveNoiseFloorDb] finite for digital silence (about -120 dBFS). */
+private const val ENERGY_EPSILON = 1e-12
 
 /** Splits `[from, to)` at its quietest points into pieces no longer than [limit]. */
 private fun splitLongRange(audio: FloatArray, from: Int, to: Int, limit: Int): List<Pair<Int, Int>> {

@@ -200,7 +200,7 @@ no_audio（無音チャンク。文字起こししない）
 - 制約（ジョブ側）: Android の 1 回限りジョブは「電池残量低下でないこと」（設定「充電中のみ」がオンなら「充電中」）を WorkManager の制約にし、方針で止まったときは理由に応じて「遅延付きの再実行」（発熱・上限）と「充電中を条件にした実行」（`transcription-on-charge`）を予約する。iOS の `BGProcessingTask` はもともと外部電源が条件なので、止まるのは発熱のときだけ（再予約で `earliestBeginDate` を 15 分後にする）。iOS の前面実行は Android と同じ判定を使い、時間で再判定する止まり方なら前面にいる間だけ再試行する。
 - 音声の保持期間ポリシー（#33）: 文字起こし完了済みのチャンクのみ削除対象。文字起こしの後に同じ実行（共通の `TranscriptionRun`。Android `TranscriptionWorker`、iOS `BGProcessingTask` / 前面実行から呼ぶ）で `StorageManager.applyRetention()` を実行する。詳細は §9.3。
 - 文字起こしエンジンは共通インターフェース `Transcriber`（`shared/pipeline`）の裏に置く。入力は「音声パーツ（ファイル + 範囲 `[fromMs, toMs)`）のリスト」で、エンジンはそれを連結した 1 本の録音として認識し、連結先頭からの相対時刻で発話を返す（各パーツはちょうど `toMs - fromMs` の長さにする。ファイルが短ければ無音で埋める）。実装: Android = sherpa-onnx（各ファイルを `MediaCodec` でデコードして PCM を連結）、iOS = SpeechAnalyzer（Swift 側で一時 CAF ファイルに連結）、JVM ハーネス = sherpa-onnx（ffmpeg でデコード）。
-- **誤認識の除去は共通の 1 か所**（#136）: `TranscriptionPipeline` は `Transcriber` の結果（`TimedText`）を保存の前に `SegmentFilter`（`shared/pipeline`）に通し、残したものだけを保存する。既定（`SegmentFilter.KEEP_ALL`）は何も捨てない。判断の材料として `TimedText` は任意の `speechProbability`（発話区間の Silero の確率の平均。sherpa-onnx の経路で付く）と `confidence`（認識器の確信度。sherpa-onnx 1.13 の Java API はトークンの確率を出さないので現状は null、iOS も null）を持つ。どちらも DB には保存しない（スキーマは変えていない）。短い誤認識の除去（#105）はこのフィルタとして足す。
+- **誤認識の除去は共通の 1 か所**（#136、#105）: `TranscriptionPipeline` は `Transcriber` の結果（`TimedText`）を保存の前に `SegmentFilter`（`shared/pipeline`）に通し、残したものだけを保存する。アプリ（Android・iOS）とハーネスは `FalsePositiveFilter.DEFAULT` を使う（下記「会話以外の誤認識の除去」）。判断の材料として `TimedText` は任意の `speechProbability`（発話区間の Silero の確率の平均）、`levelAboveNoiseDb`（区間の音が雑音の床からどれだけ大きいか、dB）、`confidence`（認識器の確信度）を持つ。前の 2 つは sherpa-onnx の経路（`transcribeSpeech`）で付く。`confidence` は現状どの経路でも null（sherpa-onnx 1.13.8 の Java / Android API の結果はテキスト・トークン・時刻・長さだけでトークンの確率を出さない。iOS の SpeechAnalyzer の経路はどれも null）。いずれも DB には保存しない（スキーマは変えていない）。
 - **モデルの記述**（#136）: sherpa-onnx の ASR モデルは `AsrModelSpec`（`shared/pipeline`: ディレクトリ名 `id`、`engineId`、言語、認識器の種類 `RecognizerKind`、役割ごとのファイル名）で表す。現在は `AsrModelSpec.JA_REAZONSPEECH`（Zipformer ReazonSpeech int8、`ja`）だけ。Android の `ModelFiles`・`ModelManifest` とハーネスの `SherpaTranscriber` はこの spec からファイルの場所と認識器の設定を作るので、別のモデル（英語・日英混在の #81 など）は spec と `RecognizerKind` の追加で足せる。
 
 #### 発話区間の切り出し（Android / JVM ハーネス、#68・#71）
@@ -225,8 +225,19 @@ sherpa-onnx の経路では、Silero VAD の発話確率（32 ms ごと）から
 **残る制約**:
 
 - 雑音下の相手の声（装着者より小さい声）は、正解区間で切った場合より CER が大きい（カフェ 59%、屋外 52%）。細かく切られて文脈が減るか、取りこぼされる。話者の切り替わりの検出やノイズ抑制は未検討。
-- しきい値を下げたぶん、会話以外の短い声（「うん」「え」など）も拾う（1 日分で会話外の誤認識 7 → 58 文字）。
+- しきい値を下げたぶん、会話以外の短い声（「うん」「え」など）も拾う（1 日分で会話外の誤認識 7 → 58 文字）。保存の前に除く（下記、#105）。
 - パラメータは合成音声（#56）で選んだ。実機の雑音での確認は #61。
+
+#### 会話以外の誤認識の除去（#105）
+
+VAD のしきい値を 0.15 に下げた（#71）ぶん、会話のない所の生活音や遠くの話し声も発話として拾い、「うん」「え」「何」のような短い文字になる。`TranscriptionPipeline` は保存の前に `FalsePositiveFilter`（`shared/pipeline/SegmentFilter.kt`）で次のどちらかに当たる結果を捨てる。
+
+1. **雑音の床に近い**: 区間の 10 ms ごとのエネルギーの 95 パーセンタイルが、雑音の床（区間と前後 5 秒の 10 パーセンタイル、§6.3 の間の検出と同じ）から 7 dB（`minLevelAboveNoiseDb`）未満（`levelAboveNoiseFloorDb`、`TimedText.levelAboveNoiseDb`）。文字数は問わない。遠くの話し声・空調・会話の合間の無音から出た文字は床とほとんど変わらない（1 日分で 3.8〜5.5 dB）。会話の CER は 8 dB まで悪化せず、10 dB で雑音下の相手の声を捨て始めた。
+2. **発話らしくない 1 文字**: 文字（かな・漢字・英数字）が 1 文字（`shortTextMaxChars`）以下で、Silero の確率の平均が 0.2（`shortTextMinSpeechProbability`）未満。袖の擦れのような、大きいが声ではない音から出た「え」「あ」。
+
+信号がない（null）ときは、その規則では捨てない。iOS の SpeechAnalyzer の経路は確率も音量も返さないので、現状は何も捨てない（Swift 側で信号を付ければ同じフィルタが効く）。
+
+**理由**: 1 日分（`day`）の会話外の誤認識 58 文字の内訳は、オフィスの遠くの話し声（空調と合わせて床から 3.8〜5.5 dB）から 48 文字、擦れ音（床から 17〜28 dB と大きいが、Silero の確率の平均 0.05〜0.12）から 10 文字だった。会話の CER を悪化させないことを条件に候補（短い区間と文字数、Silero の確率、雑音の床からの差、その組み合わせ）を比べ、悪化がなく会話外の誤認識が最も少ない組み合わせを選んだ。区間の長さは前後 0.3 秒の余白を含むので、短さだけでは雑音と短い相づちを分けられなかった（会話の CER が悪化する）。測定結果は [test-audio.md §4](../dev/test-audio.md#4-結果)。合成の雑音で選んだ値なので、実機の生活音での確認は #61。
 
 #### チャンク境界をまたぐ発話（#45）
 

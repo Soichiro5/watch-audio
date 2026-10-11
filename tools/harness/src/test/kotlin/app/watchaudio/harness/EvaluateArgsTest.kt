@@ -1,11 +1,13 @@
 package app.watchaudio.harness
 
+import app.watchaudio.core.pipeline.FalsePositiveFilter
 import app.watchaudio.core.pipeline.VadSettings
 import java.io.File
 import java.lang.reflect.Modifier
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 class EvaluateArgsTest {
     @Test
@@ -40,6 +42,33 @@ class EvaluateArgsTest {
     }
 
     @Test
+    fun theAppFilterIsOnUnlessTurnedOff() {
+        assertEquals(FalsePositiveFilter.DEFAULT, EvaluateArgs.parse(listOf("m.json", "out")).filter)
+        assertNull(EvaluateArgs.parse(listOf("m.json", "out", "--filter", "off", "day")).filter)
+        assertNull(EvaluateArgs.parse(listOf("m.json", "out", "--filter=off")).filter)
+    }
+
+    @Test
+    fun filterOptionsOverrideTheFilterByName() {
+        val args = EvaluateArgs.parse(
+            listOf("m.json", "out", "--filter", "minLevelAboveNoiseDb=5,shortTextMaxChars=2", "--filter=shortTextMinSpeechProbability=0.1", "day"),
+        )
+        assertEquals(FalsePositiveFilter(minLevelAboveNoiseDb = 5f, shortTextMaxChars = 2, shortTextMinSpeechProbability = 0.1f), args.filter)
+        assertEquals(setOf("day"), args.recordings)
+    }
+
+    @Test
+    fun everyFilterPropertyCanBeOverridden() {
+        val names = FalsePositiveFilter::class.java.declaredFields.filterNot { Modifier.isStatic(it.modifiers) }.map { it.name }.toSet()
+        assertEquals(names, FILTER_OPTIONS.keys)
+        for ((name, set) in FILTER_OPTIONS) {
+            val changed = set(FalsePositiveFilter.DEFAULT, "3")
+            val field = FalsePositiveFilter::class.java.getDeclaredField(name).apply { isAccessible = true }
+            assertEquals(3.0, (field.get(changed) as Number).toDouble(), name)
+        }
+    }
+
+    @Test
     fun badInputIsReported() {
         assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json")) }
         assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--vad")) }
@@ -47,6 +76,9 @@ class EvaluateArgsTest {
         assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--vad", "threshold=high")) }
         assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--vad", "threshold")) }
         assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--vda", "threshold=1")) }
+        assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--filter")) }
+        assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--filter", "threshold=1")) }
+        assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--filter", "shortTextMaxChars=two")) }
     }
 
     private fun property(settings: VadSettings, name: String): Any =

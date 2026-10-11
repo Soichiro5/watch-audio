@@ -5,6 +5,7 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SpeechSegmentationTest {
@@ -199,5 +200,22 @@ class SpeechSegmentationTest {
         val floor = noiseFloor(audio, 4 * rate, 8 * rate)
         val noiseEnergy = 0.01 * 0.01 / 3 // mean square of uniform noise in [-0.01, 0.01]
         assertTrue(floor in noiseEnergy * 0.5..noiseEnergy * 1.5, "floor $floor")
+    }
+
+    @Test
+    fun levelAboveNoiseFloorIsTheLoudFramesOverTheFloorAround() {
+        val audio = noisy(12, 4 * rate to 2 * rate)
+        // Speech 20 dB above the noise around it.
+        val speech = levelAboveNoiseFloorDb(audio, 4 * rate, 6 * rate)!!
+        assertTrue(speech in 19f..23f, "speech $speech dB")
+        // Noise alone barely rises above its own floor.
+        val noise = levelAboveNoiseFloorDb(audio, 8 * rate, 10 * rate)!!
+        assertTrue(noise in 0f..3f, "noise $noise dB")
+        // Ranges are clamped to the audio; less than one 10 ms frame has no level.
+        assertTrue(levelAboveNoiseFloorDb(audio, 11 * rate, 20 * rate)!! in 0f..3f)
+        assertNull(levelAboveNoiseFloorDb(audio, rate, rate + 100))
+        assertNull(levelAboveNoiseFloorDb(audio, 13 * rate, 14 * rate))
+        // Digital silence everywhere stays finite.
+        assertEquals(0f, levelAboveNoiseFloorDb(FloatArray(rate), 0, rate))
     }
 }

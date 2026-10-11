@@ -36,6 +36,8 @@ class SherpaTranscriber(
     numThreads: Int = 2,
     val spec: AsrModelSpec = AsrModelSpec.DEFAULT,
     val vadSettings: VadSettings = VadSettings.DEFAULT,
+    /** Hears every result with its audio, for analysis (see [SignalLog]). */
+    private val signalLog: SignalLog? = null,
 ) : Transcriber, AutoCloseable {
     override val engineId = spec.engineId
 
@@ -67,7 +69,9 @@ class SherpaTranscriber(
 
     override suspend fun transcribe(parts: List<AudioPart>): List<TimedText> = withContext(Dispatchers.Default) {
         val samples = concatenateParts(parts) { Ffmpeg.decode(File(it.file.toString())) }
-        transcribeSpeech(samples, vadProbabilities(samples), vadSettings, spec.language) { Recognition(recognize(it)) }
+        val probabilities = vadProbabilities(samples)
+        transcribeSpeech(samples, probabilities, vadSettings, spec.language) { Recognition(recognize(it)) }
+            .also { signalLog?.record(parts, probabilities, vadSettings.windowSize, it) }
     }
 
     /** Recognizes [samples] (16 kHz) as one utterance, without VAD. */
