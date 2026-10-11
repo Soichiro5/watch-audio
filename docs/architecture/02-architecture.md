@@ -78,8 +78,9 @@ watch-audio/
 ├── shared/                    # KMP: 共通ロジック（Gradle: :shared:<名前>）
 │   ├── protocol/              #   ChunkManifest / ChunkAck / ChunkFrame / RecordingFormat（Wear OS・スマホ共通。testdata/ は Swift 側と共有）
 │   ├── platform/              #   expect/actual: SHA-256、IoDispatcher など
-│   ├── db/                    #   LocalStore（手書き SQL）、Schema.kt のマイグレーション、FTS5 検索
+│   ├── db/                    #   LocalStore（手書き SQL。StoreTransaction はチャンク・文字起こし・検索・容量管理・設定ごとのファイルに分割）、Schema.kt のマイグレーション、FTS5 検索
 │   ├── pipeline/              #   Ingestor・ChunkIntake（受信の入口）、TranscriptionPipeline・TranscriptionRun（文字起こし 1 回分）、Transcriber、発話区間の切り出し、境界の連結、StorageManager、設定（AppSettings）・状態（ProcessingStatus）・途絶アラートの判定
+│   ├── testing/               #   テスト専用: TempDir、manifest の組み立て（testManifest）。各モジュールのテストだけが使う
 │   └── ui/                    #   スマホ UI（Compose MP、Android/iOS 共通）、AppServices、ViewModel。iosMain に IosAppGraph と Swift とのブリッジ
 ├── build-logic/               # Gradle の convention plugin（KMP ライブラリ共通設定、SQLite テストを JVM/Android/iOS で動かす設定）
 ├── gradle/libs.versions.toml  # 依存バージョンのカタログ
@@ -103,14 +104,18 @@ watch-audio/
 erDiagram
   AUDIO_CHUNK ||--o{ TRANSCRIPT_SEGMENT : transcribed_into
   AUDIO_CHUNK ||--o{ MARK : has
+  ENGINE ||--o{ TRANSCRIPT_SEGMENT : produced
   TRANSCRIPT_SEGMENT ||--|| SEGMENT_FTS : indexed_by
 ```
 
+チャンク・エンジンは**整数のキーで参照**する（マイグレーション 6、#94）。Watch が採番した UUID は `audio_chunk.uuid` にだけ持ち、セグメントと印は `audio_chunk.id`（INTEGER PRIMARY KEY。VACUUM で番号が変わらない）を指す。整数のキーは `shared/db` の中だけで使い、公開 API（`ChunkRecord.id`・`SegmentRecord.chunkId`・`SegmentRecord.engine`）は従来どおり UUID とエンジン名の文字列で返す。
+
 | テーブル | 主なカラム |
 | --- | --- |
-| `audio_chunk` | id（UUID、Watch 採番）, session_id, device_id, source（watchos/wearos…）, started_at, ended_at, time_zone, audio_path（相対。無音チャンクは NULL）, codec, size_bytes, sha256, end_reason（rotation/mark/user_stop/charging/off_body/…）, state（received/transcribing/transcribed/failed/no_audio）, attempts, last_error, received_at, manifest_json, audio_purged_at（保持期間で音声を削除した時刻。文字起こしは残る） |
-| `mark` | chunk_id, at（PK は両方） |
-| `transcript_segment` | id, chunk_id, start_at, end_at, text, lang, engine |
+| `audio_chunk` | id（整数のキー）, uuid（Watch 採番の UUID、一意）, session_id, device_id, source（watchos/wearos…）, started_at, ended_at, time_zone, audio_path（相対。無音チャンクは NULL）, codec, size_bytes, sha256, end_reason（rotation/mark/user_stop/charging/off_body/…）, state（received/transcribing/transcribed/failed/no_audio）, attempts, last_error, received_at, manifest_json, audio_purged_at（保持期間で音声を削除した時刻。文字起こしは残る） |
+| `mark` | chunk_id（`audio_chunk.id`）, at（PK は両方） |
+| `transcript_segment` | id, chunk_id（`audio_chunk.id`）, start_at, end_at, text, lang, engine_id（`engine.id`） |
+| `engine` | id, name（文字起こしエンジンの ID。`Transcriber.engineId`、一意） |
 | `segment_fts` | FTS5(trigram) の contentless 仮想テーブル（本文 + 改行 2 つをトリガで索引。語彙 `segment_fts_terms` で 1〜2 文字の検索にも使う。マイグレーション 5、#72） |
 | `app_setting` | key, value（音声の保持期間・通知設定など。`CREATE TABLE IF NOT EXISTS` で冪等に作成） |
 
@@ -381,7 +386,7 @@ interface LlmProvider {
 | **24h、無音チャンクを捨てる（音声 8h 相当）、AAC-LC 24kbps（現在）** | 11.1MB | **約 89MB** | **約 32GB** |
 | 同上 + Opus 16kbps（形式を変えた場合） | 6.7MB | 約 54MB | 約 20GB |
 | 参考: 同上 + AAC-LC 32kbps（#52 以前の見積もりの前提） | 14.8MB | 約 118MB | 約 43GB |
-| 文字起こし + 検索索引（SQLite、下記） | - | 約 2.8MB | 約 1.0GB |
+| 文字起こし + 検索索引（SQLite、下記） | - | 約 1.7MB | 約 0.65GB |
 | 埋め込みベクトル（int8 256 次元、発話 1 行ごとに作る場合。P2） | - | 約 2.2MB | 約 0.8GB |
 
 - 「音声 8h 相当」は仮定（無音を捨てるのは 5 分チャンク全体が確実に無音のときだけ、§6.1）。実際の比率は実機の 1 日分の録音で確かめる。
@@ -392,9 +397,11 @@ interface LlmProvider {
 **文字起こしの行数と DB 容量（#72）**
 
 - 行数: #68（PR #70）以降、ASR の入力は話者交代の間で切った発話単位になり、1 行が短く多くなった。装着 16 時間・発話 約 31%（約 5 時間、[M0-5 §5](../research/m0-5-asr-desktop.md#5-1-日分の処理時間の見積もりスマホ)）、検証用音声セットの会話で発話 1 時間あたり約 1,720 セグメント（中央値 1.7〜1.9 秒、1 行 平均約 12 文字）から、**1 日 約 8,600 行・1 年 約 310 万行**（約 3,700 万文字）。雑音の多い場面では区間が長いままなので、これは上限寄りの値。
-- 容量: 1 年分（320 万行）のベンチマークで DB 1,018 MB・1 行あたり約 318 B（本文・チャンク ID（UUID）・エンジン名・索引・FTS を含む）→ **1 日 約 2.8MB・1 年 約 1.0GB**。30 万行での内訳の目安は、`transcript_segment` の表 約 41%・`chunk_id` の索引 約 16%・trigram 索引 約 16%・`start_at` の索引 約 5%、残りはチャンクの表（マニフェストの JSON を含む）など。
-- 検索は 1 年分で 300ms 以内を保つ（CI で最悪のクエリの p95 は 150ms 以下。[04 §5](../dev/04-dev-environment.md#5-検索の性能ベンチマーク23-72)）。
-- さらに減らす余地: 行ごとのエンジン名（37 B）と UUID のチャンク ID（表と索引で約 90 B）を整数の参照にすれば 1 年で約 3 割減る見込み。埋め込みは発話 1 行ごとではなく、数十秒の窓ごとに作る方がよい。
+- 容量: 1 年分（320 万行）のベンチマークで DB 644 MB・1 行あたり約 201 B（本文・索引・FTS・チャンクの表と WAL を含む）→ **1 日 約 1.7MB・1 年 約 0.65GB**。#94 でチャンクとエンジンを整数のキーで参照するようにした（マイグレーション 6）。それまでは行ごとに UUID のチャンク ID（36 文字。表と `chunk_id` の索引の両方）とエンジン名（37 文字）を持ち、1,018 MB・約 318 B だった（約 37% 減）。
+- 内訳（30 万行、チェックポイント後のファイル 50 MB = 1 行 約 167 B。`-Pbenchmark.keepDb` で残した DB を SQLite の `dbstat` で集計）: `transcript_segment` の表 39%（約 66 B/行）・trigram 索引 32%（約 54 B/行）・`start_at` の索引 10%（約 17 B/行）・チャンクの表（マニフェストの JSON を含む）9%・`chunk_id` の索引 7.5%（約 12 B/行）。残りの大半は本文と FTS で、これ以上減らすには索引の持ち方を変える必要がある。
+- 検索は 1 年分で 300ms 以内を保つ（#94 の後、手元で最悪のクエリの p95 は 136 ms。[04 §5](../dev/04-dev-environment.md#5-検索の性能ベンチマーク23-72)）。
+- マイグレーション 6 は既存のチャンク・印・セグメントを新しい表へ写す（セグメント ID はそのままなので FTS の作り直しは要らない）。100 万行の DB で約 3.5 秒（手元の JVM）、1 年分なら 10 秒強の見込み（スマホではその数倍かかりうる。アプリの起動時に `LocalStore.open` の中で 1 回だけ走る）。写している間は古い表と新しい表が両方あるので、一時的にその分の空き容量が要る。古い表の分の空きページはファイルに残り、以後の書き込みで再利用される（縮めるには「すべて削除」と同じ `compact()`）。
+- 埋め込みは発話 1 行ごとではなく、数十秒の窓ごとに作る方がよい。
 
 → 文字起こしは無期限に保存しても問題ない。音声は「無音を捨てる + 低ビットレート」と、保持期間・バックアップ先へのオフロードで管理する。
 

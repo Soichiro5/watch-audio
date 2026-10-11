@@ -28,6 +28,7 @@ include(":shared:protocol")
 include(":shared:platform")
 include(":shared:db")
 include(":shared:pipeline")
+include(":shared:testing") // test setup shared by the modules' tests
 
 // Phone UI (Compose Multiplatform) and app shells
 include(":shared:ui")

@@ -21,6 +21,7 @@ A smartwatch records continuously while worn → chunks go to the paired phone o
 | Path | What |
 | --- | --- |
 | `shared/*` | KMP logic: `protocol` (manifest/ACK), `db` (bundled SQLite + FTS5), `pipeline` (Ingestor, TranscriptionPipeline, VAD settings), `platform` (expect/actual) |
+| `shared/testing` | Test-only helpers shared by the shared modules' tests (`TempDir`, `testManifest`, `testAudio`) |
 | `shared/ui` | Shared phone UI (Compose MP) + `AppServices` contract; `iosMain` has the iOS graph/bridge (framework `ComposeApp`) |
 | `apps/android` / `apps/wear` | Android phone (receiver, sherpa-onnx ASR, WorkManager) / Wear OS recorder |
 | `apps/ios` | XcodeGen project (`project.yml`): `App` (iOS host), `Watch` + `WatchWidget` (watchOS recorder, complication), `SharedSwift`, `Tests/*` |

@@ -59,7 +59,7 @@ jobs:
         run: ./gradlew jvmTest testAndroidHostTest :apps:android:testDebugUnitTest :apps:wear:testDebugUnitTest
 
       # #23, #72: a year of generated Japanese utterances as the pipeline cuts them since #68
-      # (~3.2 million segments, ~1 GB); fails if any query's p95 exceeds 300 ms. The numbers land
+      # (~3.2 million segments, ~650 MB since #94); fails if any query's p95 exceeds 300 ms. The numbers land
       # in the job summary either way.
       - name: "Search benchmark (3.2M segments, target 300 ms)"
         run: |

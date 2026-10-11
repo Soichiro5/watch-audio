@@ -84,12 +84,12 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 1 年分相当の日本語の文字起こしを決定的に生成し、`StoreTransaction.search` の応答時間を測る。通常の `jvmTest` には含めない（1 年分の投入に数分かかるため）。
 
 ```bash
-./gradlew --max-workers=2 :shared:db:jvmBenchmark                       # 1 年分（320 万セグメント、約 1 GB）、各クエリ 40 回
-./gradlew --max-workers=2 :shared:db:jvmBenchmark -Pbenchmark.segments=50000 -Pbenchmark.rounds=5   # 手早く試す（約 17 MB）
+./gradlew --max-workers=2 :shared:db:jvmBenchmark                       # 1 年分（320 万セグメント、約 650 MB）、各クエリ 40 回
+./gradlew --max-workers=2 :shared:db:jvmBenchmark -Pbenchmark.segments=50000 -Pbenchmark.rounds=5   # 手早く試す（約 13 MB）
 ./gradlew --max-workers=2 :shared:db:jvmBenchmark -Pbenchmark.profile=sentences -Pbenchmark.segments=500000   # #23 の前提（長めのセグメント）
 ```
 
-1 年分の DB は約 1 GB になる。ディスクの空きが少ない環境では件数を減らして試し、1 年分は CI で確認する。
+1 年分の DB は約 650 MB になる（#94 の前は約 1 GB）。ディスクの空きが少ない環境では件数を減らして試し、1 年分は CI で確認する。`-Pbenchmark.keepDb=<パス>` を付けると、終了後に DB をそのパスへ写す（表・索引ごとの容量を `dbstat` などで調べる用。Python の `sqlite3` で `SELECT name, SUM(pgsize) FROM dbstat GROUP BY name` が使える）。
 
 ### 生成するデータ（`TranscriptGenerator`）
 
@@ -111,7 +111,7 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 
 ### 計測結果
 
-クラウドの Linux（4 CPU、JVM 21）と GitHub Actions の ubuntu-latest（4 CPU、JVM 21。PR #84 の [android.yml の実行](https://github.com/Soichiro5/watch-audio/actions/runs/38114188178)）。#23 は 2026-10-10、#72 は 2026-10-11。
+クラウドの Linux（4 CPU、JVM 21）と GitHub Actions の ubuntu-latest（4 CPU、JVM 21。PR #84 の [android.yml の実行](https://github.com/Soichiro5/watch-audio/actions/runs/38114188178)）。#23 は 2026-10-10、#72・#94 は 2026-10-11。手元の値は他のビルドと同じマシンで測ったもので、CI より遅めに出る。DB の容量は WAL を含む。
 
 | データ | 対策 | FTS（3 文字以上）p50 / p95 | 2 文字以下 p50 / p95 | 最悪のクエリ p95 | DB |
 | --- | --- | --- | --- | --- | --- |
@@ -119,7 +119,9 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 | `sentences` 50 万 | #23 の改善後 | 30 / 48 ms | 0.8 / 128 ms | 148 ms（2 文字・ヒットなし） | 281 MB |
 | `utterances` 30 万 | #72 の改善前 | 7.2 / 13.5 ms | 1.0 / 49 ms | 62 ms（2 文字・まれ / ヒットなし） | 111 MB（371 B/行） |
 | `utterances` 30 万 | #72 の改善後 | 7.6 / 13.9 ms | 2.0 / 8.9 ms | 22 ms（「ミーティング」） | 101 MB（335 B/行） |
-| **`utterances` 320 万（1 年 384 日分、CI）** | #72 の改善後 | **56.6 / 98.2 ms** | **0.9 / 7.1 ms** | **101 ms（「ミーティング」）** | **1,018 MB（318 B/行）** |
+| `utterances` 320 万（1 年 384 日分、CI） | #72 の改善後 | 56.6 / 98.2 ms | 0.9 / 7.1 ms | 101 ms（「ミーティング」） | 1,018 MB（318 B/行） |
+| `utterances` 320 万（1 年分、手元） | #94 の前（main 5e2fa2e） | 73.4 / 130.7 ms | 1.7 / 14.8 ms | 173 ms（「ミーティング」） | 1,018 MB（318 B/行） |
+| **`utterances` 320 万（1 年分、手元）** | **#94 の後（整数の参照、マイグレーション 6）** | **63.1 / 103.5 ms** | **1.5 / 11.1 ms** | **136 ms（「ミーティング」）** | **644 MB（201 B/行）** |
 
 #72 の改善前の 2 文字以下の検索は全文を走査するので、件数に比例して 320 万行では 0.5〜0.7 秒になる見込みだった（30 万行で 62 ms）。
 
@@ -136,6 +138,10 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 - 末尾の文字も必ずどれかの trigram の先頭になるよう、索引には本文の後ろに改行 2 つを付けて登録する。そのため FTS は本文を持たない contentless 表（`contentless_delete=1`、行 ID で削除）にした。
 - LIKE で全件を走査しなくなったので、#23 で追加した `(start_at, text)` の索引を `start_at` だけの索引に戻した（1 行あたり約 40 B、1 年で約 130 MB 減）。
 - 発話の行をまとめて「検索用の行」を作る案（隣り合う短いセグメントを保存時に結合）も試算したが、2 文字以下の全件走査は文字数に比例するため 1.5〜2 倍しか速くならず、本文の重複で DB が 2 割ほど増えるので採らなかった。
+
+#94（マイグレーション 6）:
+
+- 容量の削減。セグメントと印はチャンクを UUID の文字列ではなく `audio_chunk.id`（整数）で、エンジンは `engine` 表の整数で参照する。検索の手順は変えず、返す 50 行だけをチャンク・エンジンの表と主キーで結合して UUID とエンジン名に戻す（`Rows.kt` の `SEGMENTS`）。
 
 実機（中位機種）での値は未計測（#61）。スマホの CPU・ストレージは上の環境より遅いので、実機入手後に同じクエリで確認する。
 
@@ -173,9 +179,11 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 
 SQLite（bundled ドライバ）を開くテストは `src/sqliteTest` に置く（`watchaudio.kmp.sqlite-tests` プラグイン）。`jvmTest`・`iosTest`・`androidDeviceTest` から共有され、JVM・iOS シミュレータ・Android 端末/エミュレータで実行される。Android のホストテスト（`testAndroidHostTest`）では実行しない: Android 版の `sqlite-bundled` は Android の ABI 向けネイティブライブラリしか含まず、ホストの JVM では読み込めないため。
 
-- shared/db（`LocalStoreTest`・`StorageQueriesTest`）と shared/pipeline（`IngestorTest`・`TranscriptionPipelineTest`・`StorageManagerTest`・`ChunkIntakeTest`・`TranscriptionRunTest`・`GapAlertEvaluatorTest`）: JVM・iOS シミュレータ・Android 端末/エミュレータ。
-- shared/ui の `src/sqliteTest`（今はテスト用の `TempDir` だけ）: JVM・iOS シミュレータ（`watchaudio.kmp.sqlite-tests-jvm-ios`）。Compose Multiplatform のリソースプラグインが KMP ライブラリの Android デバイステスト用バリアントを構成できないため、Android 端末では実行しない。途絶アラートの `GapAlertEvaluatorTest` は #134 で shared/pipeline に移り、Android 端末でも実行される。
+- shared/db（`LocalStoreTest`・`StorageQueriesTest`・`IntegerRefsMigrationTest`）と shared/pipeline（`IngestorTest`・`TranscriptionPipelineTest`・`StorageManagerTest`・`ChunkIntakeTest`・`TranscriptionRunTest`・`GapAlertEvaluatorTest`）: JVM・iOS シミュレータ・Android 端末/エミュレータ。
+- shared/ui の `src/sqliteTest`（今はテストなし）: JVM・iOS シミュレータ（`watchaudio.kmp.sqlite-tests-jvm-ios`）。Compose Multiplatform のリソースプラグインが KMP ライブラリの Android デバイステスト用バリアントを構成できないため、Android 端末では実行しない。途絶アラートの `GapAlertEvaluatorTest` は #134 で shared/pipeline に移り、Android 端末でも実行される。
 - shared/ui の `ViewModelTest`・`AppUiTest` は JVM のみ（`Dispatchers.Main` に Swing、描画にデスクトップの Skia を使うため）。iOS では `src/iosTest` の `IosPlaybackTest` が実際の `IosAppServices` で同じ流れ（タイムライン・検索 → 再生の準備）を確かめる。Kotlin/Native のテスト実行ファイルはアプリのプロセスではなく `AVAudioPlayer.play()` が false を返すため、再生が進むことはアプリをホストにした XCTest（`apps/ios/Tests/PlaybackTests`）で確かめる。Kotlin/Native のテストはメインスレッドで動き、`Dispatchers.Main` はメインのランループが回るときだけ進むので、待ち合わせ中にランループを回している（`IosPlaybackFixture.pumpMainRunLoop`）。
+
+テストの準備コード（一時ディレクトリ `TempDir`、manifest を作る `testManifest` / `testAudio`）は `shared/testing` にまとめ、各モジュールの `commonTest` から使う（#94）。本体のコードからは参照しない。shared/db のテストのチャンク登録は `StoreFixtures.kt` の `registerChunk`。
 
 手元での実行:
 

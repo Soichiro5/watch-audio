@@ -1,11 +1,11 @@
 package app.watchaudio.core.alert
 
 import app.watchaudio.core.db.LocalStore
-import app.watchaudio.core.pipeline.TempDir
 import app.watchaudio.core.protocol.ChunkEndReason
-import app.watchaudio.core.protocol.ChunkManifest
 import app.watchaudio.core.protocol.SourcePlatform
 import app.watchaudio.core.settings.updateSettings
+import app.watchaudio.testing.TempDir
+import app.watchaudio.testing.testManifest
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -33,17 +33,7 @@ class GapAlertEvaluatorTest {
     private suspend fun receive(id: String, startAt: Long, receivedAt: Long, endReason: ChunkEndReason = ChunkEndReason.ROTATION) =
         store.transaction {
             insertChunk(
-                ChunkManifest(
-                    chunkId = id,
-                    sessionId = "s",
-                    deviceId = "watch",
-                    source = SourcePlatform.WATCHOS,
-                    startedAtEpochMs = startAt,
-                    durationMs = 300_000,
-                    timeZone = "Asia/Tokyo",
-                    audio = null,
-                    endReason = endReason,
-                ),
+                testManifest(id, startAt, audio = null, source = SourcePlatform.WATCHOS, timeZone = "Asia/Tokyo", endReason = endReason),
                 audioPath = null,
                 receivedAt = receivedAt,
             )

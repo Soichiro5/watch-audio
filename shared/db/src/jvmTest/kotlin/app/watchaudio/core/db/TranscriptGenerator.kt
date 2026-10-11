@@ -1,10 +1,7 @@
 package app.watchaudio.core.db
 
-import app.watchaudio.core.protocol.AudioCodec
-import app.watchaudio.core.protocol.AudioFile
-import app.watchaudio.core.protocol.ChunkEndReason
-import app.watchaudio.core.protocol.ChunkManifest
-import app.watchaudio.core.protocol.SourcePlatform
+import app.watchaudio.testing.testAudio
+import app.watchaudio.testing.testManifest
 import java.util.UUID
 import kotlin.random.Random
 
@@ -53,16 +50,13 @@ internal class TranscriptGenerator(seed: Int, private val profile: Profile) {
                     if (segments >= targetSegments) return@repeat
                     val id = uuid()
                     if (chunks % 100 == 0) session = uuid()
-                    val manifest = ChunkManifest(
-                        chunkId = id,
-                        sessionId = session,
-                        deviceId = "watch",
-                        source = SourcePlatform.WEAROS,
-                        startedAtEpochMs = at,
+                    val manifest = testManifest(
+                        id,
+                        at,
                         durationMs = CHUNK_MS,
+                        audio = testAudio(id, sizeBytes = 900_000),
+                        sessionId = session,
                         timeZone = "Asia/Tokyo",
-                        audio = AudioFile("$id.m4a", AudioCodec.AAC, 16_000, 1, 24_000, 900_000, "00"),
-                        endReason = ChunkEndReason.ROTATION,
                     )
                     insertChunk(manifest, "$id.m4a", at + CHUNK_MS)
                     val chunkSegments = when (profile) {
