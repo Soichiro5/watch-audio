@@ -18,12 +18,15 @@ import kotlinx.io.files.Path
  *
  * An utterance crossing the boundary to a seamless, already transcribed neighbour is
  * transcribed in one piece together with that neighbour's adjoining audio (see [BoundaryJoin]).
+ *
+ * Only the utterances that [segmentFilter] keeps are stored (by default all of them).
  */
 class TranscriptionPipeline(
     private val store: LocalStore,
     private val audioRoot: Path,
     private val transcriber: Transcriber,
     private val maxAttempts: Int = DEFAULT_MAX_ATTEMPTS,
+    private val segmentFilter: SegmentFilter = SegmentFilter.KEEP_ALL,
 ) {
     /**
      * Re-queues chunks left TRANSCRIBING by a run that was killed or cancelled. Only call it while
@@ -95,7 +98,7 @@ class TranscriptionPipeline(
     private class Transcribed(val joined: JoinedTranscription, val byChunk: Map<String, List<NewSegment>>)
 
     private suspend fun transcribe(joined: JoinedTranscription) =
-        Transcribed(joined, joined.assign(transcriber.transcribe(joined.parts(audioRoot))))
+        Transcribed(joined, joined.assign(transcriber.transcribe(joined.parts(audioRoot)).filter(segmentFilter::keep)))
 
     /** Joins [chunk] with the boundary audio of its seamless, transcribed neighbours. */
     private fun StoreTransaction.planJoin(chunk: ChunkRecord): JoinedTranscription {
