@@ -78,7 +78,7 @@ RTF = 処理時間 ÷ 音声長（0.03 なら 1 時間の音声を約 2 分で�
 | --- | --- |
 | Android 既定エンジン | sherpa-onnx + Zipformer ReazonSpeech int8（encoder/decoder/joiner int8 + tokens） |
 | 英語対応 | 当面なし。必要になれば SenseVoice Small を追加（言語自動判定） |
-| VAD | Silero、閾値 0.3、最小無音 0.5s、最小発話 0.25s、最大発話 20s、前後 0.3s パディング（`AsrSettings`）。認識器への入力は 20s 以下にし、区間内の 0.22s 以上の間（大きい音より 30dB 以上小さい）で分割する（#68）。その後、雑音下の会話のため開始・終了のしきい値 0.15、最小無音 2s に変え、雑音の床から 9dB 以内が 0.3s 続く間でも分割するようにした（#71、[02 §6.3](../architecture/02-architecture.md#発話区間の切り出しandroid--jvm-ハーネス6871)） |
+| VAD | Silero、閾値 0.3、最小無音 0.5s、最小発話 0.25s、最大発話 20s、前後 0.3s パディング（当時の `AsrSettings`、#136 から `VadSettings`）。認識器への入力は 20s 以下にし、区間内の 0.22s 以上の間（大きい音より 30dB 以上小さい）で分割する（#68）。その後、雑音下の会話のため開始・終了のしきい値 0.15、最小無音 2s に変え、雑音の床から 9dB 以内が 0.3s 続く間でも分割するようにした（#71、[02 §6.3](../architecture/02-architecture.md#発話区間の切り出しandroid--jvm-ハーネス6871)） |
 | Watch の音声形式 | AAC-LC 16kHz mono 24kbps |
 | iOS | SpeechAnalyzer / SpeechTranscriber（日本語対応、モデルは OS 管理）。精度は実機で比較する |
 

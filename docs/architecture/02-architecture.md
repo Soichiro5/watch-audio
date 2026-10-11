@@ -200,20 +200,22 @@ no_audio（無音チャンク。文字起こししない）
 - 制約（ジョブ側）: Android の 1 回限りジョブは「電池残量低下でないこと」（設定「充電中のみ」がオンなら「充電中」）を WorkManager の制約にし、方針で止まったときは理由に応じて「遅延付きの再実行」（発熱・上限）と「充電中を条件にした実行」（`transcription-on-charge`）を予約する。iOS の `BGProcessingTask` はもともと外部電源が条件なので、止まるのは発熱のときだけ（再予約で `earliestBeginDate` を 15 分後にする）。iOS の前面実行は Android と同じ判定を使い、時間で再判定する止まり方なら前面にいる間だけ再試行する。
 - 音声の保持期間ポリシー（#33）: 文字起こし完了済みのチャンクのみ削除対象。文字起こしの後に同じ実行（共通の `TranscriptionRun`。Android `TranscriptionWorker`、iOS `BGProcessingTask` / 前面実行から呼ぶ）で `StorageManager.applyRetention()` を実行する。詳細は §9.3。
 - 文字起こしエンジンは共通インターフェース `Transcriber`（`shared/pipeline`）の裏に置く。入力は「音声パーツ（ファイル + 範囲 `[fromMs, toMs)`）のリスト」で、エンジンはそれを連結した 1 本の録音として認識し、連結先頭からの相対時刻で発話を返す（各パーツはちょうど `toMs - fromMs` の長さにする。ファイルが短ければ無音で埋める）。実装: Android = sherpa-onnx（各ファイルを `MediaCodec` でデコードして PCM を連結）、iOS = SpeechAnalyzer（Swift 側で一時 CAF ファイルに連結）、JVM ハーネス = sherpa-onnx（ffmpeg でデコード）。
+- **誤認識の除去は共通の 1 か所**（#136）: `TranscriptionPipeline` は `Transcriber` の結果（`TimedText`）を保存の前に `SegmentFilter`（`shared/pipeline`）に通し、残したものだけを保存する。既定（`SegmentFilter.KEEP_ALL`）は何も捨てない。判断の材料として `TimedText` は任意の `speechProbability`（発話区間の Silero の確率の平均。sherpa-onnx の経路で付く）と `confidence`（認識器の確信度。sherpa-onnx 1.13 の Java API はトークンの確率を出さないので現状は null、iOS も null）を持つ。どちらも DB には保存しない（スキーマは変えていない）。短い誤認識の除去（#105）はこのフィルタとして足す。
+- **モデルの記述**（#136）: sherpa-onnx の ASR モデルは `AsrModelSpec`（`shared/pipeline`: ディレクトリ名 `id`、`engineId`、言語、認識器の種類 `RecognizerKind`、役割ごとのファイル名）で表す。現在は `AsrModelSpec.JA_REAZONSPEECH`（Zipformer ReazonSpeech int8、`ja`）だけ。Android の `ModelFiles`・`ModelManifest` とハーネスの `SherpaTranscriber` はこの spec からファイルの場所と認識器の設定を作るので、別のモデル（英語・日英混在の #81 など）は spec と `RecognizerKind` の追加で足せる。
 
 #### 発話区間の切り出し（Android / JVM ハーネス、#68・#71）
 
-sherpa-onnx の経路では、Silero VAD の発話確率（32 ms ごと）から `speechSegments`（`shared/pipeline/SpeechDetection.kt`）で発話区間を見つけ、`padSpeechSpans`（`shared/pipeline/SpeechSegmentation.kt`）で認識器への入力に切り分ける。設定はどちらも `AsrSettings`。Android とハーネスは同じコードを使い、プラットフォーム側は sherpa-onnx の `Vad.compute` で確率を求めるだけ。iOS の SpeechAnalyzer は音声ファイルを丸ごと渡し、区切りは OS に任せる（この処理は通らない）。
+sherpa-onnx の経路では、Silero VAD の発話確率（32 ms ごと）から `speechSegments`（`shared/pipeline/SpeechDetection.kt`）で発話区間を見つけ、`padSpeechSpans`（`shared/pipeline/SpeechSegmentation.kt`）で認識器への入力に切り分け、1 つずつ認識して `TimedText` にする。この「確率の列 → 区間 → `TimedText`」は共通の関数 `transcribeSpeech`（`shared/pipeline/VadTranscription.kt`）で、Android とハーネスは同じコードを使う。プラットフォーム側は sherpa-onnx の VAD（`Vad.compute`、窓ごとの呼び出しは共通の `speechProbabilities`）と認識器を作るだけ。設定はすべて `VadSettings`（`shared/pipeline/VadSettings.kt` のデータクラス。既定値 `VadSettings.DEFAULT` が下記の値）で、ハーネスの `evaluate` は `--vad 名前=値` で再コンパイルせずに変えられる（[test-audio.md §1](../dev/test-audio.md#1-生成と評価の手順)）。iOS の SpeechAnalyzer は音声ファイルを丸ごと渡し、区切りは OS に任せる（この処理は通らない）。
 
-**発話の検出**（`speechSegments`）: 確率が 0.15（`VAD_THRESHOLD`）以上になったら発話の開始（2 窓 = 64 ms さかのぼる）、0.15（`VAD_NEG_THRESHOLD`）未満が 2 秒（`VAD_MIN_SILENCE_SECONDS`）続いたら終了。0.25 秒未満は捨てる。長さでは区切らない（一定の長さで切ると語の途中で切れ、clean の CER が約 1 ポイント悪化した。長い区間は 3.・4. で間や最も静かな点で切る）。sherpa-onnx の VAD は終了のしきい値が「開始 − 0.15」に固定で、開始を 0.15 に下げると 0.01 未満でしか終わらず会話全体がつながるため、同じ処理を自前で持つ（#71）。しきい値を 0.3 から下げたのは、雑音下の相手の声（装着者より 8 dB 小さく、雑音との差は 2〜7 dB）が 0.3 では検出漏れ・途中切れになるため。最小無音を 0.5 秒から 2 秒にしたのは、確率が揺れる小さな声を途中で切らないため（区間の中の間は次の 3. で切る）。
+**発話の検出**（`speechSegments`）: 確率が 0.15（`threshold`）以上になったら発話の開始（2 窓 = 64 ms さかのぼる、`startBackWindows`）、0.15（`negThreshold`）未満が 2 秒（`minSilenceSeconds`）続いたら終了。0.25 秒未満は捨てる。長さでは区切らない（一定の長さで切ると語の途中で切れ、clean の CER が約 1 ポイント悪化した。長い区間は 3.・4. で間や最も静かな点で切る）。sherpa-onnx の VAD は終了のしきい値が「開始 − 0.15」に固定で、開始を 0.15 に下げると 0.01 未満でしか終わらず会話全体がつながるため、同じ処理を自前で持つ（#71）。しきい値を 0.3 から下げたのは、雑音下の相手の声（装着者より 8 dB 小さく、雑音との差は 2〜7 dB）が 0.3 では検出漏れ・途中切れになるため。最小無音を 0.5 秒から 2 秒にしたのは、確率が揺れる小さな声を途中で切らないため（区間の中の間は次の 3. で切る）。
 
 **入力への切り分け**（`padSpeechSpans`）:
 
 1. **余白**: 各区間の前後に 0.3 秒の実音声を付ける（語頭が欠けないように）。
-2. **結合と切り分け**: 余白が重なる隣の区間は、余白込みで 20 秒（`MAX_SEGMENT_SECONDS`）以内に収まる場合だけ 1 つにまとめる。収まらない場合はまとめず、重なった余白の中で最も静かな点で切り分ける（同じ音声を 2 回認識しない）。
+2. **結合と切り分け**: 余白が重なる隣の区間は、余白込みで 20 秒（`maxSegmentSeconds`）以内に収まる場合だけ 1 つにまとめる。収まらない場合はまとめず、重なった余白の中で最も静かな点で切り分ける（同じ音声を 2 回認識しない）。
 3. **間での分割**: 各区間の中に「間」があれば、その中央で切る。会話の話者交代（平均 0.35 秒）を捉えるため。間は次のどちらか（10 ms ごとのエネルギーで判定）。
-   - **無音の間**: 大きい音より 30 dB 以上小さい状態が 0.22 秒（`MIN_PAUSE_SECONDS`）以上続く所。「大きい音」は前後 1 秒（`PAUSE_LOUD_WINDOW_SECONDS`）の 95 パーセンタイル。区間全体を基準にすると、大きい声の話者と同じ区間に入った小さい声の話者が、声の谷ごとに切られてしまう。残響のある音声では、Silero の確率は無音になっても 1 秒以上しきい値を下回らないので、VAD の最小無音を短くしても話者交代では切れない（#68）。
-   - **雑音の床まで下がった間**（#71）: 区間と前後 5 秒の 10 パーセンタイルを雑音の床とし、床から 9 dB 以内（`PAUSE_FLOOR_DB`、ただし大きい音より 6 dB 以上小さい。雑音しかない区間を切らないため）の状態が 0.3 秒（`MIN_NOISY_PAUSE_SECONDS`）以上続く所。雑音があると間は雑音で埋まり、大きい音より 30 dB も下がらない（話者交代の間の 61〜99% は床から 3 dB 以内、96〜100% は 9 dB 以内だった）。雑音は無音より短い谷が多く、細かく切りすぎると文脈が減って誤るので、無音の間より長く取る（0.22 / 0.25 / 0.3 / 0.35 / 0.4 / 0.5 秒で比べ、0.3 秒が最もよかった）。
+   - **無音の間**: 大きい音より 30 dB 以上小さい状態が 0.22 秒（`minPauseSeconds`）以上続く所。「大きい音」は前後 1 秒（`pauseLoudWindowSeconds`）の 95 パーセンタイル。区間全体を基準にすると、大きい声の話者と同じ区間に入った小さい声の話者が、声の谷ごとに切られてしまう。残響のある音声では、Silero の確率は無音になっても 1 秒以上しきい値を下回らないので、VAD の最小無音を短くしても話者交代では切れない（#68）。
+   - **雑音の床まで下がった間**（#71）: 区間と前後 5 秒の 10 パーセンタイルを雑音の床とし、床から 9 dB 以内（`pauseFloorDb`、ただし大きい音より 6 dB 以上小さい。雑音しかない区間を切らないため）の状態が 0.3 秒（`minNoisyPauseSeconds`）以上続く所。雑音があると間は雑音で埋まり、大きい音より 30 dB も下がらない（話者交代の間の 61〜99% は床から 3 dB 以内、96〜100% は 9 dB 以内だった）。雑音は無音より短い谷が多く、細かく切りすぎると文脈が減って誤るので、無音の間より長く取る（0.22 / 0.25 / 0.3 / 0.35 / 0.4 / 0.5 秒で比べ、0.3 秒が最もよかった）。
 4. **上限**: それでも 20 秒を超える区間（間のない長い発話、雑音で間が埋まった会話）は、最も静かな点（前後 50 ms のエネルギーが最小の所）で 20 秒以下に分ける。どの片も 5 秒以上にする。
 
 結果として、認識器への入力は必ず 20 秒以下になり、入力どうしは重ならない。

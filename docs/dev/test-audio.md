@@ -26,6 +26,9 @@ tools/test-audio/.venv/bin/python tools/test-audio/generate.py
 #   特定の録音だけ:  --args="evaluate tools/test-audio/cache/out/manifest.json build/test-audio-eval clean day"
 #   録音ごとに別々に実行してもよい（メモリが少ない環境向け）。results.md は作業ディレクトリ内の
 #   評価済みの録音すべてをまとめ直す
+#   VAD・区間の切り出しの設定を変えて比べる（再コンパイル不要。名前は VadSettings のプロパティ名、既定はアプリと同じ値）:
+#   --args="evaluate tools/test-audio/cache/out/manifest.json build/eval-th03 --vad threshold=0.3,negThreshold=0.3 office cafe"
+#   （--vad は繰り返してもよい。設定ごとに作業ディレクトリを分ける。使った設定は最初に「VAD: VadSettings(...)」と表示される）
 #   固定サンプルで動作確認（1 分×3 条件、数十秒で終わる）:
 #   --args="evaluate tools/test-audio/fixtures/manifest.json build/test-audio-fixture"
 ```
@@ -99,7 +102,7 @@ B: {Zoom|ズーム}のリンクを{Slack|スラック}に貼っておきまし�
 ## 4. 結果
 
 2026-10-10〜11、この開発環境（Linux、4 コア、ASR 2 スレッド）で全条件を評価した結果（`--seed 56`）。
-ASR は Android と同じ sherpa-onnx + Zipformer ReazonSpeech int8、発話の検出と区間の切り出しも同じ設定（`AsrSettings`、`speechSegments`、`padSpeechSpans`）。
+ASR は Android と同じ sherpa-onnx + Zipformer ReazonSpeech int8、発話の検出と区間の切り出しも同じ設定とコード（`VadSettings.DEFAULT`、`transcribeSpeech` = `speechSegments` → `padSpeechSpans`）。
 
 ### 現在（#71 の修正後）
 
