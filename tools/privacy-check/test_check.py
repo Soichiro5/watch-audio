@@ -91,6 +91,7 @@ class FixtureRepo:
         self.write(MODEL_MANIFEST, """\
             const val HF = "https://huggingface.co/csukuangfj/reazonspeech-k2-v2/resolve/abc"
             const val RELEASES = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models"
+            const val SENSE_VOICE = "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/abc"
             """)
         # Test code is not shipped: a local fake server is fine there.
         self.write("apps/android/src/test/kotlin/DownloaderTest.kt", """\

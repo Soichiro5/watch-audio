@@ -55,7 +55,7 @@ The App records conversations while you wear your smartwatch, transcribes them o
 
 The App uses the internet **only to download transcription models**. No audio, transcripts or other data of yours are sent in this communication.
 
-- Android: during setup (and when a model needs to be fetched again), the App downloads a Japanese speech recognition model and a speech detection model (several hundred MB) from files published on Hugging Face (huggingface.co) and GitHub (github.com). You can restrict the download to Wi-Fi.
+- Android: during setup (and when a model needs to be fetched again), the App downloads a Japanese speech recognition model and a speech detection model (several hundred MB) from files published on Hugging Face (huggingface.co) and GitHub (github.com). You can restrict the download to Wi-Fi. Only if you turn on "Also transcribe English" (英語も文字起こしする), the App also downloads an English-capable speech recognition model (about 240 MB) from Hugging Face over Wi-Fi (or over mobile data if you choose to); turning the setting off deletes it.
 - iPhone: if the iOS Japanese speech recognition model is not on the device, iOS downloads it from Apple.
 - As with any internet communication, the download servers receive information needed for the connection, such as your device's IP address. That information is handled under each provider's privacy policy. We do not receive it.
 - The Wear OS watch app does not use the internet.
