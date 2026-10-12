@@ -5,27 +5,17 @@ name: sherpa-onnx JNI (Android, no TTS)
 # from the upstream commit, NDK and ABIs pinned in gradle/sherpa-onnx-jni.properties, with the upstream
 # build scripts (tools/sherpa-onnx-android/build-jni.sh). Each build is checked for eSpeak NG / TTS
 # markers and for linking against the AAR's libonnxruntime.so, and compared with the pinned SHA-256.
-# Run manually with `publish` to create the GitHub Release `release` the app build downloads from
-# (refused when that release exists: published files never change). docs/dev/04-dev-environment.md §7.3.
+# The built files are uploaded as artifacts (sherpa-onnx-jni-<abi>). This workflow only reads the
+# repository; a maintainer publishes the pinned files as the GitHub Release the app build downloads
+# from (docs/dev/04-dev-environment.md §7.3).
 on:
+  # Any branch (a PR's branch included) that changes the build, its pins or this workflow.
   push:
-    branches: [main]
-    paths:
-      - ".github/workflows/sherpa-onnx-android.yml"
-      - "tools/sherpa-onnx-android/**"
-      - "gradle/sherpa-onnx-jni.properties"
-  pull_request:
-    branches: [main]
     paths:
       - ".github/workflows/sherpa-onnx-android.yml"
       - "tools/sherpa-onnx-android/**"
       - "gradle/sherpa-onnx-jni.properties"
   workflow_dispatch:
-    inputs:
-      publish:
-        description: "Create the GitHub Release named in gradle/sherpa-onnx-jni.properties (release=) with the built libraries"
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -107,50 +97,6 @@ jobs:
           name: sherpa-onnx-jni-${{ matrix.abi }}
           path: out/
           if-no-files-found: error
-          retention-days: 30
+          # Kept until a maintainer publishes them (§7.3).
+          retention-days: 90
 
-  publish:
-    needs: build
-    if: github.event_name == 'workflow_dispatch' && inputs.publish
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      # Creates the release (and its tag) with the built libraries.
-      contents: write
-      actions: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Create the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          prop() { grep -E "^$1=" gradle/sherpa-onnx-jni.properties | head -n 1 | cut -d= -f2-; }
-          release=$(prop release)
-          case "$release" in "sherpa-onnx-jni-$(prop version)-"*) ;; *) echo "release=$release must start with sherpa-onnx-jni-$(prop version)-"; exit 1 ;; esac
-          if gh release view "$release" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            echo "release $release exists; published files never change. Bump the release number in gradle/sherpa-onnx-jni.properties."
-            exit 1
-          fi
-          mkdir -p dist
-          for abi in arm64-v8a x86_64; do
-            gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "sherpa-onnx-jni-$abi" --dir "dist/$abi"
-            cp "dist/$abi/libsherpa-onnx-jni-$abi.so" dist/
-          done
-          cp dist/arm64-v8a/sherpa-onnx-LICENSE.txt dist/
-          {
-            echo "sherpa-onnx $(prop version) ([\`$(prop commit)\`](https://github.com/k2-fsa/sherpa-onnx/commit/$(prop commit))) の Android 用 JNI ライブラリ \`libsherpa-onnx-jni.so\`。"
-            echo "音声合成（TTS: eSpeak NG・piper-phonemize）と話者分離（hclust-cpp）を外してビルドした（#173）。"
-            echo
-            echo "- ビルド: 上流の build-android-*.sh、NDK $(prop ndk)、\`SHERPA_ONNX_ENABLE_TTS=OFF\`・\`SHERPA_ONNX_ENABLE_SPEAKER_DIARIZATION=OFF\`・\`SHERPA_ONNX_ENABLE_C_API=OFF\`（[ワークフローの実行]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)、コミット $GITHUB_SHA）"
-            echo "- \`libonnxruntime.so\` は含めない（アプリは JitPack の AAR に入っているものを使う。リンク先が同じファイルであることをビルドで確認済み）"
-            echo "- ライセンス: sherpa-onnx は Apache-2.0（\`sherpa-onnx-LICENSE.txt\`）。中に含まれるもの（kaldi-native-fbank・kaldi-decoder・kaldifst・OpenFst・simple-sentencepiece は Apache-2.0、JSON for Modern C++ は MIT）はアプリのライセンス画面に表示している"
-            echo
-            echo "| ファイル | SHA-256 |"
-            echo "| --- | --- |"
-            for f in dist/*.so dist/sherpa-onnx-LICENSE.txt; do echo "| $(basename "$f") | \`$(sha256sum "$f" | cut -d' ' -f1)\` |"; done
-          } > notes.md
-          cat notes.md >> "$GITHUB_STEP_SUMMARY"
-          gh release create "$release" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false \
-            --title "sherpa-onnx JNI $(prop version) without TTS ($release)" --notes-file notes.md \
-            dist/libsherpa-onnx-jni-*.so dist/sherpa-onnx-LICENSE.txt
