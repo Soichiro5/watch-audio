@@ -127,7 +127,7 @@ class AppUiTest {
         waitForText(Strings.RETENTION)
         onNodeWithText(Strings.DELETE_ALL).performScrollTo().performClick()
         waitForText(Strings.DELETE_ALL_NOTE)
-        onNode(hasSetTextAction()).performScrollTo().performTextInput(Strings.DELETE_ALL_WORD)
+        onNode(hasSetTextAction() and hasText(Strings.DELETE_ALL_INPUT)).performScrollTo().performTextInput(Strings.DELETE_ALL_WORD)
         screenshot("storage")
         onNodeWithText(Strings.DELETE_ALL_CONFIRM).performScrollTo().performClick()
         waitForText(Strings.DELETED_ALL)
@@ -289,6 +289,45 @@ class AppUiTest {
         onNode(hasText("1日分を書き出しました", substring = true)).performScrollTo()
         assertNoEnglish()
         screenshot("export-done")
+    }
+
+    /** #40: the backup card; the file only goes where the platform's save dialog says, and comes back the same way. */
+    @Test
+    fun backupCardCreatesAndRestoresABackup() = runDesktopComposeUiTest(width = 412, height = 915) {
+        runBlocking {
+            DemoData.seed(store, day, tokyo, until = now - 20 * 60_000L)
+            store.updateSettings { it.copy(onboardingCompleted = true) }
+        }
+        showApp(services)
+        waitForText(Strings.TAB_STATUS)
+        onNodeWithText(Strings.TAB_STATUS).performClick()
+        onNode(hasSetTextAction() and hasText(Strings.BACKUP_PASSPHRASE)).performScrollTo().performTextInput("とけいの記録 2026 秋")
+        waitForText(Strings.PASSPHRASE_STRONG)
+        onNode(hasSetTextAction() and hasText(Strings.BACKUP_PASSPHRASE_CONFIRM)).performScrollTo().performTextInput("とけいの記録 2026")
+        waitForText(Strings.BACKUP_PASSPHRASE_MISMATCH)
+        onNode(hasSetTextAction() and hasText(Strings.BACKUP_PASSPHRASE_CONFIRM)).performTextInput(" 秋")
+        onNodeWithText(Strings.BACKUP_CREATE_BUTTON).performScrollTo()
+        assertTrue(onAllNodes(hasText(Strings.BACKUP_PASSPHRASE_MISMATCH)).fetchSemanticsNodes().isEmpty())
+        assertNoEnglish()
+        screenshot("backup")
+        assertTrue(services.exportRequests.isEmpty()) // nothing leaves before the tap
+
+        onNodeWithText(Strings.BACKUP_CREATE_BUTTON).performClick()
+        waitForText("バックアップしました", substring = true)
+        val (name, bytes) = services.savedExports.single()
+        assertEquals("watch-audio-backup-2026-10-10.wabackup", name)
+        onNode(hasText("バックアップしました", substring = true)).performScrollTo()
+        assertNoEnglish()
+        screenshot("backup-done")
+
+        // Restoring onto the same phone adds nothing twice.
+        services.backupToOpen = bytes
+        onNode(hasSetTextAction() and hasText(Strings.RESTORE_PASSPHRASE)).performScrollTo().performTextInput("とけいの記録 2026 秋")
+        onNodeWithText(Strings.RESTORE_BUTTON).performScrollTo().performClick()
+        waitForText("すでにこの端末にあった", substring = true)
+        onNode(hasText("すでにこの端末にあった", substring = true)).performScrollTo()
+        assertNoEnglish()
+        screenshot("restore-done")
     }
 
     /** #144: a failed chunk shows a fixed Japanese note, never the exception message stored in the DB. */

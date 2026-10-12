@@ -26,6 +26,8 @@ class BackupWriter(
     store: LocalStore,
     audioRoot: Path,
     private val dispatcher: CoroutineDispatcher = IoDispatcher,
+    /** PBKDF2 rounds of the backups it writes; only tests lower it. */
+    private val iterations: Int = BackupCipher.DEFAULT_ITERATIONS,
 ) {
     private val exporter = DataExporter(store, audioRoot, dispatcher)
 
@@ -41,7 +43,6 @@ class BackupWriter(
      * an audio file or the sink fails; the partial file then has no final chunk and is rejected
      * when restored, and the caller discards it.
      *
-     * @param iterations PBKDF2 rounds; only tests lower it.
      * @param chunkSize plaintext bytes per authenticated chunk; only tests lower it.
      * @param random salt and nonce source; only tests fix it.
      */
@@ -50,7 +51,6 @@ class BackupWriter(
         passphrase: String,
         sink: RawSink,
         onProgress: (ExportProgress) -> Unit = {},
-        iterations: Int = BackupCipher.DEFAULT_ITERATIONS,
         chunkSize: Int = BackupCipher.DEFAULT_CHUNK_SIZE,
         random: (Int) -> ByteArray = ::secureRandomBytes,
     ): ExportSummary {

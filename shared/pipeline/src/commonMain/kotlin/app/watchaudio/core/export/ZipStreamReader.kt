@@ -88,7 +88,9 @@ class ZipStreamReader(private val source: Source) {
         current?.let { skipRest() }
         current = null
         val buffer = ByteArray(BLOCK_SIZE)
-        while (source.readAtMostTo(buffer) != -1) Unit
+        while (source.readAtMostTo(buffer) != -1) {
+            // Read to the end, so that a decrypting source authenticates its last chunk.
+        }
     }
 
     private fun skipRest() {

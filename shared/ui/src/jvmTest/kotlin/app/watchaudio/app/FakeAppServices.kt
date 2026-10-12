@@ -1,5 +1,7 @@
 package app.watchaudio.app
 
+import app.watchaudio.core.backup.BackupRestorer
+import app.watchaudio.core.backup.BackupWriter
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.export.DataExporter
 import app.watchaudio.core.pipeline.Diagnostics
@@ -10,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.io.Buffer
 import kotlinx.io.RawSink
+import kotlinx.io.RawSource
 import kotlinx.io.files.Path
 import kotlinx.io.readByteArray
 
@@ -26,6 +29,9 @@ class FakeAppServices(
     override val modelSetup: ModelSetup = ModelSetup.DOWNLOAD,
     override val storage: StorageManager = StorageManager(store, Path(audioRoot)),
     override val exporter: DataExporter = DataExporter(store, Path(audioRoot)),
+    // Few PBKDF2 rounds keep the tests fast; the format records the count.
+    override val backupWriter: BackupWriter = BackupWriter(store, Path(audioRoot), iterations = 1_000),
+    override val backupRestorer: BackupRestorer = BackupRestorer(store, Path(audioRoot)),
 ) : AppServices {
     val mutableStatus = MutableStateFlow(initialStatus)
     override val status: StateFlow<ProcessingStatus> = mutableStatus.asStateFlow()
@@ -115,6 +121,18 @@ class FakeAppServices(
         val buffer = Buffer()
         write(buffer)
         savedExports += fileName to buffer.readByteArray()
+        return true
+    }
+
+    /** The file the user "picks" in [openBackup]; null: they cancel. */
+    var backupToOpen: ByteArray? = null
+    var backupOpenRequests = 0
+        private set
+
+    override suspend fun openBackup(read: suspend (open: () -> RawSource) -> Unit): Boolean {
+        backupOpenRequests++
+        val bytes = backupToOpen ?: return false
+        read { Buffer().apply { write(bytes) } }
         return true
     }
 

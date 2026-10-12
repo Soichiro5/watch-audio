@@ -1,0 +1,223 @@
+package app.watchaudio.app
+
+import app.watchaudio.app.logic.PassphraseStrength
+import app.watchaudio.app.state.BackupViewModel
+import app.watchaudio.app.state.NowProvider
+import app.watchaudio.core.backup.BackupRestorer
+import app.watchaudio.core.backup.BackupWriter
+import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.db.NewSegment
+import app.watchaudio.core.protocol.AudioCodec
+import app.watchaudio.core.protocol.AudioFile
+import app.watchaudio.core.protocol.ChunkEndReason
+import app.watchaudio.core.protocol.ChunkManifest
+import app.watchaudio.core.protocol.SourcePlatform
+import app.watchaudio.core.timeline.dayWindow
+import java.io.File
+import java.io.IOException
+import java.nio.file.Files
+import java.security.MessageDigest
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.io.files.Path
+
+/** 「暗号化バックアップ」 (#40): create on one phone, restore on another, only on the user's taps. */
+@OptIn(ExperimentalCoroutinesApi::class)
+class BackupViewModelTest {
+    private val dispatcher = StandardTestDispatcher()
+    private val tokyo = TimeZone.of("Asia/Tokyo")
+    private val window = dayWindow(LocalDate(2026, 10, 10), tokyo)
+    private val now = window.start + 15 * 3_600_000L
+    private val dirs = mutableListOf<File>()
+    private val stores = mutableListOf<LocalStore>()
+    private val old = phone()
+    private val new = phone()
+
+    @AfterTest
+    fun tearDown() {
+        stores.forEach { it.close() }
+        dirs.forEach { it.deleteRecursively() }
+    }
+
+    private fun phone(): FakeAppServices {
+        val dir = Files.createTempDirectory("watch-audio-backup").toFile().also { dirs += it }
+        val store = LocalStore.open(File(dir, "watch-audio.db").path, dispatcher = dispatcher).also { stores += it }
+        val audio = Path(File(dir, "audio").path)
+        return FakeAppServices(
+            store,
+            audio.toString(),
+            backupWriter = BackupWriter(store, audio, dispatcher, iterations = 1_000),
+            backupRestorer = BackupRestorer(store, audio, dispatcher = dispatcher),
+        )
+    }
+
+    private fun runVmTest(block: suspend TestScope.() -> Unit) = runTest(dispatcher) { block() }
+
+    private fun TestScope.viewModel(services: FakeAppServices) = BackupViewModel(services, tokyo, NowProvider { now }, scope = backgroundScope)
+
+    private suspend fun addChunk(services: FakeAppServices, id: String, start: Long, text: String) {
+        val bytes = ByteArray(64) { it.toByte() }
+        val relative = "2026/10/10/$id.m4a"
+        File(services.audioRoot, relative).apply { parentFile.mkdirs() }.writeBytes(bytes)
+        val sha = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        val manifest = ChunkManifest(
+            chunkId = id,
+            sessionId = "s",
+            deviceId = "watch",
+            source = SourcePlatform.WATCHOS,
+            startedAtEpochMs = start,
+            durationMs = 300_000,
+            timeZone = "Asia/Tokyo",
+            audio = AudioFile("$id.m4a", AudioCodec.AAC, 16_000, 1, 24_000, 64, sha),
+            markOffsetsMs = listOf(30_000),
+            endReason = ChunkEndReason.ROTATION,
+        )
+        services.store.transaction {
+            insertChunk(manifest, relative, start + 300_000)
+            markTranscribing(id)
+            saveTranscript(id, listOf(NewSegment(start + 10_000, start + 12_000, text, "ja")), "test")
+        }
+    }
+
+    private suspend fun TestScope.createBackup(passphrase: String = PASS, includeAudio: Boolean = true): ByteArray {
+        addChunk(old, "a", window.start + 9 * 3_600_000L, "おはようございます")
+        addChunk(old, "b", window.start + 9 * 3_600_000L + 300_000, "会議の資料を送ります")
+        val vm = viewModel(old)
+        vm.setPassphrase(passphrase)
+        vm.setConfirmation(passphrase)
+        vm.setIncludeAudio(includeAudio)
+        vm.create()
+        runCurrent()
+        return old.savedExports.single().second
+    }
+
+    @Test
+    fun aBackupNeedsALongEnoughConfirmedPassphrase() = runVmTest {
+        val vm = viewModel(old)
+        assertFalse(vm.state.value.canCreate)
+        vm.setPassphrase("short")
+        assertEquals(PassphraseStrength.TOO_SHORT, vm.state.value.strength)
+        vm.setConfirmation("short")
+        assertFalse(vm.state.value.canCreate)
+        vm.setPassphrase(PASS)
+        assertTrue(vm.state.value.confirmationMismatch)
+        assertFalse(vm.state.value.canCreate)
+        vm.setConfirmation(PASS)
+        assertTrue(vm.state.value.canCreate)
+        assertFalse(vm.state.value.canRestore)
+        runCurrent()
+        assertTrue(old.exportRequests.isEmpty()) // never on its own
+    }
+
+    @Test
+    fun aBackupMadeOnOnePhoneRestoresOnAnother() = runVmTest {
+        val file = createBackup()
+
+        val created = viewModel(old).state.value // a fresh card: nothing kept
+        assertEquals("", created.passphrase)
+        assertEquals(listOf("watch-audio-backup-2026-10-10.wabackup"), old.exportRequests)
+        assertTrue(old.diagnosticsLines.single().startsWith("backup_created days=1 chunks=2 audio_files=2"))
+
+        new.backupToOpen = file
+        val vm = viewModel(new)
+        vm.setRestorePassphrase(PASS)
+        vm.restore()
+        assertTrue(vm.state.value.restoring)
+        runCurrent()
+
+        val state = vm.state.value
+        assertFalse(state.restoring)
+        assertEquals(Strings.restored(added = 2, segments = 2, audioFiles = 2, alreadyPresent = 0), state.restoreMessage)
+        assertEquals("", state.restorePassphrase)
+        assertEquals(listOf("おはようございます", "会議の資料を送ります"), new.store.read { segmentsBetween(Long.MIN_VALUE, Long.MAX_VALUE) }.map { it.text })
+        assertEquals(listOf("backup_restored days=1 added=2 present=0 audio_files=2 without_audio=0"), new.diagnosticsLines)
+        // Nothing in the logs reveals the passphrase or the content.
+        (old.diagnosticsLines + new.diagnosticsLines).forEach { line ->
+            assertFalse(PASS in line || "会議" in line, line)
+        }
+    }
+
+    @Test
+    fun aWrongPassphraseSaysSoAndChangesNothing() = runVmTest {
+        new.backupToOpen = createBackup()
+        val vm = viewModel(new)
+        vm.setRestorePassphrase("not the passphrase")
+        vm.restore()
+        runCurrent()
+
+        assertEquals(Strings.RESTORE_WRONG_PASSPHRASE, vm.state.value.restoreMessage)
+        assertEquals("not the passphrase", vm.state.value.restorePassphrase) // to correct it
+        assertEquals(0, new.store.read { stats() }.chunks)
+        assertEquals(
+            listOf("backup_restore_failed phase=verify error=app.watchaudio.core.backup.BackupException.WrongPassphrase"),
+            new.diagnosticsLines,
+        )
+    }
+
+    @Test
+    fun aDamagedFileSaysSoAndChangesNothing() = runVmTest {
+        val file = createBackup()
+        new.backupToOpen = file.copyOf(file.size - 100)
+        val vm = viewModel(new)
+        vm.setRestorePassphrase(PASS)
+        vm.restore()
+        runCurrent()
+
+        assertEquals(Strings.RESTORE_CORRUPTED, vm.state.value.restoreMessage)
+        assertEquals(0, new.store.read { stats() }.chunks)
+    }
+
+    @Test
+    fun cancellingThePickerShowsNothing() = runVmTest {
+        val vm = viewModel(new)
+        vm.setRestorePassphrase(PASS)
+        vm.restore()
+        runCurrent()
+
+        assertEquals(1, new.backupOpenRequests)
+        assertNull(vm.state.value.restoreMessage)
+        assertFalse(vm.state.value.restoring)
+    }
+
+    @Test
+    fun aFailedSaveShowsAFixedTextAndKeepsThePassphrase() = runVmTest {
+        addChunk(old, "a", window.start + 9 * 3_600_000L, "おはようございます")
+        old.exportDestinationFailure = IOException("ENOSPC (No space left on device)")
+        val vm = viewModel(old)
+        vm.setPassphrase(PASS)
+        vm.setConfirmation(PASS)
+        vm.create()
+        runCurrent()
+
+        assertEquals(Strings.BACKUP_FAILED, vm.state.value.createMessage)
+        assertEquals(PASS, vm.state.value.passphrase)
+        assertEquals(listOf("backup_failed error=java.io.IOException"), old.diagnosticsLines)
+    }
+
+    @Test
+    fun nothingToBackUpSaysSo() = runVmTest {
+        val vm = viewModel(old)
+        vm.setPassphrase(PASS)
+        vm.setConfirmation(PASS)
+        vm.create()
+        runCurrent()
+
+        assertEquals(Strings.BACKUP_NOTHING, vm.state.value.createMessage)
+        assertTrue(old.exportRequests.isEmpty())
+    }
+
+    private companion object {
+        const val PASS = "とけいの記録 backup 2026"
+    }
+}

@@ -36,7 +36,9 @@ class BackupCipherTest {
         val keys = BackupCipher.unlock(header, passphrase)
         val plain = Buffer()
         val decrypted = BackupCipher.decrypt(source, header, keys)
-        while (decrypted.readAtMostTo(plain, 10_000) != -1L) Unit
+        while (decrypted.readAtMostTo(plain, 10_000) != -1L) {
+            // Reads to the end.
+        }
         return plain.readByteArray()
     }
 

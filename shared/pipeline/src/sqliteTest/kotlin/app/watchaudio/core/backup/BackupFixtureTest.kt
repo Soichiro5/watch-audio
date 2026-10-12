@@ -71,10 +71,10 @@ internal object BackupFixture {
         val audio = dir.resolve("fixture-audio")
         return LocalStore.open(dir.resolve("fixture.db").toString()).use { store ->
             BackupTestData.seed(store, audio)
-            val writer = BackupWriter(store, audio)
+            val writer = BackupWriter(store, audio, iterations = 1_000)
             val plan = assertNotNull(writer.plan(includeAudio = true, timeZone = tokyo, now = createdAt))
             val out = Buffer()
-            writer.write(plan, PASSPHRASE, out, iterations = 1_000, chunkSize = 1024, random = BackupTestData.fixedRandom)
+            writer.write(plan, PASSPHRASE, out, chunkSize = 1024, random = BackupTestData.fixedRandom)
             out.readByteArray()
         }
     }

@@ -47,10 +47,10 @@ class BackupRestorerTest {
 
     private suspend fun backup(includeAudio: Boolean, chunkSize: Int = 1024): ByteArray {
         BackupTestData.seed(source, sourceAudio)
-        val writer = BackupWriter(source, sourceAudio)
+        val writer = BackupWriter(source, sourceAudio, iterations = 1_000)
         val plan = assertNotNull(writer.plan(includeAudio, tokyo, createdAt))
         val out = Buffer()
-        writer.write(plan, PASSPHRASE, out, iterations = 1_000, chunkSize = chunkSize)
+        writer.write(plan, PASSPHRASE, out, chunkSize = chunkSize)
         return out.readByteArray()
     }
 

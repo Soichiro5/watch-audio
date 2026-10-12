@@ -1,5 +1,7 @@
 package app.watchaudio.app
 
+import app.watchaudio.core.backup.BackupRestorer
+import app.watchaudio.core.backup.BackupWriter
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.export.DataExporter
 import app.watchaudio.core.pipeline.Diagnostics
@@ -7,6 +9,7 @@ import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageManager
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.io.RawSink
+import kotlinx.io.RawSource
 import kotlinx.io.files.Path
 
 /**
@@ -94,12 +97,36 @@ interface AppServices {
      */
     suspend fun saveExport(fileName: String, mimeType: String, write: suspend (RawSink) -> Unit): Boolean = false
 
+    /** Writes encrypted backups (#40) of [store] and the audio under [audioRoot]. */
+    val backupWriter: BackupWriter get() = BackupWriter(store, Path(audioRoot))
+
+    /** Restores encrypted backups (#40) into [store] and [audioRoot]. */
+    val backupRestorer: BackupRestorer get() = BackupRestorer(store, Path(audioRoot))
+
+    /**
+     * Asks the user to pick a backup file (#40) and calls [read] with a function that opens it
+     * (the restore reads it twice: once to check it, once to add the data). Only ever called from
+     * the user's tap; the file is only read, never sent anywhere:
+     * - Android: the system's file picker (SAF `ACTION_OPEN_DOCUMENT`); each open reads the
+     *   document the user picked.
+     * - iOS: the document picker, which copies the file into the app's temporary directory; the
+     *   copy is deleted when [read] returns.
+     *
+     * Backups are saved with [saveExport] ([BACKUP_MIME_TYPE]).
+     * @return false if the user cancelled (or the platform cannot open files).
+     * @throws Exception from [read] or from opening the file.
+     */
+    suspend fun openBackup(read: suspend (open: () -> RawSource) -> Unit): Boolean = false
+
     /**
      * The on-device diagnostics log, for failures the UI itself sees (error types only, never
      * messages or user data). [Diagnostics.NONE] where the platform keeps no log.
      */
     val diagnostics: Diagnostics get() = Diagnostics.NONE
 }
+
+/** MIME type of encrypted backup files (#40) for [AppServices.saveExport]: they have no registered type. */
+const val BACKUP_MIME_TYPE = "application/octet-stream"
 
 enum class ModelSetup {
     /** The app downloads the model itself; the user picks Wi-Fi only or mobile data too. */

@@ -30,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.watchaudio.app.logic.formatClock
 import app.watchaudio.app.state.DayViewModel
+import app.watchaudio.app.state.BackupViewModel
 import app.watchaudio.app.state.ExportViewModel
 import app.watchaudio.app.state.NowPlaying
 import app.watchaudio.app.state.NowProvider
@@ -39,6 +40,7 @@ import app.watchaudio.app.state.SettingsViewModel
 import app.watchaudio.app.state.StatusViewModel
 import app.watchaudio.app.ui.AppIcons
 import app.watchaudio.app.ui.DayScreen
+import app.watchaudio.app.ui.BackupCallbacks
 import app.watchaudio.app.ui.ExportCallbacks
 import app.watchaudio.app.ui.OnboardingScreen
 import app.watchaudio.app.ui.SearchScreen
@@ -66,6 +68,7 @@ fun App(
     val searchViewModel = viewModel { SearchViewModel(services, timeZone) }
     val statusViewModel = viewModel { StatusViewModel(services, clock) }
     val exportViewModel = viewModel { ExportViewModel(services, timeZone, clock) }
+    val backupViewModel = viewModel { BackupViewModel(services, timeZone, clock) }
     val settingsViewModel = viewModel { SettingsViewModel(services) }
     val onboardingViewModel = viewModel { OnboardingViewModel(services) }
 
@@ -75,7 +78,7 @@ fun App(
             // Loading: show an empty surface rather than flashing the wrong screen.
             null -> Surface(Modifier.fillMaxSize()) {}
             false -> Onboarding(onboardingViewModel, onFinish = settingsViewModel::completeOnboarding)
-            true -> MainTabs(timeZone, dayViewModel, searchViewModel, statusViewModel, exportViewModel, settingsViewModel) {
+            true -> MainTabs(timeZone, dayViewModel, searchViewModel, statusViewModel, exportViewModel, backupViewModel, settingsViewModel) {
                 onboardingViewModel.restart()
                 settingsViewModel.showOnboardingAgain()
             }
@@ -110,6 +113,7 @@ private fun MainTabs(
     searchViewModel: SearchViewModel,
     statusViewModel: StatusViewModel,
     exportViewModel: ExportViewModel,
+    backupViewModel: BackupViewModel,
     settingsViewModel: SettingsViewModel,
     onShowOnboarding: () -> Unit,
 ) {
@@ -169,6 +173,7 @@ private fun MainTabs(
             Tab.STATUS -> {
                 val statusState by statusViewModel.state.collectAsStateWithLifecycle()
                 val exportState by exportViewModel.state.collectAsStateWithLifecycle()
+                val backupState by backupViewModel.state.collectAsStateWithLifecycle()
                 val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
                 StatusScreen(
                     state = statusState,
@@ -200,6 +205,15 @@ private fun MainTabs(
                         onTo = exportViewModel::setTo,
                         onIncludeAudio = exportViewModel::setIncludeAudio,
                         onExport = exportViewModel::export,
+                    ),
+                    backup = backupState,
+                    backupCallbacks = BackupCallbacks(
+                        onPassphrase = backupViewModel::setPassphrase,
+                        onConfirmation = backupViewModel::setConfirmation,
+                        onIncludeAudio = backupViewModel::setIncludeAudio,
+                        onCreate = backupViewModel::create,
+                        onRestorePassphrase = backupViewModel::setRestorePassphrase,
+                        onRestore = backupViewModel::restore,
                     ),
                     modifier = modifier,
                 )
