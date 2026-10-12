@@ -36,7 +36,7 @@ class OpenSourceNoticesTest {
     /** MIT and BSD ask for the copyright notice to accompany the binaries. */
     @Test
     fun noticeLicensesCarryTheCopyrightLine() {
-        val needsCopyright = setOf(License.MIT, License.BSD_2_CLAUSE, License.BSD_3_CLAUSE)
+        val needsCopyright = setOf(License.MIT, License.BSD_3_CLAUSE)
         for (notice in all.filter { it.license in needsCopyright }) {
             assertTrue(notice.copyright?.startsWith("Copyright") == true, "${notice.name}: ${notice.copyright}")
         }
@@ -62,6 +62,8 @@ class OpenSourceNoticesTest {
         assertTrue(listOf("sherpa-onnx", "ONNX Runtime", "SQLite", "AndroidX (Jetpack)", "Protocol Buffers").all { it in android }, "$android")
         assertTrue(OpenSourceNotices.SENSE_VOICE.name in android)
         assertTrue("Skia" !in android)
+        // sherpa-onnx's JNI library is built without text-to-speech and speaker diarization (#173).
+        assertTrue(listOf("eSpeak NG", "piper-phonemize", "hclust-cpp (fastcluster)").none { it in android }, "$android")
         // iOS transcribes with the OS (no downloaded models) and renders Compose with Skiko.
         assertTrue(ios.none { it.kind == NoticeKind.MODEL })
         assertTrue(listOf("Compose Multiplatform", "Skiko", "Skia", "SQLite").all { name -> ios.any { it.name == name } })

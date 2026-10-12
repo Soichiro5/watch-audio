@@ -29,5 +29,9 @@ gradlePlugin {
             id = "watchaudio.android.debug-input-guard"
             implementationClass = "DebugInputGuardPlugin"
         }
+        register("sherpaOnnxJni") {
+            id = "watchaudio.android.sherpa-onnx-jni"
+            implementationClass = "SherpaOnnxJniPlugin"
+        }
     }
 }

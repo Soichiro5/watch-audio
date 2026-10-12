@@ -1,6 +1,9 @@
 plugins {
     // applicationId, SDK levels, version (gradle.properties), Java, Compose, release: build-logic (#138)
     id("watchaudio.android.app")
+    // Distributed builds (CI) pack libsherpa-onnx-jni.so without TTS (eSpeak NG, GPL-3.0) instead of
+    // the AAR's when WATCHAUDIO_SHERPA_ONNX_JNI_DIR is set (#173, docs/dev/04 §7.3)
+    id("watchaudio.android.sherpa-onnx-jni")
 }
 
 android {
@@ -18,7 +21,8 @@ android {
 
     packaging {
         jniLibs {
-            // sherpa-onnx's C/C++ API libraries; the Kotlin API only loads the JNI library.
+            // sherpa-onnx's C/C++ API libraries; the Kotlin API only loads the JNI library (which
+            // watchaudio.android.sherpa-onnx-jni may replace) and libonnxruntime.so.
             excludes += listOf("**/libsherpa-onnx-c-api.so", "**/libsherpa-onnx-cxx-api.so")
         }
     }

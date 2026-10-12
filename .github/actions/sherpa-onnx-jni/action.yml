@@ -1,0 +1,82 @@
+name: sherpa-onnx JNI without TTS
+description: >
+  #173: provides libsherpa-onnx-jni.so built from the upstream sherpa-onnx tag of gradle/libs.versions.toml
+  without text-to-speech (eSpeak NG, GPL-3.0) and speaker diarization, and makes the app builds of the rest
+  of the job pack it (WATCHAUDIO_SHERPA_ONNX_JNI_DIR, read by build-logic's SherpaOnnxJniPlugin). Cached by
+  (sherpa-onnx version, NDK of the AAR, ABIs, build-jni.sh); a miss builds it (~7 min) and saves the cache.
+  Every run checks the libraries for eSpeak NG / TTS markers and that they were linked against the AAR's
+  libonnxruntime.so. Use after actions/checkout and setup-gradle (the AAR may already be in the Gradle cache).
+  docs/dev/04-dev-environment.md §7.3.
+outputs:
+  dir:
+    description: Directory with <abi>/libsherpa-onnx-jni.so and sherpa-onnx-jni.properties
+    value: ${{ steps.check.outputs.dir }}
+runs:
+  using: composite
+  steps:
+    - name: sherpa-onnx version, ABIs and NDK of the AAR
+      id: info
+      shell: bash
+      run: |
+        tools/sherpa-onnx-android/aar-info.sh "$RUNNER_TEMP/sherpa-onnx-aar"
+        . "$RUNNER_TEMP/sherpa-onnx-aar/info.env"
+        script=$(sha256sum tools/sherpa-onnx-android/build-jni.sh | cut -c1-16)
+        echo "key=sherpa-onnx-jni-$version-ndk$ndk-${abis// /+}-$script" | tee -a "$GITHUB_OUTPUT"
+
+    - name: Restore the JNI library
+      id: cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/sherpa-onnx-jni
+        key: ${{ steps.info.outputs.key }}
+
+    - name: Build the JNI library without TTS (cache miss)
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: tools/sherpa-onnx-android/build-jni.sh "$RUNNER_TEMP/sherpa-onnx-aar" "$RUNNER_TEMP/sherpa-onnx-jni"
+
+    - name: Save the JNI library
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/sherpa-onnx-jni
+        key: ${{ steps.cache.outputs.cache-primary-key }}
+
+    - name: Check the JNI library and use it in this job
+      id: check
+      shell: bash
+      env:
+        CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
+      run: |
+        dir="$RUNNER_TEMP/sherpa-onnx-jni"
+        aar="$RUNNER_TEMP/sherpa-onnx-aar"
+        . "$aar/info.env"
+        prop() { sed -n "s/^$1=//p" "$dir/sherpa-onnx-jni.properties"; }
+        [ "$(prop version)" = "$version" ] || { echo "built from $(prop version), the AAR is $version"; exit 1; }
+        [ "$(prop ndk)" = "$ndk" ] || { echo "built with NDK $(prop ndk), the AAR with $ndk"; exit 1; }
+        status=0
+        for abi in $abis; do
+          aar_ort=$(sha256sum "$aar/aar/$abi/libonnxruntime.so" | cut -d' ' -f1)
+          if [ "$(prop "onnxruntime.sha256.$abi")" = "$aar_ort" ]; then
+            echo "OK   $abi: linked against the AAR's libonnxruntime.so ($aar_ort)"
+          else
+            echo "FAIL $abi: linked against libonnxruntime.so $(prop "onnxruntime.sha256.$abi"), the AAR ships $aar_ort"
+            status=1
+          fi
+          [ -f "$dir/$abi/libsherpa-onnx-jni.so" ] || { echo "FAIL $abi: no libsherpa-onnx-jni.so"; status=1; }
+        done
+        tools/sherpa-onnx-android/check-no-tts.sh "$dir"/*/libsherpa-onnx-jni.so || status=1
+        {
+          echo "### sherpa-onnx JNI without TTS (#173)"
+          echo
+          echo "- sherpa-onnx $version ($(prop commit)), NDK $ndk, $(prop options)"
+          echo "- cache: $([ "$CACHE_HIT" = "true" ] && echo "hit" || echo "miss (built in this job)")"
+          for abi in $abis; do
+            f="$dir/$abi/libsherpa-onnx-jni.so"
+            [ -f "$f" ] && echo "- $abi/libsherpa-onnx-jni.so: $(wc -c < "$f") bytes, sha256 \`$(sha256sum "$f" | cut -d' ' -f1)\`"
+          done
+        } >> "$GITHUB_STEP_SUMMARY"
+        rm -rf "$aar"
+        [ $status -eq 0 ] || exit 1
+        echo "WATCHAUDIO_SHERPA_ONNX_JNI_DIR=$dir" >> "$GITHUB_ENV"
+        echo "dir=$dir" >> "$GITHUB_OUTPUT"
