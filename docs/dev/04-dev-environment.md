@@ -247,7 +247,7 @@ PR の CI 待ちを減らすため、変更したファイルに関係するワ�
 | JVM 専用（`src/jvmMain`・`src/jvmTest`） | 動く | 動かない | 動かない | 動く | 動く |
 | 共通コード（`src/commonMain` など）・Gradle の設定・`build-logic/**` | 動く | 動く | 動く | 動く | 動く |
 
-- `sherpa-onnx-android.yml`（JNI ライブラリのビルド、ABI ごとに十数分）は、どのブランチでも `gradle/sherpa-onnx-jni.properties`・`tools/sherpa-onnx-android/**`・自分自身を変えた push でだけ動く（§7.3）。
+- `sherpa-onnx-android.yml`（JNI ライブラリのビルド、ABI ごとに並列で約 5 分）は、どのブランチでも `gradle/sherpa-onnx-jni.properties`・`tools/sherpa-onnx-android/**`・自分自身を変えた push でだけ動く（§7.3）。
 - `android.yml` と `deliver.yml` は除外リスト（`paths-ignore`）。ドキュメント以外の変更では必ず動く。
 - `links.yml`（Markdown のリンク検査、数秒）は絞り込みなしで毎回動く。ドキュメントだけの変更でもリンク切れを見つけるためと、コードの移動で docs からのリンクが切れることがあるため。手元では `python3 tools/check-links/check_links.py`（テストは `python3 -m unittest discover -s tools/check-links -v`）。
 - `emulator.yml` と `ios.yml` は対象リスト（`paths`）に除外（`!`）を足している。除外は後ろに書いたものが優先されるので、新しい除外は対象リストより後ろに書く。
@@ -362,7 +362,8 @@ base64 -w0 watch-audio-release.jks > keystore.b64   # macOS: base64 -i watch-aud
 
 - **差し替えるのは `libsherpa-onnx-jni.so` だけ**（`arm64-v8a`・`x86_64`）。Kotlin の API（`OfflineRecognizer`・`Vad` など）と `libonnxruntime.so` は AAR のものを使う。ビルドでリンクする `libonnxruntime.so` は AAR のものとバイト単位で同じことを確かめる（`onnxruntime.sha256.<abi>`）。
 - **動作は変わらない**: オプションで変わるのは TTS・話者分離のソースがビルドに入るかどうかだけで、ASR・VAD とその JNI のソースはこれらのオプションを参照しない（ワークフローのジョブサマリーに、オプションを参照するソースの一覧を出す）。JNI の関数は Kotlin から呼ばれたときに名前で解決されるので、使わないクラス（`OfflineTts` など）の関数がなくても読み込みは失敗しない。release ビルドの文字起こし（`ReleaseAsrTest`）と計装テストの結果で確かめる。
-- **方式**: CI（GitHub Actions）でビルドし、このリポジトリの GitHub Release に置いたファイルを、SHA-256 を固定してアプリのビルドが取得する。上流には TTS なしの Android 向けの公開ビルドが見つからなかった。ビルドしたファイルを Git に入れる方法は、更新のたびに約 8 MB ずつ履歴が増え、差分をレビューできないので採らなかった。
+- **サイズ**: `libsherpa-onnx-jni.so` は arm64-v8a が 4,771,760 → 3,434,928 バイト、x86_64 が 5,201,192 → 3,715,504 バイト。APK では `.so` を圧縮せずに格納するので、両 ABI 入りの release APK は約 2.8 MB 小さくなる（v1.13.8、#173）。
+- **方式**: CI（GitHub Actions）でビルドし、このリポジトリの GitHub Release に置いたファイルを、SHA-256 を固定してアプリのビルドが取得する。上流には TTS なしの Android 向けの公開ビルドが見つからなかった。ビルドしたファイルを Git に入れる方法は、更新のたびに約 7 MB ずつ履歴が増え、差分をレビューできないので採らなかった。
 
 | 場所 | 役割 |
 | --- | --- |
