@@ -1,6 +1,6 @@
-# 英語・日英混在の文字起こし（Android）: 方式の比較と採用
+# 英語・日英混在の文字起こし: 方式の比較と採用（Android・iOS）
 
-- Issue: [#81 Android で英語・日英混在の会話を文字起こしできる](https://github.com/Soichiro5/watch-audio/issues/81)
+- Issue: [#81 Android で英語・日英混在の会話を文字起こしできる](https://github.com/Soichiro5/watch-audio/issues/81)、iOS は [#170](https://github.com/Soichiro5/watch-audio/issues/170)（§7）
 - 実施日: 2026-10-12
 - 環境: この開発環境（Linux、4 vCPU、ASR 2 スレッド。他の評価と並行したため速度は参考値）
 - 前提: [M0-5 スパイク](m0-5-asr-desktop.md)（Zipformer ReazonSpeech を採用、SenseVoice Small は日英の言語自動判定ができるが日本語の会話調で誤りが多い）
@@ -13,13 +13,14 @@
 3. **英語が文字起こしされる**: 英語の会話の WER はオフ 100%（英語として何も残らない）→ オン 10.2%（近接）/ 11.7%（腕の位置）。日英が発話ごとに入れ替わる会話でも、日本語の CER はオフと同じまま英語 WER 11.0% / 14.1%、言語の取り違えは 174 発話中 0〜1。
 4. **計算量**: 日本語の録音では SenseVoice が動くのは区間の 3〜17% で、ASR の計算時間は約 2 割増（全区間で SenseVoice を動かす方式 C は約 3 倍）。英語の録音では両方のモデルが動く。
 5. **SenseVoice への置き換え（B）は不採用**: 合成音声の会話では Zipformer より CER が低い（clean 9.8% vs 14.7%）が、実音声の ReazonSpeech では 26.6% vs 9.7% と大きく悪い。合成音声の評価は SenseVoice に有利に偏っている（実録音で要確認、#61）。
-6. **既知の限界**: 1 つの発話の中で日英が混ざる場合（「このPRをmergeして」）はどちらか一方の言語になる。iOS は対象外（SpeechAnalyzer の日本語ロケールのまま）。
+6. **既知の限界**: 1 つの発話の中で日英が混ざる場合（「このPRをmergeして」）はどちらか一方の言語になる。
+7. **iOS（#170、§7）**: 同じ考え方（日本語のモデルが怪しい区間だけ英語のモデルでも聞く）を、OS の英語の `SpeechTranscriber`（`en_US`）で実装した。共通の `LanguageRouting` の規則を、自分で発話を区切る認識器向けの `SegmentRouting` で使い、言語タグがない代わりに英語のモデルの確信度（0.5 以上）で採否を決める。英語のモデルは OS が入れ、オンの間だけ確保する。SpeechTranscriber は CI のシミュレータで使えないため、実際の認識での精度は実機で確かめる（#60）。
 
 ## 1. 背景
 
 Android の文字起こしは sherpa-onnx + Zipformer ReazonSpeech（int8、約 160 MB）で、日本語専用。英語の発話を聞かせると、英語として認識しないだけでなく、10 秒の英文に「はい」「そう」程度の 1 語しか出さないか、固有名詞などをカタカナの別の語にする（「JVキャンストレーション」）。英語の会議・英語を話す相手との会話は記録に残らない。
 
-iOS は SpeechAnalyzer（OS の音声認識）で、本件の対象外（§7）。
+iOS は SpeechAnalyzer（OS の音声認識）で、#170 で別に対応した（§7）。
 
 ## 2. 評価データ
 
@@ -133,9 +134,53 @@ SenseVoice の判定は認識と同時に出るので、英語の文を得るの
 - 評価の英語は FLEURS（読み上げ）で、日本語は合成音声。実際の英語の会話（くだけた話し方・訛り）での精度、実機での速度・電池・メモリ（2 つのモデルで合計約 400 MB）は #61 で確かめる。
 - SenseVoice は中国語・韓国語・広東語も判定できるが、英語以外は日本語モデルの文を使う（`LanguageRouting.languages` で広げられる）。
 
-## 7. iOS の状況
+## 7. iOS（#170）
 
-iOS は OS の SpeechAnalyzer / SpeechTranscriber を日本語ロケールで使っており、本件では変更していない（「英語も文字起こしする」の設定は `AppServices.supportsEnglish` が false なので表示されない）。SpeechTranscriber は英語のロケールもあるが、1 つの解析で使えるロケールは 1 つで、言語の自動判定はない。英語に対応するには、区間ごとの言語判定（例: 英語ロケールでも認識して信頼度で選ぶ）が要り、別の Issue で検討する。
+- Issue: [#170 iOS で英語・日英混在の会話を文字起こしできるようにする](https://github.com/Soichiro5/watch-audio/issues/170)
+- 実施日: 2026-10-12（CI の macOS 26 ランナー、Xcode 26.6、iPhone 17 Pro シミュレータ iOS 26.5。実機は未確認）
+
+### 7.1 前提（iOS 26 の Speech フレームワーク）
+
+- iOS の文字起こしは OS の SpeechAnalyzer + `SpeechTranscriber`（日本語ロケール `ja_JP`）。モデルは OS が `AssetInventory` で入れる（アプリは大きさを知らない）。
+- 1 つの `SpeechTranscriber` は 1 つのロケールだけを認識し、言語の自動判定も、SenseVoice のような「どの言語だったか」のタグもない。英語ロケール（`en_US`）の `SpeechTranscriber` はどんな音声も英語の単語として書く。
+- SpeechAnalyzer は自分で発話を区切る（VAD の区間を 1 つずつ渡す Android の作りとは違う）。結果ごとに時刻（`audioTimeRange`）と単語ごとの確信度（`transcriptionConfidence`）が付く。
+- GitHub の macOS ランナーでは、iOS シミュレータでも macOS 本体でも `SpeechTranscriber.isAvailable` が false（対応ロケール 0）。`DictationTranscriber`（OS の従来の端末内ディクテーションのモデル、同じ SpeechAnalyzer のモジュール）はシミュレータで 54 ロケール（ja_JP・en_US を含む）を挙げ、モデルも入れられるが、解析はできない（§7.4）。
+
+### 7.2 候補
+
+| 方式 | 内容 | 精度 | 速度・電池（日本語の録音） | ダウンロード | 判断 |
+| --- | --- | --- | --- | --- | --- |
+| **a. 区間ごとの振り分け（採用）** | 日本語の `SpeechTranscriber` でチャンク全体を認識し、Android と同じ `LanguageRouting` の規則で怪しい区間（出力が少ない / カタカナ・ラテン文字ばかりのセグメント）と、日本語の出力がない 1 秒以上の間だけを英語の `SpeechTranscriber` でも認識。英語の文は確信度 0.5 以上・3 語以上・ラテン文字 9 割以上のときだけ採用 | 日本語の文は怪しい区間以外は変わらない。英語は英語モデルの精度 | 英語のパスは怪しいセグメントと間の長さだけ（1 回の解析にまとめる） | 英語の OS モデル（オンのときだけ確保、オフで解除） | 採用。Android の D と同じ考え方で、規則を共有できる |
+| b. 2 つの解析を並べて実行 | 日本語と英語の `SpeechTranscriber` でチャンク全体を両方認識し、区間ごとに確信度で選ぶ | a と同程度（両方の区切り方が違うので、区間の対応づけが要る） | 常に約 2 倍（Android の C と同じ） | a と同じ | 不採用。日本語の録音にも英語の計算が全部かかる |
+| c. sherpa-onnx の SenseVoice を iOS でも | Android と同じ方式 D をそのまま iOS で（sherpa-onnx の iOS ビルド + onnxruntime） | 言語タグがあるので判定は確か。日本語は SpeechTranscriber のまま | a と同程度（SenseVoice の区間だけ） | アプリ自身が約 240 MB を取得・検証（Android の仕組みを iOS にも作る） | 不採用（今は）。アプリが大きくなり、ダウンロードの仕組みと FunASR のライセンス表示（#167）が iOS にも要る。a の実機での精度が足りないときの代案 |
+
+### 7.3 採用した方式（a）の実装
+
+- 共通コード（`shared/pipeline`）: `SegmentRouting`（純粋関数・単体テストつき）。自分で区切る認識器のための `LanguageRouting` で、(1) 主（日本語）のパスの結果のうち `LanguageRouting.suspectsOtherLanguage` が真のセグメントと、(2) 主のパスが何も書かなかった 1 秒以上の間（日本語のモデルが英語を何も書かないことがあり、VAD の区間がないため）を、前後 0.3 秒広げて重なるものをまとめ、1 秒の無音をはさんで 1 つの入力にして英語のパスに渡す。英語のパスの結果は重なりの最も大きい区間に戻し、区間ごとに英語の文をまとめて `LanguageRouting.keeps` が真なら区間内の怪しい日本語のセグメントと置き換える。日本語のセグメントのうち怪しくないものは置き換えない。
+- `LanguageRouting.minConfidence`（既定 0 = Android は変更なし）: 言語タグのない第 2 のモデルでは、確信度を言語の判定の代わりにする。iOS は 0.5（`IosTranscriberAdapter.ROUTING`）。
+- iOS（`IosTranscriberAdapter`）: 設定がオンで英語モデルが準備完了のときだけ英語のパスを足す。エンジン ID は `apple-speechtranscriber-ja+apple-speechtranscriber-en`、セグメントの `lang` は書いたモデルの言語（`ja` / `en`、DB は変更なし）。英語のパスが失敗したら（OS がモデルを消したなど）チャンクは日本語の文のまま保存し、次の実行の前に英語モデルを確認し直す。
+- モデル: オンにすると `AssetInventory.reserve(locale: en_US)` + `assetInstallationRequest` で OS に英語モデルを入れてもらい（状態カードに「準備中」→「準備完了」）、オフにすると `AssetInventory.release(reservedLocale:)` で確保を解除する（実際に消すかは OS が決める）。失敗したら次の実行のときと「英語モデルをもう一度準備」で再試行。
+- 音声の形式: 解析の前に `SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith:)` と比べ、違えば一時 CAF に変換する（これまでは形式が合う前提だった。シミュレータで「Audio format is not supported」を見て追加したが、そこでの原因は形式ではなくモジュールが動かないことだった）。
+
+### 7.4 検証
+
+CI の run は `ios.yml` を `workflow_dispatch` で実行したもの。
+
+| 確認したこと | 方法 | 結果 |
+| --- | --- | --- |
+| CI で実際の認識器が使えるか | macOS 本体で `SpeechTranscriber` を直接呼ぶ（[run 38274664154](https://github.com/Soichiro5/watch-audio/actions/runs/38274664154)、一時的なジョブ）。シミュレータで DictationTranscriber のモデルを入れ、`bestAvailableAudioFormat` と 4 つの形式（AAC を Float32 のまま・Int16 16 kHz・Float32 16 kHz・Int16 44.1 kHz）で解析（[run 38283291181](https://github.com/Soichiro5/watch-audio/actions/runs/38283291181)） | macOS 本体も `isAvailable` false・対応ロケール 0。シミュレータの DictationTranscriber はモデルを入れられるが `bestAvailableAudioFormat` が nil で、どの形式でも「Audio format is not supported」。**CI では実際の認識器で英語を確かめられない** |
+| 振り分けの規則 | `SegmentRoutingTest`（10 件: 少ない日本語・出力のない間・ラテン文字で書いた英語の置き換え、日本語だけは何を聞いても変わらない（空・1〜2 語・確信度 0.2）、詰まった日本語では英語のパスを呼ばない、区間のまとめ方・時刻の戻し方・広げた部分の聞き直しを捨てる）、`LanguageRoutingTest`（`jvmTest`、iOS シミュレータでも） | 通過 |
+| iOS の Kotlin 側 | `IosTranscriberBridgeTest`（iOS シミュレータ、[run 38276342181](https://github.com/Soichiro5/watch-audio/actions/runs/38276342181)）: 本物の `TranscriptionPipeline` と SQLite に、Swift 役のスタブ | 5 件通過。英語オンの日本語 → 英語 → 日本語が `ja, en, ja`・エンジン ID が両方の名前、日本語だけはオン・オフで同じ、英語のパスの失敗で日本語が残る |
+| アプリのプロセスで Swift → Kotlin → SQLite | `EnglishTranscriptionTests`（SpeechTests、[run 38286363645](https://github.com/Soichiro5/watch-audio/actions/runs/38286363645)）。音声は `say`（Kyoko / Samantha）の日本語 → 英語 → 日本語 20.2 秒（間 1.5 秒）。認識器だけを文の時刻から答える `ScriptedTranscriber`（日本語のパスは英語の文に「はい」、英語のパスは日本語に確信度 0.3 の英単語）に替え、ブリッジ・振り分け・パイプラインは本物 | 通過: `[500–6780] ja / [8280–14469] en / [15969–19657] ja`、英語のパスは 1 回（6480–16269 ms）。日本語の文だけでは英語オン・オフで同じ。実際の認識器の 2 件は上の理由でスキップ（ログに理由）。形式の変換（Int16 16 kHz・Float32 48 kHz）で長さが変わらないことも確認 |
+
+- 速度・電池・精度（日本語のモデルが英語に何を書くか、英語のモデルが日本語に付ける確信度）は、実際の認識器でしか測れないため数値はない。Android の評価（§4）は日本語のモデルが英語に「はい」程度しか書かない前提で、SpeechTranscriber も同じか（ラテン文字やカタカナで書くか）は実機で確かめる。
+
+### 7.5 限界・実機で確かめること
+
+- 精度と確信度の閾値（0.5）は SpeechTranscriber で確かめていない（CI のシミュレータでは使えない）。実機で、実際の英語・日英混在の会話が英語として保存されること、日本語だけの会話でオンにしても英語に化けないこと、確信度の分布を確かめる（#60）。
+- 計算量: 日本語の録音でも、日本語の出力がない 1 秒以上の間はすべて英語のパスにかかる（無音の多い録音では英語のパスの入力が長くなる）。実機で英語オンの文字起こし時間（RTF）と電池を測る（#60）。必要なら間の音量で絞る。
+- 1 つの発話の中の日英混在、英語の短い返事（1〜2 語）は Android と同じ限界（§6）。
+- 英語の OS モデルの大きさはアプリから分からない（状態カードに大きさを出さない）。
 
 ## 8. 再現手順
 

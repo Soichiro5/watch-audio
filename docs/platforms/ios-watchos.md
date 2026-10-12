@@ -21,13 +21,14 @@ Apple Watch で装着中ずっと録音 → WatchConnectivity で iPhone へ（�
 | 〃 | `apps/ios/Watch/WatchAudioApp.swift`, `ContentView.swift` | 画面、scenePhase、WatchConnectivity のバックグラウンド起床 |
 | iOS (Swift) | `apps/ios/App/iOSApp.swift` | 起動時に Kotlin グラフ → WatchConnectivity の順で開始、scenePhase を Kotlin に通知、Compose UI をホスト |
 | 〃 | `apps/ios/App/WatchReceiver.swift` | WCSession 受信 → Kotlin `Ingestor` → ACK 返信 |
-| 〃 | `apps/ios/App/SpeechTranscription.swift` | SpeechAnalyzer + SpeechTranscriber による文字起こし本体（モデル準備・範囲の連結・時刻付きセグメント）。Kotlin に依存しない |
-| 〃 | `apps/ios/App/SpeechAnalyzerTranscriber.swift` | 上記を Kotlin の `IosSpeechTranscriber` として公開するブリッジ |
+| 〃 | `apps/ios/App/SpeechTranscription.swift` | SpeechAnalyzer + SpeechTranscriber による文字起こし本体（モデルの準備と確保の解除・範囲の連結・時刻と確信度つきセグメント）。Kotlin に依存しない |
+| 〃 | `apps/ios/App/SpeechAnalyzerTranscriber.swift` | 上記を Kotlin の `IosSpeechTranscriber` として公開するブリッジ（言語 `ja` / `en` → ロケール `ja_JP` / `en_US`） |
 | iOS (Kotlin) | `shared/ui/src/iosMain/.../IosAppGraph.kt` | iOS の composition root（DB・音声置き場・BGTask）。受信は共通の `ChunkIntake`、文字起こし 1 回分は共通の `TranscriptionRun`（`shared/pipeline`、Android と同じコード）を呼び、結果を WatchConnectivity の ACK・前面実行・BGTask に対応づける |
 | 〃 | `IosAppServices.kt` | 共有 UI 向け `AppServices` 実装（状態 Flow、AVAudioPlayer 再生、権限、モデル準備、通知設定の変更通知） |
 | 〃 | `IosPermissions.kt` | オンボーディングで求める権限（通知 `UNUserNotificationCenter`、音声認識 `SFSpeechRecognizer`）の状態取得と要求 |
 | 〃 | `IosGapAlerts.kt` | 録音の途絶アラート（#43）のローカル通知の予約・取り消し |
-| 〃 | `IosSpeechTranscriber.kt` | Swift 実装を受けるコールバック型インターフェースと共通 `Transcriber` へのアダプタ |
+| 〃 | `IosSpeechTranscriber.kt` | Swift 実装を受けるコールバック型インターフェースと共通 `Transcriber` へのアダプタ（英語オンのときは共通の `SegmentRouting` で英語のパスを足す、#170） |
+| 〃 | `IosTranscriptionCheck.kt` | シミュレータ検査用: 音声ファイルを一時 DB にチャンクとして取り込み、本番と同じアダプタと `TranscriptionPipeline` で文字起こしして保存されたセグメントを返す（`EnglishTranscriptionTests` が使う。アプリの DB には触れない） |
 | 〃 | `MainViewController.kt` | Compose UI のエントリ（Swift から引数なしで呼ぶ） |
 | テスト | `apps/ios/Tests/ProtocolTests/ChunkProtocolTests.swift` | Swift プロトコル実装と録音形式（`RecordingFormat.current`）を Kotlin のテストベクタ（`shared/protocol/testdata/*.json`）で検証 |
 | 〃 | `apps/ios/Tests/WatchLogicTests/RecorderPolicyTests.swift` | 停止理由（充電・低電池・ストレージ不足・割り込み・ユーザー停止・レコーダー停止）の判定、ヒステリシス（10% 未満で停止・15% 以上で再開）、自動再開、通知、無音判定（ピーク −40 dBFS）、停止理由がマニフェストの `endReason` に書かれること（#15）、しきい値が共通の `RecorderRules` と一致すること、Mark でチャンクを閉じずオフセットが manifest に入ること（#137） |
@@ -35,7 +36,8 @@ Apple Watch で装着中ずっと録音 → WatchConnectivity で iPhone へ（�
 | 〃 | `apps/ios/Tests/SpeechTests/SpeechTranscriptionTests.swift` | シミュレータで SpeechTranscriber（ja_JP）が既知の日本語音声（16 kHz AAC）を時刻付きで文字起こしできるか（#21）。使えなければ理由を記録してスキップ |
 | 〃 | `shared/ui/src/iosTest/.../IosPlaybackTest.kt` | `IosAppServices.play` が正しいチャンクのファイルを AVAudioPlayer で開き、指定位置（±0.2 秒）に合わせ、長さも正しいこと。共有 UI で前日のタイムライン → 発話タップ、検索 → 1 タップ → その発話の位置（#19, #25）。テスト実行ファイルはアプリではないため `play()` は false を返し、`started=` は記録のみ |
 | 〃 | `apps/ios/Tests/PlaybackTests/HostedPlaybackTests.swift` | iOS アプリをホストにした XCTest。アプリが起動時に作った本物の `IosAppServices`（ComposeApp フレームワーク経由）で Watch と同じ形式（AAC 16 kHz モノラル）の音声を 8 秒から再生し、再生位置がそこから始まり 2 秒後に 1 秒以上進むこと（#19） |
-| 〃 | `shared/ui/src/iosTest/.../IosTranscriberBridgeTest.kt` | Swift 側の結果（`IosTimedText`）が `IosTranscriberAdapter` → `TranscriptionPipeline` で絶対時刻つきで DB と FTS に保存されること、Swift のエラーでチャンクが FAILED になること（#21） |
+| 〃 | `shared/ui/src/iosTest/.../IosTranscriberBridgeTest.kt` | Swift 側の結果（`IosTimedText`）が `IosTranscriberAdapter` → `TranscriptionPipeline` で絶対時刻つきで DB と FTS に保存されること、Swift のエラーでチャンクが FAILED になること（#21）。英語オンで日本語 → 英語 → 日本語のチャンクが `ja, en, ja` で保存され、日本語だけのチャンクはオン・オフで同じ、英語のパスが失敗しても日本語が残ること（#170） |
+| 〃 | `apps/ios/Tests/SpeechTests/EnglishTranscriptionTests.swift` | 実際の音声認識（`say` の日本語・英語の音声）を Swift の文字起こし → 共通の振り分け → パイプライン → SQLite まで通し、日本語 → 英語 → 日本語が `ja, en, ja` で保存されること、日本語だけの音声は英語のオン・オフで同じになること（#170、§7.5） |
 
 ## 2. データフロー
 
@@ -129,19 +131,19 @@ IosAppGraph.shared.setAppActive(active: true / false)                 // scenePh
 MainViewControllerKt.MainViewController()                             // Compose UI
 ```
 
-- Swift の `async` は Kotlin から呼べないため、文字起こしはコールバック型の Kotlin インターフェース `IosSpeechTranscriber`（`engineId`, `language`, `prepareModel(callback:)`, `transcribe(parts:callback:)`, `cancel()`。`parts` は `IosAudioPart(path, fromMs, toMs)` のリスト）を Swift で実装し、Kotlin 側 `IosTranscriberAdapter` が `suspendCancellableCoroutine` で共通 `Transcriber` に変換する。コルーチンのキャンセルは `cancel()` → Swift の `Task.cancel()` → `SpeechAnalyzer.cancelAndFinishNow()` に伝わる。
+- Swift の `async` は Kotlin から呼べないため、文字起こしはコールバック型の Kotlin インターフェース `IosSpeechTranscriber`（`language`、`engineId(language:)`、`prepareModel(language:callback:)`、`releaseModel(language:callback:)`、`transcribe(parts:language:callback:)`、`cancel()`。`parts` は `IosAudioPart(path, fromMs, toMs)` のリスト、結果は `IosTimedText(startMs, endMs, text, confidence)`。言語は `ja`（主）と `en`（#170））を Swift で実装し、Kotlin 側 `IosTranscriberAdapter` が `suspendCancellableCoroutine` で共通 `Transcriber` に変換する。コルーチンのキャンセルは `cancel()` → Swift の `Task.cancel()` → `SpeechAnalyzer.cancelAndFinishNow()` に伝わる。
 - Swift 6 の厳格な並行性チェック対策として、Kotlin のコールバック（非 Sendable）は `UncheckedSendableBox` に入れて Task に渡す。コールバックはどのスレッドから呼んでもよく、必ず 1 回だけ呼ぶ。
 - `MainViewController()` は引数なしのまま `IosAppGraph.services` を取得し `App(services)` を表示する。オンボーディング・権限・途絶アラートはすべて Kotlin（iosMain）側で実装しており、Swift 側の変更はない。
 - Kotlin 内部状態はメインディスパッチャ上でのみ変更する（`ingest` はどのスレッドから呼んでもよい）。
 
 ## 7. 文字起こし（iOS）
 
-- 実装は `SpeechTranscription.swift`（Speech フレームワークだけに依存）にあり、`SpeechAnalyzerTranscriber.swift` はそれを Kotlin の `IosSpeechTranscriber` として渡す薄いブリッジ。分けてあるのは、シミュレータテスト（`SpeechTests`）が Kotlin フレームワークをリンクせずに同じコードを動かせるようにするため。
-- `SpeechTranscriber(locale:transcriptionOptions: [], reportingOptions: [], attributeOptions: [.audioTimeRange])`。ロケールは `SpeechTranscriber.supportedLocale(equivalentTo: ja_JP)` で解決。`isAvailable` が false の端末ではエラー。
+- 実装は `SpeechTranscription.swift`（Speech フレームワークだけに依存）にあり、`SpeechAnalyzerTranscriber.swift` はそれを Kotlin の `IosSpeechTranscriber` として渡す薄いブリッジ。分けてあるのは、シミュレータテスト（`SpeechTests`）が同じコードを自分のバンドルにコンパイルして直接動かせるようにするため（英語の検査 `EnglishTranscriptionTests` は Kotlin フレームワークのヘッダも参照する、§7.5）。
+- `SpeechTranscriber(locale:transcriptionOptions: [], reportingOptions: [], attributeOptions: [.audioTimeRange, .transcriptionConfidence])`。確信度は結果の各ランの `transcriptionConfidence` を文字数で重み付けした平均（英語の振り分けに使う。DB には保存しない）。ロケールは `SpeechTranscriber.supportedLocale(equivalentTo: ja_JP)` で解決。`isAvailable` が false の端末ではエラー。
 - モデルは OS 管理: `installedLocales` に無ければ `AssetInventory.reserve(locale:)` → `assetInstallationRequest(supporting:)` → `downloadAndInstall()`。Kotlin 側は各実行の前に `prepareModel` で確認し（共通の `TranscriptionRun` が `SpeechModel.ensureReady` として呼ぶ）、失敗したら実行しない（モデル未導入のまま全チャンクがリトライ上限に達するのを防ぐ）。失敗したチャンクがあった実行の後は状態を `Unknown` に戻し、次の実行で確認し直す（`SpeechModel.recheck`、Android と共通の扱い）。状態は `ProcessingStatus.asrModel`（Downloading / Ready / Failed）。
 - `SpeechAnalyzer(modules:)` → `analyzeSequence(from: AVAudioFile)` → `finalizeAndFinish(through:)`。結果は `transcriber.results` を別 Task で収集し、`isFinal` の各結果を 1 セグメント（`result.range` の開始・終了をミリ秒に変換）とする。
 - 入力は音声パーツのリスト。通常はチャンク 1 つ（先頭から）で、そのファイルをそのまま解析する。チャンク境界をまたぐ発話がある場合（[02 §6.3](../architecture/02-architecture.md#63-処理パイプラインphone)）は、隣のチャンクの境界付近を含む複数パーツが来るので、各ファイルを `AVAudioFile` の `processingFormat`（Float32）で読み、範囲を切り出して一時ディレクトリの 32 bit float CAF に書き出し（ファイルが短ければ無音で埋める）、その一時ファイルを解析して削除する。パーツ間でサンプルレート・チャンネル数が違うとエラーにし、共有パイプラインがそのチャンク単体で認識し直す（同じセッションのチャンクは同じ形式なので通常は起きない）。一時ファイルは最大で「チャンク + 前後 30 秒」分（16 kHz モノラルで約 23 MB）。
-- エンジン ID: `apple-speechtranscriber-ja`。言語: `ja`。
+- エンジン ID: `apple-speechtranscriber-ja`。言語: `ja`。英語オン（§7.5）のときは `apple-speechtranscriber-ja+apple-speechtranscriber-en`（各セグメントの `lang` が書いたモデルを示す）。
 - 誤認識の除去（#105）: `IosAppGraph` も Android と同じ `FalsePositiveFilter.DEFAULT` を `TranscriptionPipeline` に渡す。ただし判断の材料（Silero の確率の平均 `speechProbability`、雑音の床からの差 `levelAboveNoiseDb`）は sherpa-onnx の経路でしか付かず、SpeechAnalyzer の結果（`IosTimedText`）にはないので、現状は何も捨てない（信号がないときは捨てない規則。[02 §6.3](../architecture/02-architecture.md#会話以外の誤認識の除去105)）。SpeechAnalyzer は自前で区切るため、短い誤認識の出方は実機で確かめる（#61）。
 - 実行タイミング:
   - 1 回分の処理（中断分の回復・モデルの確認・方針つきの文字起こし・保持期間の削除・診断ログ・次の予約の判定）は Android と共通の `TranscriptionRun`。iOS は返ってきた `FollowUp` を次のように扱う: `RunAgain`（失敗して再試行回数が残っている・実行中に届いた）→ 前面ならすぐ、BGTask なら時間切れまで続けて再実行、`Paused` → 下記の再試行・再予約、`Interrupted` / `WaitForModel` → 何もしない（バックグラウンドへ移るときの予約や、モデルの準備完了時の要求に任せる）。
@@ -168,7 +170,7 @@ MainViewControllerKt.MainViewController()                             // Compose
 Android と同じ共通の `DiagnosticsLog`（`shared/pipeline`、形式・上限・記録しないものは [android-phone.md §4.2](android-phone.md#42-診断ログ77)）を `IosAppGraph.start` で開く。
 
 - 場所: `Application Support/WatchAudio/diagnostics/diagnostics.csv`（512 KB で `.1` に回す。最大約 1 MB。バックアップ対象外のディレクトリ内）。
-- 記録: `app_start`（バージョン・OS）、`chunk_received` / `chunk_rejected`（共通の `ChunkIntake`。ACK の送信自体は Swift 側なので記録しない）、`worker_start` / `worker_stop`（共通の `TranscriptionRun`。`worker=foreground` / `worker=bgtask`、件数、BGTask の時間切れ）、`transcription_*`（`DiagnosticsPipelineObserver`、RTF 付き）、`retention_purge`、`model_download_start` / `model_ready` / `model_download_failed`（OS によるモデルのインストール）、`gap_alert_scheduled`（`IosGapAlerts` が予約した時刻）、`crash`。
+- 記録: `app_start`（バージョン・OS）、`chunk_received` / `chunk_rejected`（共通の `ChunkIntake`。ACK の送信自体は Swift 側なので記録しない）、`worker_start` / `worker_stop`（共通の `TranscriptionRun`。`worker=foreground` / `worker=bgtask`、件数、BGTask の時間切れ）、`transcription_*`（`DiagnosticsPipelineObserver`、RTF 付き）、`retention_purge`、`model_download_start` / `model_ready` / `model_download_failed`（OS によるモデルのインストール。英語のモデルは `model=en`、#170）、`gap_alert_scheduled`（`IosGapAlerts` が予約した時刻）、`crash`。
 - 異常終了: Kotlin の未捕捉例外は `setUnhandledExceptionHook` で型名とスタックの先頭を 1 行書いてから元のフック（終了）に渡す。Objective-C / Swift のクラッシュや OS による強制終了（メモリ・時間切れ）は記録できないので、OS のクラッシュレポート（設定 > プライバシーとセキュリティ > 解析と改善 > 解析データ、Xcode Organizer）を見る。`NSSetUncaughtExceptionHandler` は C 関数ポインタとグローバル状態が要るため使っていない。
 - 書き出し: 状態タブの「診断ログを書き出す」→ `IosAppServices.exportDiagnostics()` が一時ディレクトリ（`tmp/diagnostics-export/`、前回分は削除）に 1 つの CSV をまとめ、`UIActivityViewController`（共有シート）を最前面の画面から表示する。送り先はユーザーが選ぶ（AirDrop・ファイルに保存など）。自動では送らない。
 - 削除: 状態タブの「すべてのデータを削除」で、ログと `tmp/diagnostics-export/` のコピーも消える（`StorageManager.deleteAll` → `DiagnosticsLog.clear`、#159）。Apple Watch の `diagnostics.csv` は Watch 側にあり対象外。
@@ -181,6 +183,15 @@ Android と同じ共通の `DiagnosticsLog`（`shared/pipeline`、形式・上�
 
 状態タブの「暗号化バックアップ」（暗号化・復元の処理は共通コード、[phone-ui.md §1.10](phone-ui.md#110-暗号化バックアップ40)、形式は [02 §6.7](../architecture/02-architecture.md#67-暗号化バックアップ40)）。作成は §7.3 と同じ `saveExport()`（`tmp/data-export/` に暗号化済みのファイルを書いて共有シート、閉じたら削除）。復元は `IosAppServices.openBackup()` が `UIDocumentPickerViewController(forOpeningContentTypes: [UTTypeItem], asCopy: true)` を最前面の画面から表示し（delegate は UIKit が弱参照で持つので、選ぶまで `IosAppServices` が保持）、OS が `tmp/` に作ったコピーを 2 回（確認と追加）読み、終わったら（失敗でも）消す。暗号は CommonCrypto（`CCCryptorCreateWithMode` の CTR・`CCHmac`・`CCKeyDerivationPBKDF`）と Security（`SecRandomCopyBytes`）を Kotlin/Native から直接呼ぶ（`shared/platform` の `Crypto.ios.kt`）。CryptoKit（Swift のみ）は使わないので Swift 側の変更はない。標準の暗号化を OS の API で使っているため、App Store Connect の輸出コンプライアンスの申告が必要（[store-data-declarations.md](../legal/store-data-declarations.md)）。
 
+### 7.5 英語（#170）
+
+状態タブの「英語も文字起こしする」（`AppSettings.transcribeEnglish`、既定オフ、[phone-ui.md](phone-ui.md)）をオンにすると、日本語に加えて英語の `SpeechTranscriber`（`en_US`）も使う。方式の比較は [research/english-asr.md §7](../research/english-asr.md#7-ios170)。
+
+- **振り分け**: `IosTranscriberAdapter` が、設定がオンで英語モデルが準備完了のときだけ、共通の `SegmentRouting`（`shared/pipeline`）で英語のパスを足す。日本語のパスはチャンク全体のまま（オフと同じ）。その結果のうち、Android と同じ `LanguageRouting` の規則で怪しいセグメント（1.5 文字/秒未満、またはカタカナ・ラテン文字が 8 割以上）と、日本語の出力がない 1 秒以上の間を、前後 0.3 秒広げてまとめ、1 秒の無音をはさんで 1 つの入力にして英語で 1 回だけ解析する（無音は「ファイルの終わりより後の範囲」で、`SpeechTranscription.concatenate` が無音で埋める）。英語の文は、区間ごとにまとめて確信度 0.5 以上（`LanguageRouting.minConfidence`、`IosTranscriberAdapter.ROUTING`）・3 語以上・ラテン文字 9 割以上なら、区間内の怪しい日本語のセグメントと置き換えて `lang = en` で保存する。広げた 0.3 秒で隣の日本語（置き換えないセグメント）を聞き直した英語の結果は捨てる。
+- **エンジン ID**: 英語オンで処理したチャンクは `apple-speechtranscriber-ja+apple-speechtranscriber-en`（各セグメントの `lang` が書いたモデル）。英語のパスが失敗したら（OS がモデルを消したなど）、チャンクは日本語の文のまま `apple-speechtranscriber-ja` で保存し、診断ログに `transcription_failed pass=en fallback=ja` を残して英語モデルの状態を「確認中」に戻す（次の実行の前に準備し直す）。
+- **モデル**: `IosAppGraph.syncEnglish()` が設定に合わせる。オン: `prepareModel("en")` → Swift の `makeTranscriber(en_US)`（未導入なら `AssetInventory.reserve` + `assetInstallationRequest` → `downloadAndInstall`）。状態は `ProcessingStatus.englishModel`（準備中 → 準備完了 / 失敗）。起動時・設定の変更時・各実行の前（`SpeechModel.ensureReady`、日本語のモデルの後）と、状態タブの「英語モデルをもう一度準備」で呼ぶので、失敗は次の実行で再試行される。オフ: `releaseModel("en")` → `AssetInventory.release(reservedLocale:)` でこのアプリの確保を解除する（モデルを消すかは OS が決める。日本語の確保はそのまま）。診断ログは `model_download_start` / `model_ready` / `model_download_failed` に `model=en`。
+- **音声の形式**: 解析の前に `SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith:)` と入力の `processingFormat` を比べ、違えば `AVAudioConverter` で一時 CAF に変換してから渡す（`SpeechTranscription.analyzerInput`。同じなら変換しない）。
+- **シミュレータ検査**: `IosTranscriptionCheck`（iosMain、公開）は音声ファイルを一時 DB にチャンクとして取り込み、本番と同じアダプタとパイプラインで文字起こしした結果を返す。`EnglishTranscriptionTests`（SpeechTests）がこれを Swift から呼ぶ。テストバンドルは PlaybackTests と同じく ComposeApp のヘッダだけを参照し、`SpeechAnalyzerTranscriber.swift` のコピーをコンパイルする。`SpeechTranscription.Engine.dictation`（DictationTranscriber）は SpeechTranscriber のないシミュレータのための検査用の選択肢で、アプリは使わない。
 
 - iPhone: `Application Support/WatchAudio/`（`watch-audio.db`、`audio/yyyy/MM/dd/<chunkId>.m4a`、`inbox/`、`diagnostics/`（§7.2））。`LocalDataDirectory`（shared/ui/iosMain）がディレクトリに `NSURLIsExcludedFromBackupKey` を設定して iCloud / PC バックアップに含めず、ファイル保護クラス `CompleteUntilFirstUserAuthentication`（BGTask・ロック中の取り込みから読める）を明示する（#76）。
 - Watch: `Application Support/WatchAudio/`（録音中・送信待ちチャンク、診断ログ）。ACK 後に削除。`ChunkOutbox` が `LocalDataProtection`（apps/ios/SharedSwift）で同じくバックアップ除外と `completeUntilFirstUserAuthentication` を設定する（画面オフ・ロック中も録音・再送できる）。
@@ -216,6 +227,7 @@ iPhone アプリはマイクを使わない（録音は Watch だけ。再生は
 | iOS の再生（`IosAppServices.play`、#19 / #25） | 2 段構え。(a) `shared/ui` の iOS シミュレータテスト `IosPlaybackTest`（`./gradlew iosSimulatorArm64Test`）: 本番の `Ingestor` で前日 10:00 開始の AAC チャンクを取り込み、(1) `play(path, 45 s)`、(2) 共有 Compose UI で「前の日」→ 発話をタップ → 「HH:mm から再生中」、(3) 検索 → 結果を 1 タップ、のそれぞれで、そのチャンクのファイル（音声ルートからの相対パスを解決したもの）が AVAudioPlayer に開かれ、再生位置が指定位置 ±0.2 秒、長さが正しいことを確認する。Kotlin/Native のテスト実行ファイルはアプリのプロセスではなく `AVAudioPlayer.play()` が false を返すため（CI で確認、シークは効く）、再生が始まったか（`started=`）は `PLAYBACK_CHECK` 行に記録するだけにしている。テストプロセスには UIApplication が無いため `IosAppGraph` ではなく、それが組み立てるのと同じ `IosAppServices` を一時 DB で作る。(b) 実際に再生が進むことは `PlaybackTests`（iOS アプリをホストにした XCTest、`HostedPlaybackTests.swift`）で確認: アプリが起動時に作った `IosAppGraph.shared.services`（本物の `IosAppServices`）に、音声ルート下に置いた AAC 16 kHz モノラル 20 秒のファイルを相対パスで渡して 8 秒から再生し、最初に観測した位置が 8 秒（-0.2〜+1 秒）、2 秒後に 1 秒以上進むことを確認（`PLAYBACK_CHECK check=hosted_player` 行）。ComposeApp は静的フレームワークでアプリにだけリンクされるので、テストバンドルはヘッダだけを参照し、シンボルは `BUNDLE_LOADER`（アプリ）から解決する（Kotlin ランタイムが二重にならないよう自動リンクを無効化）。ランナーに音声出力デバイスが無い場合に備え、CI は BlackHole（仮想デバイス）を入れる | CI で確認（ジョブサマリーの「Playback checks」と「Playback check in the app process」） |
 | Swift プロトコル互換 | Linux の Swift 6.2 で同等のテストを実行 | 通過。CI では `ProtocolTests`（`SwiftUnitTests` スキーム）を iOS シミュレータで実行 |
 | Watch の停止理由・状態判定（#15）、送信キュー（#17） | `WatchLogicTests`（`SwiftUnitTests` スキーム、ホストなし）を iPhone シミュレータで実行。対象の `RecorderPolicy` / `ChunkSendTracker` / `ChunkOutbox` は Foundation / AVFoundation だけを使うので watchOS 以外でもそのまま動く（WatchKit・WatchConnectivity・AVAudioRecorder を使う `RecorderController` / `ChunkTransport` は対象外で、実機確認は #60） | CI で確認 |
+| 英語・日英混在（#170） | (a) 振り分けの規則: `SegmentRoutingTest` / `LanguageRoutingTest`（`jvmTest`、`iosSimulatorArm64Test`）。(b) iOS の Kotlin 側: `IosTranscriberBridgeTest`（シミュレータ）で、英語オンの日本語 → 英語 → 日本語のチャンクが `ja, en, ja` で保存され、日本語だけはオン・オフで同じ、英語のパスの失敗で日本語が残ること。(c) アプリのプロセスで Swift → Kotlin → SQLite まで: `EnglishTranscriptionTests`（SpeechTests）。CI が `say`（Kyoko / Samantha）で日本語 → 英語 → 日本語の音声（`make-mixed-speech.sh`）を作る。実際の認識器（SpeechTranscriber、なければ DictationTranscriber）の 2 件は、GitHub のシミュレータではどちらも動かない（SpeechTranscriber は `isAvailable` が false、DictationTranscriber は `bestAvailableAudioFormat` が nil で解析が「Audio format is not supported」）ため理由を記録してスキップし、認識器だけを文の時刻から答える `ScriptedTranscriber` に替えた 2 件で `ja, en, ja` と日本語だけのオン・オフ一致を確認。形式の変換が長さを保つことも確認 | CI で確認（実際の認識での精度は実機、§11 の 19） |
 | SpeechTranscriber（ja_JP）の文字起こし（#21） | `SpeechTests`（iOS アプリをホストにした XCTest）。CI が macOS の `say`（日本語音声）→ `afconvert` で Watch と同じ AAC 16 kHz モノラルの音声と正解文を作り、`SpeechTranscription` で文字起こし → セグメントの時刻（0 以上・音声長以内・昇順）と文字の再現率 0.5 以上を確認。3 秒の無音を前に連結した場合に時刻がずれることも確認。DB への保存は `IosTranscriberBridgeTest`（Kotlin、シミュレータ）で確認。シミュレータで使えない（`isAvailable` が false、ja_JP 非対応、モデルを入れられない、解析がエラー）場合は理由をログ（`build/swift-evidence/`、ジョブサマリー）に残してスキップし、実機確認は #60 | CI で確認（結果はジョブサマリーの「Speech check logs」） |
 | Swift の型・Swift 6 並行性チェック | Linux の Swift 6.2 + Apple フレームワークのスタブ（API 名は developer.apple.com で確認）で SIL 診断まで実行 | 通過（SwiftUI の画面ファイルは対象外） |
 | ComposeApp フレームワークのリンク（bundled SQLite を含む）、Xcode ビルド、SwiftUI、実 API との一致 | **CI（macOS）のみ** | 要確認 |
@@ -242,12 +254,14 @@ iPhone アプリはマイクを使わない（録音は Watch だけ。再生は
 16. 状態タブ「暗号化バックアップ」（#40）→ パスフレーズと確認を入れ「音声もバックアップする」→「バックアップを作成」→ 共有シートの「ファイルに保存」で保存。別の端末（Android を含む）の「バックアップから戻す」でそのファイルを選んで同じパスフレーズを入れると、タイムラインのチャンク・文字起こし・マーク・録音できていない時間が元の端末と一致し、音声が再生できる。違うパスフレーズでは「パスフレーズが違います」と出て何も増えない。Android で作ったバックアップをこの iPhone で戻す逆方向も確かめる。終わった後、アプリの `tmp/` にバックアップのコピーが残っていない。
 17. オフロード（#156）: 16 の音声入りバックアップを「ファイルに保存」で保存した後、状態タブの「バックアップ済みの音声」に件数と最後のバックアップの日付が出る → 「バックアップ済みの音声を端末から外す」→ 確認で「端末から外す」→ タイムラインの発話に ▶ の代わりに「バックアップにあり」、検索は今までどおり。同じバックアップを「バックアップから戻す」で戻すと再生できる。共有シートを保存先を選ばずに閉じたバックアップでは、外せる音声が増えない。
 18. 差分バックアップ（#164）: 16 の全体のバックアップを保存した後、カードに「前回のバックアップ: <日時>（全体）」が出て「差分」が選ばれ、録音が増えると差分の件数と大きさが増える → 差分を作成して「ファイルに保存」（ファイル名が `…-diff.wabackup`）→ 前回の表示が「差分。… の後の 1個目」になる。共有シートを保存先なしで閉じた差分では前回の表示が変わらない。別の端末（Android を含む）で全体と差分を（逆順でも）戻すと、元の端末と同じチャンク・文字起こし・音声になる。タイムラインで 1 日を削除すると「差分」が選べなくなり、理由が出る。
+19. 英語（#170、§7.5）: 状態タブ「英語も文字起こしする」をオン → 「英語モデルを準備中…」→「準備完了」（初回は OS がダウンロード。Wi-Fi・モバイル通信での挙動と所要時間を記録）。英語だけの会話と、日本語と英語が交互の会話を録音 → タイムラインで英語の発話が英語（`lang = en`）で、日本語はオフのときと同じに保存される。日本語だけの会話（相づち・小声・雑音を含む）でオンにしても英語に化けないこと。英語オンで文字起こし時間（診断ログの RTF）と電池がどれだけ増えるかを、日本語だけの録音（無音の多い 1 時間）と英語の録音で測る。確信度の閾値 0.5 が合っているかを、誤って英語になった・英語が残らなかった発話の数で確かめる。オフにすると英語のパスが止まり、`AssetInventory.reservedLocales` から `en_US` が消える（モデルの削除は OS 次第）。機内モードで初回にオン → 失敗の表示と「英語モデルをもう一度準備」、通信を戻すと準備できる。
 
 ## 12. 既知のリスク・制約
 
-- **CI でしか分からないこと**: ComposeApp 静的フレームワークのリンク（androidx.sqlite の bundled SQLite を含む初めてのリンク）、Kotlin が生成する ObjC ヘッダの Swift 名（`ingest(manifestJson:filePath:completion:)`、`IosSpeechTranscriber` の各メソッド、`transcribe(parts:callback:)` と `IosAudioPart` のプロパティ）、SwiftUI の `.backgroundTask(.watchConnectivity)` などのビルド。
-- **SpeechAnalyzer とファイル形式**: `analyzeSequence(from: AVAudioFile)` が 16 kHz AAC をそのまま受け付ける前提。もしフォーマット不一致エラーになる場合は `SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith:)` + `AVAudioConverter` で変換してから `AnalyzerInput` を流す実装に切り替える。
+- **CI でしか分からないこと**: ComposeApp 静的フレームワークのリンク（androidx.sqlite の bundled SQLite を含む初めてのリンク）、Kotlin が生成する ObjC ヘッダの Swift 名（`ingest(manifestJson:filePath:completion:)`、`IosSpeechTranscriber` の各メソッド、`transcribe(parts:language:callback:)` と `IosAudioPart` のプロパティ）、SwiftUI の `.backgroundTask(.watchConnectivity)` などのビルド。
+- **SpeechAnalyzer とファイル形式**: 解析の前に `SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith:)` と比べ、違えば `AVAudioConverter` で一時 CAF に変換してから渡す（#170 で追加。シミュレータの DictationTranscriber が Float32 のままでは「Audio format is not supported」を返したため）。実機の SpeechTranscriber で変換が要るか（同じ形式ならそのまま）と、変換した場合の時間は実機で確かめる。
 - **境界の連結（#45）は実機未確認**: 一時 CAF への書き出し（`AVAudioFile(forWriting:settings:commonFormat:interleaved:)`、`read(into:frameCount:)`、`write(from:)`）と、その結果の時刻が元のチャンクの時刻に正しく戻ることを実機で確認する。Linux ではスタブに対する Swift 6 の型チェックのみ。
+- **英語（#170）の実際の精度は実機のみ**: SpeechTranscriber も DictationTranscriber も CI のシミュレータでは動かないので、日本語のモデルが英語に何を書くか（何も書かない・ラテン文字・カタカナ）、英語のモデルが日本語に付ける確信度、閾値（0.5、Android の規則の値）が合うかは実機で確かめる（§11 の 19、#60）。無音の多い録音では日本語の出力がない間がすべて英語のパスにかかるので、計算時間と電池も実機で測る。
 - **音声認識の認可**: SpeechTranscriber が `SFSpeechRecognizer` の認可を必要とするかは未確認。念のためオンボーディングで要求している。不要と確認できたら `IosPermissions.all` から外す。
 - **充電後の自動再開**はアプリが前面に来たときのみ（上記 4 章）。バックグラウンドで録音を開始できるかは watchOS の制約次第。
 - **割り込み後の再開**: watchOS が中断後にバックグラウンドでの録音再開を許すかは M0-3 の検証課題。失敗時は通知でユーザーに促す。
