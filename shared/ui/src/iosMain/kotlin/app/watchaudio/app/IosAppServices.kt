@@ -63,6 +63,7 @@ class IosAppServices internal constructor(
     private val onGapAlertSettingsChanged: () -> Unit,
     override val diagnostics: DiagnosticsLog,
     private val onTranscriptionSettingsChanged: () -> Unit = {},
+    private val onPrepareEnglishModel: () -> Unit = {},
 ) : AppServices {
     private var player: AVAudioPlayer? = null
 
@@ -85,6 +86,12 @@ class IosAppServices internal constructor(
 
     /** Asks the OS to install the speech model now; there is no Wi-Fi/mobile choice on iOS. */
     override fun downloadModels(allowMetered: Boolean) = onPrepareModel()
+
+    /** English with a second SpeechTranscriber (en_US) on the stretches the Japanese one may have got wrong (#170). */
+    override val supportsEnglish: Boolean get() = true
+
+    /** Asks the OS to install the English model again (after a failure); no Wi-Fi/mobile choice on iOS. */
+    override fun downloadEnglishModel(allowMetered: Boolean) = onPrepareEnglishModel()
 
     override val permissions: List<AppPermission> get() = IosPermissions.all
 

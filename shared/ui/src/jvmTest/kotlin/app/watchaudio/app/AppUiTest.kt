@@ -297,6 +297,39 @@ class AppUiTest {
         assertEquals(false, runBlocking { store.loadSettings() }.transcribeEnglish)
     }
 
+    /**
+     * #170: where the OS installs the English model (iOS), the switch states no download size or
+     * attribution, preparing shows without a percentage, and a failed installation can be retried.
+     */
+    @Test
+    fun englishSwitchWithAnOsManagedModel() = runDesktopComposeUiTest(width = 412, height = 915) {
+        runBlocking { store.updateSettings { it.copy(onboardingCompleted = true, transcribeEnglish = true) } }
+        val services = FakeAppServices(
+            store,
+            audioRoot = audioDir.path,
+            initialStatus = ProcessingStatus(asrModel = ModelState.Ready, englishModel = ModelState.Downloading(0f)),
+            modelSetup = ModelSetup.OS_MANAGED,
+            supportsEnglish = true,
+        )
+        showApp(services)
+        waitForText(Strings.TAB_STATUS)
+        onNodeWithText(Strings.TAB_STATUS).performClick()
+        waitForText(Strings.englishModelState(ModelState.Downloading(0f), waitingForWifi = false, ModelSetup.OS_MANAGED))
+        waitForText(Strings.ENGLISH_DETAIL_OS_MANAGED)
+        assertTrue(onAllNodes(hasText(ENGLISH_ATTRIBUTION)).fetchSemanticsNodes().isEmpty())
+        assertTrue(onAllNodes(hasText(Strings.ENGLISH_DOWNLOAD_NOW)).fetchSemanticsNodes().isEmpty())
+        assertNoEnglish()
+        screenshot("status-english-os-managed-preparing")
+
+        // The OS's (English) reason is not shown.
+        services.mutableStatus.value = ProcessingStatus(asrModel = ModelState.Ready, englishModel = ModelState.Failed("Asset installation failed"))
+        waitForText(Strings.englishModelState(ModelState.Failed(""), waitingForWifi = false, ModelSetup.OS_MANAGED))
+        onNodeWithText(Strings.ENGLISH_PREPARE_AGAIN).performScrollTo().performClick()
+        waitUntil(timeoutMillis = 10_000) { services.englishDownloadRequests.size == 1 }
+        assertTrue(onAllNodes(hasText("Asset installation", substring = true)).fetchSemanticsNodes().isEmpty())
+        assertNoEnglish()
+    }
+
     @Test
     fun englishSwitchIsHiddenWithoutEnglishSupport() = runDesktopComposeUiTest(width = 412, height = 915) {
         runBlocking { store.updateSettings { it.copy(onboardingCompleted = true) } }

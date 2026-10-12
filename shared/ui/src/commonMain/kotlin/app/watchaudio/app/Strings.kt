@@ -345,15 +345,35 @@ object Strings {
             "文字起こしにかかる時間と電池が増えます。1 つの発話の中で日本語と英語が混ざると、どちらか一方の言語として認識されます。" +
             "オンにした後に届いた録音から英語を認識します。オフにするとモデルを削除します。"
 
-    /** The extra English model's state under the switch (#81). */
-    fun englishModelState(model: ModelState, waitingForWifi: Boolean): String = when (model) {
+    /** The switch's description where the OS installs the English model (iOS, #170). */
+    const val ENGLISH_DETAIL_OS_MANAGED =
+        "日本語に加えて、英語の発話を英語として文字起こしします。iPhone の英語の音声認識モデルを使い（初回は OS がダウンロードします）、" +
+            "日本語のモデルが聞き取れなかった部分を英語のモデルでも聞くため、文字起こしにかかる時間と電池が増えます。" +
+            "1 つの発話の中で日本語と英語が混ざると、どちらか一方の言語として認識されます。" +
+            "オンにした後に文字起こしする録音から英語を認識します。オフにすると、このアプリの英語モデルの確保を解除します（削除するかは OS が決めます）。"
+
+    /** The extra English model's state under the switch (#81; [ModelSetup.OS_MANAGED]: iOS, #170). */
+    fun englishModelState(model: ModelState, waitingForWifi: Boolean, setup: ModelSetup = ModelSetup.DOWNLOAD): String = when (model) {
         ModelState.Unknown -> "英語モデル: 確認中…"
-        ModelState.Missing -> if (waitingForWifi) "英語モデル: Wi-Fi に接続するとダウンロードします" else "英語モデル: 未ダウンロード"
-        is ModelState.Downloading -> "英語モデルをダウンロード中… ${(model.progress * 100).toInt().coerceIn(0, 100)}%"
+        ModelState.Missing -> when {
+            setup == ModelSetup.OS_MANAGED -> "英語モデル: 未準備"
+            waitingForWifi -> "英語モデル: Wi-Fi に接続するとダウンロードします"
+            else -> "英語モデル: 未ダウンロード"
+        }
+        is ModelState.Downloading -> when (setup) {
+            ModelSetup.DOWNLOAD -> "英語モデルをダウンロード中… ${(model.progress * 100).toInt().coerceIn(0, 100)}%"
+            ModelSetup.OS_MANAGED -> "英語モデルを準備中…（初回は OS がダウンロードします）"
+        }
         ModelState.Ready -> "英語モデル: 準備完了（英語も端末内で文字起こしします）"
-        is ModelState.Failed -> "英語モデルのダウンロードに失敗しました。しばらくしてから自動で再試行します"
+        is ModelState.Failed -> when (setup) {
+            ModelSetup.DOWNLOAD -> "英語モデルのダウンロードに失敗しました。しばらくしてから自動で再試行します"
+            ModelSetup.OS_MANAGED -> "英語モデルを準備できませんでした。次の文字起こしのときにもう一度試します"
+        }
     }
     const val ENGLISH_DOWNLOAD_NOW = "モバイルデータ通信でもダウンロード"
+
+    /** Retries the English model where the OS installs it (iOS, #170). */
+    const val ENGLISH_PREPARE_AGAIN = "英語モデルをもう一度準備"
 
     /** Attribution of the English model under its switch (#167; the FunASR model license asks for it). */
     fun englishModelAttribution(name: String, author: String, url: String) = "英語のモデル: $name — $author（出典: $url）"

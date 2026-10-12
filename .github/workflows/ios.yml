@@ -206,12 +206,20 @@ jobs:
         continue-on-error: true # without audio the tests skip and say why
         run: .github/scripts/make-ja-speech.sh build/ja-speech
 
+      # #170: Japanese -> English -> Japanese (and Japanese only) for EnglishTranscriptionTests, which
+      # run the Swift transcriber through the shared routing and pipeline (IosTranscriptionCheck).
+      # GitHub's simulators have no SpeechTranscriber, so they use DictationTranscriber there.
+      - name: Japanese/English test speech
+        if: (success() || failure()) && steps.build-ios.outcome == 'success'
+        continue-on-error: true # without audio the tests skip and say why
+        run: .github/scripts/make-mixed-speech.sh build/mixed-speech
+
       - name: Speech transcription on the iOS simulator
         if: (success() || failure()) && steps.build-ios.outcome == 'success'
-        timeout-minutes: 15
+        timeout-minutes: 20
         run: |
           status=0
-          UNINSTALL_APP=app.watchaudio .github/scripts/xcode-test.sh SpeechTests "SpeechTranscriber (ja_JP) on the iOS simulator" \
+          UNINSTALL_APP=app.watchaudio .github/scripts/xcode-test.sh SpeechTests "Speech transcription (ja_JP; ja + en routing, #170) on the iOS simulator" \
             OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES || status=$?
           {
             echo "Speech check logs (build/swift-evidence):"
@@ -272,6 +280,7 @@ jobs:
           path: |
             build/swift-evidence/
             build/ja-speech/
+            build/mixed-speech/
             audio-devices.txt
           if-no-files-found: ignore
           retention-days: 7

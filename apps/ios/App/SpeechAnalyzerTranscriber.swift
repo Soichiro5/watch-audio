@@ -8,25 +8,50 @@ struct UncheckedSendableBox<Value>: @unchecked Sendable {
     init(_ value: Value) { self.value = value }
 }
 
-/// On-device Japanese speech-to-text for the shared pipeline: implements the Kotlin
+/// On-device speech-to-text for the shared pipeline: implements the Kotlin
 /// `IosSpeechTranscriber` interface on top of `SpeechTranscription` (SpeechAnalyzer +
-/// SpeechTranscriber, iOS 26). The model is managed by the OS; audio never leaves the device.
+/// SpeechTranscriber, iOS 26). Japanese always; English for the stretches the shared routing
+/// picks while 「英語も文字起こしする」 is on (#170). The models are managed by the OS; audio never
+/// leaves the device.
 final class SpeechAnalyzerTranscriber: NSObject, IosSpeechTranscriber, @unchecked Sendable {
     /// Guarded by `lock`.
     private var running: Task<Void, Never>?
     private let lock = NSLock()
-    private let requestedLocale = Locale(identifier: "ja_JP")
+    private let engine: SpeechTranscription.Engine
 
-    var engineId: String { "apple-speechtranscriber-ja" }
+    /// `engine` is `.speech` in the app; the simulator checks may use `.dictation`.
+    init(engine: SpeechTranscription.Engine = .speech) {
+        self.engine = engine
+        super.init()
+    }
 
     var language: String { "ja" }
 
-    func prepareModel(callback: @escaping (String?) -> Void) {
+    func engineId(language: String) -> String {
+        switch engine {
+        case .speech: "apple-speechtranscriber-\(language)"
+        case .dictation: "apple-dictationtranscriber-\(language)"
+        }
+    }
+
+    /// The SpeechTranscriber locale for a language of the shared code.
+    static func locale(for language: String) -> Locale {
+        switch language {
+        case "en": Locale(identifier: "en_US")
+        default: Locale(identifier: "ja_JP")
+        }
+    }
+
+    func prepareModel(language: String, callback: @escaping (String?) -> Void) {
         let reply = UncheckedSendableBox(callback)
-        let locale = requestedLocale
+        let locale = Self.locale(for: language)
+        let engine = engine
         Task {
             do {
-                _ = try await SpeechTranscription.makeTranscriber(locale: locale)
+                switch engine {
+                case .speech: _ = try await SpeechTranscription.makeTranscriber(locale: locale)
+                case .dictation: _ = try await SpeechTranscription.makeDictationTranscriber(locale: locale)
+                }
                 reply.value(nil)
             } catch {
                 reply.value(SpeechTranscription.describe(error))
@@ -34,14 +59,26 @@ final class SpeechAnalyzerTranscriber: NSObject, IosSpeechTranscriber, @unchecke
         }
     }
 
-    func transcribe(parts: [IosAudioPart], callback: @escaping ([IosTimedText]?, String?) -> Void) {
+    func releaseModel(language: String, callback: @escaping () -> Void) {
         let reply = UncheckedSendableBox(callback)
-        let locale = requestedLocale
+        let locale = Self.locale(for: language)
+        Task {
+            await SpeechTranscription.releaseModel(locale: locale)
+            reply.value()
+        }
+    }
+
+    func transcribe(parts: [IosAudioPart], language: String, callback: @escaping ([IosTimedText]?, String?) -> Void) {
+        let reply = UncheckedSendableBox(callback)
+        let locale = Self.locale(for: language)
         let ranges = parts.map { SpeechTranscription.AudioRange(url: URL(fileURLWithPath: $0.path), fromMs: $0.fromMs, toMs: $0.toMs) }
+        let engine = engine
         let task = Task {
             do {
-                let segments = try await SpeechTranscription.transcribe(ranges, locale: locale)
-                reply.value(segments.map { IosTimedText(startMs: $0.startMs, endMs: $0.endMs, text: $0.text) }, nil)
+                let segments = try await SpeechTranscription.transcribe(ranges, locale: locale, engine: engine)
+                reply.value(segments.map {
+                    IosTimedText(startMs: $0.startMs, endMs: $0.endMs, text: $0.text, confidence: $0.confidence ?? -1)
+                }, nil)
             } catch {
                 reply.value(nil, SpeechTranscription.describe(error))
             }

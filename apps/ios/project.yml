@@ -166,9 +166,12 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).watchlogictests
         GENERATE_INFOPLIST_FILE: YES
 
-  # SpeechAnalyzer / SpeechTranscriber (ja_JP) on the simulator (#21). Hosted by the iOS app so
-  # the Speech framework sees the app's bundle and usage descriptions; the test bundle compiles
-  # its own copy of SpeechTranscription.swift and does not touch the Kotlin framework.
+  # SpeechAnalyzer / SpeechTranscriber (ja_JP) on the simulator (#21), and English next to
+  # Japanese through the shared routing and pipeline (#170). Hosted by the iOS app so the Speech
+  # framework sees the app's bundle and usage descriptions; the test bundle compiles its own copies
+  # of SpeechTranscription.swift and SpeechAnalyzerTranscriber.swift. The English check reaches the
+  # Kotlin framework (IosTranscriptionCheck) like PlaybackTests: headers only, symbols through
+  # BUNDLE_LOADER, no second copy of the Kotlin runtime.
   SpeechTests:
     type: bundle.unit-test
     platform: iOS
@@ -176,6 +179,7 @@ targets:
       - Tests/SpeechTests
       - Tests/TestSupport
       - path: App/SpeechTranscription.swift
+      - path: App/SpeechAnalyzerTranscriber.swift
     dependencies:
       - target: iosApp
         embed: false
@@ -185,6 +189,9 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/WatchAudio.app/WatchAudio
         BUNDLE_LOADER: $(TEST_HOST)
+        FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../../shared/ui/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
+        OTHER_SWIFT_FLAGS: [$(inherited), -Xfrontend, -disable-autolink-framework, -Xfrontend, ComposeApp]
+        CLANG_MODULES_AUTOLINK: NO
         EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
 
   # Real playback through the app's own IosAppServices (AVAudioPlayer) in the app process (#19):

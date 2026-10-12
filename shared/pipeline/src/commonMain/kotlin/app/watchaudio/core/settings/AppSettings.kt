@@ -17,9 +17,10 @@ data class AppSettings(
     /** 「充電中のみ文字起こしする」 (#75): no transcription on battery at all. */
     val transcribeOnlyWhileCharging: Boolean = false,
     /**
-     * 「英語も文字起こしする」 (#81): also recognize English, with an extra model (SenseVoice,
-     * ~240 MB) routed in front of the Japanese one. Off by default. Platforms that cannot do it
-     * ignore it (`AppServices.supportsEnglish`).
+     * 「英語も文字起こしする」 (#81): also recognize English, with an extra model for the spans the
+     * Japanese one may have got wrong (Android: SenseVoice, ~240 MB; iOS: an English
+     * SpeechTranscriber, #170). Off by default. Platforms that cannot do it ignore it
+     * (`AppServices.supportsEnglish`).
      */
     val transcribeEnglish: Boolean = false,
 ) {
