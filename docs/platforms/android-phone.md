@@ -2,7 +2,7 @@
 
 対象 Issue: [M1-6 (#18)](https://github.com/Soichiro5/watch-audio/issues/18)（Wear OS → Android 転送 + ACK）、[M2-3 (#22)](https://github.com/Soichiro5/watch-audio/issues/22)（Android Transcriber とモデル配信）、[M2-1 (#20)](https://github.com/Soichiro5/watch-audio/issues/20) の Android 部分（WorkManager）。
 
-コアの目標「Watch で装着中ずっと録音 → **直接の Bluetooth / Wi-Fi 接続**でスマホへ転送 → スマホ上で文字起こし → ローカル SQLite に蓄積」のうち、スマホ側を `apps/android` に実装した。**音声・文字起こしはどこにもアップロードしない**（ネットワークを使うのは ASR モデルのダウンロードのみ）。
+コアの目標「Watch で装着中ずっと録音 → **直接の Bluetooth / Wi-Fi 接続**でスマホへ転送 → スマホ上で文字起こし → ローカル SQLite に蓄積」のうち、スマホ側を `apps/android` に実装した。**音声・文字起こしはどこにもアップロードしない**（ネットワークを使うのはモデル（ASR と意味検索の埋め込み）のダウンロードのみ）。意味検索（[#24](https://github.com/Soichiro5/watch-audio/issues/24)）の Android 部分は §3.4・§4.5。
 
 ## 1. コンポーネント
 
@@ -18,6 +18,7 @@
 | `ModelManager` / `ModelDownloadWorker` / `ModelManifest` / `ModelDownloader` / `ModelFiles` | `asr/` | モデルの用意（adb サイドロード取り込み・ファイル単位のダウンロード（途中再開・SHA-256 検証）・原子的な配置）。ダウンロードするモデルは `ModelManifest.spec`、ファイルの場所（`ModelFiles`）とパスはその `AsrModelSpec` から作る |
 | `TranscriptionScheduler` / `TranscriptionWorker` / `AndroidDeviceConditions` | `work/` | WorkManager による文字起こしの起動。ワーカーは共通の `TranscriptionRun` を呼び、その `FollowUp` を WorkManager の予約に対応づけるだけ（§4）。電池と発熱の方針の端末の状態の読み取り（§4.0） |
 | `GapAlertMonitor` / `GapAlertWorker` | `alert/` | 録音の途絶アラート（#43）。判定は共通の `GapAlertEvaluator`、ここでは WorkManager でのチェックと通知の表示のみ（§4.1） |
+| `AndroidEmbedding` / `AndroidSemanticSearch` | `search/` | 意味検索（#24、§3.4・§4.5）。埋め込みモデル（ruri-v3-30m int8）を共通の `OnnxEmbedder` で組み立て（推論は `shared/ort` の ONNX Runtime C API を JNA で、sherpa-onnx 同梱の `libonnxruntime.so` 上で呼ぶ）、`AppGraph` の `SemanticIndex`（`files/search/` のベクトルのキャッシュ）と共通の `EmbeddingStep`（`TranscriptionRun` の中の埋め込みの段）に渡す。`AndroidSemanticSearch` は検索画面が状態を尋ねたときにモデルのダウンロード（Wi-Fi のみ）を予約する |
 | `MainActivity` | `MainActivity.kt` | `App(services)` をホスト。オンボーディングの権限要求用に Activity Result の launcher を `AndroidAppServices` に渡す |
 
 共通コードの追加:
@@ -122,6 +123,28 @@ files/models/
 - メモリ: 英語オンの実行では 2 つの認識器（int8 で約 155 MB + 約 240 MB）を読み込む。英語を使わない実行では英語の認識器を解放する。実機での速度・電池・メモリは #61 で確認する。
 - **既知の制限**: 1 つの発話の中で日本語と英語が混ざる場合（「このPRをmergeして」）は、どちらか一方の言語として認識される（日本語モデルは英単語をカタカナや別の語にし、SenseVoice の日本語は Zipformer より誤りが多い）。話者交代や 0.2 秒以上の間で区間が分かれていれば、区間ごとに言語を選べる。
 
+### 3.4 意味検索の埋め込みモデル（#24）
+
+```
+files/models/
+  ruri-v3-30m/
+    model_quantized.onnx   (37,048,575 バイト。onnx-community/ruri-v3-30m-ONNX の int8、コミット 1b41a27… に固定)
+    tokenizer.json         ( 6,724,873 バイト。cl-nagoya/ruri-v3-30m、コミット 24899e5… に固定)
+```
+
+- **モデル**: M0-6 で選んだ `cl-nagoya/ruri-v3-30m`（日本語、256 次元、Apache-2.0。[research/m0-6](../research/m0-6-embedding-desktop.md)）。SHA-256 はモデルが Git LFS のハッシュ、tokenizer はファイルのハッシュ。ベクトルには `RuriV3.SPEC.id`（`ruri-v3-30m-int8@1b41a27`）を付けて保存するので、ファイルを差し替えるときは id も変えれば全体が埋め込み直される（§4.5）。
+- **いつ取得するか（自動・Wi-Fi のみ、検索画面を開いたとき）**: `AndroidSemanticSearch.status()`（検索タブを開くと呼ばれる）が `ModelManager.downloadEmbeddingIfMissing()` で `UNMETERED` 制約付きの `embedding-model-download`（`ModelDownloadWorker`、入力 `embedding=true`、通知「意味で探すためのモデルをダウンロード中」）を `KEEP` で予約する。モバイル通信では取得しない。理由: 約 44 MB と小さく文字起こしと同じ扱い（自動・Wi-Fi のみ）で足りるが、検索を使わない人にまで通信・容量・埋め込みの電池を使わせないため、きっかけを検索画面にした。取得できるまでの検索は従来どおりキーワードだけで、画面に「意味で探すためのモデルは Wi-Fi に接続したときにダウンロードします」と出る。途中再開・SHA-256 検証・原子的な配置は §3.1 と同じ `ModelDownloader`。
+- 揃った後は次の文字起こしの実行（新しいチャンクの受信、または充電中の定期実行）から埋め込みが始まる（モデル到着時に実行は要求しない）。
+- サイドロード（§3.2）も同じ場所に取り込む（外部ファイル領域の `models/ruri-v3-30m/` に push）。
+
+**ONNX Runtime の選び方（重要）**: sherpa-onnx の AAR（v1.13.8）はすでに `lib/<abi>/libonnxruntime.so`（ONNX Runtime **1.28.2**）を含む。Microsoft の Java パッケージ `com.microsoft.onnxruntime:onnxruntime-android` を足すと同じパスに別の `libonnxruntime.so` が来て、APK には 1 つしか入らない（`pickFirst` が要る）。しかも両方の JNI ライブラリはシンボルのバージョンを要求する（`readelf` で確認: `libsherpa-onnx-jni.so` は `OrtGetApiBase@VERS_1.28.2`、Maven Central の最新に近い `onnxruntime-android` 1.28.0 の `libonnxruntime4j_jni.so` は `OrtGetApiBase@VERS_1.28.0`。1.28.2 は Maven Central にない）。Android の linker（bionic）も glibc もこの不一致で読み込みに失敗するので、**どちらを残しても片方が動かない**。そこで Java パッケージは使わず、**ONNX Runtime の C API（`OrtGetApiBase` → 関数テーブル）を JNA で直接呼ぶ**（`shared/ort` の `OrtApi` / `OrtSession`、JNA 5.19.1 の AAR が `libjnidispatch.so` を足す。arm64 で 176 KB、16 KB ページ対応）:
+
+- APK の `libonnxruntime.so` は sherpa-onnx のもの 1 つだけ（ASR と埋め込みで共有。Java パッケージを足すより ABI ごとに約 28 MB 小さい）。
+- C API はバージョンなしの `OrtGetApiBase` だけを参照し、関数テーブルは追記のみで位置が変わらない。要求する API 版は 16（1.16 以降の全ランタイムが提供）なので、sherpa-onnx の更新で ONNX Runtime が新しくなってもそのまま動く。
+- 関数の位置（`OrtApi.Fn`）は `onnxruntime_c_api.h`（v1.28.2）から数え、`shared/ort` の単体テスト（Linux 版の sherpa-onnx の 1.28.2 で、使う関数をすべて呼ぶ）と `tools/harness` の一致テストで確かめる。Android 上では emulator の `EmbeddingDeviceTest`（§6.1）が、同じプロセスで sherpa-onnx の文字起こしの後に埋め込みを動かして確かめる。
+- R8: `proguard-rules.pro` で `com.sun.jna.**` を残す（ネイティブ側が名前で参照する）。
+- 推論は 1 スレッド（ONNX Runtime のスレッドプールは待機中にスピンして電池を使うため。passage は短く 1 件 数 ms）。パディングのあるバッチは int8 の動的量子化で値が変わるため 1 件ずつ（[m0-6 §9.1](../research/m0-6-embedding-desktop.md#91-トークナイザと埋め込みの一致)）。
+
 ### 3.2 adb でのサイドロード（開発者向け）
 
 ダウンロードを待たずに試すときは、ハーネス用のモデル（`tools/harness/download-models.sh` で取得）を外部ファイル領域に push してアプリを再起動する。起動時に内部領域へコピーされ、push したファイルは削除される。
@@ -144,6 +167,7 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 | `transcription-on-charge`（1 回限り・unique） | 方針が充電待ちで止めたとき（残量 50% 未満・省電力・充電中のみ・1 時間の上限） | 充電中 | 同上 |
 | `transcription-periodic`（6 時間ごと） | アプリ起動時に登録（`KEEP`） | 充電中 | 同上（取りこぼしの保険） |
 | `model-download`（unique） | 起動時（Wi-Fi 制約）またはユーザー操作 | UNMETERED / CONNECTED、ストレージ残量 | §3.1 |
+| `embedding-model-download`（unique、`KEEP`） | 検索タブを開いたとき（モデルが無ければ。#24） | UNMETERED、ストレージ残量 | §3.4 |
 | `gap-alert-timer`（1 回限り・unique・`REPLACE`） | チャンクを `STORED` で受信したとき・通知設定の変更時。次にアラートが必要になる時刻に遅延実行 | なし | §4.1 |
 | `gap-alert-periodic`（15 分ごと） | アプリ起動時に登録（`KEEP`） | なし | §4.1（タイマーの取りこぼし・おやすみ時間明けの保険） |
 
@@ -168,6 +192,17 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 - **表示**: 最後の実行が止まった理由を `AppGraph.transcriptionPause` → `ProcessingStatus.paused` で状態タブの「文字起こしモデル」欄に出す（例「電池残量が50%未満のため、充電を待っています」）。設定は状態タブの「文字起こしのタイミング」（`AppSettings.transcribeOnlyWhileCharging`、`app_setting.transcription.charging_only`、既定オフ）。
 - **診断ログ**: 各実行の判定を `transcription_policy` に記録する（§4.2）。
 - テスト: 判定の単体テスト `ProcessingPolicyTest`（commonTest）、中断・再開の単体テスト `PolicyGatedTranscriptionTest`（sqliteTest。JVM と Android 実機/エミュレータ）、端末の状態の変換 `AndroidDeviceConditionsTest`（JVM）、WorkManager のテストドライバでの計装テスト `BatteryPolicyWorkTest`（§6.1）。
+
+### 4.5 意味検索の埋め込み（#24）
+
+文字起こしの実行（`transcription` / `-on-charge` / `-periodic`）の最後に、共通の `EmbeddingStep`（[02 §6.3](../architecture/02-architecture.md#63-処理パイプラインphone)）が走る。新しいワーカーやジョブは足していない。
+
+- **文字起こしを遅らせない**: 文字起こし待ちのチャンクが 1 つも無いときだけ始め、チャンクごとに「新しいチャンクが届いていないか（`pipeline.hasPending()`）」「WorkManager に止められていないか」「方針（§4.0）がまだ許すか」を確かめ、どれかが変わればその場でやめる（次の実行が続きをする）。
+- **電池**: 方針は文字起こしと同じ（発熱時は動かない、電池駆動では残量 50% 以上・省電力オフ・設定「充電中のみ」に従う）。電池駆動では**受信から 48 時間以内のチャンクを 1 回 50 件まで**だけ（その日の会話。1 チャンク数十〜数百 ms）。それより古い分（インストール直後の過去分・モデル更新後の埋め込み直し）は**充電中だけ**、1 回 300 件・4 分までで、残りがあれば次の実行を要求する（`EmbeddingStep.FollowUp.RunAgain` → `requestNow`、電池駆動で残れば `OnCharge` → `requestOnCharge`。`TranscriptionWorker` が文字起こしの `FollowUp` が `None` のときに対応づける）。埋め込み自体は時間の上限（1 時間に録音 10 分）に数えない（文字起こしに比べて桁違いに軽い。m0-6 §9.3）。
+- 失敗: チャンク単位の失敗は飛ばして診断ログに残し、3 件で打ち切る。ネイティブライブラリの読み込み失敗なども含め、埋め込みの失敗が文字起こしの結果や実行の成否に影響することはない。
+- 実行のあとモデルを解放する（モデル 37 MB と ONNX Runtime の作業領域）。検索画面は次のクエリでまた読み込む（デスクトップの JVM で 0.85 秒）。
+- 埋め込みの間もワーカーは動いているが、状態タブには「文字起こし中…」を出さない（`AppGraph.embeddingRunning` → `AndroidAppServices.status`）。進み具合は検索画面の「意味で探す準備中 N%」に出る。
+- 全削除・日の削除（状態タブ）の後は `StorageManager` の `onDeleted` で `SemanticIndex.sync` を呼び、消えた会話のベクトルをキャッシュのファイルからもすぐに消す（[02 §6.4](../architecture/02-architecture.md#64-検索)）。
 
 ### 4.1 録音の途絶アラート（#43）
 
@@ -200,6 +235,7 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 | `transcription_started` / `_finished` / `_failed` | `TranscriptionPipeline.Observer`（共通の `DiagnosticsPipelineObserver`） | `chunk=… audio_ms=300000 elapsed_ms=21000 rtf=0.07`（失敗時は `error=例外の型`） |
 | `transcription_policy` | `PolicyGatedTranscription`（各実行の最初の判定と、止めたときの理由。§4.0、#75） | `decision=run on_battery=true charging=false battery=80 power_save=false thermal=none battery_used_ms=0`、`decision=pause reason=thermal … retry_ms=900000 after_chunks=1` |
 | `retention_purge` | 保持期間による音声の削除（#33、`TranscriptionRun`） | `chunks=12 bytes=…` |
+| `embedding_run` / `embedding_failed` | 意味検索の埋め込み（#24、`EmbeddingStep`。件数と時間、失敗はチャンク ID とエラーの種類だけ） | `chunks=12 passages=40 failed=0 on_battery=false ms=950`、`chunk=… error=…` |
 | `model_download_*` / `model_ready` | `ModelManager`（開始・10% ごとの進捗・完了・失敗（HTTP ステータスなど）・準備完了） | `pct=30 bytes=…`、`error=java.io.IOException message=HTTP 404 for …` |
 | `gap_alert` / `gap_alert_blocked` | `GapAlertMonitor`（通知した / 通知が許可されておらず出せなかった） | `last_received_at=…` |
 | `audio_offloaded` | 共通 UI の `StatusViewModel`（バックアップ済みの音声を端末から外した、#156。件数とバイト数だけ） | `chunks=12 bytes=…` |
@@ -253,6 +289,7 @@ adb logcat -d | grep PLAYBACK_CHECK                # 再生位置の記録
 | テスト | 確認すること（Issue） | 証拠 |
 | --- | --- | --- |
 | `PlaybackTest` | 再生・検索から 1 タップ再生（#19, #25、下記） | `PLAYBACK_CHECK` |
+| `EmbeddingDeviceTest` | 意味検索（#24、§3.4）: 同じプロセスで sherpa-onnx の文字起こしの後に、JNA 経由の C API で同じ `libonnxruntime.so`（1.28.2）上の埋め込みモデルが動き、言い換えのクエリで正しい会話が上位に来る（`EmbeddingStep` → `HybridSearch`）。モデルは `push-models.sh` が push したものをこのテストの間だけ入れる | `EMBED_CHECK`（読み込み・1 件あたりの時間）、`EMBED_SEARCH` |
 | `SherpaTranscriberTest` | `AndroidSherpaTranscriber`（MediaCodec で AAC をデコード + sherpa-onnx AAR、Silero VAD + ReazonSpeech int8）が参照音声 5 文を 1 チャンクにした AAC を文字起こしし、DB に保存・検索できる（「気象庁」「ヤンバルクイナ」「傘」）（#22） | `ASR_CHECK`（処理時間・RTF・セグメント数）、`ASR_SEGMENT` |
 | `ModelWaitTest` | モデルを退避した状態でチャンクを受信 → 文字起こしジョブは成功扱いで終わりチャンクは `RECEIVED`・試行 0 回のまま、再生はできる、状態タブに「モデルが未ダウンロードです」→ モデルを戻すと（`ModelManager.refresh` → `onReady`）自動で文字起こしされる（#22） | `MODEL_CHECK`、`status-model-missing.png` / `status-model-ready.png` |
 | `ChargingWorkTest` | `TranscriptionScheduler.schedulePeriodic()` の定期ジョブは充電を条件とし、条件を満たすまで実行されない（チャンクは処理待ちのまま）。WorkManager の `TestDriver.setAllConstraintsMet`（充電開始に相当）で本番の `TranscriptionWorker` が走り、溜まったチャンクが文字起こしされる（#20） | `CHARGING_CHECK` |
@@ -292,6 +329,9 @@ adb exec-out run-as app.watchaudio cat files/diagnostics/diagnostics.csv.1 files
 Watch が無くても、ADB 経由の Wear OS エミュレータとスマホエミュレータをペアリングすれば `ChannelClient` 経由の受信を確認できる（KVM のある環境が必要）。
 
 ## 7. 既知の制限・TODO
+
+- **意味検索（#24）の実機確認は未実施**。実機で確かめること: 埋め込みの速度（1 passage・1 日分の過去分）と電池・発熱（充電中のバックフィル）、50 万件・100 万件のベクトルでの検索時間（4 スレッド、目標 300 ms 以内）、モデル読み込みのメモリのピーク、アプリサイズの増分、`libjnidispatch.so` の読み込み（arm64 実機）と R8 の release ビルドでの動作。release ビルドの JNA は emulator の `ReleaseAsrTest` では通っていない（埋め込みモデルを入れないため）。
+- 意味検索のベクトルは DB（正本、1 passage 約 300 B）と検索用のキャッシュのファイル（約 268 B）の 2 か所にあり、1 年分（約 100 万 passage）で合わせて約 0.57 GB になる（[02 §9.3](../architecture/02-architecture.md#93-データ量の見積もり)）。
 
 - **実機での動作確認は未実施**（#61）。エミュレータ（CI、§6.1）では起動・再生・MediaCodec デコード + sherpa-onnx AAR での文字起こし・モデル待ち・強制終了からの再開・充電時の定期ジョブ（WorkManager のテストドライバ）・電池と発熱の方針（同、端末の状態は差し替え）・途絶通知の表示を確認している（この開発環境には KVM がないため手元では動かせない）。Data Layer 受信、実機の速度・発熱、Doze 中の WorkManager の挙動、方針の目標値（電池消費 1 日 3% 以下）は実機で確認が必要。
 - Watch からの ACK 再送依頼はない（送る側も受ける側もなかった定数 `SYNC_REQUEST_MESSAGE` は #133 で削除）。ACK を失ったときは Watch がチャンクを再送 → `DUPLICATE` ACK で回復する。必要になったら chunkId 一覧をペイロードに持たせるメッセージとして、Swift 側・testdata と合わせて追加する。

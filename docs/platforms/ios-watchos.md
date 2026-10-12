@@ -346,3 +346,24 @@ cat "$DATA/Library/Application Support/WatchAudio/diagnostics.csv"
 | ウィジェット拡張の埋め込みとタップ経路 | CI ステップ「watchOS complication tap on an Apple Watch simulator」（`.github/scripts/watch-complication-smoke.sh`）: `WatchAudio.app/PlugIns/WatchAudioWidget.appex`（`com.apple.widgetkit-extension`）の存在を確認 → 通常起動（停止中）のスクリーンショット → `simctl openurl watchaudio://record`（watchOS シミュレータはアプリの URL スキームを開けず LSApplicationWorkspaceErrorDomain 115 になるため、その場合は **Debug 限定**の起動引数 `-complicationURL watchaudio://record` で `onOpenURL` と同じ処理に URL を渡す）→ 録音開始（またはその理由付きの不可）が診断ログに記録されることを確認し、スクリーンショットとアプリが書いた共有状態を成果物 `simulator-smoke` に残す（`watchos-complication-*.png` / `-diagnostics.csv` / `-defaults.txt`）。タップ後のスクリーンショットは初回開始時の通知許可ダイアログが前面に出る（simctl では通知を事前許可できない）ため、開始の判定は診断ログの `start` と共有状態 `{"state":"recording",…}` で行う | CI で確認（[run 38113587458](https://github.com/Soichiro5/watch-audio/actions/runs/38113587458)） |
 | 実機の文字盤での表示、システムからの `widgetURL` の受け渡し、中断後の 1 タップ再開 | 実機のみ（§11 の 13、#60） | 要確認 |
 
+
+## 15. 意味検索（#24、未対応）
+
+**現状: iOS の検索はキーワードのみ**。`IosAppServices` は `AppServices.semanticSearch` を持たない（既定の null）ので、検索画面は従来のキーワード検索の画面のままで、`IosAppGraph` の `TranscriptionRun` にも埋め込みの段は無い。
+
+共通コード（`shared/pipeline` の `UnigramTokenizer`・`EmbeddingPassages`・`Int8Vectors`・`VectorCache`・`SemanticIndex`・`HybridSearch`・`EmbeddingStep`、`shared/platform` の `PositionalFile`（iOS は POSIX の `pread` / `pwrite`））は iOS 向けにもコンパイルされる（`compileKotlinIosSimulatorArm64`）。iOS に足りないのは次の 3 つ:
+
+1. **埋め込みモデルを動かす `EncoderRuntime`**（`input_ids` と `attention_mask` → `last_hidden_state`）。
+2. **モデルのダウンロード**: iOS アプリは今どこにも通信しない（音声認識のモデルは OS が管理）。ruri-v3-30m（約 44 MB、Android と同じ URL・SHA-256、`ModelManifest.embeddingFiles` 相当）を取るには、`URLSession`（バックグラウンドの構成）での取得・`Sha256` での検証・原子的な配置が要る。`tools/privacy-check` は `URLSession` を検査対象にしているので、許可リスト（`ALLOWED_API_USES` / `ALLOWED_URL_PREFIXES`）と 02 §7.2 を更新する（iOS で初めての通信箇所になる）。
+3. **組み込み**: `IosAppGraph` で `SemanticIndex`（`Application Support/WatchAudio/search/`。ディレクトリの保護クラスとバックアップ除外を引き継ぐ）と `EmbeddingStep` を作り、`TranscriptionRun(embedding = …)` と `IosAppServices.semanticSearch` に渡す。BGProcessingTask（充電中）でバックフィルが進む。
+
+`EncoderRuntime` の候補:
+
+| 案 | 内容 | 長所 | 短所 |
+| --- | --- | --- | --- |
+| **A. ONNX Runtime（SPM）を Swift で包む（推奨）** | `onnxruntime-swift-package-manager`（ObjC/Swift API）で `ORTSession` を作り、Swift で `EncoderRuntime` を実装して Kotlin に注入する（文字起こしの `IosSpeechTranscriber` と同じ Swift → Kotlin の注入の形、§6） | Android と**同じモデル・同じベクトル**（JVM で Python と一致を確認済み、[m0-6 §9.1](../research/m0-6-embedding-desktop.md#91-トークナイザと埋め込みの一致)）。評価結果（m0-6 §9.2）がそのまま当てはまる。SPM をそのまま使える | アプリが大きくなる（フル版の ONNX Runtime。ModernBERT の演算子があるかは Mobile 版では未確認）。Swift 側のテスト（XCTest、シミュレータ）を足す |
+| B. ONNX Runtime の C API を cinterop で呼ぶ | `onnxruntime_c_api.h` を cinterop し、`shared/ort` と同じ関数テーブルの呼び出しを Kotlin/Native で書く。xcframework は Xcode 側でリンク | 実装が Kotlin だけで、Android の `OrtApi` と同じ構造 | ヘッダの同梱、cinterop と静的リンクの設定（ComposeApp framework とホストアプリ）を CI の macOS でしか確かめられない。SPM のパッケージは cinterop から直接は使えない |
+| C. Core ML に変換 | coremltools で ruri-v3（ModernBERT）を `.mlpackage` に変換し、Core ML（Neural Engine）で動かす | 速い・電池に優しい可能性 | 変換したモデルの配布元が要る（このプロジェクトは上流のファイルだけをダウンロードする方針）。局所・大域アテンションの変換と、ONNX 版との一致を別に確かめる必要がある |
+| D. `NLContextualEmbedding`（Apple） | OS のトークン単位の埋め込みを平均して文ベクトルにする | ダウンロードもライブラリも不要（OS 管理のアセット） | 別のモデル（検索用に学習されていない、512 次元程度）で品質が未知（M0-6 §6.3）。Mac で m0-6 §9.2 と同じ評価をしてから判断する |
+
+**推奨**: A。Android と同じモデルなので、品質・速度の根拠（m0-6 §9）と `tools/harness` の評価がそのまま使え、トークナイザ・passage・キャッシュ・統合は共通コードのまま。B は A のサイズや保守に問題が出たときの代替、D はアプリサイズを最優先にする場合の候補（評価が先）。後続の Issue で、(1) Swift の `EncoderRuntime` と注入、(2) iOS のモデルダウンロード（privacy-check の更新を含む）、(3) シミュレータでの一致テスト（`testdata/ruri-reference.json` と同じ値になるか）と CI、(4) 実機の速度・メモリ・アプリサイズ、を扱う。
