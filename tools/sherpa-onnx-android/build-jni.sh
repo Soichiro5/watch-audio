@@ -11,9 +11,9 @@
 # - SHERPA_ONNX_ENABLE_TTS=OFF: no TTS code, eSpeak NG and piper-phonemize;
 # - SHERPA_ONNX_ENABLE_SPEAKER_DIARIZATION=OFF: no diarization code and hclust-cpp;
 # - SHERPA_ONNX_ENABLE_C_API=OFF: the C/C++ API libraries are not shipped (apps/android excludes them).
-# The NDK is the one the AAR was built with: $ANDROID_NDK or $ANDROID_HOME/ndk/<revision> if that
-# version, else downloaded from Google. Each library must link against the AAR's libonnxruntime.so (the app
-# keeps that file) and pass check-no-tts.sh. Writes <output dir>/<abi>/libsherpa-onnx-jni.so and
+# The NDK is the one the AAR was built with, downloaded from Google (or $SHERPA_ONNX_ANDROID_NDK).
+# Each library must link against the AAR's libonnxruntime.so (the app keeps that file) and pass
+# check-no-tts.sh. Writes <output dir>/<abi>/libsherpa-onnx-jni.so and
 # <output dir>/sherpa-onnx-jni.properties (what was built; the app build checks it). Needs git, cmake,
 # make, wget, unzip and curl.
 set -euo pipefail
@@ -30,12 +30,11 @@ work="$info_dir/build"
 rm -rf "$work"
 mkdir -p "$work"
 
-revision() { grep -E '^Pkg.Revision' "$1/source.properties" 2>/dev/null | cut -d= -f2 | tr -d ' '; }
-# CI runners set ANDROID_NDK to their default NDK, which may be another version: use it only if it matches.
-ndk_dir=""
-for candidate in "${ANDROID_NDK:-}" "${ANDROID_HOME:-}/ndk/$ndk" "${ANDROID_SDK_ROOT:-}/ndk/$ndk"; do
-  if [ -n "$candidate" ] && [ "$(revision "$candidate")" = "$ndk" ]; then ndk_dir=$candidate; break; fi
-done
+revision() { sed -nE 's/^Pkg.Revision *= *([^ ]+).*/\1/p' "$1/source.properties" 2>/dev/null || true; }
+# Always the NDK from Google, unpacked in the same place, unless SHERPA_ONNX_ANDROID_NDK names one: the
+# output depends on where the NDK is (same size, other SHA-256), so every CI job then builds the same
+# bytes. A runner's own NDK ($ANDROID_NDK, $ANDROID_HOME/ndk) is not used: it differs between images.
+ndk_dir=${SHERPA_ONNX_ANDROID_NDK:-}
 if [ -z "$ndk_dir" ]; then
   url="https://dl.google.com/android/repository/android-ndk-$ndk_release-linux.zip"
   echo "Downloading $url"
