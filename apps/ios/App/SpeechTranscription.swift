@@ -269,7 +269,7 @@ enum SpeechTranscription {
     }
 
     /// Writes the whole of `input` converted to `target` (sample format, rate, channels) to a CAF file.
-    private static func convert(_ input: AVAudioFile, to target: AVAudioFormat, at url: URL) throws {
+    static func convert(_ input: AVAudioFile, to target: AVAudioFormat, at url: URL) throws {
         let source = input.processingFormat
         guard let converter = AVAudioConverter(from: source, to: target) else { throw TranscriberError.mismatchedFormats }
         let capacity: AVAudioFrameCount = 16_384

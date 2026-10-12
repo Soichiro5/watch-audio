@@ -123,7 +123,53 @@ final class EnglishTranscriptionTests: XCTestCase {
             }
         }
         report.log("engine: DictationTranscriber (SpeechTranscriber is unavailable here)")
+        await probeFormats(report)
         return .dictation
+    }
+
+    /// Which audio formats DictationTranscriber (ja_JP) accepts on this simulator: its best
+    /// available format, and a 3 s analysis of the test audio in each candidate format.
+    private static func probeFormats(_ report: EvidenceReport) async {
+        let url = directory.appending(path: "japanese.m4a")
+        guard let file = try? AVAudioFile(forReading: url) else { return }
+        report.log("file format: \(file.fileFormat), processing format: \(file.processingFormat)")
+        guard let module = try? await SpeechTranscription.makeDictationTranscriber(locale: Locale(identifier: "ja_JP")) else { return }
+        let best = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [module])
+        report.log("bestAvailableAudioFormat: \(best.map { "\($0)" } ?? "nil")")
+        var candidates: [(String, AVAudioFormat?)] = [("as read", nil)]
+        if let best { candidates.append(("best", best)) }
+        candidates.append(("int16 16k", AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: true)))
+        candidates.append(("float32 16k", AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false)))
+        candidates.append(("int16 44.1k", AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 44_100, channels: 1, interleaved: true)))
+        for (name, format) in candidates {
+            let converted = FileManager.default.temporaryDirectory.appending(path: "probe-\(UUID().uuidString).caf")
+            defer { try? FileManager.default.removeItem(at: converted) }
+            do {
+                let input: AVAudioFile
+                if let format {
+                    try SpeechTranscription.convert(try AVAudioFile(forReading: url), to: format, at: converted)
+                    input = try AVAudioFile(forReading: converted, commonFormat: format.commonFormat, interleaved: format.isInterleaved)
+                } else {
+                    input = try AVAudioFile(forReading: url)
+                }
+                let probe = try await SpeechTranscription.makeDictationTranscriber(locale: Locale(identifier: "ja_JP"))
+                let analyzer = SpeechAnalyzer(modules: [probe])
+                let collector = Task { () throws -> Int in
+                    var count = 0
+                    for try await result in probe.results where result.isFinal { count += result.text.characters.count }
+                    return count
+                }
+                if let last = try await analyzer.analyzeSequence(from: input) {
+                    try await analyzer.finalizeAndFinish(through: last)
+                } else {
+                    await analyzer.cancelAndFinishNow()
+                }
+                let characters = try await collector.value
+                report.log("format probe \(name) (\(input.processingFormat)): ok, \(characters) characters")
+            } catch {
+                report.log("format probe \(name): \(SpeechTranscription.describe(error))")
+            }
+        }
     }
 
     private static var directory: URL {
