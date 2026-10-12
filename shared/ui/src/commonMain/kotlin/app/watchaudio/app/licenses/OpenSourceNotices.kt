@@ -53,8 +53,8 @@ data class OpenSourceNotice(
  *
  * Collected from the release runtime classpaths of `apps/android` and `apps/wear`, the iOS
  * framework's klibs (`shared/ui`), the native libraries the app ships (sherpa-onnx's JNI library as
- * built for the app, `gradle/sherpa-onnx-jni.properties`; Skiko), and the models in the Android
- * model manifest. A new dependency or model needs an entry here (the Android
+ * CI builds it for distributed APKs, `tools/sherpa-onnx-android/build-jni.sh`; Skiko), and the
+ * models in the Android model manifest. A new dependency or model needs an entry here (the Android
  * manifest is checked by a unit test).
  */
 object OpenSourceNotices {
@@ -128,9 +128,10 @@ object OpenSourceNotices {
             setOf(NoticeApp.WEAR_OS), copyright = "Copyright 2008 Google Inc. All rights reserved.",
             includedIn = "AndroidX Wear ProtoLayout",
         ),
-        // On-device speech recognition (Android) and what its native libraries contain. The app's
-        // libsherpa-onnx-jni.so is built without text-to-speech and speaker diarization (#173), so
-        // eSpeak NG (GPL-3.0), piper-phonemize and hclust-cpp are not shipped.
+        // On-device speech recognition (Android) and what its native libraries contain. Distributed
+        // APKs pack libsherpa-onnx-jni.so built without text-to-speech and speaker diarization (#173,
+        // checked by CI), so eSpeak NG (GPL-3.0), piper-phonemize and hclust-cpp are not shipped.
+        // Local development builds keep the AAR's library (with them); they are never distributed.
         library(SHERPA_ONNX, "k2-fsa (Next-gen Kaldi), Xiaomi Corporation", License.APACHE_2_0, "https://github.com/k2-fsa/sherpa-onnx", ANDROID),
         library(
             "ONNX Runtime", "Microsoft", License.MIT, "https://github.com/microsoft/onnxruntime", ANDROID,

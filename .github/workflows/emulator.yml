@@ -14,6 +14,8 @@ name: Emulator smoke test
 # the gap alert notification (#43) and the refused permission (#32); see .github/scripts/phone-scenarios.sh.
 # On the Wear OS emulator it shows the BODY_SENSORS explanation and declines it (#161), shows the tile and the complication and taps the tile (#41):
 # .github/scripts/wear-surfaces.sh. Screenshots are uploaded as the screenshots-<name> artifact.
+# The phone APKs (release, debug, release-test) pack sherpa-onnx's JNI library built without text-to-speech, as the
+# distributed builds do (#173, .github/actions/sherpa-onnx-jni), so these checks run on that library.
 on:
   push:
     branches: [main]
@@ -26,6 +28,8 @@ on:
       - "build-logic/**"
       - ".github/workflows/emulator.yml"
       - ".github/scripts/**"
+      - ".github/actions/sherpa-onnx-jni/**"
+      - "tools/sherpa-onnx-android/**"
       - "!**/*.md"
       - "!docs/**"
       - "!**/src/iosMain/**"
@@ -49,6 +53,8 @@ on:
       - "build-logic/**"
       - ".github/workflows/emulator.yml"
       - ".github/scripts/**"
+      - ".github/actions/sherpa-onnx-jni/**"
+      - "tools/sherpa-onnx-android/**"
       - "!**/*.md"
       - "!docs/**"
       - "!**/src/iosMain/**"
@@ -166,6 +172,11 @@ jobs:
         if: matrix.name == 'phone'
         run: tools/harness/download-models.sh
 
+      # #173: all phone APKs of this job pack the JNI library without TTS (the instrumented ASR tests use it too).
+      - name: sherpa-onnx JNI without TTS
+        if: matrix.name == 'phone'
+        uses: ./.github/actions/sherpa-onnx-jni
+
       # The release build (R8, #78) is signed with a throwaway key made here: it only has to install
       # on the emulator, and the real release key (android.yml) never reaches this job.
       # The shipped release APK is set aside in release-apk/ for the launch check. The APKs of the release ASR check
@@ -181,6 +192,9 @@ jobs:
             -keypass ci-throwaway -alias ci -keyalg RSA -keysize 2048 -validity 1 -dname "CN=watch-audio CI throwaway"
           ./gradlew ${{ matrix.gradle-path }}:assembleRelease ${{ matrix.gradle-path }}:assembleDebug ${{ matrix.device-test-apks }}
           mkdir -p release-apk && cp ${{ matrix.module }}/build/outputs/apk/release/${{ matrix.apk }}-release.apk release-apk/
+          if [ "${{ matrix.name }}" = phone ]; then
+            tools/sherpa-onnx-android/check-no-tts.sh release-apk/android-release.apk apps/android/build/outputs/apk/debug/android-debug.apk
+          fi
 
       - name: Wait for the emulator download
         run: |
@@ -269,7 +283,8 @@ jobs:
   # Signed with a throwaway key made here (both APKs with the same key; the phone job uninstalls its own builds first).
   release-test-apks:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # +~7 min when the sherpa-onnx JNI cache misses (a new sherpa-onnx version, #173).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -282,6 +297,10 @@ jobs:
         with:
           # Reads the smoke jobs' caches; saving its own would only duplicate them.
           cache-read-only: true
+
+      # #173: ReleaseAsrTest runs against the JNI library without TTS that the distributed builds pack.
+      - name: sherpa-onnx JNI without TTS
+        uses: ./.github/actions/sherpa-onnx-jni
 
       # assembleRelease too: the test APK only depends on the app's R8 mapping, not on its packaged APK.
       - name: Build the release APK and the test APK for the release ASR check
@@ -297,6 +316,7 @@ jobs:
           mkdir -p release-test-apks
           cp apps/android/build/outputs/apk/release/android-release.apk \
             apps/android/build/outputs/apk/androidTest/release/android-release-androidTest.apk release-test-apks/
+          tools/sherpa-onnx-android/check-no-tts.sh release-test-apks/android-release.apk
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

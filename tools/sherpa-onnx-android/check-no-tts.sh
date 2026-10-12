@@ -8,7 +8,9 @@
 # - eSpeak NG's data file names (espeak-ng-data, phontab, phonindex);
 # - the JNI entry points of the Kotlin TTS and speaker diarization classes (exported names).
 # An APK must contain libsherpa-onnx-jni.so for at least one ABI; each one is checked.
-# Used by .github/workflows/sherpa-onnx-android.yml (the built .so) and android.yml (the release APK).
+# Used by build-jni.sh and .github/actions/sherpa-onnx-jni (the built .so) and by the workflows that
+# build distributable or release-test APKs (android.yml, deliver.yml, emulator.yml) on those APKs.
+# The Gradle task VerifySherpaOnnxJniTask (build-logic) checks the same markers.
 set -euo pipefail
 
 MARKERS='espeak-ng-data|phontab|phonindex|Java_com_k2fsa_sherpa_onnx_OfflineTts|Java_com_k2fsa_sherpa_onnx_OfflineSpeakerDiarization'
