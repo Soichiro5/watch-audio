@@ -153,6 +153,8 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 | `android.yml` | Unit tests | 共通ロジック（JVM・Android ホスト）。SQLite を使う shared/db / Ingestor / パイプラインのテストは JVM で実行 | テスト結果 |
 | `android.yml` | Search benchmark | 1 年分（320 万セグメント）での検索応答時間と DB 容量（§5） | ジョブサマリーの表と `SEARCH_BENCHMARK` 行 |
 | `android.yml` | Unit tests（shared/ui の `AppUiTest`） | 画面の描画（タイムライン・検索・状態・オンボーディング。権限拒否時の「設定を開く」#32 を含む） | 成果物 `ui-screenshots`（`shared/ui/build/screenshots/*.png`） |
+| `android.yml` | sherpa-onnx JNI without TTS | release の APK の `libsherpa-onnx-jni.so`（全 ABI）に eSpeak NG（GPL-3.0）と音声合成・話者分離の痕跡がない（`check-no-tts.sh`、#173。§7.3） | ジョブのログ（ABI ごとの `OK` 行とサイズ・SHA-256） |
+| `sherpa-onnx-android.yml` | Build libsherpa-onnx-jni.so / Compare with the pinned SHA-256 | 音声合成と話者分離を外した JNI ライブラリが上流のタグからビルドでき、eSpeak NG の痕跡がなく、AAR と同じ `libonnxruntime.so` にリンクしている。固定した SHA-256 と同じか（§7.3） | ジョブサマリー、成果物 `sherpa-onnx-jni-<abi>` |
 | `android.yml` | Assemble release (R8) + debug input leak check | スマホ・Wear OS の release ビルド（R8 で縮小・難読化）が通る。Wear OS の debug 専用の音声ファイル入力（#57）が release に入っていない（`verifyReleaseDebugInput`）（#78） | ジョブサマリーの APK 一覧と `debug-input/release.txt` の内容 |
 | `emulator.yml`（phone / wear） | Install, launch and check for crashes | release ビルド（R8、CI で作る使い捨ての鍵で署名）→ debug ビルドの順に入れて起動し、15 秒後もクラッシュしていない（`launch-smoke.sh`。R8 の keep 漏れによる起動時のクラッシュを検出、#78） | ジョブサマリーの `LAUNCH_CHECK` 行、成果物 `logcat-*`（`logcat-release.txt` / `logcat.txt`） |
 | `emulator.yml`（phone） | 同上（`release-asr.sh`） | release ビルド（R8）が既知の日本語チャンクを本番の経路（取り込み → WorkManager の文字起こし → sherpa-onnx）で文字起こしして DB に保存し、検索できる（`ReleaseAsrTest`、#78。§7.1） | `RELEASE_ASR_CHECK` 行（`debuggable=false` と文字起こし結果）、成果物 `logcat-phone` の `release-asr/` |
@@ -245,6 +247,7 @@ PR の CI 待ちを減らすため、変更したファイルに関係するワ�
 | JVM 専用（`src/jvmMain`・`src/jvmTest`） | 動く | 動かない | 動かない | 動く | 動く |
 | 共通コード（`src/commonMain` など）・Gradle の設定・`build-logic/**` | 動く | 動く | 動く | 動く | 動く |
 
+- `sherpa-onnx-android.yml`（JNI ライブラリのビルド、ABI ごとに十数分）は、どのブランチでも `gradle/sherpa-onnx-jni.properties`・`tools/sherpa-onnx-android/**`・自分自身を変えた push でだけ動く（§7.3）。
 - `android.yml` と `deliver.yml` は除外リスト（`paths-ignore`）。ドキュメント以外の変更では必ず動く。
 - `links.yml`（Markdown のリンク検査、数秒）は絞り込みなしで毎回動く。ドキュメントだけの変更でもリンク切れを見つけるためと、コードの移動で docs からのリンクが切れることがあるため。手元では `python3 tools/check-links/check_links.py`（テストは `python3 -m unittest discover -s tools/check-links -v`）。
 - `emulator.yml` と `ios.yml` は対象リスト（`paths`）に除外（`!`）を足している。除外は後ろに書いたものが優先されるので、新しい除外は対象リストより後ろに書く。
@@ -304,6 +307,7 @@ python3 tools/privacy-check/check.py --resolved-deps apps/wear=/tmp/deps-wear.tx
 | `logcat-phone` / `logcat-wear` | emulator.yml | エミュレータの logcat・計装テストのレポート（合成音声・テスト用 DB のみ。文字起こし本文はテスト音声の正解文） | 7 日 |
 | `screenshots-phone` / `screenshots-wear` | emulator.yml | エミュレータのスクリーンショット | 30 日 |
 | `release-test-apks` | emulator.yml | release での文字起こし確認用の APK（R8 + テスト用 keep ルールのアプリと、そのテスト APK）。ジョブ内で作った使い捨ての鍵で署名した確認専用のもので、配布には使わない。同じ実行の phone ジョブが受け取る（§7.1） | 1 日 |
+| `sherpa-onnx-jni-<abi>` | sherpa-onnx-android.yml | 音声合成なしでビルドした `libsherpa-onnx-jni-<abi>.so` と sherpa-onnx の LICENSE。運営者が Release にするまで残す（§7.3） | 90 日 |
 | `xcodebuild-logs` / `xcodebuild-release-logs` / `simulator-smoke` | ios.yml | ビルドログ（`xcodebuild-release-logs` は Release ビルドが失敗したときだけ）、シミュレータのスクリーンショットとアプリログ | 7 日 |
 
 成果物を Issue の証跡として参照する場合、保持期間を過ぎると消える点に注意する（コメントには数値・ログ行を本文として残す）。
@@ -351,6 +355,43 @@ base64 -w0 watch-audio-release.jks > keystore.b64   # macOS: base64 -i watch-aud
 - **バージョンの上げ方**（例: v0.2）: `gradle.properties` の 2 行と `project.yml` の 2 行を同じ PR で直す。手元では `python3 tools/check-version/check_version.py`（テストは `python3 -m unittest discover -s tools/check-version -v`）。
 - **Android アプリの共通設定**（`build-logic` の `AndroidAppConventionPlugin`、プラグイン ID `watchaudio.android.app`。`apps/android` と `apps/wear` が適用）: Android アプリ・Compose コンパイラのプラグイン、applicationId `app.watchaudio`（Data Layer でつながるため両方で同じ）、compileSdk / targetSdk（`gradle/libs.versions.toml`）、Java 17、Compose の有効化、上のバージョン、release ビルド（R8 と署名、§7.1）。各アプリに残すのは namespace・minSdk（Watch は 33、スマホは 29）・依存・アプリ固有の設定（スマホの ABI や計装テストの設定など）。
 - **Wear OS の debug 入力の混入検査**（#57）: `build-logic` の `VerifyDebugInputTask` を `DebugInputGuardPlugin`（プラグイン ID `watchaudio.android.debug-input-guard`、`apps/wear` が適用）がバリアントごとに `verify<Variant>DebugInput` として登録し、`assemble<Variant>` から実行する（内容は [wearos.md](../platforms/wearos.md) の「リリースへの混入防止」）。
+
+### 7.3 sherpa-onnx の JNI ライブラリ（音声合成なし、#173）
+
+**なぜ自前でビルドするか**: JitPack の sherpa-onnx の AAR（v1.13.8）に入っている `libsherpa-onnx-jni.so` には、音声合成（TTS）用の **eSpeak NG（GPL-3.0）**・piper-phonemize と、話者分離用の hclust-cpp が静的にリンクされている（上流の Android ビルドは `SHERPA_ONNX_ENABLE_TTS=ON` が既定）。アプリが使うのはオフラインの ASR（Zipformer・SenseVoice）と Silero VAD だけなので、使わない GPL のコードを配布物に入れないように、**同じタグ・同じ NDK・上流と同じビルドスクリプト**で、TTS と話者分離だけを外した JNI ライブラリに差し替える。
+
+- **差し替えるのは `libsherpa-onnx-jni.so` だけ**（`arm64-v8a`・`x86_64`）。Kotlin の API（`OfflineRecognizer`・`Vad` など）と `libonnxruntime.so` は AAR のものを使う。ビルドでリンクする `libonnxruntime.so` は AAR のものとバイト単位で同じことを確かめる（`onnxruntime.sha256.<abi>`）。
+- **動作は変わらない**: オプションで変わるのは TTS・話者分離のソースがビルドに入るかどうかだけで、ASR・VAD とその JNI のソースはこれらのオプションを参照しない（ワークフローのジョブサマリーに、オプションを参照するソースの一覧を出す）。JNI の関数は Kotlin から呼ばれたときに名前で解決されるので、使わないクラス（`OfflineTts` など）の関数がなくても読み込みは失敗しない。release ビルドの文字起こし（`ReleaseAsrTest`）と計装テストの結果で確かめる。
+- **方式**: CI（GitHub Actions）でビルドし、このリポジトリの GitHub Release に置いたファイルを、SHA-256 を固定してアプリのビルドが取得する。上流には TTS なしの Android 向けの公開ビルドが見つからなかった。ビルドしたファイルを Git に入れる方法は、更新のたびに約 8 MB ずつ履歴が増え、差分をレビューできないので採らなかった。
+
+| 場所 | 役割 |
+| --- | --- |
+| `gradle/sherpa-onnx-jni.properties` | 固定する値: 上流のタグとコミット・NDK・ABI・Release の名前・各 ABI の SHA-256・AAR の `libonnxruntime.so` の SHA-256 |
+| `.github/workflows/sherpa-onnx-android.yml` | 上の値でビルドする（どのブランチでも、このワークフロー・`tools/sherpa-onnx-android/**`・上のファイルを変えた push で動く。手動でも可）。eSpeak NG / TTS の痕跡がないこと、`libonnxruntime.so` が AAR と同じことを検査し、固定した SHA-256 と比べた結果（同じなら「reproduced」）をジョブサマリーに出す。成果物 `sherpa-onnx-jni-<abi>`（90 日）。リポジトリへの書き込みはしない |
+| `tools/sherpa-onnx-android/build-jni.sh` | 上流の `build-android-<abi>.sh` を `SHERPA_ONNX_ENABLE_TTS=OFF`・`SHERPA_ONNX_ENABLE_SPEAKER_DIARIZATION=OFF`・`SHERPA_ONNX_ENABLE_C_API=OFF` で実行する（それ以外は上流の既定のまま） |
+| `tools/sherpa-onnx-android/check-no-tts.sh` | `.so` または APK の中の `libsherpa-onnx-jni.so` に、eSpeak NG のデータ名（`espeak-ng-data`・`phontab`・`phonindex`）か TTS・話者分離の JNI 関数名があれば失敗する（AAR のものでは失敗することを確認済み） |
+| `build-logic` の `SherpaOnnxJniPlugin`（プラグイン ID `watchaudio.android.sherpa-onnx-jni`、`apps/android` が適用） | バリアントごとに `fetch<Variant>SherpaOnnxJni` がファイルを用意して jniLibs に加える（アプリ自身の jniLibs は依存の同じパスのファイルより優先されるので、AAR のものは入らない）。`verify<Variant>SherpaOnnxJni` が `assemble<Variant>` で APK を検査する（上と同じ痕跡、ABI の欠け）。`libs.versions.toml` の sherpa-onnx の版が固定した `version` と違えばビルドを失敗させる |
+
+- **ビルド時のダウンロード**: 初回のビルドで Release から `libsherpa-onnx-jni-<abi>.so`（ABI ごとに数 MB）を取得し、SHA-256 が合えば `~/.gradle/caches/watchaudio/sherpa-onnx-jni/<sha256>/` に置いて以後は使い回す（ワークツリーやブランチをまたいで 1 回だけ）。開発機と CI のビルドの通信で、アプリ自身は通信しない（Local-only チェック §6.4 の対象はアプリのコード）。オフラインでは `-Pwatchaudio.sherpaOnnxJniDir=<dir>` で、`libsherpa-onnx-jni-<abi>.so` を置いたディレクトリ（ワークフローの成果物など）から取る。この場合も SHA-256 を確かめる。
+- **CI の検査**: `android.yml` が release の APK を `check-no-tts.sh` で検査する（ステップ「sherpa-onnx JNI without TTS」）。`emulator.yml` の `ReleaseAsrTest`・`SherpaTranscriberTest` が差し替えた `.so` で文字起こしする。
+
+**sherpa-onnx の版を上げるとき**（または同じ版を作り直すとき）:
+
+1. `gradle/libs.versions.toml` の `sherpa-onnx` と、`gradle/sherpa-onnx-jni.properties` の `version`・`commit`（`git ls-remote https://github.com/k2-fsa/sherpa-onnx refs/tags/<tag>`）・`release`（`sherpa-onnx-jni-<tag>-1`。同じ版を作り直すときは末尾の番号を上げる）を直す。`ndk` は新しい AAR の `libsherpa-onnx-jni.so` の `readelf -n`（`.note.android.ident` の `r29` とビルド番号）で、`onnxruntime.sha256.<abi>` は AAR の `jni/<abi>/libonnxruntime.so` の SHA-256 で確かめる。上流の `build-android-*.sh` の変更（オプション名・既定値）も見る。
+2. ブランチに push すると `sherpa-onnx-android.yml` がビルドする。ジョブサマリーの SHA-256 を `jni.sha256.<abi>` に書いて push する（再ビルドで同じ値になれば「reproduced」）。
+3. 運営者（リポジトリに書き込める人）が、その成果物で Release を作る。公開したファイルは差し替えない（変えるときは `release` の番号を上げる）。
+
+```bash
+run=<sherpa-onnx-android.yml の実行 ID>
+gh run download "$run" -R Soichiro5/watch-audio -n sherpa-onnx-jni-arm64-v8a -D dist/arm64-v8a
+gh run download "$run" -R Soichiro5/watch-audio -n sherpa-onnx-jni-x86_64 -D dist/x86_64
+sha256sum dist/*/libsherpa-onnx-jni-*.so   # gradle/sherpa-onnx-jni.properties の jni.sha256.<abi> と一致すること
+gh release create sherpa-onnx-jni-v1.13.8-1 -R Soichiro5/watch-audio --target <ピンを書いたコミット> --latest=false \
+  --title "sherpa-onnx JNI v1.13.8 without TTS" --notes "<上流のコミット・NDK・オプション・ビルドした実行の URL・SHA-256>" \
+  dist/arm64-v8a/libsherpa-onnx-jni-arm64-v8a.so dist/x86_64/libsherpa-onnx-jni-x86_64.so dist/arm64-v8a/sherpa-onnx-LICENSE.txt
+```
+
+4. `android.yml`（APK の検査）と `emulator.yml`（`ReleaseAsrTest`）が通り、文字起こしの結果が変わらないことを確かめる。iOS は sherpa-onnx を使わない。ハーネス（`tools/harness`）は JVM 版の sherpa-onnx をそのまま使う（配布しない開発用ツール）。
 
 ## 8. 実機検証の手順
 
