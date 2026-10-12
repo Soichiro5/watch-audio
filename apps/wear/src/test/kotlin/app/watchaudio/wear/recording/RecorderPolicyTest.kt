@@ -32,6 +32,15 @@ class RecorderPolicyTest {
     }
 
     @Test
+    fun `without off-body events (sensor missing or BODY_SENSORS declined) the watch counts as worn`() {
+        // OffBodyMonitor never reports when it cannot register (#161): offBodySinceMs stays null.
+        val d = decide(armed, at = now + 24 * 3_600_000L)
+        assertEquals(RecorderMode.Recording, d.mode)
+        assertNull(d.alert)
+        assertNull(d.reevaluateAtMs, "nothing pending: no off-body grace period is running")
+    }
+
+    @Test
     fun `charging wins over off body and does not alert`() {
         val d = decide(armed.copy(charging = true, offBodySinceMs = 0), at = now)
         assertEquals(RecorderMode.Paused(PauseReason.CHARGING), d.mode)
