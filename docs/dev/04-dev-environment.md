@@ -363,7 +363,7 @@ base64 -w0 watch-audio-release.jks > keystore.b64   # macOS: base64 -i watch-aud
 - **公開しない・リポジトリに入れない**: ビルドは CI の中だけで行い、GitHub Actions のキャッシュに置く。GitHub Release・Git へのコミット・ほかの公開先は使わない。キャッシュが消えても（7 日使われないと消える）次の CI が作り直す。
 - **差し替えるのは `libsherpa-onnx-jni.so` だけ**（ABI はアプリの `abiFilters`: `arm64-v8a`・`x86_64`）。Kotlin の API（`OfflineRecognizer`・`Vad` など）と `libonnxruntime.so` は AAR のものを使う。
 - **動作は変わらない**: オプションで変わるのは TTS・話者分離のソースがビルドに入るかどうかだけで、ASR・VAD とその JNI のソースはこれらのオプションを参照しない（ビルドのログに、オプションを参照するソースの一覧を出す。v1.13.8 では C API の `c-api.cc` と Python の `sherpa-onnx.cc` だけで、どちらも JNI ライブラリには入らない）。JNI の関数は Kotlin から呼ばれたときに名前で解決されるので、使わないクラス（`OfflineTts` など）の関数がなくても読み込みは失敗しない。`emulator.yml` の release ビルドの文字起こし（`ReleaseAsrTest`）と計装テストを、差し替えた APK で動かして確かめ続ける。
-- **サイズ**: `libsherpa-onnx-jni.so` は arm64-v8a が 4,771,760 → 3,434,928 バイト、x86_64 が 5,201,192 → 3,715,504 バイト。APK では `.so` を圧縮せずに格納するので、両 ABI 入りの APK は約 2.8 MB 小さくなる（v1.13.8）。
+- **サイズ**: `libsherpa-onnx-jni.so` は arm64-v8a が 4,771,760 → 3,436,448 バイト、x86_64 が 5,201,192 → 3,717,024 バイト。APK では `.so` を圧縮せずに格納するので、両 ABI 入りの APK は約 2.8 MB 小さくなる（v1.13.8）。同じ入力からは、どのジョブでビルドしても（ランナーの NDK でもダウンロードした NDK でも）バイト単位で同じファイルになる。
 
 **どの APK に入るか**:
 
