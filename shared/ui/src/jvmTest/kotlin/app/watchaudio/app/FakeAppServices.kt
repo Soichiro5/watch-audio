@@ -111,6 +111,9 @@ class FakeAppServices(
     /** Makes the destination fail after the user picked it (e.g. it is full). */
     var exportDestinationFailure: Exception? = null
 
+    /** The user closes the iOS share sheet without picking a destination, after the file was written. */
+    var exportDismissedAfterWrite = false
+
     /** What was "saved": file name to the bytes the shared code wrote. */
     val savedExports = mutableListOf<Pair<String, ByteArray>>()
 
@@ -120,6 +123,7 @@ class FakeAppServices(
         exportDestinationFailure?.let { throw it }
         val buffer = Buffer()
         write(buffer)
+        if (exportDismissedAfterWrite) return false
         savedExports += fileName to buffer.readByteArray()
         return true
     }

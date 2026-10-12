@@ -189,6 +189,10 @@ private fun MainTabs(
                         onSelectRetention = statusViewModel::selectRetention,
                         onConfirmRetention = statusViewModel::confirmRetention,
                         onCancelRetention = statusViewModel::cancelRetention,
+                        onOpenOffload = statusViewModel::openOffload,
+                        onSelectOffloadAge = statusViewModel::selectOffloadAge,
+                        onConfirmOffload = statusViewModel::confirmOffload,
+                        onCancelOffload = statusViewModel::cancelOffload,
                         onOpenDeleteAll = statusViewModel::openDeleteAll,
                         onDeleteAllInput = statusViewModel::updateDeleteAllInput,
                         onConfirmDeleteAll = {

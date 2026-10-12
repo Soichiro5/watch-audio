@@ -33,6 +33,10 @@ import platform.Foundation.NSFileManager
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSURL
 import platform.darwin.NSObject
+import platform.UIKit.UIActivityTypeAddToReadingList
+import platform.UIKit.UIActivityTypeAssignToContact
+import platform.UIKit.UIActivityTypeCopyToPasteboard
+import platform.UIKit.UIActivityTypePrint
 import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIApplication
 import platform.UIKit.UIApplicationOpenSettingsURLString
@@ -115,9 +119,12 @@ class IosAppServices internal constructor(
     }
 
     /**
-     * Writes the data export (#155) to the temporary directory (`tmp/data-export/`, replacing earlier
-     * exports), then presents the share sheet, where the user picks 「ファイルに保存」 or another
-     * destination. The file is deleted when the sheet closes. Main thread (called from the UI).
+     * Writes the data export (#155) or backup (#40) to the temporary directory (`tmp/data-export/`,
+     * replacing earlier exports), then presents the share sheet, where the user picks
+     * 「ファイルに保存」 or another destination, and waits until the sheet closes. The file is
+     * deleted then. Returns whether the chosen destination reported success: closing the sheet
+     * without picking one is a cancel, so a backup is only recorded as holding the audio (#156)
+     * once it was handed over. Main thread (called from the UI).
      */
     override suspend fun saveExport(fileName: String, mimeType: String, write: suspend (RawSink) -> Unit): Boolean {
         val target = withContext(IoDispatcher) {
@@ -129,17 +136,29 @@ class IosAppServices internal constructor(
         try {
             withContext(IoDispatcher) { SystemFileSystem.sink(target).use { write(it) } }
             val presenter = topViewController() ?: error("no visible screen to present the share sheet from")
-            val sheet = UIActivityViewController(activityItems = listOf(NSURL.fileURLWithPath(target.toString())), applicationActivities = null)
-            // Required on iPad, where the sheet is a popover.
-            sheet.popoverPresentationController?.sourceView = presenter.view
-            // The destination has its copy once the sheet closes (saved, sent or cancelled).
-            sheet.completionWithItemsHandler = { _, _, _, _ -> SystemFileSystem.delete(target, mustExist = false) }
-            presenter.presentViewController(sheet, animated = true, completion = null)
+            return suspendCancellableCoroutine { continuation ->
+                val sheet = UIActivityViewController(activityItems = listOf(NSURL.fileURLWithPath(target.toString())), applicationActivities = null)
+                // Required on iPad, where the sheet is a popover.
+                sheet.popoverPresentationController?.sourceView = presenter.view
+                // Destinations that report success without keeping the file: a backup handed to one
+                // of them would count as holding its audio (#156) although nothing was saved.
+                sheet.excludedActivityTypes = listOf(
+                    UIActivityTypeCopyToPasteboard,
+                    UIActivityTypePrint,
+                    UIActivityTypeAssignToContact,
+                    UIActivityTypeAddToReadingList,
+                )
+                // The destination has its copy once the sheet closes (saved, sent or cancelled).
+                sheet.completionWithItemsHandler = { _, completed, _, _ ->
+                    SystemFileSystem.delete(target, mustExist = false)
+                    if (continuation.isActive) continuation.resume(completed)
+                }
+                presenter.presentViewController(sheet, animated = true, completion = null)
+            }
         } catch (e: Throwable) {
             withContext(IoDispatcher + NonCancellable) { SystemFileSystem.delete(target, mustExist = false) }
             throw e
         }
-        return true
     }
 
     /** Keeps the document picker's delegate alive while it is shown (UIKit holds it weakly). */

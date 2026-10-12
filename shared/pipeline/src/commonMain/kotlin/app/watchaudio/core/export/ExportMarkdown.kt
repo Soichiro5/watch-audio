@@ -23,6 +23,7 @@ object MarkdownText {
     const val GAP_AWAITING = "転送待ち"
     const val NEXT_DAY = "翌日"
     const val AUDIO_PURGED = "保持期間を過ぎて削除済み"
+    const val AUDIO_IN_BACKUP = "暗号化バックアップにあり（端末からは削除済み）"
     const val AUDIO_NOT_FOUND = "ファイルが見つかりませんでした"
     val WEEKDAYS = listOf("月", "火", "水", "木", "金", "土", "日")
 
@@ -153,6 +154,7 @@ fun renderDayMarkdown(day: ExportDay, archiveRoot: String = "../"): String = bui
             val range = clockRange(chunk.startedAt, chunk.endedAt, day, zone, seconds = false)
             val target = when {
                 audio.file != null -> "[${audio.file.substringAfterLast('/')}]($archiveRoot${audio.file})"
+                audio.purgedAt != null && audio.backedUpAt != null -> MarkdownText.AUDIO_IN_BACKUP
                 audio.purgedAt != null -> MarkdownText.AUDIO_PURGED
                 else -> MarkdownText.AUDIO_NOT_FOUND
             }

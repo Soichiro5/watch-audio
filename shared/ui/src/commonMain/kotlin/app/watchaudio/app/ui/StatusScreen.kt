@@ -80,7 +80,7 @@ internal fun StatusScreen(
         settings?.let { TranscriptionSettingsCard(it.transcribeOnlyWhileCharging, onTranscribeOnlyWhileChargingChange) }
         settings?.let { AlertSettingsCard(it.gapAlert, onGapAlertsEnabledChange, onQuietHoursChange) }
         state.stats?.let { StatsCard(it) }
-        state.storage?.let { StorageCard(it, state.storageActions, storageCallbacks) }
+        state.storage?.let { StorageCard(it, state.storageActions, storageCallbacks, timeZone) }
         ExportCard(export, state.storage?.breakdown?.audioBytes, exportCallbacks)
         BackupCard(backup, state.storage?.breakdown?.audioBytes, backupCallbacks)
         Section(Strings.PRIVACY_TITLE) {

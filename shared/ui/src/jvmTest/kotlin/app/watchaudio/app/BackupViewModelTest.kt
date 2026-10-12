@@ -141,7 +141,7 @@ class BackupViewModelTest {
         assertEquals(Strings.restored(added = 2, segments = 2, audioFiles = 2, alreadyPresent = 0), state.restoreMessage)
         assertEquals("", state.restorePassphrase)
         assertEquals(listOf("おはようございます", "会議の資料を送ります"), new.store.read { segmentsBetween(Long.MIN_VALUE, Long.MAX_VALUE) }.map { it.text })
-        assertEquals(listOf("backup_restored days=1 added=2 present=0 audio_files=2 without_audio=0"), new.diagnosticsLines)
+        assertEquals(listOf("backup_restored days=1 added=2 present=0 audio_files=2 without_audio=0 audio_returned=0"), new.diagnosticsLines)
         // Nothing in the logs reveals the passphrase or the content.
         (old.diagnosticsLines + new.diagnosticsLines).forEach { line ->
             assertFalse(PASS in line || "会議" in line, line)
@@ -203,6 +203,55 @@ class BackupViewModelTest {
         assertEquals(Strings.BACKUP_FAILED, vm.state.value.createMessage)
         assertEquals(PASS, vm.state.value.passphrase)
         assertEquals(listOf("backup_failed error=java.io.IOException"), old.diagnosticsLines)
+    }
+
+    @Test
+    fun aSavedBackupWithAudioMarksTheAudioAsBackedUp() = runVmTest {
+        createBackup()
+        // #156: the audio of both chunks is in the saved file, so it may now be offloaded.
+        assertEquals(listOf(now, now), listOf("a", "b").map { old.store.read { chunk(it) }?.audioBackedUpAt })
+        assertEquals(2, old.store.read { stats() }.offloadableAudio.chunks)
+    }
+
+    @Test
+    fun aBackupWithoutAudioMarksNothing() = runVmTest {
+        createBackup(includeAudio = false)
+        assertEquals(0, old.store.read { stats() }.offloadableAudio.chunks)
+        assertNull(old.store.read { chunk("a") }?.audioBackedUpAt)
+    }
+
+    @Test
+    fun aBackupThatWasNotSavedMarksNothing() = runVmTest {
+        // iOS: the file was written, then the share sheet was closed without a destination.
+        old.exportDismissedAfterWrite = true
+        addChunk(old, "a", window.start + 9 * 3_600_000L, "おはようございます")
+        val vm = viewModel(old)
+        vm.setPassphrase(PASS)
+        vm.setConfirmation(PASS)
+        vm.setIncludeAudio(true)
+        vm.create()
+        runCurrent()
+
+        assertNull(vm.state.value.createMessage)
+        assertEquals(PASS, vm.state.value.passphrase)
+        assertNull(old.store.read { chunk("a") }?.audioBackedUpAt)
+        assertEquals(0, old.store.read { stats() }.offloadableAudio.chunks)
+        assertTrue(old.diagnosticsLines.isEmpty())
+    }
+
+    @Test
+    fun aFailedSaveMarksNothing() = runVmTest {
+        addChunk(old, "a", window.start + 9 * 3_600_000L, "おはようございます")
+        old.exportDestinationFailure = IOException("ENOSPC (No space left on device)")
+        val vm = viewModel(old)
+        vm.setPassphrase(PASS)
+        vm.setConfirmation(PASS)
+        vm.setIncludeAudio(true)
+        vm.create()
+        runCurrent()
+
+        assertEquals(Strings.BACKUP_FAILED, vm.state.value.createMessage)
+        assertNull(old.store.read { chunk("a") }?.audioBackedUpAt)
     }
 
     @Test

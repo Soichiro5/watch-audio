@@ -47,11 +47,23 @@ data class ChunkRecord(
     val lastError: String?,
     /** Size of the audio file as received, or null for a silent chunk. */
     val sizeBytes: Long? = null,
-    /** When the audio file was deleted by the retention setting (the transcript is kept). */
+    /**
+     * When the audio file was deleted from the phone (the transcript is kept): by the retention
+     * setting (#33) or by the offload of backed-up audio (#156).
+     */
     val audioPurgedAt: Long? = null,
+    /**
+     * When the audio was last written into an encrypted backup the user saved (the backup's
+     * creation time, #156), or null. The app cannot see the file afterwards, so this only says
+     * the audio was in a backup made then, not that the file still exists.
+     */
+    val audioBackedUpAt: Long? = null,
 ) {
     /** True if the chunk's audio file should still exist and can be played. */
     val hasAudioFile: Boolean get() = audioPath != null && audioPurgedAt == null
+
+    /** True if the audio is no longer on the phone but was in a backup ([audioBackedUpAt]). */
+    val isAudioOnlyInBackup: Boolean get() = audioPath != null && audioPurgedAt != null && audioBackedUpAt != null
 }
 
 /** A transcript segment to store. Times are absolute epoch ms. */
@@ -101,8 +113,17 @@ data class StoreStats(
     val recordedMs: Long,
     /** When the phone last stored a chunk (`received_at`), or null if there are none. */
     val lastReceivedAt: Long? = null,
-    /** Chunks whose audio was deleted by the retention setting (their transcript is kept). */
+    /**
+     * Chunks whose audio was deleted from the phone and was never in a backup (retention, #33);
+     * their transcript is kept.
+     */
     val audioPurgedChunks: Int = 0,
+    /** Chunks whose audio is no longer on the phone but is in a backup ([ChunkRecord.isAudioOnlyInBackup]). */
+    val audioInBackupChunks: Int = 0,
+    /** Audio on the phone that is also in a backup and could be offloaded (transcribed chunks only). */
+    val offloadableAudio: AudioUsage = AudioUsage(0, 0),
+    /** Creation time of the newest backup that included audio, or null if none did. */
+    val lastAudioBackupAt: Long? = null,
 )
 
 /** Number and total size of audio files, e.g. those a retention change would delete. */

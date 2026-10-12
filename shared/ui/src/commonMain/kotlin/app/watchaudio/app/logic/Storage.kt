@@ -2,6 +2,8 @@ package app.watchaudio.app.logic
 
 import app.watchaudio.app.Strings
 import app.watchaudio.core.pipeline.AudioRetention
+import app.watchaudio.core.timeline.localDateOf
+import kotlinx.datetime.TimeZone
 
 private const val GIB = 1L shl 30
 
@@ -15,6 +17,16 @@ fun formatBytes(bytes: Long): String {
 /** Switching retention from [current] to [target] deletes audio sooner, so it needs a confirmation. */
 fun retentionChangeNeedsConfirmation(current: AudioRetention, target: AudioRetention): Boolean =
     target.isShorterThan(current)
+
+/**
+ * The day (or the first and last day) of the backups that hold audio about to be offloaded (#156),
+ * in [timeZone]: `2026年10月12日(月)` or `2026年10月5日(月)〜2026年10月12日(月)`.
+ */
+fun formatBackupDates(oldest: Long, newest: Long, timeZone: TimeZone): String {
+    val first = localDateOf(oldest, timeZone)
+    val last = localDateOf(newest, timeZone)
+    return if (first == last) formatDate(first) else "${formatDate(first)}〜${formatDate(last)}"
+}
 
 /** "Delete everything" goes ahead only after the user typed [Strings.DELETE_ALL_WORD]. */
 fun isDeleteAllConfirmed(input: String?): Boolean = input?.trim() == Strings.DELETE_ALL_WORD

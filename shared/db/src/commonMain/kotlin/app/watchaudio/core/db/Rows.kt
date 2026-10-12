@@ -14,7 +14,7 @@ import app.watchaudio.core.protocol.SourcePlatform
 /** Columns of `audio_chunk` read by [toChunk], in order. */
 internal const val CHUNK_COLUMNS =
     "uuid, session_id, device_id, source, started_at, ended_at, time_zone, audio_path, end_reason, state, attempts, " +
-        "last_error, size_bytes, audio_purged_at"
+        "last_error, size_bytes, audio_purged_at, audio_backed_up_at"
 
 /** Columns of [SEGMENTS] read by [toSegment], in order. */
 internal const val SEGMENT_COLUMNS = "s.id, c.uuid, s.start_at, s.end_at, s.text, s.lang, e.name"
@@ -44,6 +44,7 @@ internal fun SQLiteStatement.toChunk() = ChunkRecord(
     lastError = if (isNull(11)) null else getText(11),
     sizeBytes = if (isNull(12)) null else getLong(12),
     audioPurgedAt = if (isNull(13)) null else getLong(13),
+    audioBackedUpAt = if (isNull(14)) null else getLong(14),
 )
 
 internal fun SQLiteStatement.toSegment() = SegmentRecord(

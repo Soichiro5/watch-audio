@@ -23,7 +23,7 @@ import kotlinx.io.files.Path
  * keys stay in memory on this device and are not stored anywhere.
  */
 class BackupWriter(
-    store: LocalStore,
+    private val store: LocalStore,
     audioRoot: Path,
     private val dispatcher: CoroutineDispatcher = IoDispatcher,
     /** PBKDF2 rounds of the backups it writes; only tests lower it. */
@@ -65,7 +65,21 @@ class BackupWriter(
         }
     }
 
+    /**
+     * Records that the audio files [summary] wrote are in the backup of [plan] (#156), so that
+     * they may be offloaded. Call it only once the platform reports that the file reached the
+     * place the user chose; a backup that was cancelled or failed must not count. Marks in
+     * batches, so a long backup does not hold the database for long.
+     * @return number of chunks marked.
+     */
+    suspend fun recordSaved(plan: ExportPlan, summary: ExportSummary): Int =
+        summary.audioChunkIds.chunked(RECORD_BATCH_SIZE).sumOf { ids ->
+            store.transaction { markAudioBackedUp(ids, plan.request.exportedAt) }
+        }
+
     companion object {
+        private const val RECORD_BATCH_SIZE = 500
+
         /** `watch-audio-backup-2026-10-12.wabackup` for a backup made on that day in [timeZone]. */
         fun fileName(now: Long, timeZone: TimeZone): String = "watch-audio-backup-${localDateOf(now, timeZone)}.$BACKUP_FILE_EXTENSION"
     }

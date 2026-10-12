@@ -16,6 +16,8 @@ import app.watchaudio.core.db.StoreStats
 import app.watchaudio.core.pipeline.AudioRetention
 import app.watchaudio.core.pipeline.DiagnosticEvents
 import app.watchaudio.core.pipeline.DiagnosticsLog
+import app.watchaudio.core.pipeline.OffloadAge
+import app.watchaudio.core.pipeline.OffloadPreview
 import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageBreakdown
 import kotlin.coroutines.cancellation.CancellationException
@@ -55,9 +57,15 @@ data class StorageUiState(
 /** A shorter retention the user picked, waiting for confirmation, and what it deletes now. */
 data class PendingRetention(val target: AudioRetention, val usage: AudioUsage)
 
+/** The offload of backed-up audio (#156) the user opened, waiting for confirmation, and what it removes now. */
+data class PendingOffload(val age: OffloadAge, val preview: OffloadPreview) {
+    val canConfirm: Boolean get() = preview.usage.chunks > 0
+}
+
 /** Destructive storage actions on the status screen; each needs an explicit in-app confirmation. */
 data class StorageActions(
     val pendingRetention: PendingRetention? = null,
+    val pendingOffload: PendingOffload? = null,
     /** What the user typed so far while 「すべてのデータを削除」 is open; null while it is closed. */
     val deleteAllInput: String? = null,
     val busy: Boolean = false,
@@ -146,7 +154,7 @@ class StatusViewModel(
             val current = services.storage.retention()
             if (retentionChangeNeedsConfirmation(current, target)) {
                 val usage = services.storage.previewRetention(target)
-                actions.update { it.copy(pendingRetention = PendingRetention(target, usage), deleteAllInput = null, message = null) }
+                actions.update { it.copy(pendingRetention = PendingRetention(target, usage), pendingOffload = null, deleteAllInput = null, message = null) }
             } else {
                 if (target != current) services.storage.setRetention(target)
                 actions.update { it.copy(pendingRetention = null, message = null) }
@@ -155,6 +163,32 @@ class StatusViewModel(
     }
 
     fun cancelRetention() = actions.update { it.copy(pendingRetention = null) }
+
+    /** Opens the confirmation for offloading backed-up audio (#156), with what it would remove. */
+    fun openOffload() = selectOffloadAge(OffloadAge.ALL)
+
+    /** Shows what offloading audio of at least [age] would remove; nothing is deleted yet. */
+    fun selectOffloadAge(age: OffloadAge) {
+        if (actions.value.busy) return
+        viewModelScope.launch {
+            val preview = services.storage.previewOffload(age)
+            actions.update {
+                if (it.busy) it else it.copy(pendingOffload = PendingOffload(age, preview), pendingRetention = null, deleteAllInput = null, message = null)
+            }
+        }
+    }
+
+    fun cancelOffload() = actions.update { it.copy(pendingOffload = null) }
+
+    /** Deletes the confirmed backed-up audio from the phone; transcripts stay (#156). */
+    fun confirmOffload() {
+        val pending = actions.value.pendingOffload?.takeIf { it.canConfirm } ?: return
+        runDestructive("offload", failure = Strings.OFFLOAD_FAILED) {
+            val result = services.storage.offloadBackedUpAudio(pending.age)
+            services.diagnostics.log(DiagnosticEvents.AUDIO_OFFLOADED, "chunks=${result.purgedChunks} bytes=${result.freedBytes}")
+            Strings.audioOffloaded(result.purgedChunks, formatBytes(result.freedBytes))
+        }
+    }
 
     /** Stores the confirmed shorter retention and deletes the audio it no longer keeps. */
     fun confirmRetention() {
@@ -168,7 +202,7 @@ class StatusViewModel(
 
     fun openDeleteAll() {
         if (actions.value.busy) return
-        actions.update { it.copy(deleteAllInput = "", pendingRetention = null, message = null) }
+        actions.update { it.copy(deleteAllInput = "", pendingRetention = null, pendingOffload = null, message = null) }
     }
 
     fun updateDeleteAllInput(input: String) = actions.update { if (it.deleteAllInput == null) it else it.copy(deleteAllInput = input) }
@@ -189,8 +223,11 @@ class StatusViewModel(
         return true
     }
 
-    /** @param action names the deletion in the diagnostics log if it fails. */
-    private fun runDestructive(action: String, block: suspend () -> String) {
+    /**
+     * @param action names the deletion in the diagnostics log if it fails.
+     * @param failure the fixed text shown if it fails (#135).
+     */
+    private fun runDestructive(action: String, failure: String = Strings.STORAGE_ACTION_FAILED, block: suspend () -> String) {
         if (actions.value.busy) return
         actions.value = StorageActions(busy = true)
         viewModelScope.launch {
@@ -203,7 +240,7 @@ class StatusViewModel(
                     DiagnosticEvents.STORAGE_ACTION_FAILED,
                     "action=$action error=${DiagnosticsLog.typeName(e)}",
                 )
-                Strings.STORAGE_ACTION_FAILED
+                failure
             }
             actions.value = StorageActions(message = message)
         }

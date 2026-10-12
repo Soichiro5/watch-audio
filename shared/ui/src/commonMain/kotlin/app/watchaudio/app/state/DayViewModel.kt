@@ -48,8 +48,12 @@ data class DayContent(
     val entries: List<TranscriptEntry>,
     /** Chunks that started on this day: what 「この日のデータを削除」 removes. */
     val chunksStartedThisDay: Int = 0,
-    /** Chunks shown on this day whose audio was deleted by the retention setting. */
+    /** Chunks shown on this day whose audio was deleted by the retention setting (and is in no backup). */
     val audioPurgedChunks: Int = 0,
+    /** Chunks shown on this day whose audio is only in a backup (#156). */
+    val audioInBackupChunks: Int = 0,
+    /** Creation time of the newest backup holding that audio, or null. */
+    val audioBackupAt: Long? = null,
 )
 
 enum class DayDeletion {
@@ -193,7 +197,9 @@ class DayViewModel(
             timeline = buildDayTimeline(window, chunks, previous, now),
             entries = buildTranscriptEntries(chunks, segments),
             chunksStartedThisDay = chunks.count { it.startedAt >= window.start && it.startedAt < window.end },
-            audioPurgedChunks = chunks.count { it.audioPurgedAt != null },
+            audioPurgedChunks = chunks.count { it.audioPurgedAt != null && !it.isAudioOnlyInBackup },
+            audioInBackupChunks = chunks.count { it.isAudioOnlyInBackup },
+            audioBackupAt = chunks.filter { it.isAudioOnlyInBackup }.mapNotNull { it.audioBackedUpAt }.maxOrNull(),
         )
     }
 

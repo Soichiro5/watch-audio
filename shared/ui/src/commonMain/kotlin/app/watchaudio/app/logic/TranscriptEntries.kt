@@ -11,12 +11,14 @@ sealed interface TranscriptEntry {
 
     /**
      * A transcribed utterance; [audioPath] + [offsetMs] start playback at it. [audioPath] is null
-     * when there is nothing to play (the audio was deleted by the retention setting).
+     * when there is nothing to play (the audio was deleted by the retention setting or offloaded);
+     * [audioInBackup] then says the audio is in an encrypted backup (#156).
      */
     data class Utterance(
         val segment: SegmentRecord,
         val audioPath: String?,
         val offsetMs: Long,
+        val audioInBackup: Boolean = false,
     ) : TranscriptEntry {
         override val at: Long get() = segment.startAt
         override val key: String get() = "s${segment.id}"
@@ -52,6 +54,7 @@ fun buildTranscriptEntries(chunks: List<ChunkRecord>, segments: List<SegmentReco
             segment = segment,
             audioPath = chunk?.takeIf { it.hasAudioFile }?.audioPath,
             offsetMs = if (chunk == null) 0 else (segment.startAt - chunk.startedAt).coerceAtLeast(0),
+            audioInBackup = chunk?.isAudioOnlyInBackup == true,
         )
     }
 

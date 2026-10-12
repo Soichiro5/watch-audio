@@ -23,25 +23,38 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.watchaudio.app.Strings
+import app.watchaudio.app.logic.formatBackupDates
 import app.watchaudio.app.logic.formatBytes
+import app.watchaudio.app.logic.formatDate
 import app.watchaudio.app.state.StorageActions
 import app.watchaudio.app.state.StorageUiState
 import app.watchaudio.core.pipeline.AudioRetention
+import app.watchaudio.core.pipeline.OffloadAge
+import app.watchaudio.core.pipeline.StorageBreakdown
+import app.watchaudio.core.timeline.localDateOf
+import kotlinx.datetime.TimeZone
 
 /** What the storage card can ask for; implemented by [app.watchaudio.app.state.StatusViewModel]. */
 internal class StorageCallbacks(
     val onSelectRetention: (AudioRetention) -> Unit,
     val onConfirmRetention: () -> Unit,
     val onCancelRetention: () -> Unit,
+    val onOpenOffload: () -> Unit,
+    val onSelectOffloadAge: (OffloadAge) -> Unit,
+    val onConfirmOffload: () -> Unit,
+    val onCancelOffload: () -> Unit,
     val onOpenDeleteAll: () -> Unit,
     val onDeleteAllInput: (String) -> Unit,
     val onConfirmDeleteAll: () -> Unit,
     val onCancelDeleteAll: () -> Unit,
 )
 
-/** Usage breakdown, low-space warning, audio retention and 「すべてのデータを削除」 (#33). */
+/**
+ * Usage breakdown, low-space warning, offloading backed-up audio (#156), audio retention and
+ * 「すべてのデータを削除」 (#33).
+ */
 @Composable
-internal fun StorageCard(storage: StorageUiState, actions: StorageActions, callbacks: StorageCallbacks) {
+internal fun StorageCard(storage: StorageUiState, actions: StorageActions, callbacks: StorageCallbacks, timeZone: TimeZone) {
     val breakdown = storage.breakdown
     Section(
         Strings.STORAGE_USAGE,
@@ -62,6 +75,9 @@ internal fun StorageCard(storage: StorageUiState, actions: StorageActions, callb
         if (breakdown.audioPurgedChunks > 0) {
             Text(Strings.audioPurgedChunks(breakdown.audioPurgedChunks), style = MaterialTheme.typography.bodySmall)
         }
+
+        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+        OffloadSection(breakdown, actions, callbacks, timeZone)
 
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
         Text(Strings.RETENTION, style = MaterialTheme.typography.titleSmall)
@@ -129,6 +145,59 @@ internal fun StorageCard(storage: StorageUiState, actions: StorageActions, callb
             LinearProgressIndicator(Modifier.fillMaxWidth())
         }
         actions.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+    }
+}
+
+/** 「バックアップ済みの音声」 (#156): what is backed up, and removing it from the phone after a confirmation. */
+@Composable
+private fun OffloadSection(breakdown: StorageBreakdown, actions: StorageActions, callbacks: StorageCallbacks, timeZone: TimeZone) {
+    Text(Strings.OFFLOAD_TITLE, style = MaterialTheme.typography.titleSmall)
+    val lastBackupAt = breakdown.lastAudioBackupAt
+    if (lastBackupAt == null) {
+        Text(Strings.OFFLOAD_NO_BACKUP, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        return
+    }
+    val offloadable = breakdown.offloadableAudio
+    StatRow(Strings.OFFLOADABLE_AUDIO, Strings.offloadableAudio(offloadable.chunks, formatBytes(offloadable.bytes)))
+    Text(Strings.lastAudioBackup(formatDate(localDateOf(lastBackupAt, timeZone))), style = MaterialTheme.typography.bodySmall)
+    if (breakdown.audioInBackupChunks > 0) {
+        Text(Strings.audioInBackupChunks(breakdown.audioInBackupChunks), style = MaterialTheme.typography.bodySmall)
+    }
+    Text(Strings.OFFLOAD_NOTE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val pending = actions.pendingOffload
+    if (pending == null) {
+        OutlinedButton(onClick = callbacks.onOpenOffload, enabled = !actions.busy && offloadable.chunks > 0) {
+            Text(Strings.OFFLOAD_BUTTON)
+        }
+        return
+    }
+    Confirmation(
+        confirmLabel = Strings.OFFLOAD_CONFIRM,
+        confirmEnabled = !actions.busy && pending.canConfirm,
+        onConfirm = callbacks.onConfirmOffload,
+        onCancel = callbacks.onCancelOffload,
+    ) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OffloadAge.entries.forEach { age ->
+                FilterChip(
+                    selected = age == pending.age,
+                    onClick = { callbacks.onSelectOffloadAge(age) },
+                    enabled = !actions.busy,
+                    label = { Text(Strings.offloadAge(age)) },
+                )
+            }
+        }
+        val preview = pending.preview
+        val oldest = preview.oldestBackupAt
+        val newest = preview.newestBackupAt
+        Text(
+            if (oldest == null || newest == null || !pending.canConfirm) {
+                Strings.OFFLOAD_NOTHING
+            } else {
+                Strings.confirmOffload(preview.usage.chunks, formatBytes(preview.usage.bytes), formatBackupDates(oldest, newest, timeZone))
+            },
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 

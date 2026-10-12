@@ -101,10 +101,18 @@ data class ExportAudio(
     val sizeBytes: Long? = null,
     /** Lowercase hex SHA-256 as received from the watch. */
     val sha256: String? = null,
-    /** When the retention setting deleted the audio (the transcript is kept), or null. */
+    /**
+     * When the audio was deleted from the phone (the transcript is kept), or null: by the
+     * retention setting, or by the offload of backed-up audio (#156, then [backedUpAt] is set).
+     */
     val purgedAt: Long? = null,
     /** Path of the audio file in the archive, or null when it was not included. */
     val file: String? = null,
+    /**
+     * When the audio was last written into an encrypted backup the user saved (that backup's
+     * creation time, #156), or null. Restoring that backup brings the audio back.
+     */
+    val backedUpAt: Long? = null,
 )
 
 /** Where a chunk's transcription stands. */

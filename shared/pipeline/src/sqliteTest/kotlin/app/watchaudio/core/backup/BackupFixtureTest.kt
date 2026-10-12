@@ -49,6 +49,8 @@ class BackupFixtureTest {
 
                 assertEquals(7, summary.chunksAdded)
                 assertEquals(5, summary.audioFilesRestored)
+                // The restored audio counts as in the backup (#156), as on the phone that saved it.
+                source.transaction { markAudioBackedUp(listOf("a0", "b0", "b1", "b3", "b4"), createdAt) }
                 assertEquals(BackupTestData.exportedDays(source, sourceAudio), BackupTestData.exportedDays(target, targetAudio))
                 listOf("a0", "b0", "b1", "b3", "b4").forEach { id ->
                     val chunk = assertNotNull(target.read { chunk(id) })
