@@ -45,7 +45,7 @@ class EmbedderParityTest {
                 val cosine = dot(single, expected)
                 println("cosine %.6f  %s".format(cosine, text))
                 // ONNX Runtime's int8 kernels differ by CPU (AVX2 / AVX-512 VNNI): across machines the
-                // same model and input agree to about 1e-3 (0.998 seen on a CI runner), not exactly.
+                // same model and input agree to within about 1e-2 (0.998 for sentences, 0.994 for 「うん」 on a CI runner), not exactly; a wrong tokenizer or model is far below.
                 assertTrue(cosine > CROSS_MACHINE_COSINE, "cosine $cosine for '$text'")
                 if (entry in documents) {
                     val inBatch = batched[documents.indexOf(entry)]
@@ -61,6 +61,6 @@ class EmbedderParityTest {
 
     companion object {
         /** Least cosine between vectors of the same model and text computed on different CPUs. */
-        const val CROSS_MACHINE_COSINE = 0.995
+        const val CROSS_MACHINE_COSINE = 0.99
     }
 }
