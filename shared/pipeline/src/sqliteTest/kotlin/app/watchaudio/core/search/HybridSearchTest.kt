@@ -48,7 +48,7 @@ class HybridSearchTest {
         setUp()
         // Keyword hits for 飛行機, newest first: "work", then "trip". The meaning search ranks the
         // trip passage first (the query is close to its text), so it leads the fused list.
-        val results = HybridSearch.search(store, index, "沖縄の飛行機は朝の便", minScore = 0f)
+        val results = HybridSearch.search(store, index, "沖縄の飛行機は朝の便", band = 1f)
         val first = results.hits.first()
         assertEquals("trip", first.segment.chunkId)
         assertTrue(first.byKeyword && first.byMeaning)
@@ -62,11 +62,11 @@ class HybridSearchTest {
     }
 
     @Test
-    fun weakMeaningHitsAreDropped() = runTest {
+    fun meaningHitsFarBelowTheBestAreDropped() = runTest {
         setUp()
-        val results = HybridSearch.search(store, index, "歯医者の予約", minScore = 0.99f)
+        val results = HybridSearch.search(store, index, "歯医者の予約は木曜の午後", band = 0.01f)
         assertEquals(listOf("dentist"), results.hits.map { it.segment.chunkId })
-        assertTrue(results.hits.single().byKeyword)
+        assertTrue(results.hits.single().byKeyword && results.hits.single().byMeaning)
     }
 
     @Test

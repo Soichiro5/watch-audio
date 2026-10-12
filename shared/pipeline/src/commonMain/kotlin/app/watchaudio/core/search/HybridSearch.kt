@@ -31,18 +31,17 @@ data class HybridResults(
  * per passage), so text that matches both ways comes first. Without [SemanticSearch] (or when it
  * fails) the result is exactly the keyword search.
  *
- * Meaning hits below [MIN_MEANING_SCORE] are dropped: the brute-force search always returns its
- * nearest passages, even when nothing is related.
+ * The brute-force search always returns its nearest passages, even when nothing is related, so only
+ * meaning hits within [MEANING_BAND] of the best one are kept (ruri-v3's similarities are high
+ * across the board, 0.80–0.90 for unrelated conversation passages, so a fixed threshold does not
+ * separate them; see docs/research/m0-6 §9).
  */
 object HybridSearch {
-    /** Meaning hits kept per query. */
-    const val MEANING_LIMIT = 30
+    /** Meaning hits asked for per query (fewer remain after [MEANING_BAND]). */
+    const val MEANING_LIMIT = 20
 
-    /**
-     * Lowest similarity (≈ cosine of the ruri-v3 vectors) a meaning hit needs. Unrelated
-     * conversation passages score about 0.6–0.75 with ruri-v3-30m; see docs/research/m0-6 §9.
-     */
-    const val MIN_MEANING_SCORE = 0.78f
+    /** How far below the best meaning hit (in similarity ≈ cosine) another one may score and still be shown. */
+    const val MEANING_BAND = 0.04f
 
     /** Longest text shown for a meaning-only hit. */
     const val PASSAGE_SNIPPET_CHARS = 80
@@ -53,13 +52,13 @@ object HybridSearch {
         query: String,
         keywordLimit: Int = 100,
         meaningLimit: Int = MEANING_LIMIT,
-        minScore: Float = MIN_MEANING_SCORE,
+        band: Float = MEANING_BAND,
     ): HybridResults {
         val q = query.trim()
         if (q.isEmpty()) return HybridResults(emptyList(), keywordLimited = false)
         val keyword = store.read { search(q, keywordLimit) }
         val limited = keyword.size >= keywordLimit
-        val meaning = semantic?.let { meaningHits(it, q, meaningLimit, minScore) }.orEmpty()
+        val meaning = semantic?.let { meaningHits(it, q, meaningLimit, band) }.orEmpty()
         if (meaning.isEmpty()) return HybridResults(keyword.map { it.toHit(byMeaning = false) }, limited)
 
         val modelId = semantic!!.modelId
@@ -87,8 +86,10 @@ object HybridSearch {
         return HybridResults(hits, limited)
     }
 
-    private suspend fun meaningHits(semantic: SemanticSearch, query: String, limit: Int, minScore: Float): List<VectorHit> = try {
-        semantic.search(query, limit).filter { it.score >= minScore }
+    private suspend fun meaningHits(semantic: SemanticSearch, query: String, limit: Int, band: Float): List<VectorHit> = try {
+        val hits = semantic.search(query, limit)
+        val best = hits.firstOrNull()?.score
+        if (best == null) emptyList() else hits.filter { it.score >= best - band }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {

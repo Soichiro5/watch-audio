@@ -16,7 +16,7 @@ data class PassageSpan(val firstIndex: Int, val count: Int) {
  */
 object EmbeddingPassages {
     data class Rules(
-        val minTokens: Int = 32,
+        val minTokens: Int = 24,
         val maxTokens: Int = 128,
         val maxGapMs: Long = 30_000,
     )
