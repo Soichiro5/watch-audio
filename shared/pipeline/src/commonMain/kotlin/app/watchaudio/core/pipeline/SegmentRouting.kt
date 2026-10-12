@@ -136,13 +136,19 @@ data class SegmentRouting(
     /**
      * The [primary] segments, with each region's suspect ones replaced by the region's [heard]
      * segments when [LanguageRouting.keeps] their joined text (with their length-weighted
-     * confidence and the language of the first), sorted by start.
+     * confidence and the language of the first), sorted by start. Heard segments lying mostly
+     * inside a primary segment that is not suspect are left out first: they are the padding
+     * re-hearing speech the primary pass already wrote.
      */
     fun merge(primary: List<TimedText>, regions: List<Region>, heard: List<List<TimedText>>): List<TimedText> {
+        val suspects = regions.flatMapTo(mutableSetOf()) { it.suspects }
+        val kept = primary.filterIndexed { index, _ -> index !in suspects }
         val replaced = mutableSetOf<Int>()
         val added = mutableListOf<TimedText>()
         regions.forEachIndexed { index, region ->
-            val texts = heard[index]
+            // What the second pass heard mostly inside a primary segment that stays (the padding
+            // reaching into Japanese the primary pass wrote well) is not a new utterance.
+            val texts = heard[index].filterNot { segment -> kept.any { overlapMs(it, segment) * 2 > segment.endMs - segment.startMs } }
             if (texts.isEmpty()) return@forEachIndexed
             val recognition = Recognition(texts.joinToString(" ") { it.text }, weightedConfidence(texts), texts.first().lang)
             if (routing.keeps(recognition)) {
@@ -190,3 +196,6 @@ private fun weightedConfidence(texts: List<TimedText>): Float? {
     }
     return if (weight > 0) weighted / weight else null
 }
+
+/** How long [a] and [b] overlap, in ms (0 if they do not). */
+private fun overlapMs(a: TimedText, b: TimedText): Long = max(0L, min(a.endMs, b.endMs) - max(a.startMs, b.startMs))

@@ -40,6 +40,21 @@ class SegmentRoutingTest {
     }
 
     @Test
+    fun theSecondPassReHearingJapaneseInThePaddingIsLeftOut() = runTest {
+        val primary = listOf(morning, station)
+        val result = routing.transcribe(parts, { primary }) {
+            // The pause region 3.7 s..14.3 s: its first 300 ms are the end of 「おはよう…」, heard as English.
+            listOf(
+                en(0, 300, "Oh how are you", confidence = 0.6f),
+                en(1_800, 9_000, "Let's review the schedule for next week.", confidence = 0.9f),
+                en(10_400, 10_600, "Sore day", confidence = 0.6f),
+            )
+        }
+        assertEquals(listOf("ja", "en", "ja"), result.map { it.lang })
+        assertEquals("Let's review the schedule for next week.", result[1].text)
+    }
+
+    @Test
     fun englishTheJapaneseModelLeftUnwrittenIsHeardInThePause() = runTest {
         val primary = listOf(morning, station)
         val result = routing.transcribe(parts, { primary }) { input ->
