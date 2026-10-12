@@ -177,7 +177,7 @@ class DiagnosticsScenarioTest {
         /** Reference recording with a keyword the transcript must contain (SpeechFixtures.KEYWORDS). */
         const val WAV = 1
 
-        /** `AndroidAppServices.DIAGNOSTICS_EXPORT_DIR` (cache subdirectory of the export). */
+        /** `AppGraph.DIAGNOSTICS_EXPORT_DIR` (cache subdirectory of the export). */
         const val EXPORT_DIR = "diagnostics-export"
 
         val RESUMED = Regex("""ResumedActivity[:=] ?ActivityRecord\{\S+ u\d+ (\S+)""")

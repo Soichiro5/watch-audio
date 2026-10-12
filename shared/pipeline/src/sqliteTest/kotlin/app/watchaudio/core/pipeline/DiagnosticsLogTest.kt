@@ -10,6 +10,7 @@ import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.readString
+import kotlinx.io.writeString
 
 /** File-based tests (JVM and the iOS simulator); they live with the SQLite tests for [TempDir]. */
 class DiagnosticsLogTest {
@@ -106,5 +107,30 @@ class DiagnosticsLogTest {
     fun realTimeFactorRoundsToTwoDecimals() {
         assertEquals(0.07, DiagnosticsLog.realTimeFactor(elapsedMs = 4_000, audioMs = 60_000))
         assertEquals(null, DiagnosticsLog.realTimeFactor(elapsedMs = 4_000, audioMs = 0))
+    }
+
+    @Test
+    fun clearRemovesTheLogTheRotatedPartAndExportsOnly() {
+        val exports = dir.resolve("export")
+        val log = DiagnosticsLog(file, maxBytes = 200, clock = { now }, exportDirectory = exports)
+        repeat(10) { log.log(DiagnosticEvents.CHUNK_RECEIVED, "chunk=c$it") }
+        log.exportTo(Path(exports, "out.csv"))
+        val neighbour = Path(file.parent!!, "other.txt")
+        SystemFileSystem.sink(neighbour).buffered().use { it.writeString("keep") }
+
+        assertTrue(log.clear())
+
+        assertFalse(SystemFileSystem.exists(file))
+        assertFalse(SystemFileSystem.exists(log.previousFile))
+        assertEquals(emptyList(), SystemFileSystem.list(exports))
+        assertTrue(SystemFileSystem.exists(neighbour), "other files next to the log are kept")
+        assertEquals(0, log.exportTo(dir.resolve("after.csv")))
+        log.log(DiagnosticEvents.APP_START)
+        assertEquals(DiagnosticsLog.HEADER + "2025-10-09T08:53:20Z,app_start,\n", read(file))
+    }
+
+    @Test
+    fun clearOfAnEmptyLogSucceeds() {
+        assertTrue(DiagnosticsLog(file, exportDirectory = dir.resolve("missing")).clear())
     }
 }

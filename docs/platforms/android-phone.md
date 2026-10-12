@@ -184,6 +184,8 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 
 **書き出し**: 状態タブの「診断ログを書き出す」→ `AndroidAppServices.exportDiagnostics()` が `.1` と現在のファイルを 1 つの CSV（`cache/diagnostics-export/watch-audio-diagnostics-<日時>.csv`、前回の書き出しは削除）にまとめ、`FileProvider`（authority `app.watchaudio.diagnostics`、公開するのはこのディレクトリだけ）経由で共有シート（`ACTION_SEND`）を開く。ユーザーが選んだ共有先だけに読み取り権限が付く。**自動では送らない**。新しい権限・通信・SDK は追加していない。
 
+**削除**: 状態タブの「すべてのデータを削除」で、ログ（`.1` を含む）と `cache/diagnostics-export/` の書き出し済みのコピーも消える（`StorageManager.deleteAll` → `DiagnosticsLog.clear`、#159）。書き出し先のディレクトリ名は `AppGraph.DIAGNOSTICS_EXPORT_DIR` の 1 か所（`res/xml/diagnostics_paths.xml` と一致させる）。
+
 **エミュレータでの確認**（CI `emulator.yml` の phone、`DiagnosticsScenarioTest`）: 時計からの転送と同じフレームを `ChunkReceiver.store`（チャネルから読んだ後の処理。Wearable のチャネルなしで呼べる）に渡して受信 → 本番のワーカーが文字起こし → アプリを起動して `adb shell am force-stop app.watchaudio` → 次の起動で、ログに `chunk_received`・`transcription_started` / `_finished`（`rtf` つき）・`app_start`・強制終了の時刻の `previous_exit`（理由は OS が報告したまま記録）があること、状態タブの「診断ログを書き出す」で CSV が書き出されて共有シートが開くこと、書き出した CSV にそのチャンクの文字起こし本文が含まれないことを確かめる。証拠は `DIAGNOSTICS_CHECK` 行・`diagnostics-export.png`・成果物 `logcat-phone` の `scenario-logs/diagnostics-export.csv`（流れは [04-dev-environment.md §6.2](../dev/04-dev-environment.md#62-1-回の計装テストでは確かめられないものphone-scenariossh)）。
 
 ## 5. プライバシー・パッケージング

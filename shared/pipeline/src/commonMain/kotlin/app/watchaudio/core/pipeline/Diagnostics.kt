@@ -71,11 +71,15 @@ object DiagnosticEvents {
  * Size is capped: once [file] reaches [maxBytes] it is renamed to `<name>.1` (replacing the
  * previous one), so at most about 2 × [maxBytes] are kept. Thread-safe; I/O errors are swallowed
  * so logging can never break the caller.
+ *
+ * @param exportDirectory where the platform puts the copies it hands to the share sheet; [clear]
+ *   empties it too. Null when the host never exports.
  */
 class DiagnosticsLog(
     val file: Path,
     private val maxBytes: Long = DEFAULT_MAX_BYTES,
     private val clock: () -> Long = { Clock.System.now().toEpochMilliseconds() },
+    val exportDirectory: Path? = null,
 ) : Diagnostics {
     private val lock = PlatformLock()
 
@@ -120,6 +124,22 @@ class DiagnosticsLog(
             lines.forEach { sink.writeString(it + "\n") }
         }
         lines.size
+    }
+
+    /**
+     * Deletes the log, its rotated part and earlier exports ("delete all data", #159): the log
+     * records when chunks arrived, i.e. when the user was recording. The next [log] starts a new
+     * file.
+     * @return true if none of them is left.
+     */
+    fun clear(): Boolean = lock.withLock {
+        val exports = exportDirectory
+            ?.let { dir -> runCatching { SystemFileSystem.list(dir) }.getOrDefault(emptyList()) }
+            .orEmpty()
+        (listOf(file, previousFile) + exports).forEach { path ->
+            runCatching { SystemFileSystem.delete(path, mustExist = false) }
+        }
+        (listOf(file, previousFile) + exports).none { SystemFileSystem.exists(it) }
     }
 
     private fun eventLines(path: Path): List<String> {

@@ -171,6 +171,7 @@ Android と同じ共通の `DiagnosticsLog`（`shared/pipeline`、形式・上�
 - 記録: `app_start`（バージョン・OS）、`chunk_received` / `chunk_rejected`（共通の `ChunkIntake`。ACK の送信自体は Swift 側なので記録しない）、`worker_start` / `worker_stop`（共通の `TranscriptionRun`。`worker=foreground` / `worker=bgtask`、件数、BGTask の時間切れ）、`transcription_*`（`DiagnosticsPipelineObserver`、RTF 付き）、`retention_purge`、`model_download_start` / `model_ready` / `model_download_failed`（OS によるモデルのインストール）、`gap_alert_scheduled`（`IosGapAlerts` が予約した時刻）、`crash`。
 - 異常終了: Kotlin の未捕捉例外は `setUnhandledExceptionHook` で型名とスタックの先頭を 1 行書いてから元のフック（終了）に渡す。Objective-C / Swift のクラッシュや OS による強制終了（メモリ・時間切れ）は記録できないので、OS のクラッシュレポート（設定 > プライバシーとセキュリティ > 解析と改善 > 解析データ、Xcode Organizer）を見る。`NSSetUncaughtExceptionHandler` は C 関数ポインタとグローバル状態が要るため使っていない。
 - 書き出し: 状態タブの「診断ログを書き出す」→ `IosAppServices.exportDiagnostics()` が一時ディレクトリ（`tmp/diagnostics-export/`、前回分は削除）に 1 つの CSV をまとめ、`UIActivityViewController`（共有シート）を最前面の画面から表示する。送り先はユーザーが選ぶ（AirDrop・ファイルに保存など）。自動では送らない。
+- 削除: 状態タブの「すべてのデータを削除」で、ログと `tmp/diagnostics-export/` のコピーも消える（`StorageManager.deleteAll` → `DiagnosticsLog.clear`、#159）。Apple Watch の `diagnostics.csv` は Watch 側にあり対象外。
 
 ## 8. 保存場所とプライバシー
 
@@ -183,8 +184,7 @@ Android と同じ共通の `DiagnosticsLog`（`shared/pipeline`、形式・上�
 
 | ターゲット | キー | 値・目的 |
 | --- | --- | --- |
-| iosApp | `NSMicrophoneUsageDescription` | 将来のスマホ側録音用（現状はマイク未使用） |
-| 〃 | `NSSpeechRecognitionUsageDescription` | 音声認識の用途説明。オンボーディングで `SFSpeechRecognizer.requestAuthorization` を念のため要求する（SpeechTranscriber に必要かは未確認。`SpeechTests` は許可状態をログに出す） |
+| iosApp | `NSSpeechRecognitionUsageDescription` | 音声認識の用途説明。オンボーディングで `SFSpeechRecognizer.requestAuthorization` を念のため要求する（SpeechTranscriber に必要かは未確認。`SpeechTests` は許可状態をログに出す） |
 | 〃 | `UIBackgroundModes: [processing]` | BGProcessingTask |
 | 〃 | `BGTaskSchedulerPermittedIdentifiers: [app.watchaudio.transcribe]` | `IosAppGraph.PROCESSING_TASK_ID` と一致させること |
 | WatchApp | `NSMicrophoneUsageDescription` | 録音 |
@@ -193,7 +193,11 @@ Android と同じ共通の `DiagnosticsLog`（`shared/pipeline`、形式・上�
 | 〃 | `CFBundleURLTypes`（スキーム `watchaudio`） | コンプリケーションのタップ（`watchaudio://record`）で開始・再開（§14） |
 | WatchApp / WatchWidget | `WatchAudioAppGroup` + entitlement `com.apple.security.application-groups` | 録音状態を共有する App Group（`APP_GROUP_ID`、§14） |
 
+iPhone アプリはマイクを使わない（録音は Watch だけ。再生は `AVAudioSessionCategoryPlayback`、文字起こしはファイル入力）ので `NSMicrophoneUsageDescription` を持たない（#159。ios.yml の Release ジョブが `IPHONE_MICROPHONE_CHECK` で確認）。
+
 実行時の許可: Watch でマイク（初回開始時）と通知（初回録音開始時）。iPhone ではオンボーディングの「許可の設定」で通知（alert + sound、途絶アラート用）と音声認識を要求する（`IosPermissions`。拒否済みなら設定アプリへの案内を表示）。スパイク用の `UIFileSharingEnabled` / `LSSupportsOpeningDocumentsInPlace` は削除した。
+
+**プライバシーマニフェスト**（#159）: `apps/ios/Privacy/{App,Watch,WatchWidget}/PrivacyInfo.xcprivacy` を各ターゲットの `sources` に `buildPhase: resources` で指定し、各バンドルの直下にコピーする（iosApp / WatchApp / WatchWidget）。追跡なし・収集データなし。理由の申告が必要な API と理由コード、その根拠のコード箇所は [docs/legal/store-data-declarations.md §2.3](../legal/store-data-declarations.md#23-プライバシーマニフェストprivacyinfoxcprivacy)。`tools/privacy-check` がアプリ・拡張ターゲットごとのマニフェストの有無と内容（追跡・収集なし、理由コードは `policy.IOS_REQUIRED_REASONS` の許可リスト）を検査し、ios.yml の Release ジョブがバンドル内の有無を `PRIVACY_MANIFEST_CHECK` で確認する。API の使い方を変えたら（`UserDefaults`・ファイルの属性・空き容量・`mach_absolute_time` / `systemUptime` など）マニフェストと §2.3 を一緒に直す。
 
 ## 10. 検証状況
 

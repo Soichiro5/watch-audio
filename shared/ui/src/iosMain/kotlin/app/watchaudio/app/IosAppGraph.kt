@@ -47,6 +47,7 @@ import platform.Foundation.NSApplicationSupportDirectory
 import platform.Foundation.NSBundle
 import platform.Foundation.NSDate
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
+import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSUserDomainMask
 import platform.Foundation.dateWithTimeIntervalSinceNow
 import platform.UIKit.UIApplication
@@ -62,7 +63,7 @@ import platform.UIKit.UIBackgroundTaskInvalid
  * uses the `CompleteUntilFirstUserAuthentication` protection class ([LocalDataDirectory]):
  * nothing leaves the phone.
  * The diagnostics log (#77) is `diagnostics/diagnostics.csv` there; it leaves only through the
- * user's export ([IosAppServices.exportDiagnostics]).
+ * user's export ([IosAppServices.exportDiagnostics]) and is cleared by "delete all data" (#159).
  *
  * Threading: [start] and [setAppActive] are called on the main thread; [ingest] from any thread.
  * Internal state is only mutated on the main dispatcher.
@@ -71,6 +72,9 @@ import platform.UIKit.UIBackgroundTaskInvalid
 object IosAppGraph {
     /** Must match `BGTaskSchedulerPermittedIdentifiers` in apps/ios/project.yml. */
     const val PROCESSING_TASK_ID = "app.watchaudio.transcribe"
+
+    /** Subdirectory of the temporary directory for the diagnostics log copies the user shares. */
+    internal const val DIAGNOSTICS_EXPORT_DIR = "diagnostics-export"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val status = MutableStateFlow(ProcessingStatus())
@@ -133,7 +137,10 @@ object IosAppGraph {
         if (started) return
         started = true
         this.transcriber = transcriber
-        diagnostics = DiagnosticsLog(Path("$rootDirectory/diagnostics/${DiagnosticsLog.FILE_NAME}"))
+        diagnostics = DiagnosticsLog(
+            Path("$rootDirectory/diagnostics/${DiagnosticsLog.FILE_NAME}"),
+            exportDirectory = Path(NSTemporaryDirectory(), DIAGNOSTICS_EXPORT_DIR),
+        )
         recordUncaughtExceptions(diagnostics)
         diagnostics.log(DiagnosticEvents.APP_START, "version=${appVersion()} os=${platformName()}")
         val audioRoot = audioDirectory
@@ -142,7 +149,7 @@ object IosAppGraph {
         // SpeechAnalyzer reports neither a speech probability nor a noise level, so the filter keeps
         // everything for now; it applies as soon as the Swift side supplies them (#105).
         val pipeline = TranscriptionPipeline(store, Path(audioRoot), IosTranscriberAdapter(transcriber), segmentFilter = FalsePositiveFilter.DEFAULT)
-        storage = StorageManager(store, Path(audioRoot), IosStorageEnvironment(rootDirectory))
+        storage = StorageManager(store, Path(audioRoot), IosStorageEnvironment(rootDirectory), diagnostics = diagnostics)
         gapAlerts = IosGapAlerts(GapAlertEvaluator(store), diagnostics)
         intake = ChunkIntake(Ingestor(store, Path(audioRoot)), diagnostics, onStored = { chunkStored() })
         transcriptionRun = TranscriptionRun(

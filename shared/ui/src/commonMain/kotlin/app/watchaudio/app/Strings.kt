@@ -154,7 +154,7 @@ object Strings {
     const val DELETE_ALL = "すべてのデータを削除"
     const val DELETE_ALL_WORD = "削除"
     const val DELETE_ALL_NOTE =
-        "すべての録音・音声・文字起こしをこの端末から削除します（設定は残ります）。元に戻せません。続けるには「削除」と入力してください。"
+        "すべての録音・音声・文字起こしと診断ログをこの端末から削除します（設定は残ります）。元に戻せません。続けるには「削除」と入力してください。"
     const val DELETE_ALL_INPUT = "確認のため「削除」と入力"
     const val DELETE_ALL_CONFIRM = "すべて削除する"
     const val DELETED_ALL = "すべてのデータを削除しました"
