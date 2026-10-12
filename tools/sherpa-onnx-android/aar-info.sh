@@ -7,7 +7,7 @@
 #
 #   tools/sherpa-onnx-android/aar-info.sh <work dir>
 #
-# Prints key=value lines (for $GITHUB_OUTPUT) and writes them to <work dir>/info.env:
+# Writes <work dir>/info.env (shell variables, for `. info.env`) and prints it:
 #   version, abis (space-separated), ndk_release (e.g. r29), ndk (SDK package revision, e.g. 29.0.14206865)
 # Extracts the AAR's jni/<abi>/libsherpa-onnx-jni.so and libonnxruntime.so to <work dir>/aar/<abi>/.
 # The AAR is taken from the Gradle cache when present, else downloaded from JitPack (the repository
@@ -68,8 +68,8 @@ minor=0
 ndk="$major.$minor.$ndk_build"
 
 {
-  echo "version=$version"
-  echo "abis=$abis"
-  echo "ndk_release=$ndk_release"
-  echo "ndk=$ndk"
+  echo "version='$version'"
+  echo "abis='$abis'"
+  echo "ndk_release='$ndk_release'"
+  echo "ndk='$ndk'"
 } | tee "$work/info.env"

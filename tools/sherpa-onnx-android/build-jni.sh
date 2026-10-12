@@ -46,7 +46,7 @@ ndk_revision=$(grep -E '^Pkg.Revision' "$ANDROID_NDK/source.properties" | cut -d
 [ "$ndk_revision" = "$ndk" ] || { echo "NDK $ndk_revision at $ANDROID_NDK, but the AAR was built with $ndk" >&2; exit 1; }
 echo "NDK $ndk_revision: $ANDROID_NDK"
 
-git clone --quiet --depth 1 --branch "$version" https://github.com/k2-fsa/sherpa-onnx "$work/sherpa-onnx"
+git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$version" https://github.com/k2-fsa/sherpa-onnx "$work/sherpa-onnx"
 src="$work/sherpa-onnx"
 commit=$(git -C "$src" rev-parse HEAD)
 echo "sherpa-onnx $version: $commit"
