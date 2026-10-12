@@ -153,20 +153,34 @@ iPhone アプリの `NSMicrophoneUsageDescription` は削除した（#159）。i
 | 対象年齢 | ［運営者が決める］（子ども向けではない） |
 | コンテンツのレーティング | 質問票に回答（暴力・課金などなし。ユーザー間のやり取りなし） |
 | 健康アプリの申告 | **「健康機能はない（My app doesn't provide any health features）」と申告する**。根拠と確認内容は下の §3.3.1 |
-| 権限の説明 | `RECORD_AUDIO`: 録音のため（Wear OS のみ。スマホはマイクを使わない）。`BODY_SENSORS`: ウォッチを外したことの検知だけ、値は保存しない |
+| 権限の説明 | `RECORD_AUDIO`: 録音のため（Wear OS のみ。スマホはマイクを使わない）。`BODY_SENSORS`: ウォッチを外したことの検知だけ、心拍などの値は読まない。Play Console にそのまま貼る文は §3.3.2 |
 | Wear OS | スマホアプリが必須（`com.google.android.wearable.standalone=false`）。Wear OS の品質ガイドラインの確認が必要（§4） |
 
 #### 3.3.1 健康アプリの申告と `BODY_SENSORS`（#159 で確認）
 
 - **公式の基準**: 健康アプリの申告（Health apps declaration）は、Google Play に公開する**すべてのアプリ**が提出する（クローズド・オープンテストを含む）。健康機能がないアプリも、健康機能がないことを申告する（2024-08-31 以降必須）。対象の機能の分類は「Activity and Fitness」「Sleep Management」「Diseases and Conditions Management」などの健康・医療の機能（[Provide information for the Health apps declaration form](https://support.google.com/googleplay/android-developer/answer/14738291)）。この申告のページは権限（`BODY_SENSORS`）には触れていない。
 - 一方、Google Play の「健康に関するデータ」のポリシーは `BODY_SENSORS` を健康関連の機密データに当たる権限の例に挙げ、使う場合は**目立つ開示とユーザーの同意**を求める（[Health apps / health-related sensitive data](https://support.google.com/googleplay/android-developer/answer/13996367)。一覧は例示）。
-- **本アプリの使い方**: Wear OS アプリは `BODY_SENSORS` を `maxSdkVersion="35"`（Wear OS 4/5）でだけ宣言し、ユーザーが録音ボタンを押したときに、マイク・通知と一緒に任意の許可として 1 回だけ求める（`MainActivity.requestStart` / `optionalPermissions`。拒否しても録音できる）。用途は `Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT` による「ウォッチを外した」ことの検知だけで、録音の一時停止に使う（`ConditionMonitors.kt` の `OffBodyMonitor`）。心拍などの値は読まず、検知の結果も保存・送信しない。健康・フィットネスの機能はない。Wear OS 6（API 36）以降は `BODY_SENSORS` を宣言せず、細かい健康の権限も求めない（許可なしで装着検出を試み、イベントが来なければ装着中とみなす。[wearos.md](../platforms/wearos.md) の権限の表）。
+- **本アプリの使い方**: Wear OS アプリは `BODY_SENSORS` を `maxSdkVersion="35"`（Wear OS 4/5）でだけ宣言し、ユーザーが録音ボタンを押してマイクを許可した後に、アプリ内の説明画面（「ウォッチを外したら録音を一時停止するために使います。心拍などは読み取らず、インターネットにも送りません。」）を出し、「次へ」を選んだときだけ OS のダイアログで求める。説明は 1 回だけで、拒否しても録音できる（#161。流れは [wearos.md](../platforms/wearos.md) §6「身体センサーの説明」）。用途は `Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT` による「ウォッチを外した」ことの検知だけで、録音の一時停止に使う（`ConditionMonitors.kt` の `OffBodyMonitor`）。心拍などの値は読まない。分かるのは外したかどうかだけで、それも録音を区切った理由（`off_body`）としてウォッチの診断ログと自分のスマホに届く録音の情報（manifest）に残るだけで、端末の外（インターネット）には送らない。健康・フィットネスの機能はない。Wear OS 6（API 36）以降は `BODY_SENSORS` を宣言せず、細かい健康の権限も求めない（許可なしで装着検出を試み、イベントが来なければ装着中とみなす。[wearos.md](../platforms/wearos.md) の権限の表）。
 - **推奨する対応**:
   1. 健康アプリの申告では「健康機能はない」を選ぶ（装着検出は健康機能の分類のどれにも当たらない）。
-  2. 権限の説明（Play Console のアプリのコンテンツ・ストアの説明・審査メモ）に「`BODY_SENSORS` はウォッチを外したことの検知だけに使い、値は保存も送信もしない（Wear OS 5 以前のみ）」と書く（§3.3 の「権限の説明」）。
-  3. 目立つ開示: 今は録音ボタンを押したときに OS の許可ダイアログ（「身体センサー」）が出るだけで、装着検出のために使うというアプリ自身の説明がない。ポリシーの「目立つ開示と同意」に合わせるため、許可を求める前に「ウォッチを外したら録音を止めるために使います（値は保存・送信しません）」と一文を出すことを勧める（Wear OS の作業として別 Issue にする。リリース前に必要かは運営者が判断）。
+  2. 権限の説明（Play Console のアプリのコンテンツ・ストアの説明・審査メモ）に「`BODY_SENSORS` はウォッチを外したことの検知だけに使い、心拍などの値は読まず、インターネットに送らない（Wear OS 5 以前のみ）」と書く（§3.3 の「権限の説明」、貼る文は §3.3.2）。
+  3. 目立つ開示: **対応済み（#161）**。OS の許可ダイアログの前に、アプリ内の 1 画面で用途（ウォッチを外したら録音を一時停止する）・心拍などは読み取らずインターネットにも送らないこと・許可しなくても録音できることを説明し、「次へ」で同意したときだけダイアログを出す。「使わない」を選ぶか OS のダイアログで拒否しても録音は続き、アプリに「外しても録音は止まりません（身体センサー未許可）」と出る。証拠はエミュレータのスクリーンショット（`emulator.yml` の成果物 `screenshots-wear` の `wear-body-sensors-*.png`）と単体テスト（`PermissionPlanTest`・`RecorderPolicyTest`）。
   4. 審査で権限について質問されたら、装着検出だけに使うことを説明する。指摘が続く場合の代替は、`BODY_SENSORS` の宣言をやめる（Wear OS 4/5 では、許可がないと装着検出が働かない機種で「外したら一時停止」がなくなる。充電中の一時停止などは残る）。
 - データセーフティ: センサーの値は端末から出ないので「健康情報」の収集・共有には当たらない（§3.1）。
+
+#### 3.3.2 Play Console に書く権限の説明（`BODY_SENSORS`）
+
+Play Console で権限の用途を聞かれたとき（アプリのコンテンツの申告・審査からの問い合わせ）にそのまま使う文。日本語と英語（Play Console の入力は英語が確実）を用意する。アプリ内の説明画面（`apps/wear/src/main/res/values/strings.xml` の `body_sensors_*`）と内容をそろえる。
+
+- 日本語:
+
+  > Wear OS アプリは、ウォッチを外したことを検知して録音を一時停止するためだけに `BODY_SENSORS`（身体センサー）を使います（Wear OS 5 以前。`Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT`）。心拍などの値は読み取りません。外したかどうかは、録音を区切った理由としてウォッチと利用者自身のスマホの中に残るだけで、インターネットには送りません。健康・フィットネスの機能はありません。許可を求める前にアプリ内で用途を説明し、許可しなくても録音はできます（外したときに自動で一時停止しないだけです）。
+
+- 英語:
+
+  > The Wear OS app uses BODY_SENSORS only to detect when the watch is taken off the wrist, so that recording pauses (Wear OS 5 and earlier; Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT). It does not read heart rate or any other vital sign. Whether the watch was worn is kept only as the reason a recording segment ended, on the watch and on the user's own paired phone, and is never sent over the internet. The app has no health or fitness features. Before the system asks for the permission, the app explains this on its own screen; recording works without the permission, it just does not pause automatically when the watch is taken off.
+
+- 審査メモに添えるもの: 説明画面のスクリーンショット（§4、`wear-body-sensors-explanation.png`）。Wear OS 6（API 36）以降は `BODY_SENSORS` を宣言せず、代わりの健康の権限（`READ_HEART_RATE` など）も求めないことも書く（[wearos.md](../platforms/wearos.md) §6）。
 
 ### 3.4 Google Play のユーザーデータポリシー（目立つ開示）
 
@@ -181,6 +195,7 @@ iPhone アプリの `NSMicrophoneUsageDescription` は削除した（#159）。i
 | App Review 用の動画（バックグラウンドオーディオ） | Watch で録音開始 → 画面消灯のまま録音が続く → iPhone に届いて文字起こしされる → 停止。録音中の表示が見えること | 実機（Apple Watch + iPhone） |
 | Google Play スクリーンショット（スマホ） | タイムライン、検索、状態タブ、オンボーディング | Android スマホ（エミュレータで可） |
 | Google Play スクリーンショット（Wear OS） | 録音中の画面、タイル、コンプリケーション（Wear OS の要件どおり、端末の枠なし） | Wear OS（エミュレータで可） |
+| 身体センサーの説明（`BODY_SENSORS` の目立つ開示、§3.3.1） | 説明画面 → OS の許可ダイアログ → 拒否しても録音が続き注記が出る | Wear OS 4/5（エミュレータで可。CI `emulator.yml` の `wear-body-sensors-*.png`） |
 | 前景サービスの動画（microphone） | ユーザーが録音を開始 → Ongoing Activity / 通知の表示 → 画面消灯でも録音が続く → 停止ボタンで止まる | 実機の Wear OS ウォッチが望ましい（動画は YouTube などの URL で提出） |
 | 前景サービスの動画（dataSync） | オンボーディングでモデルのダウンロードを開始 → 進み具合の通知 → 完了 | Android スマホ（エミュレータで可） |
 

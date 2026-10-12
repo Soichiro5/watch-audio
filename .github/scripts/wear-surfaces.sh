@@ -2,6 +2,8 @@
 # Wear OS emulator evidence for the tile and the complication (#41), run by emulator.yml after the
 # smoke check. Uses the Wear OS debug surface broadcasts (developer.android.com/training/wearables/tiles/debug):
 #
+#   0. fresh install, start tapped in the app: the BODY_SENSORS explanation, the system dialog,
+#      declined -> still recording, with the "not paused when taken off" note (#161) -> screenshots,
 #   1. stopped: shows the tile (and sets the complication on the current watch face) -> screenshots,
 #   2. taps the tile's button -> the app opens and starts recording -> screenshot,
 #   3. recording: shows the tile and the watch face again -> screenshots.
@@ -107,12 +109,10 @@ set_complication() {
 
 go_home() { adb shell input keyevent KEYCODE_HOME; sleep 2; }
 
-# Taps the tile button (action_start / action_resume / action_open in apps/wear strings.xml: 録音開始 / 再開 /
-# 開く, #144) found in the view hierarchy, else the lower middle of the screen.
-tap_tile_button() {
-  local xy size
-  dump_ui tile-ui
-  xy=$(python3 - "$OUT/tile-ui.xml" <<'EOF'
+# Prints the center "x y" of the first node in the view dump $1 whose text, content-desc or
+# resource-id matches the regex $2 (whole attribute value); prints nothing if there is none.
+node_center() {
+  python3 - "$1" "$2" <<'EOF'
 import re, sys
 try:
     xml = open(sys.argv[1], encoding="utf-8").read()
@@ -120,31 +120,90 @@ except OSError:
     sys.exit(0)
 for node in re.finditer(r'<node [^>]*>', xml):
     attrs = node.group(0)
-    if re.search(r'(text|content-desc)="(録音開始|再開|開く)"', attrs):
+    if re.search(r'(text|content-desc|resource-id)="(' + sys.argv[2] + ')"', attrs):
         b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', attrs)
         if b:
             x1, y1, x2, y2 = map(int, b.groups())
             print((x1 + x2) // 2, (y1 + y2) // 2)
             break
 EOF
-)
+}
+
+# Lower middle of the screen, where the tile button and the app's edge button sit.
+lower_middle() {
+  adb shell wm size | tr -d '\r' | sed -n 's/.*: \([0-9]*\)x\([0-9]*\)/\1 \2/p' | tail -1 | awk '{print int($1/2), int($2*0.68)}'
+}
+
+# Taps the node matching the regex $2 in a fresh view dump saved as $1.xml, else the lower middle
+# of the screen (returns 1 then).
+tap_node() {
+  local xy
+  dump_ui "$1"
+  xy=$(node_center "$OUT/$1.xml" "$2")
   if [ -z "$xy" ]; then
-    size=$(adb shell wm size | tr -d '\r' | sed -n 's/.*: \([0-9]*\)x\([0-9]*\)/\1 \2/p' | tail -1)
-    xy=$(echo "$size" | awk '{print int($1/2), int($2*0.68)}')
-    log "tile button not found in the view hierarchy; tapping at $xy"
-  else
-    log "tile button at $xy"
+    xy=$(lower_middle)
+    log "'$2' not found in $1.xml; tapping at $xy"
+    adb shell input tap $xy
+    return 1
   fi
+  log "'$2' at $xy"
   adb shell input tap $xy
 }
 
+# Taps the tile button (action_start / action_resume / action_open in apps/wear strings.xml: 録音開始 / 再開 /
+# 開く, #144) found in the view hierarchy, else the lower middle of the screen.
+tap_tile_button() { tap_node tile-ui "録音開始|再開|開く" || true; }
+
 recording() { adb shell dumpsys activity services "$PKG" | grep -q "RecordingService"; }
+
+# 0. #161: a fresh install explains BODY_SENSORS before the system asks for it, and recording goes
+# on when the wearer declines (strings body_sensors_* / off_body_detection_off in apps/wear).
+body_sensors_flow() {
+  local granted
+  adb shell pm clear "$PKG" > /dev/null
+  adb shell pm revoke "$PKG" android.permission.BODY_SENSORS 2> /dev/null || true
+  # Microphone and notifications granted: the start tap goes straight to recording, then the explanation.
+  adb shell pm grant "$PKG" android.permission.RECORD_AUDIO || true
+  adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS || true
+  adb shell am start -W -n "$PKG/app.watchaudio.wear.MainActivity" > /dev/null
+  sleep 3
+  tap_node app-stopped "録音開始" || true
+  sleep 5
+  shot wear-body-sensors-explanation
+  dump_ui body-sensors-explanation
+  if grep -q "身体センサーの許可" "$OUT/body-sensors-explanation.xml"; then
+    check body-sensors-explanation-before-request true
+  else
+    check body-sensors-explanation-before-request false "explanation text not on screen"
+  fi
+  if recording; then check body-sensors-recording-while-explaining true; else check body-sensors-recording-while-explaining false; fi
+  tap_node body-sensors-continue "次へ" || true
+  sleep 3
+  shot wear-body-sensors-system-dialog
+  dump_ui body-sensors-system-dialog
+  # Decline: the dialog's deny button (resource id or label), else back, which also answers "not granted".
+  if ! tap_node body-sensors-deny ".*permission_deny.*|Don.{1,6}t allow|Deny|許可しない"; then adb shell input keyevent KEYCODE_BACK; fi
+  sleep 3
+  shot wear-body-sensors-declined
+  dump_ui body-sensors-declined
+  granted=$(adb shell dumpsys package "$PKG" | tr -d '\r' | sed -n 's/.*android.permission.BODY_SENSORS: granted=\([a-z]*\).*/\1/p' | head -1)
+  check body-sensors-declined "$([ "$granted" = false ] && echo true || echo false)" "granted=${granted:-unknown}"
+  if recording; then check body-sensors-declined-still-records true; else check body-sensors-declined-still-records false "RecordingService not running"; fi
+  if grep -q "身体センサー未許可" "$OUT/body-sensors-declined.xml"; then
+    check body-sensors-declined-note true
+  else
+    check body-sensors-declined-note false "note not on screen"
+  fi
+  # Back to a fresh install for the tile checks.
+  adb shell pm clear "$PKG" > /dev/null
+}
 
 adb shell mkdir -p "$SHOTS"
 wait_for_system_ui
 # The recorder pauses while charging, and the emulator reports AC power by default.
 adb shell dumpsys battery unplug
 adb shell dumpsys battery set level 80
+body_sensors_flow
 # So that the tap goes straight to recording instead of the permission dialogs.
 for permission in RECORD_AUDIO POST_NOTIFICATIONS BODY_SENSORS; do adb shell pm grant "$PKG" "android.permission.$permission" || true; done
 adb shell am force-stop "$PKG"

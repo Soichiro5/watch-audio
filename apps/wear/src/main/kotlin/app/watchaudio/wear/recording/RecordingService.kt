@@ -102,6 +102,7 @@ class RecordingService : LifecycleService(), RecorderInput.Listener {
             ACTION_START -> arm()
             ACTION_STOP -> disarm()
             ACTION_MARK -> mark()
+            ACTION_REFRESH_MONITORS -> refreshMonitors()
             // Restarted by the system after the process died (START_STICKY).
             null -> restartAfterProcessDeath()
         }
@@ -159,6 +160,15 @@ class RecordingService : LifecycleService(), RecorderInput.Listener {
         writeJournal(chunk)
         RecorderStore.update { it.copy(marksInSession = it.marksInSession + 1) }
         graph.log("mark", "${chunk.chunkId} +${offset}ms")
+    }
+
+    /** A permission was granted while recording (body sensors, #161): register what failed before. */
+    private fun refreshMonitors() {
+        if (!inForeground) {
+            stopSelf()
+            return
+        }
+        startMonitors()
     }
 
     private fun enterForeground(): Boolean {
@@ -464,6 +474,7 @@ class RecordingService : LifecycleService(), RecorderInput.Listener {
         private const val ACTION_START = "app.watchaudio.wear.action.START"
         private const val ACTION_MARK = "app.watchaudio.wear.action.MARK"
         private const val ACTION_STOP = "app.watchaudio.wear.action.STOP"
+        private const val ACTION_REFRESH_MONITORS = "app.watchaudio.wear.action.REFRESH_MONITORS"
 
         private const val HEARTBEAT_INTERVAL_MS = 30_000L
         private const val STATUS_INTERVAL_MS = 5 * 60_000L
@@ -482,5 +493,9 @@ class RecordingService : LifecycleService(), RecorderInput.Listener {
         fun mark(context: Context) = context.startService(Intent(context, RecordingService::class.java).setAction(ACTION_MARK))
 
         fun stop(context: Context) = context.startService(Intent(context, RecordingService::class.java).setAction(ACTION_STOP))
+
+        /** Retries the monitors that could not start (e.g. the off-body sensor before `BODY_SENSORS` was granted). */
+        fun refreshMonitors(context: Context) =
+            context.startService(Intent(context, RecordingService::class.java).setAction(ACTION_REFRESH_MONITORS))
     }
 }
