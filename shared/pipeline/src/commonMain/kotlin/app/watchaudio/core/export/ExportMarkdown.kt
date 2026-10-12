@@ -60,10 +60,17 @@ object MarkdownText {
     }
 
     /** `README.md` at the root of the archive. */
-    fun readme(includesAudio: Boolean) = buildString {
+    fun readme(includesAudio: Boolean, diff: Boolean = false) = buildString {
         appendLine("# watch-audio の書き出し")
         appendLine()
         appendLine("このフォルダは watch-audio アプリから書き出した記録です。")
+        if (diff) {
+            appendLine()
+            appendLine(
+                "差分のバックアップです。前のバックアップの後に増えた・変わった記録（と、まだどのバックアップにも入っていなかった音声）" +
+                    "だけが入っています。",
+            )
+        }
         appendLine()
         appendLine("- `markdown/`: 日ごとの文字起こし（Markdown）。Obsidian などでそのまま読めます。")
         appendLine("- `json/`: 日ごとのチャンク・発話・マーク・録音できていない時間（JSON。アプリに取り込み直せる形式）。")

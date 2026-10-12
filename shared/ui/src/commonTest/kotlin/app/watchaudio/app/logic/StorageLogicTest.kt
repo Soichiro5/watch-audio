@@ -17,6 +17,15 @@ class StorageLogicTest {
     }
 
     @Test
+    fun smallBackupsReadInKilobytes() {
+        assertEquals("1 KB", formatBackupSize(0))
+        assertEquals("1 KB", formatBackupSize(1))
+        assertEquals("39 KB", formatBackupSize(39_055))
+        assertEquals("0.1 MB", formatBackupSize(100L shl 10))
+        assertEquals("1.0 GB", formatBackupSize(1L shl 30))
+    }
+
+    @Test
     fun backupDatesAreLocalDays() {
         val tokyo = TimeZone.of("Asia/Tokyo")
         val oct12 = 1_791_730_800_000L // 2026-10-12T00:00+09:00
