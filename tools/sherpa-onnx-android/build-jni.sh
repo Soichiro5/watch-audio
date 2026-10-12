@@ -11,8 +11,8 @@
 # - SHERPA_ONNX_ENABLE_TTS=OFF: no TTS code, eSpeak NG and piper-phonemize;
 # - SHERPA_ONNX_ENABLE_SPEAKER_DIARIZATION=OFF: no diarization code and hclust-cpp;
 # - SHERPA_ONNX_ENABLE_C_API=OFF: the C/C++ API libraries are not shipped (apps/android excludes them).
-# The NDK is the one the AAR was built with: $ANDROID_NDK if set, else $ANDROID_HOME/ndk/<revision>,
-# else downloaded from Google. Each library must link against the AAR's libonnxruntime.so (the app
+# The NDK is the one the AAR was built with: $ANDROID_NDK or $ANDROID_HOME/ndk/<revision> if that
+# version, else downloaded from Google. Each library must link against the AAR's libonnxruntime.so (the app
 # keeps that file) and pass check-no-tts.sh. Writes <output dir>/<abi>/libsherpa-onnx-jni.so and
 # <output dir>/sherpa-onnx-jni.properties (what was built; the app build checks it). Needs git, cmake,
 # make, wget, unzip and curl.
@@ -30,19 +30,22 @@ work="$info_dir/build"
 rm -rf "$work"
 mkdir -p "$work"
 
-if [ -z "${ANDROID_NDK:-}" ]; then
-  if [ -n "${ANDROID_HOME:-}" ] && [ -d "$ANDROID_HOME/ndk/$ndk" ]; then
-    ANDROID_NDK="$ANDROID_HOME/ndk/$ndk"
-  else
-    url="https://dl.google.com/android/repository/android-ndk-$ndk_release-linux.zip"
-    echo "Downloading $url"
-    curl -fsSL --retry 3 -o "$work/ndk.zip" "$url"
-    unzip -q "$work/ndk.zip" -d "$work"
-    rm "$work/ndk.zip"
-    ANDROID_NDK="$work/android-ndk-$ndk_release"
-  fi
+revision() { grep -E '^Pkg.Revision' "$1/source.properties" 2>/dev/null | cut -d= -f2 | tr -d ' '; }
+# CI runners set ANDROID_NDK to their default NDK, which may be another version: use it only if it matches.
+ndk_dir=""
+for candidate in "${ANDROID_NDK:-}" "${ANDROID_HOME:-}/ndk/$ndk" "${ANDROID_SDK_ROOT:-}/ndk/$ndk"; do
+  if [ -n "$candidate" ] && [ "$(revision "$candidate")" = "$ndk" ]; then ndk_dir=$candidate; break; fi
+done
+if [ -z "$ndk_dir" ]; then
+  url="https://dl.google.com/android/repository/android-ndk-$ndk_release-linux.zip"
+  echo "Downloading $url"
+  curl -fsSL --retry 3 -o "$work/ndk.zip" "$url"
+  unzip -q "$work/ndk.zip" -d "$work"
+  rm "$work/ndk.zip"
+  ndk_dir="$work/android-ndk-$ndk_release"
 fi
-ndk_revision=$(grep -E '^Pkg.Revision' "$ANDROID_NDK/source.properties" | cut -d= -f2 | tr -d ' ')
+ANDROID_NDK=$ndk_dir
+ndk_revision=$(revision "$ANDROID_NDK")
 [ "$ndk_revision" = "$ndk" ] || { echo "NDK $ndk_revision at $ANDROID_NDK, but the AAR was built with $ndk" >&2; exit 1; }
 echo "NDK $ndk_revision: $ANDROID_NDK"
 
