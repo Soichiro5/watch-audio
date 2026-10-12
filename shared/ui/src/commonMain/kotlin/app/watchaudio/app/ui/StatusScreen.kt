@@ -87,7 +87,7 @@ internal fun StatusScreen(
         state.stats?.let { StatsCard(it) }
         state.storage?.let { StorageCard(it, state.storageActions, storageCallbacks, timeZone) }
         ExportCard(export, state.storage?.breakdown?.audioBytes, exportCallbacks)
-        BackupCard(backup, state.storage?.breakdown?.audioBytes, backupCallbacks)
+        BackupCard(backup, state.storage?.breakdown?.audioBytes, timeZone, backupCallbacks)
         Section(Strings.PRIVACY_TITLE) {
             Text(Strings.PRIVACY_NOTE, style = MaterialTheme.typography.bodyMedium)
         }

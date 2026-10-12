@@ -3,7 +3,9 @@ package app.watchaudio.app
 import app.watchaudio.app.logic.PassphraseStrength
 import app.watchaudio.app.state.BackupViewModel
 import app.watchaudio.app.state.NowProvider
+import app.watchaudio.core.backup.BackupKind
 import app.watchaudio.core.backup.BackupRestorer
+import app.watchaudio.core.backup.DiffPreview
 import app.watchaudio.core.backup.BackupWriter
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.db.NewSegment
@@ -127,7 +129,7 @@ class BackupViewModelTest {
         val created = viewModel(old).state.value // a fresh card: nothing kept
         assertEquals("", created.passphrase)
         assertEquals(listOf("watch-audio-backup-2026-10-10.wabackup"), old.exportRequests)
-        assertTrue(old.diagnosticsLines.single().startsWith("backup_created days=1 chunks=2 audio_files=2"))
+        assertTrue(old.diagnosticsLines.single().startsWith("backup_created kind=full days=1 chunks=2 audio_files=2"))
 
         new.backupToOpen = file
         val vm = viewModel(new)
@@ -141,7 +143,7 @@ class BackupViewModelTest {
         assertEquals(Strings.restored(added = 2, segments = 2, audioFiles = 2, alreadyPresent = 0), state.restoreMessage)
         assertEquals("", state.restorePassphrase)
         assertEquals(listOf("おはようございます", "会議の資料を送ります"), new.store.read { segmentsBetween(Long.MIN_VALUE, Long.MAX_VALUE) }.map { it.text })
-        assertEquals(listOf("backup_restored days=1 added=2 present=0 audio_files=2 without_audio=0 audio_returned=0"), new.diagnosticsLines)
+        assertEquals(listOf("backup_restored days=1 added=2 present=0 audio_files=2 without_audio=0 audio_returned=0 updated=0 kind=full"), new.diagnosticsLines)
         // Nothing in the logs reveals the passphrase or the content.
         (old.diagnosticsLines + new.diagnosticsLines).forEach { line ->
             assertFalse(PASS in line || "会議" in line, line)
@@ -264,6 +266,121 @@ class BackupViewModelTest {
 
         assertEquals(Strings.BACKUP_NOTHING, vm.state.value.createMessage)
         assertTrue(old.exportRequests.isEmpty())
+    }
+
+    /** Creates a backup on [services] with the card as the user left it; @return the saved file. */
+    private fun TestScope.create(vm: BackupViewModel, services: FakeAppServices): ByteArray {
+        val before = services.savedExports.size
+        vm.setPassphrase(PASS)
+        vm.setConfirmation(PASS)
+        vm.create()
+        runCurrent()
+        assertEquals(before + 1, services.savedExports.size, vm.state.value.createMessage)
+        return services.savedExports.last().second
+    }
+
+    @Test
+    fun aDiffIsOfferedOnceAFullBackupWasSaved() = runVmTest {
+        addChunk(old, "a", window.start + 9 * 3_600_000L, "おはようございます")
+        val vm = viewModel(old)
+        vm.setIncludeAudio(true)
+        runCurrent()
+        val first = vm.state.value
+        assertNull(first.preview!!.saved.lastAt)
+        assertFalse(first.diffPossible)
+        assertEquals(BackupKind.FULL, first.kind)
+        assertEquals(1, first.preview!!.fullChunks)
+        vm.setKind(BackupKind.DIFF) // not possible yet: still a full backup
+        assertEquals(BackupKind.FULL, vm.state.value.kind)
+
+        create(vm, old)
+        val saved = vm.state.value
+        assertEquals(now, saved.preview!!.saved.lastAt)
+        assertTrue(saved.diffPossible)
+        assertEquals(DiffPreview(0, 0, 0), saved.preview!!.diff)
+
+        // A new recording: the diff would hold it and its audio.
+        addChunk(old, "b", window.start + 10 * 3_600_000L, "会議の資料を送ります")
+        runCurrent()
+        assertEquals(1, vm.state.value.preview!!.diff!!.chunks)
+        assertEquals(1, vm.state.value.preview!!.diff!!.audioFiles)
+        vm.setIncludeAudio(false)
+        runCurrent()
+        assertEquals(0, vm.state.value.preview!!.diff!!.audioFiles)
+    }
+
+    @Test
+    fun aDiffAfterTheFullBackupRestoresOnTopOfIt() = runVmTest {
+        addChunk(old, "a", window.start + 9 * 3_600_000L, "おはようございます")
+        val vm = viewModel(old)
+        vm.setIncludeAudio(true)
+        runCurrent()
+        val full = create(vm, old)
+        addChunk(old, "b", window.start + 10 * 3_600_000L, "会議の資料を送ります")
+        runCurrent()
+        assertEquals(BackupKind.DIFF, vm.state.value.kind) // offered first once possible
+        val diff = create(vm, old)
+
+        assertEquals(listOf("watch-audio-backup-2026-10-10.wabackup", "watch-audio-backup-2026-10-10-diff.wabackup"), old.exportRequests)
+        assertEquals(Strings.backedUpDiff(days = 1, chunks = 1, audioFiles = 1), vm.state.value.createMessage)
+        assertEquals("backup_created kind=diff days=1 chunks=1 audio_files=1 missing_audio=0", old.diagnosticsLines.last())
+        assertEquals(1, vm.state.value.preview!!.saved.diffsSinceFull)
+
+        // Restore, diff first: one flow takes either kind.
+        val restoring = viewModel(new)
+        for (file in listOf(diff, full)) {
+            new.backupToOpen = file
+            restoring.setRestorePassphrase(PASS)
+            restoring.restore()
+            runCurrent()
+        }
+        assertEquals(listOf("おはようございます", "会議の資料を送ります"), new.store.read { segmentsBetween(Long.MIN_VALUE, Long.MAX_VALUE) }.map { it.text })
+        assertTrue(new.diagnosticsLines.first().endsWith("kind=diff"), new.diagnosticsLines.first())
+        assertTrue(listOf("a", "b").all { new.store.read { chunk(it) }!!.hasAudioFile })
+    }
+
+    @Test
+    fun theUserCanStillPickAFullBackup() = runVmTest {
+        addChunk(old, "a", window.start + 9 * 3_600_000L, "おはようございます")
+        val vm = viewModel(old)
+        runCurrent()
+        create(vm, old)
+        addChunk(old, "b", window.start + 10 * 3_600_000L, "会議の資料を送ります")
+        vm.setKind(BackupKind.FULL)
+        runCurrent()
+        assertEquals(BackupKind.FULL, vm.state.value.kind)
+        create(vm, old)
+        assertEquals("watch-audio-backup-2026-10-10.wabackup", old.exportRequests.last())
+        assertEquals(Strings.backedUp(days = 1, chunks = 2, audioFiles = 0), vm.state.value.createMessage)
+    }
+
+    @Test
+    fun nothingChangedSinceTheLastBackupSaysSo() = runVmTest {
+        addChunk(old, "a", window.start + 9 * 3_600_000L, "おはようございます")
+        val vm = viewModel(old)
+        runCurrent()
+        create(vm, old)
+        vm.setPassphrase(PASS)
+        vm.setConfirmation(PASS)
+        vm.create()
+        runCurrent()
+        assertEquals(Strings.BACKUP_NOTHING_CHANGED, vm.state.value.createMessage)
+        assertEquals(1, old.exportRequests.size)
+    }
+
+    @Test
+    fun aDeletionMakesTheNextBackupFull() = runVmTest {
+        addChunk(old, "a", window.start + 9 * 3_600_000L, "おはようございます")
+        addChunk(old, "b", window.start + 10 * 3_600_000L, "会議の資料を送ります")
+        val vm = viewModel(old)
+        runCurrent()
+        create(vm, old)
+        assertTrue(vm.state.value.diffPossible)
+        old.store.transaction { deleteChunks(listOf("b")) }
+        runCurrent()
+        assertFalse(vm.state.value.diffPossible)
+        assertTrue(vm.state.value.preview!!.saved.deletedSinceFull)
+        assertEquals(BackupKind.FULL, vm.state.value.kind)
     }
 
     private companion object {

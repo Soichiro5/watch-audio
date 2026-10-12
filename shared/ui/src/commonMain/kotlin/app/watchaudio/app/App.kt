@@ -217,6 +217,7 @@ private fun MainTabs(
                         onPassphrase = backupViewModel::setPassphrase,
                         onConfirmation = backupViewModel::setConfirmation,
                         onIncludeAudio = backupViewModel::setIncludeAudio,
+                        onKind = backupViewModel::setKind,
                         onCreate = backupViewModel::create,
                         onRestorePassphrase = backupViewModel::setRestorePassphrase,
                         onRestore = backupViewModel::restore,

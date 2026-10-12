@@ -30,6 +30,7 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import app.watchaudio.app.state.NowProvider
 import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.db.NewSegment
 import app.watchaudio.core.pipeline.ModelState
 import app.watchaudio.core.pipeline.PauseReason
 import app.watchaudio.core.pipeline.ProcessingStatus
@@ -47,6 +48,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.io.Buffer
 
 /**
  * Renders the whole app headlessly over a seeded database and walks through the three tabs.
@@ -368,6 +370,46 @@ class AppUiTest {
         onNode(hasText("すでにこの端末にあった", substring = true)).performScrollTo()
         assertNoEnglish()
         screenshot("restore-done")
+    }
+
+    /**
+     * #164: once a full backup was saved, the card says when and offers a diff of what changed
+     * since, with its size; the diff is saved like any backup.
+     */
+    @Test
+    fun backupCardOffersADiffAfterAFullBackup() = runDesktopComposeUiTest(width = 412, height = 915) {
+        runBlocking {
+            DemoData.seed(store, day, tokyo, until = now - 20 * 60_000L)
+            store.updateSettings { it.copy(onboardingCompleted = true) }
+            // A full backup saved an hour ago; since then one more chunk was transcribed.
+            val writer = services.backupWriter
+            val plan = writer.plan(includeAudio = false, timeZone = tokyo, now = now - 3_600_000L)!!
+            writer.recordSaved(plan, writer.write(plan, "とけいの記録 2026 秋", Buffer()))
+            val pending = store.read { pendingChunks(1, 3) }.first()
+            store.transaction {
+                markTranscribing(pending.id)
+                saveTranscript(pending.id, listOf(NewSegment(pending.startedAt + 1_000, pending.startedAt + 3_000, "あとで届いた発話", "ja")), "demo")
+            }
+        }
+        showApp(services)
+        waitForText(Strings.TAB_STATUS)
+        onNodeWithText(Strings.TAB_STATUS).performClick()
+        waitForText(Strings.lastBackupFull("2026年10月10日(土) 14:40"))
+        onNode(hasSetTextAction() and hasText(Strings.BACKUP_PASSPHRASE)).performScrollTo().performTextInput("とけいの記録 2026 秋")
+        onNode(hasSetTextAction() and hasText(Strings.BACKUP_PASSPHRASE_CONFIRM)).performScrollTo().performTextInput("とけいの記録 2026 秋")
+        waitForText("前回のバックアップの後に増えた・変わった記録だけ（チャンク 1件", substring = true)
+        onNodeWithText(Strings.BACKUP_DIFF_KEEP_FILES).performScrollTo()
+        onNodeWithText(Strings.BACKUP_KIND_DIFF).performScrollTo()
+        assertNoEnglish()
+        screenshot("backup-diff")
+
+        onNodeWithText(Strings.BACKUP_CREATE_BUTTON).performScrollTo().performClick()
+        waitForText(Strings.backedUpDiff(days = 1, chunks = 1, audioFiles = 0))
+        assertEquals("watch-audio-backup-2026-10-10-diff.wabackup", services.savedExports.single().first)
+        waitForText(Strings.lastBackupDiff("2026年10月10日(土) 15:40", "2026年10月10日(土)", 1))
+        onNode(hasText(Strings.backedUpDiff(days = 1, chunks = 1, audioFiles = 0))).performScrollTo()
+        assertNoEnglish()
+        screenshot("backup-diff-done")
     }
 
     /**
