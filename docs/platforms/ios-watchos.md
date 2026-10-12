@@ -175,7 +175,7 @@ Android と同じ共通の `DiagnosticsLog`（`shared/pipeline`、形式・上�
 
 ### 7.3 データの書き出し（#155）
 
-状態タブの「データの書き出し」→「書き出す」（ZIP の中身は共通コード、[phone-ui.md §1.9](phone-ui.md#19-データの書き出し155)）。`IosAppServices.saveExport()` が一時ディレクトリ（`tmp/data-export/`、前回分は削除）に ZIP を書き、`UIActivityViewController`（共有シート）を最前面の画面から表示する。保存先（「ファイルに保存」・AirDrop など）はユーザーが選ぶ。`saveExport()` はシートが閉じるまで待ち、`completionWithItemsHandler` の `completed`（選んだ保存先が完了したか）を返す。閉じたら（保存・送信・キャンセルのどれでも）一時ファイルを消す。保存先を選ばずに閉じたらキャンセルの扱いで、書き出しの結果は出さず、暗号化バックアップでは音声を「バックアップ済み」と記録しない（#156）。書き込みに失敗したら一時ファイルを消す。Swift 側の変更はない。
+状態タブの「データの書き出し」→「書き出す」（ZIP の中身は共通コード、[phone-ui.md §1.9](phone-ui.md#19-データの書き出し155)）。`IosAppServices.saveExport()` が一時ディレクトリ（`tmp/data-export/`、前回分は削除）に ZIP を書き、`UIActivityViewController`（共有シート）を最前面の画面から表示する。保存先（「ファイルに保存」・AirDrop など）はユーザーが選ぶ。`saveExport()` はシートが閉じるまで待ち、`completionWithItemsHandler` の `completed`（選んだ保存先が完了したか）を返す。閉じたら（保存・送信・キャンセルのどれでも）一時ファイルを消す。ファイルを残さずに成功を返す宛先（コピー・プリント・連絡先に割り当て・リーディングリスト）は `excludedActivityTypes` でシートから外す。保存先を選ばずに閉じたらキャンセルの扱いで、書き出しの結果は出さず、暗号化バックアップでは音声を「バックアップ済み」と記録しない（#156）。書き込みに失敗したら一時ファイルを消す。Swift 側の変更はない。
 
 ### 7.4 暗号化バックアップ（#40）
 

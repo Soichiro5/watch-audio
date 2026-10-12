@@ -33,6 +33,10 @@ import platform.Foundation.NSFileManager
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSURL
 import platform.darwin.NSObject
+import platform.UIKit.UIActivityTypeAddToReadingList
+import platform.UIKit.UIActivityTypeAssignToContact
+import platform.UIKit.UIActivityTypeCopyToPasteboard
+import platform.UIKit.UIActivityTypePrint
 import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIApplication
 import platform.UIKit.UIApplicationOpenSettingsURLString
@@ -136,6 +140,14 @@ class IosAppServices internal constructor(
                 val sheet = UIActivityViewController(activityItems = listOf(NSURL.fileURLWithPath(target.toString())), applicationActivities = null)
                 // Required on iPad, where the sheet is a popover.
                 sheet.popoverPresentationController?.sourceView = presenter.view
+                // Destinations that report success without keeping the file: a backup handed to one
+                // of them would count as holding its audio (#156) although nothing was saved.
+                sheet.excludedActivityTypes = listOf(
+                    UIActivityTypeCopyToPasteboard,
+                    UIActivityTypePrint,
+                    UIActivityTypeAssignToContact,
+                    UIActivityTypeAddToReadingList,
+                )
                 // The destination has its copy once the sheet closes (saved, sent or cancelled).
                 sheet.completionWithItemsHandler = { _, completed, _, _ ->
                     SystemFileSystem.delete(target, mustExist = false)
