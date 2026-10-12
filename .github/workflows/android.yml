@@ -37,6 +37,9 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -62,6 +65,20 @@ jobs:
           java-version: 21
 
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      # TEMPORARY (#173): the release is not published yet; use the libraries of sherpa-onnx-android.yml
+      # run 38260459573 (same SHA-256 as the pins). Reverted before review.
+      - name: "TEMPORARY: sherpa-onnx JNI from the workflow artifact"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/sherpa-jni"
+          for abi in arm64-v8a x86_64; do
+            gh run download 38260459573 --repo "$GITHUB_REPOSITORY" --name "sherpa-onnx-jni-$abi" --dir "$RUNNER_TEMP/sherpa-jni-$abi"
+            cp "$RUNNER_TEMP/sherpa-jni-$abi/libsherpa-onnx-jni-$abi.so" "$RUNNER_TEMP/sherpa-jni/"
+          done
+          sha256sum "$RUNNER_TEMP"/sherpa-jni/*.so
+          mkdir -p ~/.gradle && echo "watchaudio.sherpaOnnxJniDir=$RUNNER_TEMP/sherpa-jni" >> ~/.gradle/gradle.properties
 
       - name: "Unit tests (shared: JVM + Android host; phone and Wear OS app JVM tests)"
         run: ./gradlew jvmTest testAndroidHostTest :apps:android:testDebugUnitTest :apps:wear:testDebugUnitTest
