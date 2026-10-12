@@ -1,5 +1,6 @@
 package app.watchaudio.app
 
+import app.watchaudio.app.licenses.NoticeApp
 import app.watchaudio.core.backup.BackupRestorer
 import app.watchaudio.core.backup.BackupWriter
 import app.watchaudio.core.db.LocalStore
@@ -33,6 +34,7 @@ class FakeAppServices(
     // Few PBKDF2 rounds keep the tests fast; the format records the count.
     override val backupWriter: BackupWriter = BackupWriter(store, Path(audioRoot), iterations = 1_000),
     override val backupRestorer: BackupRestorer = BackupRestorer(store, Path(audioRoot)),
+    override val noticeApps: Set<NoticeApp> = NoticeApp.entries.toSet(),
 ) : AppServices {
     val mutableStatus = MutableStateFlow(initialStatus)
     override val status: StateFlow<ProcessingStatus> = mutableStatus.asStateFlow()

@@ -5,7 +5,8 @@ Static checks (repository files only, no build needed):
   * Android manifests: permissions against the allow-list, allowBackup="false", backup and
     data extraction rules excluding every domain, no cleartext / custom network config.
   * App sources (.kt/.java/.swift): network APIs, Wear DataClient and weak file protection only
-    in allow-listed files; URL literals only with allow-listed prefixes.
+    in allow-listed files; URL literals only with allow-listed prefixes or in display-only files
+    (license notices shown as text).
   * Gradle files: no analytics, crash reporting or network client dependencies.
   * iOS project.yml / committed plists: Info.plist keys, background modes, entitlements and the
     privacy manifests (one per app / extension target, no tracking, no collected data, reasons
@@ -253,6 +254,7 @@ def check_sources(root: Path, report: Report) -> None:
     apis = [(api_id, re.compile(pattern, re.MULTILINE), what) for api_id, pattern, what in policy.GUARDED_APIS]
     used_apis: set[tuple[str, str]] = set()
     used_prefixes: set[str] = set()
+    display_only_files: set[str] = set()
     for path in _source_files(root):
         rel = _rel(root, path)
         code = strip_comments(path.read_text(encoding="utf-8", errors="replace"))
@@ -267,6 +269,10 @@ def check_sources(root: Path, report: Report) -> None:
                     report.add("network", rel, line,
                                f"{match.group(0).strip()} ({what}) is only allowed in files listed in "
                                "policy.ALLOWED_API_USES")
+        if rel in policy.DISPLAY_ONLY_URL_FILES:
+            if URL_PATTERN.search(code):
+                display_only_files.add(rel)
+            continue
         for match in URL_PATTERN.finditer(code):
             url = match.group(0)
             prefixes = [prefix for prefix in policy.ALLOWED_URL_PREFIXES if url.startswith(prefix)]
@@ -284,6 +290,10 @@ def check_sources(root: Path, report: Report) -> None:
         if prefix not in used_prefixes:
             report.add("network", "tools/privacy-check/policy.py", 0,
                        f"stale allow-list entry: no URL starts with {prefix} (remove it from ALLOWED_URL_PREFIXES)")
+    for rel in policy.DISPLAY_ONLY_URL_FILES:
+        if rel not in display_only_files:
+            report.add("network", "tools/privacy-check/policy.py", 0,
+                       f"stale allow-list entry: {rel} has no URL (remove it from DISPLAY_ONLY_URL_FILES)")
 
 
 # ---------------------------------------------------------------------------------------------

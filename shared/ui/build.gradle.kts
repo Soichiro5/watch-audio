@@ -25,6 +25,8 @@ kotlin {
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.ui)
+            // System back closes in-app screens such as the licenses (#167); already pulled in by compose.ui.
+            implementation(libs.compose.ui.backhandler)
             implementation(libs.compose.material3)
             implementation(libs.compose.lifecycle.viewmodel)
             implementation(libs.kotlinx.datetime)

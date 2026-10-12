@@ -1,5 +1,7 @@
 package app.watchaudio.app
 
+import app.watchaudio.app.licenses.NoticeApp
+import app.watchaudio.app.licenses.OpenSourceNotices
 import app.watchaudio.core.backup.BackupRestorer
 import app.watchaudio.core.backup.BackupWriter
 import app.watchaudio.core.db.LocalStore
@@ -55,6 +57,12 @@ interface AppServices {
      * for Wi-Fi). Only meaningful while `AppSettings.transcribeEnglish` is on.
      */
     fun downloadEnglishModel(allowMetered: Boolean) {}
+
+    /**
+     * This phone app and its watch app: the licenses screen (#167) lists the third-party components
+     * they ship or download ([OpenSourceNotices.forApps]). Defaults to every app.
+     */
+    val noticeApps: Set<NoticeApp> get() = NoticeApp.entries.toSet()
 
     /** How the platform obtains its speech model (decides what the onboarding offers). */
     val modelSetup: ModelSetup get() = ModelSetup.DOWNLOAD
