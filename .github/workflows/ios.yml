@@ -293,6 +293,20 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # TEMPORARY (#170 probe): SpeechTranscriber on the macOS host with ja/en speech.
+  speech-probe:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: .github/scripts/make-mixed-speech.sh build/mixed-speech
+      - run: |
+          xcodebuild -version
+          mkdir -p build
+          swiftc -parse-as-library -O apps/ios/App/SpeechTranscription.swift .github/scripts/speech-probe/main.swift -o build/speech-probe
+          build/speech-probe build/mixed-speech 2>&1 | tee speech-probe.txt
+          { echo '```'; cat speech-probe.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
   # #78: the Release configuration (what a TestFlight build ships, #35) built for devices without
   # signing: the iOS app with the embedded watchOS app, and the watchOS app on its own. A separate
   # job so it runs in parallel with the simulator checks in `build`.

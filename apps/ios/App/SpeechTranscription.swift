@@ -8,11 +8,13 @@ import Speech
 /// can run it directly. The model is managed by the OS (AssetInventory); audio never leaves the
 /// device. `SpeechAnalyzerTranscriber` adapts it to the shared pipeline.
 enum SpeechTranscription {
-    /// One final result, times in ms from the start of the transcribed audio.
+    /// One final result, times in ms from the start of the transcribed audio, with the model's
+    /// confidence in it (0...1, the mean over its words weighted by length; nil if not reported).
     struct Segment: Sendable, Equatable {
         let startMs: Int64
         let endMs: Int64
         let text: String
+        var confidence: Double? = nil
     }
 
     /// `[fromMs, toMs)` of an audio file, in ms from its start.
@@ -49,7 +51,7 @@ enum SpeechTranscription {
             locale: locale,
             transcriptionOptions: [],
             reportingOptions: [],
-            attributeOptions: [.audioTimeRange]
+            attributeOptions: [.audioTimeRange, .transcriptionConfidence]
         )
         let installed = await SpeechTranscriber.installedLocales
         if !installed.contains(where: { $0.identifier == locale.identifier }) {
@@ -158,7 +160,8 @@ enum SpeechTranscription {
                 segments.append(Segment(
                     startMs: SpeechTranscription.milliseconds(result.range.start),
                     endMs: SpeechTranscription.milliseconds(CMTimeRangeGetEnd(result.range)),
-                    text: text
+                    text: text,
+                    confidence: SpeechTranscription.confidence(of: result.text)
                 ))
             }
             return segments
@@ -180,6 +183,27 @@ enum SpeechTranscription {
             collector.cancel()
             Task { await analyzer.cancelAndFinishNow() }
         }
+    }
+
+    /// Mean word confidence of a result, weighted by the length of each run; nil if none is given.
+    static func confidence(of text: AttributedString) -> Double? {
+        var weighted = 0.0
+        var weight = 0.0
+        for run in text.runs {
+            guard let confidence = run.transcriptionConfidence else { continue }
+            let length = Double(text[run.range].characters.count)
+            weighted += confidence * length
+            weight += length
+        }
+        return weight > 0 ? weighted / weight : nil
+    }
+
+    /// Gives up this app's reservation of the locale's model, so the OS may remove it (the
+    /// English model when 「英語も文字起こしする」 is turned off, #170). True if it was reserved.
+    @discardableResult
+    static func releaseModel(locale requested: Locale) async -> Bool {
+        let locale = await SpeechTranscriber.supportedLocale(equivalentTo: requested) ?? requested
+        return await AssetInventory.release(reservedLocale: locale)
     }
 
     static func milliseconds(_ time: CMTime) -> Int64 {

@@ -88,6 +88,8 @@ final class SpeechTranscriptionTests: XCTestCase {
 
         report.log("SpeechTranscriber.isAvailable: \(SpeechTranscriber.isAvailable)")
         report.log("speech recognition authorization: \(Self.authorizationDescription)")
+        let dictation = await DictationTranscriber.supportedLocales
+        report.log("DictationTranscriber supported locales: \(dictation.count), ja/en: \(dictation.map(\.identifier).filter { $0.hasPrefix("ja") || $0 == "en_US" })")
         guard SpeechTranscriber.isAvailable else {
             throw report.skip("SpeechTranscriber.isAvailable is false on this simulator")
         }
