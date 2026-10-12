@@ -7,7 +7,9 @@ Static checks (repository files only, no build needed):
   * App sources (.kt/.java/.swift): network APIs, Wear DataClient and weak file protection only
     in allow-listed files; URL literals only with allow-listed prefixes.
   * Gradle files: no analytics, crash reporting or network client dependencies.
-  * iOS project.yml / committed plists: Info.plist keys, background modes and entitlements.
+  * iOS project.yml / committed plists: Info.plist keys, background modes, entitlements and the
+    privacy manifests (one per app / extension target, no tracking, no collected data, reasons
+    from the allow-list).
 
 Build outputs (optional, after `assembleDebug` / `dependencies`):
   --merged-manifest APP=PATH   merged AndroidManifest.xml (library permissions included)
@@ -451,6 +453,48 @@ def _check_entitlements(keys, where: str, rel: str, report: Report) -> None:
             report.add("ios", rel, 0, f"entitlement {key} ({where}) is not in policy.IOS_ENTITLEMENTS")
 
 
+def _check_privacy_manifest_source(target: str, spec: dict, ios_dir: Path, rel: str, report: Report) -> None:
+    """An app / extension target must copy exactly one existing privacy manifest as a resource."""
+    if spec.get("type") not in policy.IOS_PRIVACY_TARGET_TYPES:
+        return
+    entries = [s for s in spec.get("sources") or [] if isinstance(s, dict)
+               and str(s.get("path", "")).endswith(policy.IOS_PRIVACY_MANIFEST_NAME)]
+    if len(entries) != 1:
+        report.add("ios", rel, 0, f"target {target} must list one {policy.IOS_PRIVACY_MANIFEST_NAME} in sources")
+        return
+    entry = entries[0]
+    if entry.get("buildPhase") != "resources":
+        report.add("ios", rel, 0, f"{entry['path']} of {target} must use buildPhase: resources")
+    if not (ios_dir / entry["path"]).is_file():
+        report.add("ios", rel, 0, f"{entry['path']} of {target} does not exist")
+
+
+def _check_privacy_manifest(path: Path, rel: str, report: Report) -> None:
+    try:
+        data = plistlib.loads(path.read_bytes())
+    except Exception as e:  # noqa: BLE001 - any parse error is a violation
+        report.add("ios", rel, 0, f"cannot parse: {e}")
+        return
+    if data.get("NSPrivacyTracking") is not False:
+        report.add("ios", rel, 0, "NSPrivacyTracking must be false")
+    if data.get("NSPrivacyTrackingDomains"):
+        report.add("ios", rel, 0, "NSPrivacyTrackingDomains must be empty")
+    if data.get("NSPrivacyCollectedDataTypes"):
+        report.add("ios", rel, 0, "NSPrivacyCollectedDataTypes must be empty: no data leaves the device")
+    for entry in data.get("NSPrivacyAccessedAPITypes") or []:
+        category = entry.get("NSPrivacyAccessedAPIType")
+        allowed = policy.IOS_REQUIRED_REASONS.get(category)
+        if allowed is None:
+            report.add("ios", rel, 0, f"API category {category} is not in policy.IOS_REQUIRED_REASONS")
+            continue
+        reasons = entry.get("NSPrivacyAccessedAPITypeReasons") or []
+        if not reasons:
+            report.add("ios", rel, 0, f"{category} declares no reason")
+        for reason in reasons:
+            if reason not in allowed:
+                report.add("ios", rel, 0, f"reason {reason} for {category} is not in policy.IOS_REQUIRED_REASONS")
+
+
 def check_ios(root: Path, report: Report) -> None:
     project_path = root / policy.IOS_PROJECT
     if project_path.is_file():
@@ -467,6 +511,7 @@ def check_ios(root: Path, report: Report) -> None:
             spec = spec or {}
             info = (spec.get("info") or {}).get("properties") or {}
             _check_info_keys(target, info, rel, report)
+            _check_privacy_manifest_source(target, spec, project_path.parent, rel, report)
             entitlements = spec.get("entitlements") or {}
             if entitlements:
                 properties = entitlements.get("properties") or {}
@@ -484,6 +529,8 @@ def check_ios(root: Path, report: Report) -> None:
                     report.add("ios", rel, 0, f"cannot parse: {e}")
                     continue
                 _check_entitlements(keys, filename, rel, report)
+            elif filename.endswith(".xcprivacy"):
+                _check_privacy_manifest(path, rel, report)
 
 
 # ---------------------------------------------------------------------------------------------

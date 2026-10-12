@@ -93,7 +93,7 @@ class IosAppServices internal constructor(
      */
     override suspend fun exportDiagnostics(): Boolean {
         val target = withContext(IoDispatcher) {
-            val dir = Path(NSTemporaryDirectory(), "diagnostics-export")
+            val dir = Path(NSTemporaryDirectory(), IosAppGraph.DIAGNOSTICS_EXPORT_DIR)
             SystemFileSystem.createDirectories(dir)
             SystemFileSystem.list(dir).forEach { SystemFileSystem.delete(it, mustExist = false) }
             val stamp = Clock.System.now().toString().substringBefore('.').removeSuffix("Z").replace(":", "")

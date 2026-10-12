@@ -155,7 +155,7 @@ class AndroidAppServices(
      */
     override suspend fun exportDiagnostics(): Boolean {
         val file = withContext(Dispatchers.IO) {
-            val dir = File(context.cacheDir, DIAGNOSTICS_EXPORT_DIR).apply {
+            val dir = File(context.cacheDir, AppGraph.DIAGNOSTICS_EXPORT_DIR).apply {
                 deleteRecursively()
                 mkdirs()
             }
@@ -285,8 +285,7 @@ class AndroidAppServices(
 
         private const val TAG = "AndroidAppServices"
 
-        /** Must match `res/xml/diagnostics_paths.xml` and the provider in the manifest. */
-        private const val DIAGNOSTICS_EXPORT_DIR = "diagnostics-export"
-        private const val DIAGNOSTICS_AUTHORITY_SUFFIX = ".diagnostics"
+        /** Must match the diagnostics FileProvider in the manifest. */
+        const val DIAGNOSTICS_AUTHORITY_SUFFIX = ".diagnostics"
     }
 }

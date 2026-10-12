@@ -24,7 +24,14 @@ targets:
   iosApp:
     type: application
     platform: iOS
-    sources: [App, SharedSwift]
+    sources:
+      - App
+      - SharedSwift
+      # Privacy manifests (#159): one per bundle, copied to the bundle root. Kept outside the
+      # source folders so each target lists exactly its own; the declared reasons are justified in
+      # docs/legal/store-data-declarations.md §2.3.
+      - path: Privacy/App/PrivacyInfo.xcprivacy
+        buildPhase: resources
     settings:
       base:
         PRODUCT_NAME: WatchAudio
@@ -40,7 +47,6 @@ targets:
         CFBundleDisplayName: watch-audio
         UILaunchScreen: {}
         CADisableMinimumFrameDurationOnPhone: true
-        NSMicrophoneUsageDescription: Apple Watch で会話を録音し、iPhone 上で文字起こしするために使用します。
         NSSpeechRecognitionUsageDescription: 録音した会話を iPhone 上（オンデバイス）で文字起こしするために使用します。音声が端末の外に送られることはありません。
         # Transcription of received chunks while charging (BGProcessingTask, see IosAppGraph.kt).
         UIBackgroundModes: [processing]
@@ -63,7 +69,11 @@ targets:
   WatchApp:
     type: application
     platform: watchOS
-    sources: [Watch, SharedSwift]
+    sources:
+      - Watch
+      - SharedSwift
+      - path: Privacy/Watch/PrivacyInfo.xcprivacy
+        buildPhase: resources
     settings:
       base:
         PRODUCT_NAME: WatchAudio
@@ -102,6 +112,8 @@ targets:
       - path: Watch/Complication/RecorderStatus.swift
       - path: Watch/Complication/ComplicationViews.swift
       - path: SharedSwift/ChunkProtocol.swift
+      - path: Privacy/WatchWidget/PrivacyInfo.xcprivacy
+        buildPhase: resources
     settings:
       base:
         PRODUCT_NAME: WatchAudioWidget

@@ -265,7 +265,7 @@ CLAUDE.md の「Local only」（録音・文字起こし・ユーザーデータ
 | 通信・保護 | `apps/android/src`・`apps/wear/src`・`shared`・`apps/ios` の `.kt` / `.java` / `.swift`（コメントと、出荷されないテストコード = `test` や `Test` を含むディレクトリは除外） | 許可されていないファイルでの `HttpURLConnection`・`URLSession`・ソケット・WebView・`SFSpeech…RecognitionRequest`、`DataClient` / `PutDataRequest`、`.noFileProtection`、許可されていない URL、使われなくなった許可リストの項目 |
 | 依存（宣言） | `gradle/libs.versions.toml` と `*.gradle.kts`（`research/` を除く） | firebase・crashlytics・sentry・amplitude などの解析・クラッシュ送信 SDK、okhttp・retrofit・ktor などの HTTP クライアント |
 | 依存（解決結果） | リリースの実行時クラスパス | 許可リスト（AndroidX、Kotlin、Compose、play-services-wearable、sherpa-onnx など）にないモジュール |
-| iOS | `apps/ios/project.yml`、コミットされた `*.entitlements` | 許可リストにない Info.plist のキー（`NSAppTransportSecurity`、位置情報など）、`UIBackgroundModes`、entitlements |
+| iOS | `apps/ios/project.yml`、コミットされた `*.entitlements`・`*.xcprivacy` | 許可リストにない Info.plist のキー（`NSAppTransportSecurity`、位置情報など）、`UIBackgroundModes`、entitlements。アプリ・拡張のターゲットに `PrivacyInfo.xcprivacy`（`buildPhase: resources`）がないこと、マニフェストの追跡・追跡ドメイン・収集データ、許可リストにない理由コード（#159） |
 
 手元での実行:
 
@@ -281,7 +281,7 @@ python3 tools/privacy-check/check.py --resolved-deps apps/wear=/tmp/deps-wear.tx
 
 **許可リストを広げるとき**（新しい権限・依存・通信先が本当に必要な場合）:
 
-1. `tools/privacy-check/policy.py` の該当する表に、理由を添えて追加する（権限は `ANDROID_APPS`、ライブラリが足す権限は `library_permissions`、通信するファイルは `ALLOWED_API_USES`、URL は `ALLOWED_URL_PREFIXES`、依存は `ALLOWED_RESOLVED_DEPENDENCIES`、iOS は `IOS_TARGETS` / `IOS_ENTITLEMENTS`）。拒否パターン（`GUARDED_APIS`・`DENIED_DEPENDENCIES`）は緩めず、許可リスト側に足す。
+1. `tools/privacy-check/policy.py` の該当する表に、理由を添えて追加する（権限は `ANDROID_APPS`、ライブラリが足す権限は `library_permissions`、通信するファイルは `ALLOWED_API_USES`、URL は `ALLOWED_URL_PREFIXES`、依存は `ALLOWED_RESOLVED_DEPENDENCIES`、iOS は `IOS_TARGETS` / `IOS_ENTITLEMENTS` / `IOS_REQUIRED_REASONS`）。拒否パターン（`GUARDED_APIS`・`DENIED_DEPENDENCIES`）は緩めず、許可リスト側に足す。
 2. ユーザーデータが端末の外に出ないことを PR の本文で説明する。データを外に出す変更（AI プロバイダなど P2）は、CLAUDE.md の方針の変更として Issue で合意してから。
 3. [02 §7](../architecture/02-architecture.md#7-セキュリティプライバシー) の保存場所・通信箇所の一覧を更新し、`test_check.py` の期待値（通信箇所の集合など）も直す。
 

@@ -349,6 +349,20 @@ jobs:
             debug_input=$(grep -rlaq DebugAudioFileInput "$app" && echo present || echo absent)
             echo "RELEASE_BUILD_CHECK ${app#build/DerivedData/Build/Products/} id=$id archs=$(lipo -archs "$app/WatchAudio") size_kb=$(du -sk "$app" | cut -f1) debug_audio_input=$debug_input"
           done | tee release-checks.txt
+          # #159: every bundle carries its privacy manifest at its root, and the iPhone app asks for no microphone.
+          for bundle in "$IOS_APP" "$IOS_APP/Watch/WatchAudio.app" "$IOS_APP/Watch/WatchAudio.app/PlugIns/WatchAudioWidget.appex" "$WATCH_APP"; do
+            manifest="$bundle/PrivacyInfo.xcprivacy"
+            if plutil -lint -s "$manifest"; then
+              echo "PRIVACY_MANIFEST_CHECK ${bundle#build/DerivedData/Build/Products/} reasons=$(plutil -extract NSPrivacyAccessedAPITypes json -o - "$manifest" | tr -d ' \n')"
+            else
+              echo "PRIVACY_MANIFEST_CHECK ${bundle#build/DerivedData/Build/Products/} FAILED: no valid PrivacyInfo.xcprivacy"
+            fi
+          done | tee -a release-checks.txt
+          if /usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$IOS_APP/Info.plist" >/dev/null 2>&1; then
+            echo "IPHONE_MICROPHONE_CHECK FAILED: the iPhone app declares NSMicrophoneUsageDescription"
+          else
+            echo "IPHONE_MICROPHONE_CHECK ok: no NSMicrophoneUsageDescription in the iPhone app"
+          fi | tee -a release-checks.txt
           { echo "Release builds (device, unsigned):"; echo '```'; cat release-checks.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           ! grep -q "FAILED\|debug_audio_input=present" release-checks.txt
 
