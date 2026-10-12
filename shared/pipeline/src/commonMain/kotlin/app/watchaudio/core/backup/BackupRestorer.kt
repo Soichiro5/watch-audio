@@ -302,16 +302,20 @@ class BackupRestorer(
                         setChunkVersion(chunk.id, chunk.updatedAt)
                     }
                     if (inBackup.isNotEmpty()) markAudioBackedUp(inBackup, backupCreatedAt)
+                    val requeued = mutableSetOf<String>()
                     returnedIds.forEach { id ->
                         if (!markAudioRestored(id, backupCreatedAt)) return@forEach
                         returned++
                         // Added from a diff without its audio (it was in an earlier backup): transcribe it now.
                         val local = stored.getValue(id)
-                        if (local.state == ChunkState.FAILED && local.lastError == ERROR_AUDIO_NOT_RESTORED) requeueFailed(listOf(id))
+                        if (local.state == ChunkState.FAILED && local.lastError == ERROR_AUDIO_NOT_RESTORED && requeueFailed(listOf(id)) > 0) {
+                            requeued += id
+                        }
                     }
                     stored.values.forEach { local ->
                         present++
-                        marks += addMarks(local.id, marksByChunk[local.id].orEmpty())
+                        val marksAdded = addMarks(local.id, marksByChunk[local.id].orEmpty())
+                        marks += marksAdded
                         val backup = day.chunks.first { it.id == local.id }
                         val storedVersion = storedInfo[local.id]?.updatedAt
                         val backupVersion = extraById[local.id]?.updatedAt
@@ -323,8 +327,11 @@ class BackupRestorer(
                             segments += restored.size
                             if (!local.state.hasNoTranscript) updated++
                         }
-                        // Keep the version the record's transcript belongs to, whatever was added around it.
-                        setChunkVersion(local.id, if (takeTranscript) backupVersion else storedVersion)
+                        // The record has the version its transcript belongs to, whatever was added around it.
+                        when {
+                            takeTranscript -> setChunkVersion(local.id, backupVersion)
+                            marksAdded > 0 || local.id in requeued -> setChunkVersion(local.id, storedVersion)
+                        }
                     }
                 }
             } catch (e: Throwable) {

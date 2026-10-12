@@ -117,6 +117,9 @@ data class ExportProgress(val doneDays: Int, val totalDays: Int)
  * - for [ExportRequest.forBackup], `backup/<date>.json` after each day's JSON and `backup.json`
  *   after `export.json` (`core/backup/BackupFormat.kt`)
  *
+ * With an [ExportPlan.selection] (a diff backup, #164) only the selected days, chunks and audio
+ * files are written; each day's gaps are still those of the whole day.
+ *
  * Days are read one at a time and audio files are streamed, so memory does not grow with the
  * size of the export. The database is only locked while a day is read.
  */
