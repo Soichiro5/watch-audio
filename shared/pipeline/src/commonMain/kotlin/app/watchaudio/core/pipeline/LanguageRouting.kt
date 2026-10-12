@@ -39,6 +39,13 @@ data class LanguageRouting(
      * and Latin letters (the Japanese model writes English as katakana); above 1 never.
      */
     val minForeignScriptShare: Float = 0.8f,
+    /**
+     * Least confidence ([Recognition.confidence]) of the multilingual model's text for it to be
+     * kept, where the model states one. For a second model that cannot tell the language (iOS: an
+     * English-only SpeechTranscriber, [SegmentRouting]) this stands in for the language check:
+     * Japanese speech heard as English comes out as English words of low confidence. 0 keeps any.
+     */
+    val minConfidence: Float = 0f,
 ) {
     /**
      * The recognition to store for one span of [seconds]: [primary]'s, unless it is suspiciously
@@ -63,11 +70,12 @@ data class LanguageRouting(
     }
 
     /**
-     * True if [detected] is in one of [languages], has at least [minWords] words and is written
-     * (almost) only in Latin letters.
+     * True if [detected] is in one of [languages], is not less confident than [minConfidence], has
+     * at least [minWords] words and is written (almost) only in Latin letters.
      */
     fun keeps(detected: Recognition): Boolean {
         if (detected.lang !in languages) return false
+        if ((detected.confidence ?: 1f) < minConfidence) return false
         if (detected.text.split(' ').count { word -> word.any { it.isLetterOrDigit() } } < minWords) return false
         val letters = detected.text.filter { it.isLetter() }
         if (letters.isEmpty()) return false
@@ -82,7 +90,10 @@ data class LanguageRouting(
          * Engine id stored with segments transcribed by [primary] with [detector] routed in
          * ([Transcriber.engineId]); the segment's language says which model wrote it.
          */
-        fun engineId(primary: AsrModelSpec, detector: AsrModelSpec): String = "${primary.engineId}+${detector.engineId}"
+        fun engineId(primary: AsrModelSpec, detector: AsrModelSpec): String = engineId(primary.engineId, detector.engineId)
+
+        /** Engine id of segments transcribed by the [primary] engine with the [detector] engine routed in. */
+        fun engineId(primary: String, detector: String): String = "$primary+$detector"
     }
 }
 
