@@ -19,6 +19,7 @@ import androidx.wear.compose.material3.MaterialTheme
 import app.watchaudio.wear.outbox.UploadScheduler
 import app.watchaudio.wear.recording.RecorderStore
 import app.watchaudio.wear.recording.RecordingService
+import app.watchaudio.wear.ui.BodySensorRationaleScreen
 import app.watchaudio.wear.ui.RecorderScreen
 
 /**
@@ -30,20 +31,34 @@ class MainActivity : ComponentActivity() {
     private var armed by mutableStateOf(false)
     private var uploadEnabled by mutableStateOf(true)
 
-    private var askedOptional = false
+    /** The body sensor explanation is on screen instead of the recorder (#161). */
+    private var explainingBodySensors by mutableStateOf(false)
+    private var offBodyDetectionOff by mutableStateOf(false)
+    private var notificationsAsked = false
 
     /** Label of the debug-only audio file input screen; null in release builds (not declared there). */
     private val debugInputLabel: String? by lazy {
         packageManager.resolveActivity(debugInputIntent(), PackageManager.ResolveInfoFlags.of(0))?.loadLabel(packageManager)?.toString()
     }
 
-    private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+    private val microphoneLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         if (hasMicPermission()) {
             if (!RecorderStore.state.value.serviceRunning) startRecording()
+            continuePermissions()
         } else {
             Toast.makeText(this, R.string.mic_permission_needed, Toast.LENGTH_LONG).show()
         }
     }
+
+    private val bodySensorsLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        // The recorder started before the dialog, so its off-body sensor registration failed: retry it.
+        if (granted && RecorderStore.state.value.serviceRunning) RecordingService.refreshMonitors(this)
+        graph.log(if (granted) "body_sensors_granted" else "body_sensors_declined", "dialog")
+        refreshOffBodyNote()
+        continuePermissions()
+    }
+
+    private val notificationsLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,17 +68,22 @@ class MainActivity : ComponentActivity() {
             val state by RecorderStore.state.collectAsStateWithLifecycle()
             MaterialTheme {
                 AppScaffold {
-                    RecorderScreen(
-                        state = state,
-                        armed = armed,
-                        uploadEnabled = uploadEnabled,
-                        onStart = ::requestStart,
-                        onStop = ::stopRecording,
-                        onMark = { RecordingService.mark(this@MainActivity) },
-                        onUploadEnabledChange = ::changeUploadEnabled,
-                        debugInputLabel = debugInputLabel,
-                        onDebugInput = ::openDebugInput,
-                    )
+                    if (explainingBodySensors) {
+                        BodySensorRationaleScreen(onContinue = ::continueToBodySensors, onSkip = ::skipBodySensors)
+                    } else {
+                        RecorderScreen(
+                            state = state,
+                            armed = armed,
+                            uploadEnabled = uploadEnabled,
+                            onStart = ::requestStart,
+                            onStop = ::stopRecording,
+                            onMark = { RecordingService.mark(this@MainActivity) },
+                            onUploadEnabledChange = ::changeUploadEnabled,
+                            offBodyDetectionOff = offBodyDetectionOff,
+                            debugInputLabel = debugInputLabel,
+                            onDebugInput = ::openDebugInput,
+                        )
+                    }
                 }
             }
         }
@@ -77,6 +97,10 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refreshPrefs()
+        val offBodyWasOff = offBodyDetectionOff
+        refreshOffBodyNote()
+        // Body sensors allowed in the system settings meanwhile: register the off-body sensor now.
+        if (offBodyWasOff && !offBodyDetectionOff && RecorderStore.state.value.serviceRunning) RecordingService.refreshMonitors(this)
         graph.refreshPendingCount()
         // Armed but not running (process died, reboot): opening the app is the foreground start
         // Android 14+ requires, so resume right away.
@@ -90,17 +114,45 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestStart() {
-        if (hasMicPermission()) {
-            startRecording()
-            // Optional permissions are asked once in passing; recording works without them.
-            val optional = optionalPermissions().filter { !isGranted(it) }
-            if (optional.isNotEmpty() && !askedOptional) {
-                askedOptional = true
-                permissionLauncher.launch(optional.toTypedArray())
+        if (hasMicPermission()) startRecording()
+        continuePermissions()
+    }
+
+    /**
+     * Walks the start flow ([nextPermissionStep]): microphone, then the body sensor explanation
+     * right before its own system dialog (#161), then notifications. Recording never waits for the
+     * optional ones.
+     */
+    private fun continuePermissions() {
+        when (nextPermissionStep(permissionState())) {
+            PermissionStep.RequestMicrophone -> {
+                val missingNotifications = !isGranted(Manifest.permission.POST_NOTIFICATIONS) && !notificationsAsked
+                notificationsAsked = true
+                val permissions = listOf(Manifest.permission.RECORD_AUDIO) +
+                    listOfNotNull(Manifest.permission.POST_NOTIFICATIONS.takeIf { missingNotifications })
+                microphoneLauncher.launch(permissions.toTypedArray())
             }
-        } else {
-            permissionLauncher.launch((listOf(Manifest.permission.RECORD_AUDIO) + optionalPermissions()).toTypedArray())
+            PermissionStep.ExplainBodySensors -> explainingBodySensors = true
+            PermissionStep.RequestNotifications -> {
+                notificationsAsked = true
+                notificationsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            PermissionStep.Done -> Unit
         }
+    }
+
+    private fun continueToBodySensors() {
+        graph.prefs.bodySensorsAnswered = true
+        explainingBodySensors = false
+        bodySensorsLauncher.launch(Manifest.permission.BODY_SENSORS)
+    }
+
+    private fun skipBodySensors() {
+        graph.prefs.bodySensorsAnswered = true
+        explainingBodySensors = false
+        graph.log("body_sensors_declined", "explanation")
+        refreshOffBodyNote()
+        continuePermissions()
     }
 
     private fun startRecording() {
@@ -133,15 +185,26 @@ class MainActivity : ComponentActivity() {
     private fun isGranted(permission: String) =
         ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
 
-    /**
-     * Notifications (stop alerts) and, up to Wear OS 5, BODY_SENSORS for the off-body sensor. Newer
-     * releases replaced BODY_SENSORS with granular health permissions; off-body detection works
-     * without them (to be confirmed on devices, see docs/platforms/wearos.md).
-     */
-    private fun optionalPermissions() = buildList {
-        add(Manifest.permission.POST_NOTIFICATIONS)
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.VANILLA_ICE_CREAM) add(Manifest.permission.BODY_SENSORS)
+    private fun permissionState() = PermissionState(
+        microphone = hasMicPermission(),
+        notifications = isGranted(Manifest.permission.POST_NOTIFICATIONS),
+        bodySensorsDeclared = bodySensorsDeclared(),
+        bodySensors = bodySensorsDeclared() && isGranted(Manifest.permission.BODY_SENSORS),
+        bodySensorsAnswered = graph.prefs.bodySensorsAnswered,
+        notificationsAsked = notificationsAsked,
+    )
+
+    private fun refreshOffBodyNote() {
+        offBodyDetectionOff = offBodyDetectionDeclined(permissionState())
     }
+
+    /**
+     * `BODY_SENSORS` is declared only up to Wear OS 5 (`maxSdkVersion=35`), for the off-body sensor.
+     * Wear OS 6 (API 36) moved `BODY_SENSORS` to granular health permissions (`READ_HEART_RATE`, ...)
+     * that cover heart rate, SpO2 and skin temperature, not off-body detection; the app requests none
+     * there and registers the sensor without a permission (see docs/platforms/wearos.md §6).
+     */
+    private fun bodySensorsDeclared() = Build.VERSION.SDK_INT <= Build.VERSION_CODES.VANILLA_ICE_CREAM
 
     companion object {
         const val ACTION_RESUME = "app.watchaudio.wear.action.RESUME"

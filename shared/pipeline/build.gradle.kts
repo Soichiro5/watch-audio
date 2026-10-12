@@ -1,5 +1,7 @@
 plugins {
     id("watchaudio.kmp.sqlite-tests")
+    // The export format (core/export, #155) is JSON through kotlinx.serialization, as in shared/protocol.
+    alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {

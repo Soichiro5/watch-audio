@@ -134,7 +134,6 @@ IOS_TARGETS = {
             "CFBundleDisplayName": "app name",
             "UILaunchScreen": "launch screen",
             "CADisableMinimumFrameDurationOnPhone": "ProMotion",
-            "NSMicrophoneUsageDescription": "permission text (recording on the phone is not used yet)",
             "NSSpeechRecognitionUsageDescription": "on-device transcription permission",
             "UIBackgroundModes": "see background_modes",
             "BGTaskSchedulerPermittedIdentifiers": "transcription BGProcessingTask",
@@ -160,6 +159,29 @@ IOS_TARGETS = {
             "WatchAudioAppGroup": "App Group id to read the recorder state written by the app",
         },
         "background_modes": {},
+    },
+}
+
+# Privacy manifests (PrivacyInfo.xcprivacy, #159). Every application / app-extension target must
+# copy one into its bundle; tracking stays off and no data type is collected. Required-reason API
+# categories and the Apple reason codes a manifest may declare (code locations:
+# docs/legal/store-data-declarations.md §2.3).
+IOS_PRIVACY_MANIFEST_NAME = "PrivacyInfo.xcprivacy"
+IOS_PRIVACY_TARGET_TYPES = ("application", "app-extension")
+IOS_REQUIRED_REASONS = {
+    "NSPrivacyAccessedAPICategoryFileTimestamp": {
+        "C617.1": "size / metadata of files in the app or App Group container (SQLite, skiko, watch outbox)",
+    },
+    "NSPrivacyAccessedAPICategoryDiskSpace": {
+        "85F4.1": "free space shown on the iPhone status tab",
+        "E174.1": "the watch stops recording when storage is low",
+    },
+    "NSPrivacyAccessedAPICategorySystemBootTime": {
+        "35F9.1": "elapsed time within the app (Compose / skiko frame timing)",
+    },
+    "NSPrivacyAccessedAPICategoryUserDefaults": {
+        "CA92.1": "the app's own defaults (watch recorder state)",
+        "1C8F.1": "App Group defaults shared by the watch app and its complication",
     },
 }
 

@@ -46,12 +46,43 @@ WEAR_RULES = (f"<data-extraction-rules><cloud-backup>{ALL_DOMAINS}</cloud-backup
 MODEL_DOWNLOADER = "apps/android/src/main/kotlin/app/watchaudio/android/asr/ModelDownloader.kt"
 MODEL_MANIFEST = "apps/android/src/main/kotlin/app/watchaudio/android/asr/ModelManifest.kt"
 
+PRIVACY_MANIFEST = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
+"""
+
 PROJECT_YML = """\
 name: WatchAudio
 targets:
   iosApp:
     type: application
-    sources: [iosApp, Shared]
+    sources:
+      - iosApp
+      - Shared
+      # the privacy manifest is copied as a resource
+      - path: Privacy/App/PrivacyInfo.xcprivacy
+        buildPhase: resources
     info:
       path: apps/ios/Info.plist
       properties:
@@ -64,6 +95,9 @@ targets:
           ./gradlew build
   WatchApp:
     type: application
+    sources:
+      - path: Privacy/Watch/PrivacyInfo.xcprivacy
+        buildPhase: resources
     info:
       path: Watch/Info.plist
       properties:
@@ -123,6 +157,8 @@ class FixtureRepo:
             """)
         self.write("research/bench/build.gradle.kts", 'dependencies { implementation("com.squareup.okhttp3:okhttp:4") }\n')
         self.write("apps/ios/project.yml", PROJECT_YML)
+        self.write("apps/ios/Privacy/App/PrivacyInfo.xcprivacy", PRIVACY_MANIFEST)
+        self.write("apps/ios/Privacy/Watch/PrivacyInfo.xcprivacy", PRIVACY_MANIFEST)
 
     def write(self, rel: str, content: str) -> Path:
         path = self.root / rel
@@ -339,6 +375,43 @@ class IosTest(FixtureTestCase):
             """)
         self.assertViolation(self.repo.run(), "ios", "ubiquity-kvstore-identifier")
 
+    def test_app_target_without_privacy_manifest_fails(self):
+        self.repo.replace("apps/ios/project.yml", "    sources:\n      - path: Privacy/Watch/PrivacyInfo.xcprivacy\n"
+                          "        buildPhase: resources\n", "")
+        self.assertViolation(self.repo.run(), "ios", "target WatchApp must list one PrivacyInfo.xcprivacy")
+
+    def test_privacy_manifest_must_be_a_resource_that_exists(self):
+        self.repo.replace("apps/ios/project.yml", "Privacy/Watch/PrivacyInfo.xcprivacy\n        buildPhase: resources",
+                          "Privacy/Watch/PrivacyInfo.xcprivacy\n        buildPhase: sources")
+        self.assertViolation(self.repo.run(), "ios", "must use buildPhase: resources")
+        (self.repo.root / "apps/ios/Privacy/App/PrivacyInfo.xcprivacy").unlink()
+        self.assertViolation(self.repo.run(), "ios", "Privacy/App/PrivacyInfo.xcprivacy of iosApp does not exist")
+
+    def test_privacy_manifest_with_tracking_fails(self):
+        self.repo.replace("apps/ios/Privacy/App/PrivacyInfo.xcprivacy", "<key>NSPrivacyTracking</key>\n\t<false/>",
+                          "<key>NSPrivacyTracking</key>\n\t<true/>")
+        self.assertViolation(self.repo.run(), "ios", "NSPrivacyTracking must be false")
+
+    def test_privacy_manifest_with_collected_data_fails(self):
+        self.repo.replace("apps/ios/Privacy/App/PrivacyInfo.xcprivacy", "<key>NSPrivacyCollectedDataTypes</key>\n\t<array/>",
+                          "<key>NSPrivacyCollectedDataTypes</key>\n\t<array><dict><key>NSPrivacyCollectedDataType</key>"
+                          "<string>NSPrivacyCollectedDataTypeAudioData</string></dict></array>")
+        self.assertViolation(self.repo.run(), "ios", "NSPrivacyCollectedDataTypes must be empty")
+
+    def test_privacy_manifest_reason_outside_the_allow_list_fails(self):
+        self.repo.replace("apps/ios/Privacy/Watch/PrivacyInfo.xcprivacy", "<string>CA92.1</string>",
+                          "<string>AC6B.1</string>")
+        self.assertViolation(self.repo.run(), "ios", "reason AC6B.1 for NSPrivacyAccessedAPICategoryUserDefaults")
+        self.repo.replace("apps/ios/Privacy/Watch/PrivacyInfo.xcprivacy", "CategoryUserDefaults", "CategoryActiveKeyboards")
+        self.assertViolation(self.repo.run(), "ios", "NSPrivacyAccessedAPICategoryActiveKeyboards is not in policy")
+
+    def test_real_privacy_manifests_pass(self):
+        report = check.Report()
+        for path in sorted((REPO_ROOT / "apps/ios").rglob("*.xcprivacy")):
+            check._check_privacy_manifest(path, str(path), report)
+        self.assertEqual([], report.violations)
+        self.assertEqual(3, len(list((REPO_ROOT / "apps/ios").rglob("PrivacyInfo.xcprivacy"))))
+
 
 class ParserTest(unittest.TestCase):
     def test_strip_comments_keeps_strings_and_lines(self):
@@ -353,7 +426,8 @@ class ParserTest(unittest.TestCase):
     def test_simple_yaml(self):
         data = check.parse_simple_yaml(PROJECT_YML)
         ios = data["targets"]["iosApp"]
-        self.assertEqual(["iosApp", "Shared"], ios["sources"])
+        self.assertEqual(["iosApp", "Shared"], ios["sources"][:2])
+        self.assertEqual({"path": "Privacy/App/PrivacyInfo.xcprivacy", "buildPhase": "resources"}, ios["sources"][2])
         self.assertEqual({"CFBundleDisplayName": "watch-audio", "UIBackgroundModes": ["processing"]},
                          ios["info"]["properties"])
         self.assertEqual("Compile", ios["preBuildScripts"][0]["name"])

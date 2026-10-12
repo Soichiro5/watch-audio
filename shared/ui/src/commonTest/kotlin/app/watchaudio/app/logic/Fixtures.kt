@@ -5,6 +5,7 @@ import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.SegmentRecord
 import app.watchaudio.core.protocol.ChunkEndReason
 import app.watchaudio.core.protocol.SourcePlatform
+import app.watchaudio.core.timeline.dayWindow
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 

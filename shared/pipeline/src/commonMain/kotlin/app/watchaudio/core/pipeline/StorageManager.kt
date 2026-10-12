@@ -62,6 +62,8 @@ data class StorageBreakdown(
  *
  * Destructive calls ([deleteRange], [deleteAll], a shorter [setRetention]) do no confirming
  * themselves: the UI must ask the user first.
+ *
+ * @param diagnostics the phone's diagnostics log, which [deleteAll] clears as well (#159).
  */
 class StorageManager(
     private val store: LocalStore,
@@ -69,6 +71,7 @@ class StorageManager(
     private val environment: StorageEnvironment = StorageEnvironment.Unknown,
     private val clock: Clock = Clock.System,
     private val dispatcher: CoroutineDispatcher = IoDispatcher,
+    private val diagnostics: DiagnosticsLog? = null,
 ) {
     /** Serializes deletions within the process (background run vs. UI). */
     private val lock = Mutex()
@@ -146,12 +149,17 @@ class StorageManager(
 
     /**
      * Deletes every recording and transcript, including audio files no row refers to any more,
-     * and shrinks the database file. Settings are kept.
+     * shrinks the database file and clears the [diagnostics] log (it records when chunks arrived,
+     * i.e. when the user was recording; #159). Settings are kept, so the app does not start the
+     * onboarding again.
+     * @throws IOException if part of the diagnostics log is left, so the UI does not report success.
      */
-    suspend fun deleteAll() = lock.withLock {
+    suspend fun deleteAll(): Unit = lock.withLock {
         store.transaction { deleteAllChunks() }
         withContext(dispatcher) { sweepUnreferencedAudio(keep = store.read { audioPaths() }) }
         store.compact()
+        val cleared = withContext(dispatcher) { diagnostics?.clear() ?: true }
+        if (!cleared) throw IOException("diagnostics log not cleared")
     }
 
     /** @return false only if the file exists and could not be deleted. */

@@ -12,7 +12,7 @@ name: Emulator smoke test
 # shared/pipeline on Android (#14), on-device ASR with the real models and the wait without a model
 # (#22), the charging job and resuming after a force-stop (#20), the battery/thermal policy (#75),
 # the gap alert notification (#43) and the refused permission (#32); see .github/scripts/phone-scenarios.sh.
-# On the Wear OS emulator it shows the tile and the complication and taps the tile (#41):
+# On the Wear OS emulator it shows the BODY_SENSORS explanation and declines it (#161), shows the tile and the complication and taps the tile (#41):
 # .github/scripts/wear-surfaces.sh. Screenshots are uploaded as the screenshots-<name> artifact.
 on:
   push:

@@ -1,6 +1,10 @@
 package app.watchaudio.app.logic
 
 import app.watchaudio.core.protocol.ChunkEndReason
+import app.watchaudio.core.timeline.GapCause
+import app.watchaudio.core.timeline.TimelineSpan
+import app.watchaudio.core.timeline.buildDayTimeline
+import app.watchaudio.core.timeline.dayWindow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

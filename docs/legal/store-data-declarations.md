@@ -2,14 +2,14 @@
 
 > **下書きです。運営者と法律の専門家のレビュー前で、申請フォームの項目名・要件は申請時点の App Store Connect / Play Console の表示で確認し直す必要があります。**
 > プライバシーポリシー（[日本語](privacy-policy.ja.md) / [英語](privacy-policy.en.md)）と同じ内容になるように書いています。ポリシーと申告は必ず同時に更新してください（#36 の完了条件「ポリシー・ストアのデータ申告が『データは端末内のみ』と一致している」）。
-> 内容は 2026-10-12 時点の `main`（5681119）の実装に基づきます。根拠のコード箇所は末尾の「[レビュー用メモ: 主張と根拠](#5-レビュー用メモ-主張と根拠)」にまとめています。
+> 内容は 2026-10-12 時点の `main`（5681119）の実装に基づきます（プライバシーマニフェスト・iPhone のマイク・全削除の範囲・Google Play の確認は #159 で更新）。根拠のコード箇所は末尾の「[レビュー用メモ: 主張と根拠](#5-レビュー用メモ-主張と根拠)」にまとめています。
 
 ## 1. 申告の前提
 
 - アプリは録音・文字起こし・その他のユーザーデータを**端末の外へ送らない**。運営者のサーバーはない。解析・広告・クラッシュ送信の SDK はない。アカウントもない。
 - 端末外への通信は、Android スマホの文字起こしモデルのダウンロード（Hugging Face・GitHub の公開ファイル）と、iOS が行う音声認識モデルのダウンロード（OS 管理）だけ。ユーザーデータは送らない。
 - Watch → スマホの転送は、ユーザー自身の端末間の直接通信（Wear OS: 近くで直接つながったノードだけ、Apple: WatchConnectivity）。開発者には届かない。
-- ユーザーが自分で端末外に出せるのは、診断ログの書き出し（OS の共有シートで送り先をユーザーが選ぶ）だけ。データの書き出し（#155）・暗号化バックアップ（#40）・課金（#34）・AI 機能（P2）は未公開。公開時にこの文書とポリシーを更新する。
+- ユーザーが自分で端末外に出せるのは、診断ログの書き出し（OS の共有シートで送り先をユーザーが選ぶ）、データの書き出し（#155。文字起こし・マーク・ギャップと任意で音声を ZIP にして、Android は SAF の保存ダイアログ、iOS は共有シートでユーザーが選んだ保存先にだけ書く）と、暗号化バックアップ（#40。同じ保存先の選び方で、ユーザーのパスフレーズで暗号化したファイルを書く。復元はユーザーが選んだファイルを読むだけ）だけ。パスフレーズと鍵は端末の外に出さない。課金（#34）・AI 機能（P2）は未公開。公開時にこの文書とポリシーを更新する。
 
 ## 2. App Store
 
@@ -26,6 +26,9 @@
 
 - **Watch → iPhone の転送**: 同じユーザーの端末間で、OS の WatchConnectivity が行う。開発者に届かないので「収集」に当たらない、と整理している。
 - **診断ログの書き出し**: ユーザーが共有シートで送り先を選んだときだけ端末外に出る。ユーザーが問い合わせで運営者にメール送付した場合も、メールアプリからユーザーが送るもので、アプリが送信するのではない。そのため「収集なし」のままでよいと考えているが、問い合わせ窓口で診断ログを受け付ける運用にするなら、Apple の「任意の開示（optional disclosure）」の条件に当たるかを確認する。
+- **データの書き出し（#155）**: 診断ログと同じく、ユーザーが自分で選んだ保存先（共有シート）に、ユーザーの操作でだけ書き出す。開発者には届かないので「収集なし」のままと整理している。
+- **暗号化バックアップ（#40）**: データの書き出しと同じく、ユーザーが選んだ保存先にユーザーの操作でだけ書き出す（中身は暗号化済み）。開発者には届かないので「収集なし」のままと整理している。
+- **暗号化の輸出コンプライアンス（App Store Connect の「暗号化の書類」、Info.plist の `ITSAppUsesNonExemptEncryption`）**: 暗号化バックアップは、標準の暗号（AES-256・HMAC-SHA-256・PBKDF2）を OS の API（iOS は CommonCrypto と Security、Android は `javax.crypto`）で使い、ユーザーのデータの保護（パスフレーズによるファイルの暗号化）にだけ使う。独自の暗号アルゴリズムはない。通信の暗号化（HTTPS）は OS のものだけ。米国の輸出規則では「標準の暗号を OS 経由で使う」アプリは多くの場合免除（Apple の質問では「免除の対象となる暗号のみ」）に当たるが、**データの暗号化（通信以外）が目的の場合の扱いは運営者の確認が必要**（Apple の「輸出コンプライアンス」の質問に答える、必要なら年次の自己分類報告）。決まったら `apps/ios/project.yml` の Info.plist に `ITSAppUsesNonExemptEncryption` を設定する（未設定だと申請のたびに質問される）。Google Play には同様の申告はないが、配信国の規制は運営者が確認する。
 - **OS のクラッシュ・解析共有**: ユーザーが「App デベロッパと共有」を許可した場合に Apple 経由で届くクラッシュ情報は、Apple が集めるもので、アプリの申告対象ではないと理解している（要確認）。
 
 ### 2.2 審査メモ（App Review への説明文）
@@ -54,22 +57,51 @@
 
 1. iPhone アプリを起動し、オンボーディング（同意・通知・音声認識の許可・モデルの準備）を進める
 2. Apple Watch アプリで録音を開始し、手首を下ろして画面を消したまま 5〜10 分話す（録音は 5 分ごとに区切って iPhone に送られる）
-3. iPhone の「タイムライン」で文字起こしと再生、「検索」でキーワード検索、「状態」タブで受信状況・保持期間・すべてのデータの削除・診断ログの書き出しを確認する
+3. iPhone の「タイムライン」で文字起こしと再生、「検索」でキーワード検索、「状態」タブで受信状況・保持期間・すべてのデータの削除・データの書き出し・暗号化バックアップ・診断ログの書き出しを確認する
 
-要確認: iPhone アプリの Info.plist に `NSMicrophoneUsageDescription` があるが、iPhone アプリはマイクを使っていない（録音は Watch のみ）。使わない権限の説明文は審査で質問されうるので、削除するか、残す理由を決める（§4 の残作業）。
+iPhone アプリの `NSMicrophoneUsageDescription` は削除した（#159）。iPhone アプリはマイクを使わない（録音は Watch のみ）: `apps/ios/App` と `shared/ui/src/iosMain` に `AVAudioRecorder`・`AVAudioEngine` の入力・録音の許可の要求はなく、`AVAudioSession` は再生用の `AVAudioSessionCategoryPlayback`（`IosAppServices.kt`）だけ、文字起こしは受け取ったファイルを `AVAudioFile` で読む（`SpeechTranscription.swift`）。iPhone が要求する許可は通知と音声認識だけ（`IosPermissions.kt`）。Watch アプリの `NSMicrophoneUsageDescription` は録音に必要なので残す。ios.yml の Release ジョブが、iPhone アプリの Info.plist にこのキーがないことを `IPHONE_MICROPHONE_CHECK` で確かめる。
 
 ### 2.3 プライバシーマニフェスト（`PrivacyInfo.xcprivacy`）
 
-現在、iOS・watchOS のターゲットに `PrivacyInfo.xcprivacy` がない。App Store への提出では、「理由の申告が必要な API（Required Reason API）」を使う場合に理由の記載が必要になる。本アプリで該当しうるもの（実際の利用箇所の洗い出しが必要）:
+バンドルごとに 1 つ入れた（#159）。`apps/ios/project.yml` で各ターゲットの `sources` に `buildPhase: resources` で指定し、バンドルの直下にコピーする。
 
-| API の種類 | 使っていそうな箇所 | 理由コードの候補（要確認） |
-| --- | --- | --- |
-| `UserDefaults` | Watch アプリとコンプリケーションの App Group での状態共有（#41） | App Group 内での読み書き |
-| 空き容量 | 状態タブの「端末の空き容量」（#33）、Watch の空き容量不足の判定 | 空き容量の表示・空き不足時の書き込み制御 |
-| ファイルのタイムスタンプ | 音声ファイル・診断ログの管理（Kotlin/Native の `kotlinx-io` を含めて確認） | アプリのコンテナ内のファイル |
-| システムの起動時刻 | 経過時間の計測に使っていれば | 経過時間の計測 |
+| ファイル | 入るバンドル |
+| --- | --- |
+| `apps/ios/Privacy/App/PrivacyInfo.xcprivacy` | iPhone アプリ（`iosApp`）。Kotlin の `ComposeApp` フレームワーク（Compose Multiplatform・skiko・SQLite を含む）は静的にリンクされるので、その分もここで申告する |
+| `apps/ios/Privacy/Watch/PrivacyInfo.xcprivacy` | Apple Watch アプリ（`WatchApp`） |
+| `apps/ios/Privacy/WatchWidget/PrivacyInfo.xcprivacy` | コンプリケーションの拡張（`WatchWidget`） |
 
-マニフェストでは「データ収集なし」「トラッキングなし」と宣言する。追加する際は `tools/privacy-check/policy.py` の iOS の許可リストも見直す。
+3 つとも `NSPrivacyTracking` は `false`、`NSPrivacyTrackingDomains` と `NSPrivacyCollectedDataTypes` は空（データを端末の外へ送らないため、§2.1 の「データの収集なし」と一致）。
+
+**理由の申告が必要な API と理由コード**（理由コードの定義は Apple の [NSPrivacyAccessedAPITypeReasons](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitypereasons)）:
+
+| ターゲット | 区分 | 使っている箇所 | 理由コード |
+| --- | --- | --- | --- |
+| iosApp | ファイルのタイムスタンプ（`FileTimestamp`） | 同梱の SQLite（`androidx.sqlite:sqlite-bundled`）が DB ファイルに `stat` / `fstat` / `lstat`、skiko が `stat` / `fstat` を使う。どちらもアプリのコンテナ（とアプリのバンドル）内のファイルの大きさなどの属性 | `C617.1`（アプリ・App Group のコンテナ内のファイルの属性） |
+| iosApp | 空き容量（`DiskSpace`） | `IosStorageEnvironment.freeBytes`（`NSURLVolumeAvailableCapacityForImportantUsageKey`、取れなければ `NSFileSystemFreeSize`）。状態タブの「端末の空き容量」と空き容量の警告に表示する（#33）。同梱の SQLite には `statfs` / `fstatfs` もある（ファイルシステムの種類を見てロック方式を選ぶため。空き容量は読まない） | `85F4.1`（空き容量をユーザーに表示する） |
+| iosApp | システムの起動時刻（`SystemBootTime`） | skiko（Compose Multiplatform の描画）の `mach_absolute_time`。フレームの経過時間の計測 | `35F9.1`（アプリ内の経過時間の計測） |
+| WatchApp | `UserDefaults` | `RecorderController.swift`（録音を続けるかの状態 `wantsRecording`、端末 ID）、`WatchAudioApp.swift`（`complicationURL`）、`DebugAudioFileInput.swift`（Debug ビルドのみ） | `CA92.1`（アプリ自身だけが読み書きする） |
+| WatchApp | `UserDefaults`（App Group） | `RecorderStatusPublisher.swift` → `RecorderStatusStore.sharedDefaults()`（`RecorderStatus.swift`）。録音状態をコンプリケーションと共有（#41） | `1C8F.1`（同じ App Group のアプリ・拡張だけが読み書きする） |
+| WatchApp | ファイルのタイムスタンプ | `ChunkOutbox.swift` の `modificationDate(_:)`（異常終了で閉じられなかったチャンクの長さを、音声ファイルの更新時刻から求める）と `fileSize(_:)`。どちらもアプリのコンテナ内 | `C617.1` |
+| WatchApp | 空き容量 | `ChunkOutbox.freeBytes()`（`attributesOfFileSystem` の `systemFreeSize`）。空きが足りなければ録音を始めない・止める（`RecorderPolicy` の `lowStorage`、Watch の画面とコンプリケーションに「空き容量不足」と表示） | `E174.1`（書き込める空きがあるかの確認。動作の違いがユーザーに見える） |
+| WatchWidget | `UserDefaults`（App Group） | `RecorderStatusStore.load(from: sharedDefaults())`（Watch アプリが書いた録音状態を読む） | `1C8F.1` |
+| WatchWidget | `UserDefaults` | 同じ関数で、App Group が使えないとき（署名なしのビルド）は自分の `UserDefaults.standard` に戻る | `CA92.1` |
+
+使っていないもの: iPhone アプリの `UserDefaults`（Swift の `App/` にも Kotlin の `iosMain` にも依存ライブラリにもない）、入力中のキーボード（`activeInputModes`）、`systemUptime`。Watch アプリ・拡張の起動時刻（`Date` だけを使う）。
+
+**洗い出しの方法**（2026-10-12）:
+
+- Swift: `apps/ios/{App,SharedSwift,Watch,WatchWidget}`（テストを除く）を、Apple の一覧の API 名・キー名（`UserDefaults`、`creationDate` / `modificationDate`、`attributesOfItem`、`stat` 系、`volumeAvailableCapacity*`、`systemFreeSize`、`statfs` 系、`systemUptime`、`mach_absolute_time`、`activeInputModes`）で検索した。
+- Kotlin: `shared/*/src/iosMain` を同じ名前で検索した（該当は `IosStorageEnvironment.kt` だけ）。
+- 依存ライブラリ: iOS 向けの klib（Gradle キャッシュの `*-iossimulatorarm64`。Compose Multiplatform 1.12.1、skiko 0.150.1、androidx.sqlite 2.7.1、kotlinx-io 0.9.1、kotlinx-coroutines、lifecycle など）を開き、中のシンボル名を同じ一覧で照合した（JetBrains の [required-reason-finder](https://kotlinlang.org/docs/multiplatform/multiplatform-privacy-manifest.html) と同じ考え方）。該当は sqlite-bundled（`stat` / `fstat` / `lstat` / `statfs` / `fstatfs`）と skiko（`stat` / `fstat` / `mach_absolute_time`）だけ。kotlinx-io はファイルの種類と大きさを `NSFileManager` で読むだけで、タイムスタンプは読まない。
+- Kotlin/Native のランタイム: 1.9.20 以降は既定のメモリアロケータが `mach_absolute_time` を使わない（JetBrains の同じ資料。本リポジトリは Kotlin 2.4）。
+
+補足:
+
+- JetBrains の資料は Compose Multiplatform の `stat` / `fstat` に `0A2A.1` を勧めているが、Apple の定義では `0A2A.1` は「サードパーティ SDK が自分のマニフェストで宣言する」理由。本アプリでは Kotlin のフレームワークをアプリの一部としてリンクし、アプリのマニフェストで申告するため、実際の用途（コンテナ内のファイルの属性）の `C617.1` にした。
+- App Store Connect は提出（アップロード）時にバイナリを解析し、申告のない区分があれば「ITMS-91053: Missing API declaration」のメールが届く。最初の TestFlight へのアップロード（#35）でメールを確認し、指摘があれば区分を追加する。
+- マニフェストの内容は `tools/privacy-check` が検査する（アプリ・拡張のターゲットごとに 1 つ、追跡・収集なし、理由コードは `policy.IOS_REQUIRED_REASONS` の許可リストだけ）。バンドルに入ったかは ios.yml の Release ジョブの `PRIVACY_MANIFEST_CHECK`（Xcode の環境が必要なので CI だけで確認できる）。
+- 上の表の API の使い方を変えたら、マニフェスト・この表・`policy.py` を一緒に直す。
 
 ## 3. Google Play
 
@@ -85,6 +117,7 @@
 
 - **モデルのダウンロード**: Hugging Face・GitHub への HTTP リクエストで、相手のサーバーには IP アドレスなど通信に必要な情報が届く。送るのは公開ファイルの取得要求だけで、ユーザーデータは送らず、開発者はそのログを受け取らないため「収集・共有なし」と整理している。
 - **診断ログの書き出し**: ユーザーが共有シートで選んだ送り先に渡すもので、Google の定義の「ユーザーが開始した操作で、ユーザーが合理的に予期する転送」に当たり、「共有」の対象外と整理している。
+- **データの書き出し（#155）**: ユーザーが SAF の保存ダイアログで作った文書にだけ書く（アプリは通信しない）。診断ログと同じく「ユーザーが開始した操作で、ユーザーが合理的に予期する転送」で、「共有」の対象外と整理している。
 - **Android vitals**: ユーザーが Google と使用状況・診断情報の共有を許可している場合に Play Console に届くクラッシュ統計は、Google（OS）が集めるもので、アプリの申告対象ではないと理解している。
 
 ### 3.2 前景サービスの申告（Play Console の「前景サービスの権限」）
@@ -103,7 +136,12 @@
 - 前景サービスが必要な理由: ファイルが大きく、アプリを閉じてもダウンロードを続ける必要がある。ダウンロード中は進み具合の通知を表示する。中断しても途中から再開し、SHA-256 で検証する。
 - データの扱い: ダウンロードだけで、ユーザーデータは送らない。
 - 英文案: "The app downloads the Japanese speech recognition model (several hundred MB) that it needs to transcribe recordings on the device. The user starts the download during setup and can restrict it to Wi-Fi. If the user turns on English transcription, an additional English-capable model (about 240 MB) is downloaded the same way. A data sync foreground service keeps the large download running when the app is closed, with a progress notification shown throughout. The download is resumable and verified with SHA-256. No user data is uploaded."
-- 要確認: Android 15 以降の `dataSync` の実行時間の上限（1 日あたり）と、Google が代替として勧める「ユーザーが開始したデータ転送ジョブ」で足りるか。
+- **Android 15 以降の実行時間の上限（#159 で確認）**:
+  - 公式の基準: `targetSdk` 35 以上のアプリ（本アプリは 37）では、`dataSync` の前景サービスは **24 時間のうち合計 6 時間**まで（アプリのすべての `dataSync` で共有）。上限に達するとシステムが `Service.onTimeout(int, int)` を呼び、数秒以内に `stopSelf()` しないと `RemoteServiceException` で異常終了する。ユーザーがアプリを前面に出すと時間はリセットされる。使い切った後に `dataSync` を始めようとすると `ForegroundServiceStartNotAllowedException` になる（[Foreground service timeouts](https://developer.android.com/develop/background-work/services/fgs/timeout)）。
+  - 本アプリの使い方: `dataSync` を使うのは `ModelDownloadWorker`（WorkManager の `CoroutineWorker` が `setForeground` で `FOREGROUND_SERVICE_TYPE_DATA_SYNC` を指定）だけで、モデル（約 160 MB）のダウンロード中だけ動く。開始はユーザーの操作（オンボーディング・状態タブの「ダウンロード」、`ModelManager.download`）と、アプリ起動時の未取得分の再開（`downloadIfMissing`、Wi-Fi 時のみ）。6 時間かかるのは平均 60 kbps 程度より遅い回線のときだけ。
+  - 上限に達したとき: `onTimeout` は WorkManager の `SystemForegroundService` が処理する（2.10.0-alpha03 で「`dataSync` の前景ワーカーが `stopSelf()` されず ANR になる」問題を修正、2.10.0-alpha04 で停止理由 `STOP_REASON_FOREGROUND_SERVICE_TIMEOUT` を追加。[WorkManager のリリースノート](https://developer.android.com/jetpack/androidx/releases/work)。本アプリは 2.11.2）。ワーカーは止められて再実行の予約に戻り、ダウンロードは `Range` で続きから再開する（`ModelDownloader.kt`）。再実行でアプリが背面にあれば `setForeground` が `IllegalStateException`（`ForegroundServiceStartNotAllowedException`）になり、ワーカーはそれを捕まえて通常のワーカーとして続ける（`ModelDownloadWorker.kt`）。
+  - 結論: **コードの変更は不要**。申告の用途は Play Console の一覧の「Network transfer: Upload or download」を選ぶ（[前景サービスの要件](https://support.google.com/googleplay/android-developer/answer/13392821)）。
+  - 推奨（任意）: (1) エミュレータで上限を短くして（`adb shell am compat enable FGS_INTRODUCE_TIME_LIMITS app.watchaudio`、`adb shell device_config put activity_manager data_sync_fgs_timeout_duration 60000`）異常終了せず続きから再開することを確かめる。(2) Google はユーザーが求めた通信には「ユーザーが開始するデータ転送ジョブ（user-initiated data transfer job）」を勧めている（同ページの FAQ）。WorkManager からは使えず JobScheduler を直接使う必要があるため、今は採らない。前景サービスの申告が通らなかった場合の代替として残す。
 
 ### 3.3 そのほかの「アプリのコンテンツ」
 
@@ -114,9 +152,35 @@
 | アプリのアクセス権（ログイン） | ログイン不要。審査用の手順（§2.2 と同じ流れ、Wear OS とスマホ）を記載する |
 | 対象年齢 | ［運営者が決める］（子ども向けではない） |
 | コンテンツのレーティング | 質問票に回答（暴力・課金などなし。ユーザー間のやり取りなし） |
-| 健康アプリの申告 | 要確認: Wear OS アプリが `BODY_SENSORS`（Wear OS 4/5 の装着検出だけ、任意）を宣言しているため、健康関連の申告フォームで「健康機能はない」旨と用途を説明する必要があるか確認する |
-| 権限の説明 | `RECORD_AUDIO`: 録音のため（Wear OS のみ。スマホはマイクを使わない）。`BODY_SENSORS`: ウォッチを外したことの検知だけ、値は保存しない |
+| 健康アプリの申告 | **「健康機能はない（My app doesn't provide any health features）」と申告する**。根拠と確認内容は下の §3.3.1 |
+| 権限の説明 | `RECORD_AUDIO`: 録音のため（Wear OS のみ。スマホはマイクを使わない）。`BODY_SENSORS`: ウォッチを外したことの検知だけ、心拍などの値は読まない。Play Console にそのまま貼る文は §3.3.2 |
 | Wear OS | スマホアプリが必須（`com.google.android.wearable.standalone=false`）。Wear OS の品質ガイドラインの確認が必要（§4） |
+
+#### 3.3.1 健康アプリの申告と `BODY_SENSORS`（#159 で確認）
+
+- **公式の基準**: 健康アプリの申告（Health apps declaration）は、Google Play に公開する**すべてのアプリ**が提出する（クローズド・オープンテストを含む）。健康機能がないアプリも、健康機能がないことを申告する（2024-08-31 以降必須）。対象の機能の分類は「Activity and Fitness」「Sleep Management」「Diseases and Conditions Management」などの健康・医療の機能（[Provide information for the Health apps declaration form](https://support.google.com/googleplay/android-developer/answer/14738291)）。この申告のページは権限（`BODY_SENSORS`）には触れていない。
+- 一方、Google Play の「健康に関するデータ」のポリシーは `BODY_SENSORS` を健康関連の機密データに当たる権限の例に挙げ、使う場合は**目立つ開示とユーザーの同意**を求める（[Health apps / health-related sensitive data](https://support.google.com/googleplay/android-developer/answer/13996367)。一覧は例示）。
+- **本アプリの使い方**: Wear OS アプリは `BODY_SENSORS` を `maxSdkVersion="35"`（Wear OS 4/5）でだけ宣言し、ユーザーが録音ボタンを押してマイクを許可した後に、アプリ内の説明画面（「ウォッチを外したら録音を一時停止するために使います。心拍などは読み取らず、インターネットにも送りません。」）を出し、「次へ」を選んだときだけ OS のダイアログで求める。説明は 1 回だけで、拒否しても録音できる（#161。流れは [wearos.md](../platforms/wearos.md) §6「身体センサーの説明」）。用途は `Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT` による「ウォッチを外した」ことの検知だけで、録音の一時停止に使う（`ConditionMonitors.kt` の `OffBodyMonitor`）。心拍などの値は読まない。分かるのは外したかどうかだけで、それも録音を区切った理由（`off_body`）としてウォッチの診断ログと自分のスマホに届く録音の情報（manifest）に残るだけで、端末の外（インターネット）には送らない。健康・フィットネスの機能はない。Wear OS 6（API 36）以降は `BODY_SENSORS` を宣言せず、細かい健康の権限も求めない（許可なしで装着検出を試み、イベントが来なければ装着中とみなす。[wearos.md](../platforms/wearos.md) の権限の表）。
+- **推奨する対応**:
+  1. 健康アプリの申告では「健康機能はない」を選ぶ（装着検出は健康機能の分類のどれにも当たらない）。
+  2. 権限の説明（Play Console のアプリのコンテンツ・ストアの説明・審査メモ）に「`BODY_SENSORS` はウォッチを外したことの検知だけに使い、心拍などの値は読まず、インターネットに送らない（Wear OS 5 以前のみ）」と書く（§3.3 の「権限の説明」、貼る文は §3.3.2）。
+  3. 目立つ開示: **対応済み（#161）**。OS の許可ダイアログの前に、アプリ内の 1 画面で用途（ウォッチを外したら録音を一時停止する）・心拍などは読み取らずインターネットにも送らないこと・許可しなくても録音できることを説明し、「次へ」で同意したときだけダイアログを出す。「使わない」を選ぶか OS のダイアログで拒否しても録音は続き、アプリに「外しても録音は止まりません（身体センサー未許可）」と出る。証拠はエミュレータのスクリーンショット（`emulator.yml` の成果物 `screenshots-wear` の `wear-body-sensors-*.png`）と単体テスト（`PermissionPlanTest`・`RecorderPolicyTest`）。
+  4. 審査で権限について質問されたら、装着検出だけに使うことを説明する。指摘が続く場合の代替は、`BODY_SENSORS` の宣言をやめる（Wear OS 4/5 では、許可がないと装着検出が働かない機種で「外したら一時停止」がなくなる。充電中の一時停止などは残る）。
+- データセーフティ: センサーの値は端末から出ないので「健康情報」の収集・共有には当たらない（§3.1）。
+
+#### 3.3.2 Play Console に書く権限の説明（`BODY_SENSORS`）
+
+Play Console で権限の用途を聞かれたとき（アプリのコンテンツの申告・審査からの問い合わせ）にそのまま使う文。日本語と英語（Play Console の入力は英語が確実）を用意する。アプリ内の説明画面（`apps/wear/src/main/res/values/strings.xml` の `body_sensors_*`）と内容をそろえる。
+
+- 日本語:
+
+  > Wear OS アプリは、ウォッチを外したことを検知して録音を一時停止するためだけに `BODY_SENSORS`（身体センサー）を使います（Wear OS 5 以前。`Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT`）。心拍などの値は読み取りません。外したかどうかは、録音を区切った理由としてウォッチと利用者自身のスマホの中に残るだけで、インターネットには送りません。健康・フィットネスの機能はありません。許可を求める前にアプリ内で用途を説明し、許可しなくても録音はできます（外したときに自動で一時停止しないだけです）。
+
+- 英語:
+
+  > The Wear OS app uses BODY_SENSORS only to detect when the watch is taken off the wrist, so that recording pauses (Wear OS 5 and earlier; Sensor.TYPE_LOW_LATENCY_OFFBODY_DETECT). It does not read heart rate or any other vital sign. Whether the watch was worn is kept only as the reason a recording segment ended, on the watch and on the user's own paired phone, and is never sent over the internet. The app has no health or fitness features. Before the system asks for the permission, the app explains this on its own screen; recording works without the permission, it just does not pause automatically when the watch is taken off.
+
+- 審査メモに添えるもの: 説明画面のスクリーンショット（§4、`wear-body-sensors-explanation.png`）。Wear OS 6（API 36）以降は `BODY_SENSORS` を宣言せず、代わりの健康の権限（`READ_HEART_RATE` など）も求めないことも書く（[wearos.md](../platforms/wearos.md) §6）。
 
 ### 3.4 Google Play のユーザーデータポリシー（目立つ開示）
 
@@ -131,6 +195,7 @@
 | App Review 用の動画（バックグラウンドオーディオ） | Watch で録音開始 → 画面消灯のまま録音が続く → iPhone に届いて文字起こしされる → 停止。録音中の表示が見えること | 実機（Apple Watch + iPhone） |
 | Google Play スクリーンショット（スマホ） | タイムライン、検索、状態タブ、オンボーディング | Android スマホ（エミュレータで可） |
 | Google Play スクリーンショット（Wear OS） | 録音中の画面、タイル、コンプリケーション（Wear OS の要件どおり、端末の枠なし） | Wear OS（エミュレータで可） |
+| 身体センサーの説明（`BODY_SENSORS` の目立つ開示、§3.3.1） | 説明画面 → OS の許可ダイアログ → 拒否しても録音が続き注記が出る | Wear OS 4/5（エミュレータで可。CI `emulator.yml` の `wear-body-sensors-*.png`） |
 | 前景サービスの動画（microphone） | ユーザーが録音を開始 → Ongoing Activity / 通知の表示 → 画面消灯でも録音が続く → 停止ボタンで止まる | 実機の Wear OS ウォッチが望ましい（動画は YouTube などの URL で提出） |
 | 前景サービスの動画（dataSync） | オンボーディングでモデルのダウンロードを開始 → 進み具合の通知 → 完了 | Android スマホ（エミュレータで可） |
 
@@ -150,9 +215,11 @@
 | OS バックアップの対象外、Android スマホは端末間の直接転送だけ許可 | `apps/android/src/main/AndroidManifest.xml`（`allowBackup="false"`）、`apps/android/src/main/res/xml/data_extraction_rules.xml`（`cloud-backup` で全ドメイン除外、`device-transfer` は許可）、Wear OS は両方除外。iOS・watchOS は `NSURLIsExcludedFromBackupKey`。[docs/architecture/02 §7.1](../architecture/02-architecture.md#71-保存場所と保護76) |
 | iOS・watchOS のファイル保護 | `CompleteUntilFirstUserAuthentication` を `LocalDataDirectory`（shared/ui iosMain）と `LocalDataProtection`（watchOS）で明示。`policy.py` が保護なしの指定を禁止 |
 | 診断ログに本文・音声・例外メッセージを含まない、ユーザーの書き出しでだけ外に出る | `shared/pipeline/src/commonMain/kotlin/app/watchaudio/core/pipeline/Diagnostics.kt`（ID・件数・時間・エラーの型だけ、`exportTo`）、`apps/android/.../diag/CrashRecorder.kt`（型と上位フレームだけ）、`apps/android/src/main/AndroidManifest.xml` の `FileProvider`（共有シート用）。Android の `app_start` は `version`・`sdk`・`device=Build.MODEL`、iOS は `version`・`os`。Watch の診断ログ（`apps/wear/.../diag/DiagnosticsLog.kt`、`apps/ios/Watch/Recording/DiagnosticsLog.swift`）は電池残量・充電状態も持つが、アプリからの書き出し機能はない |
+| データの書き出しはユーザーが選んだ保存先にだけ書き、通信しない（#155） | 共通処理 `shared/pipeline/src/commonMain/kotlin/app/watchaudio/core/export/DataExporter.kt`（渡された出力先に ZIP を書くだけ）、保存先は `apps/android/.../AndroidAppServices.kt` の `saveExport`（SAF の `CreateDocument` で作った文書だけ）と `shared/ui/src/iosMain/.../IosAppServices.kt` の `saveExport`（`tmp/data-export/` → 共有シート、閉じたら削除）。ボタンを押したときだけ（`ExportViewModel`）。`tools/privacy-check` は通信 API の追加がないことを確認 |
+| 暗号化バックアップはユーザーが選んだ保存先にだけ書き、パスフレーズと鍵は端末の外に出さない（#40） | 共通処理 `shared/pipeline/src/commonMain/kotlin/app/watchaudio/core/backup/`（`BackupWriter` は渡された出力先に暗号化したファイルを書くだけ、`BackupCipher` が鍵を導出してメモリ上でだけ使い、使い終えたら配列をゼロで消す、`BackupRestorer` はユーザーが選んだファイルを読むだけ）、暗号の基本操作は `shared/platform/src/*/kotlin/app/watchaudio/core/platform/Crypto*.kt`（OS の API だけ）。保存先は `saveExport`（上と同じ）、読み込みは `AndroidAppServices.openBackup`（SAF の `OpenDocument`）と `IosAppServices.openBackup`（ドキュメントピッカーのコピー、読んだら削除）。パスフレーズは画面の状態（`BackupViewModel`）にだけあり、診断ログには件数とエラーの型だけ（`BackupViewModelTest` がログにパスフレーズ・本文がないことを確認）。`tools/privacy-check` は通信 API の追加がないことを確認 |
 | 識別子はランダム | `deviceId` は Wear OS がインストールごとの `UUID.randomUUID()`（`apps/wear/.../WearPrefs.kt`）、watchOS も `UUID`（`RecorderController.swift`）。チャンク・セッションも UUID |
 | 保持期間（7/30/90 日・無期限、既定は無期限、文字起こし済みの音声だけ削除） | `shared/pipeline/.../AudioRetention.kt`、文言は `shared/ui/.../Strings.kt` |
-| 日ごとの削除・すべてのデータの削除 | `shared/pipeline/.../StorageManager.kt`（`deleteAll` は全チャンク・音声を消し DB を `VACUUM`）、UI は `shared/ui/.../ui/StorageCard.kt`。**設定と診断ログは全削除の対象外**（ポリシーでは「すべてのデータ（録音・音声・文字起こし）」と書き、アンインストールで診断ログも消えると書いた） |
+| 日ごとの削除・すべてのデータの削除 | `shared/pipeline/.../StorageManager.kt`（`deleteAll` は全チャンク・音声を消し DB を `VACUUM` し、スマホの診断ログも `DiagnosticsLog.clear` で消す。ローテーション分と共有用の書き出しのコピーも含む。#159）。テストは `StorageManagerTest.deleteAllAlsoClearsTheDiagnosticsLogAndItsExports`・`DiagnosticsLogTest.clearRemovesTheLogTheRotatedPartAndExportsOnly`。UI は `shared/ui/.../ui/StorageCard.kt`（確認の文言 `Strings.DELETE_ALL_NOTE` に「診断ログ」を明記）。**設定は残す**（オンボーディングをやり直さないため）。**Watch の診断ログは Watch 側にあり対象外**（大きさの上限で古い記録から消え、アンインストールで消える） |
 | 権限 | `apps/android/src/main/AndroidManifest.xml`、`apps/wear/src/main/AndroidManifest.xml`、`apps/ios/project.yml` の Info.plist。用途は `policy.py` の各権限の理由。iPhone の通知・音声認識の要求は `shared/ui/src/iosMain/.../IosPermissions.kt`、Watch の通知は `RecorderController.swift` |
 | 身体センサーは装着検出だけ | `apps/wear/.../recording/ConditionMonitors.kt`（`TYPE_LOW_LATENCY_OFFBODY_DETECT`）。watchOS には手首検出 API がなく使っていない（[docs/platforms/ios-watchos.md](../platforms/ios-watchos.md)） |
 | 通知はローカルだけ | リモート通知（APNs・FCM）の登録なし。`IosGapAlerts.kt`（予約通知）、Android の途絶アラートは WorkManager |
@@ -183,9 +250,13 @@
 - [ ] 利用規約（日本語・英語）の下書き（録音の責任、無保証、データ消失時の免責、端末内保存のため運営者は復元できないこと）
 - [ ] ランディングページ（ポリシー・利用規約・サポートへのリンク）の下書き
 - [ ] アプリ内からプライバシーポリシーを開くリンク（状態タブの「プライバシー」）。URL リテラルを足すときは `tools/privacy-check/policy.py` の許可リストも更新する
-- [ ] iOS・watchOS の `PrivacyInfo.xcprivacy` の追加（§2.3。理由が必要な API の洗い出し）
-- [ ] iPhone アプリの使っていない `NSMicrophoneUsageDescription` の扱いを決める（§2.2）
-- [ ] 「すべてのデータを削除」で診断ログも消すかを決める（現在は残る。ID と時刻だけだが、録音した時刻の記録にはなる）
+- [x] iOS・watchOS の `PrivacyInfo.xcprivacy` の追加（§2.3。理由が必要な API の洗い出し）（#159。CI でのビルドの確認は #159 の完了条件）
+- [x] iPhone アプリの使っていない `NSMicrophoneUsageDescription` を削除（§2.2、#159）
+- [x] 「すべてのデータを削除」でスマホの診断ログも消す（#159。設定は残す）
+- [x] Google Play の健康アプリの申告と `dataSync` の時間制限の確認（§3.2・§3.3.1、#159）
 - [ ] シミュレータ・エミュレータでのスクリーンショット作成（§4）
 - [ ] Wear OS の品質ガイドラインとの照合
-- [ ] 書き出し（#155）・暗号化バックアップ（#40）・課金（#34）を公開するときに、ポリシーとこの申告を更新する
+- [x] データの書き出し（#155）をポリシー（第 7 条）とこの申告に追記した
+- [x] 暗号化バックアップ（#40）をポリシー（第 7 条）とこの申告に追記した
+- [ ] 暗号化の輸出コンプライアンスの回答を運営者が決め、`ITSAppUsesNonExemptEncryption` を設定する（§2.1）
+- [ ] 課金（#34）を公開するときに、ポリシーとこの申告を更新する

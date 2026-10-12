@@ -1,13 +1,20 @@
 package app.watchaudio.app
 
+import app.watchaudio.core.backup.BackupRestorer
+import app.watchaudio.core.backup.BackupWriter
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.export.DataExporter
 import app.watchaudio.core.pipeline.Diagnostics
 import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.io.Buffer
+import kotlinx.io.RawSink
+import kotlinx.io.RawSource
 import kotlinx.io.files.Path
+import kotlinx.io.readByteArray
 
 /**
  * [AppServices] over a real [LocalStore] with no platform behind it: playback, transcription
@@ -22,6 +29,10 @@ class FakeAppServices(
     override val modelSetup: ModelSetup = ModelSetup.DOWNLOAD,
     override val storage: StorageManager = StorageManager(store, Path(audioRoot)),
     override val supportsEnglish: Boolean = false,
+    override val exporter: DataExporter = DataExporter(store, Path(audioRoot)),
+    // Few PBKDF2 rounds keep the tests fast; the format records the count.
+    override val backupWriter: BackupWriter = BackupWriter(store, Path(audioRoot), iterations = 1_000),
+    override val backupRestorer: BackupRestorer = BackupRestorer(store, Path(audioRoot)),
 ) : AppServices {
     val mutableStatus = MutableStateFlow(initialStatus)
     override val status: StateFlow<ProcessingStatus> = mutableStatus.asStateFlow()
@@ -97,6 +108,38 @@ class FakeAppServices(
         diagnosticsExports++
         diagnosticsExportFailure?.let { throw it }
         return diagnosticsExportResult
+    }
+
+    /** File names [saveExport] was asked for; the user cancels if [exportCancelled]. */
+    val exportRequests = mutableListOf<String>()
+    var exportCancelled = false
+
+    /** Makes the destination fail after the user picked it (e.g. it is full). */
+    var exportDestinationFailure: Exception? = null
+
+    /** What was "saved": file name to the bytes the shared code wrote. */
+    val savedExports = mutableListOf<Pair<String, ByteArray>>()
+
+    override suspend fun saveExport(fileName: String, mimeType: String, write: suspend (RawSink) -> Unit): Boolean {
+        exportRequests += fileName
+        if (exportCancelled) return false
+        exportDestinationFailure?.let { throw it }
+        val buffer = Buffer()
+        write(buffer)
+        savedExports += fileName to buffer.readByteArray()
+        return true
+    }
+
+    /** The file the user "picks" in [openBackup]; null: they cancel. */
+    var backupToOpen: ByteArray? = null
+    var backupOpenRequests = 0
+        private set
+
+    override suspend fun openBackup(read: suspend (open: () -> RawSource) -> Unit): Boolean {
+        backupOpenRequests++
+        val bytes = backupToOpen ?: return false
+        read { Buffer().apply { write(bytes) } }
+        return true
     }
 
     /** What the shared UI wrote to [diagnostics], as `event detail` lines. */

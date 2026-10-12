@@ -63,7 +63,12 @@ class AppGraph private constructor(context: Context) {
     val models = ModelManager(app, scope, diagnostics, onReady = scheduler::requestNow)
     val transcriber = AndroidSherpaTranscriber(models.files, models.englishFiles, englishEnabled = { store.loadSettings().transcribeEnglish })
     val pipeline = TranscriptionPipeline(store, Path(audioRoot.path), transcriber, segmentFilter = FalsePositiveFilter.DEFAULT)
-    val storage = StorageManager(store, Path(audioRoot.path), AndroidStorageEnvironment(models.files.root, app.filesDir))
+    val storage = StorageManager(
+        store,
+        Path(audioRoot.path),
+        AndroidStorageEnvironment(models.files.root, app.filesDir),
+        diagnostics = diagnostics,
+    )
 
     /** Battery, battery saver and thermal state for the processing policy (#75); tests substitute their own. */
     @VisibleForTesting
@@ -150,6 +155,12 @@ class AppGraph private constructor(context: Context) {
     companion object {
         private const val TAG = "AppGraph"
 
+        /**
+         * Cache subdirectory for the diagnostics log copies handed to the share sheet; must match
+         * `res/xml/diagnostics_paths.xml`.
+         */
+        const val DIAGNOSTICS_EXPORT_DIR = "diagnostics-export"
+
         // Holds only the application context, which lives as long as the process.
         @SuppressLint("StaticFieldLeak")
         @Volatile
@@ -168,6 +179,7 @@ class AppGraph private constructor(context: Context) {
         fun diagnostics(context: Context): DiagnosticsLog = diagnosticsLog ?: synchronized(this) {
             diagnosticsLog ?: DiagnosticsLog(
                 Path(File(File(context.applicationContext.filesDir, "diagnostics"), DiagnosticsLog.FILE_NAME).path),
+                exportDirectory = Path(File(context.applicationContext.cacheDir, DIAGNOSTICS_EXPORT_DIR).path),
             ).also { diagnosticsLog = it }
         }
     }

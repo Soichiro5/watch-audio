@@ -5,8 +5,8 @@ import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
-import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
@@ -27,7 +27,6 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
-import app.watchaudio.app.logic.dayWindow
 import app.watchaudio.app.state.NowProvider
 import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
@@ -37,6 +36,7 @@ import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StatusNotice
 import app.watchaudio.core.settings.loadSettings
 import app.watchaudio.core.settings.updateSettings
+import app.watchaudio.core.timeline.dayWindow
 import java.io.File
 import java.nio.file.Files
 import javax.imageio.ImageIO
@@ -127,7 +127,7 @@ class AppUiTest {
         waitForText(Strings.RETENTION)
         onNodeWithText(Strings.DELETE_ALL).performScrollTo().performClick()
         waitForText(Strings.DELETE_ALL_NOTE)
-        onNode(hasSetTextAction()).performScrollTo().performTextInput(Strings.DELETE_ALL_WORD)
+        onNode(hasSetTextAction() and hasText(Strings.DELETE_ALL_INPUT)).performScrollTo().performTextInput(Strings.DELETE_ALL_WORD)
         screenshot("storage")
         onNodeWithText(Strings.DELETE_ALL_CONFIRM).performScrollTo().performClick()
         waitForText(Strings.DELETED_ALL)
@@ -296,6 +296,78 @@ class AppUiTest {
         onNodeWithText(Strings.TAB_STATUS).performClick()
         waitForText(Strings.CHARGING_ONLY_SWITCH)
         assertTrue(onAllNodes(hasText(Strings.ENGLISH_SWITCH)).fetchSemanticsNodes().isEmpty())
+    }
+
+    /** #155: the export card; the archive only goes where the platform's save dialog says. */
+    @Test
+    fun exportCardWritesTheChosenRange() = runDesktopComposeUiTest(width = 412, height = 915) {
+        runBlocking {
+            DemoData.seed(store, day, tokyo, until = now - 20 * 60_000L)
+            store.updateSettings { it.copy(onboardingCompleted = true) }
+            val window = dayWindow(day, tokyo)
+            store.read { chunksBetween(window.start, window.end) }.mapNotNull { it.audioPath }.forEach {
+                File(audioDir, it).writeBytes(ByteArray(1_000))
+            }
+        }
+        showApp(services)
+        waitForText(Strings.TAB_STATUS)
+        onNodeWithText(Strings.TAB_STATUS).performClick()
+        onNodeWithText(Strings.EXPORT_RANGE_DATES).performScrollTo().performClick()
+        waitForText(Strings.exportFrom("2026年10月4日(日)"))
+        waitForText(Strings.exportTo("2026年10月10日(土)"))
+        onNodeWithText(Strings.EXPORT_INCLUDE_AUDIO).performScrollTo().performClick()
+        onNodeWithText(Strings.EXPORT_BUTTON).performScrollTo()
+        assertNoEnglish()
+        screenshot("export")
+        assertTrue(services.exportRequests.isEmpty()) // nothing leaves before the tap
+
+        onNodeWithText(Strings.EXPORT_BUTTON).performClick()
+        waitForText("1日分を書き出しました", substring = true)
+        val (name, bytes) = services.savedExports.single()
+        assertEquals("watch-audio-2026-10-10.zip", name)
+        assertTrue(bytes.size > 1_000)
+        onNode(hasText("1日分を書き出しました", substring = true)).performScrollTo()
+        assertNoEnglish()
+        screenshot("export-done")
+    }
+
+    /** #40: the backup card; the file only goes where the platform's save dialog says, and comes back the same way. */
+    @Test
+    fun backupCardCreatesAndRestoresABackup() = runDesktopComposeUiTest(width = 412, height = 915) {
+        runBlocking {
+            DemoData.seed(store, day, tokyo, until = now - 20 * 60_000L)
+            store.updateSettings { it.copy(onboardingCompleted = true) }
+        }
+        showApp(services)
+        waitForText(Strings.TAB_STATUS)
+        onNodeWithText(Strings.TAB_STATUS).performClick()
+        onNode(hasSetTextAction() and hasText(Strings.BACKUP_PASSPHRASE)).performScrollTo().performTextInput("とけいの記録 2026 秋")
+        waitForText(Strings.PASSPHRASE_STRONG)
+        onNode(hasSetTextAction() and hasText(Strings.BACKUP_PASSPHRASE_CONFIRM)).performScrollTo().performTextInput("とけいの記録 2026")
+        waitForText(Strings.BACKUP_PASSPHRASE_MISMATCH)
+        onNode(hasSetTextAction() and hasText(Strings.BACKUP_PASSPHRASE_CONFIRM)).performTextInput(" 秋")
+        onNodeWithText(Strings.BACKUP_CREATE_BUTTON).performScrollTo()
+        assertTrue(onAllNodes(hasText(Strings.BACKUP_PASSPHRASE_MISMATCH)).fetchSemanticsNodes().isEmpty())
+        assertNoEnglish()
+        screenshot("backup")
+        assertTrue(services.exportRequests.isEmpty()) // nothing leaves before the tap
+
+        onNodeWithText(Strings.BACKUP_CREATE_BUTTON).performClick()
+        waitForText("バックアップしました", substring = true)
+        val (name, bytes) = services.savedExports.single()
+        assertEquals("watch-audio-backup-2026-10-10.wabackup", name)
+        onNode(hasText("バックアップしました", substring = true)).performScrollTo()
+        assertNoEnglish()
+        screenshot("backup-done")
+
+        // Restoring onto the same phone adds nothing twice.
+        services.backupToOpen = bytes
+        onNode(hasSetTextAction() and hasText(Strings.RESTORE_PASSPHRASE)).performScrollTo().performTextInput("とけいの記録 2026 秋")
+        onNodeWithText(Strings.RESTORE_BUTTON).performScrollTo().performClick()
+        waitForText("すでにこの端末にあった", substring = true)
+        onNode(hasText("すでにこの端末にあった", substring = true)).performScrollTo()
+        assertNoEnglish()
+        screenshot("restore-done")
     }
 
     /** #144: a failed chunk shows a fixed Japanese note, never the exception message stored in the DB. */

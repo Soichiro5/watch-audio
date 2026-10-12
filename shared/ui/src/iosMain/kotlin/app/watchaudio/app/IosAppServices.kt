@@ -5,6 +5,7 @@ import app.watchaudio.core.pipeline.DiagnosticsLog
 import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.platform.IoDispatcher
+import kotlin.coroutines.resume
 import kotlin.math.abs
 import kotlin.time.Clock
 import kotlinx.cinterop.BetaInteropApi
@@ -15,8 +16,12 @@ import kotlinx.cinterop.alloc
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.value
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.io.RawSink
+import kotlinx.io.RawSource
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import platform.AVFAudio.AVAudioPlayer
@@ -27,13 +32,17 @@ import platform.Foundation.NSError
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSURL
+import platform.darwin.NSObject
 import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIApplication
 import platform.UIKit.UIApplicationOpenSettingsURLString
+import platform.UIKit.UIDocumentPickerDelegateProtocol
+import platform.UIKit.UIDocumentPickerViewController
 import platform.UIKit.UIViewController
 import platform.UIKit.UIWindow
 import platform.UIKit.UIWindowScene
 import platform.UIKit.popoverPresentationController
+import platform.UniformTypeIdentifiers.UTTypeItem
 
 /**
  * [AppServices] for iOS. Created by [IosAppGraph]; the shared UI only sees the interface.
@@ -91,7 +100,7 @@ class IosAppServices internal constructor(
      */
     override suspend fun exportDiagnostics(): Boolean {
         val target = withContext(IoDispatcher) {
-            val dir = Path(NSTemporaryDirectory(), "diagnostics-export")
+            val dir = Path(NSTemporaryDirectory(), IosAppGraph.DIAGNOSTICS_EXPORT_DIR)
             SystemFileSystem.createDirectories(dir)
             SystemFileSystem.list(dir).forEach { SystemFileSystem.delete(it, mustExist = false) }
             val stamp = Clock.System.now().toString().substringBefore('.').removeSuffix("Z").replace(":", "")
@@ -102,6 +111,66 @@ class IosAppServices internal constructor(
         // Required on iPad, where the sheet is a popover.
         sheet.popoverPresentationController?.sourceView = presenter.view
         presenter.presentViewController(sheet, animated = true, completion = null)
+        return true
+    }
+
+    /**
+     * Writes the data export (#155) to the temporary directory (`tmp/data-export/`, replacing earlier
+     * exports), then presents the share sheet, where the user picks 「ファイルに保存」 or another
+     * destination. The file is deleted when the sheet closes. Main thread (called from the UI).
+     */
+    override suspend fun saveExport(fileName: String, mimeType: String, write: suspend (RawSink) -> Unit): Boolean {
+        val target = withContext(IoDispatcher) {
+            val dir = Path(NSTemporaryDirectory(), "data-export")
+            SystemFileSystem.createDirectories(dir)
+            SystemFileSystem.list(dir).forEach { SystemFileSystem.delete(it, mustExist = false) }
+            Path(dir, fileName)
+        }
+        try {
+            withContext(IoDispatcher) { SystemFileSystem.sink(target).use { write(it) } }
+            val presenter = topViewController() ?: error("no visible screen to present the share sheet from")
+            val sheet = UIActivityViewController(activityItems = listOf(NSURL.fileURLWithPath(target.toString())), applicationActivities = null)
+            // Required on iPad, where the sheet is a popover.
+            sheet.popoverPresentationController?.sourceView = presenter.view
+            // The destination has its copy once the sheet closes (saved, sent or cancelled).
+            sheet.completionWithItemsHandler = { _, _, _, _ -> SystemFileSystem.delete(target, mustExist = false) }
+            presenter.presentViewController(sheet, animated = true, completion = null)
+        } catch (e: Throwable) {
+            withContext(IoDispatcher + NonCancellable) { SystemFileSystem.delete(target, mustExist = false) }
+            throw e
+        }
+        return true
+    }
+
+    /** Keeps the document picker's delegate alive while it is shown (UIKit holds it weakly). */
+    private var backupPickerDelegate: BackupPickerDelegate? = null
+
+    /**
+     * Presents the document picker for a backup (#40), which copies the picked file into the
+     * app's temporary directory (`asCopy`, so files in iCloud Drive or on a server are downloaded
+     * by the system first), lets the restore read the copy and deletes it afterwards. The file is
+     * only read. Main thread (called from the UI).
+     */
+    override suspend fun openBackup(read: suspend (open: () -> RawSource) -> Unit): Boolean {
+        val presenter = topViewController() ?: error("no visible screen to present the document picker from")
+        val picked = try {
+            suspendCancellableCoroutine { continuation ->
+                val delegate = BackupPickerDelegate { url -> if (continuation.isActive) continuation.resume(url) }
+                backupPickerDelegate = delegate
+                val picker = UIDocumentPickerViewController(forOpeningContentTypes = listOf(UTTypeItem), asCopy = true)
+                picker.delegate = delegate
+                picker.allowsMultipleSelection = false
+                presenter.presentViewController(picker, animated = true, completion = null)
+            }
+        } finally {
+            backupPickerDelegate = null
+        }
+        val path = picked?.path ?: return false
+        try {
+            withContext(IoDispatcher) { read { SystemFileSystem.source(Path(path)) } }
+        } finally {
+            withContext(IoDispatcher + NonCancellable) { SystemFileSystem.delete(Path(path), mustExist = false) }
+        }
         return true
     }
 
@@ -193,3 +262,12 @@ internal data class PreparedPlayback(
     val started: Boolean,
     val playing: Boolean,
 )
+
+/** Hands the document picker's outcome to [onPicked]: the picked file, or null when cancelled. */
+private class BackupPickerDelegate(private val onPicked: (NSURL?) -> Unit) : NSObject(), UIDocumentPickerDelegateProtocol {
+    override fun documentPicker(controller: UIDocumentPickerViewController, didPickDocumentsAtURLs: List<*>) {
+        onPicked(didPickDocumentsAtURLs.firstOrNull() as? NSURL)
+    }
+
+    override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) = onPicked(null)
+}

@@ -2,6 +2,7 @@ package app.watchaudio.app.logic
 
 import app.watchaudio.core.db.ChunkRecord
 import app.watchaudio.core.protocol.ChunkEndReason
+import app.watchaudio.core.timeline.Thresholds
 
 /** Whether chunks from the watch are arriving as expected (phone-side indicator, #43). */
 sealed interface ArrivalState {

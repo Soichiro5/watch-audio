@@ -45,6 +45,15 @@
     <string name="battery">電池 %1$d%%</string>
     <string name="mic_permission_needed">マイクの許可が必要です</string>
 
+    <!-- Shown right before the system asks for BODY_SENSORS (Wear OS 4/5, #161). -->
+    <string name="body_sensors_title">身体センサーの許可</string>
+    <string name="body_sensors_rationale">ウォッチを外したら録音を一時停止するために使います。心拍などは読み取らず、インターネットにも送りません。</string>
+    <string name="body_sensors_optional">許可しなくても録音できます。外しても自動では止まりません。</string>
+    <string name="body_sensors_continue">次へ</string>
+    <string name="body_sensors_skip">使わない</string>
+    <!-- Recorder screen note after BODY_SENSORS was declined. -->
+    <string name="off_body_detection_off">外しても録音は止まりません（身体センサー未許可）</string>
+
     <string name="tile_label">watch-audio</string>
     <string name="tile_description">録音状態</string>
     <string name="complication_label">録音状態</string>

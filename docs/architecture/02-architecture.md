@@ -79,7 +79,7 @@ watch-audio/
 │   ├── protocol/              #   ChunkManifest / ChunkAck / ChunkFrame / RecordingFormat（Wear OS・スマホ共通。testdata/ は Swift 側と共有）
 │   ├── platform/              #   expect/actual: SHA-256、IoDispatcher など
 │   ├── db/                    #   LocalStore（手書き SQL。StoreTransaction はチャンク・文字起こし・検索・容量管理・設定ごとのファイルに分割）、Schema.kt のマイグレーション、FTS5 検索
-│   ├── pipeline/              #   Ingestor・ChunkIntake（受信の入口）、TranscriptionPipeline・TranscriptionRun（文字起こし 1 回分）、Transcriber、発話区間の切り出し、境界の連結、StorageManager、設定（AppSettings）・状態（ProcessingStatus）・途絶アラートの判定
+│   ├── pipeline/              #   Ingestor・ChunkIntake（受信の入口）、TranscriptionPipeline・TranscriptionRun（文字起こし 1 回分）、Transcriber、発話区間の切り出し、境界の連結、StorageManager、設定（AppSettings）・状態（ProcessingStatus）・途絶アラートの判定、日のタイムライン（ギャップ）、データの書き出し（export）
 │   ├── testing/               #   テスト専用: TempDir、manifest の組み立て（testManifest）。各モジュールのテストだけが使う
 │   └── ui/                    #   スマホ UI（Compose MP、Android/iOS 共通）、AppServices、ViewModel。iosMain に IosAppGraph と Swift とのブリッジ
 ├── build-logic/               # Gradle の convention plugin（KMP ライブラリ共通設定、SQLite テストを JVM/Android/iOS で動かす設定、Android アプリ共通設定と release、Wear OS の debug 入力の混入検査）
@@ -319,17 +319,146 @@ interface LlmProvider {
 - 送信前に `PrivacyFilter` を必ず通す（音声・生の心拍値・正確な座標は型レベルで送れない設計にする）。
 - 自動レビューは「1 日あたりの上限回数/トークン」を設定可能にし、想定外の課金を防ぐ。
 
+### 6.6 データの書き出し（#155）
+
+ためた記録を、ユーザーが読める形・ほかのアプリで使える形で端末の外に持ち出す。状態タブの「データの書き出し」で期間（すべて / 日付の範囲）と「音声ファイルを含める」を選び、「書き出す」を押したときだけ動く。保存先は OS の画面でユーザーが選ぶ（Android: SAF の保存ダイアログ、iOS: 共有シートの「ファイルに保存」など）。アプリが自動でどこかへ送ることはない（§7）。UI と各プラットフォームの実装は [phone-ui.md §1.9](../platforms/phone-ui.md#19-データの書き出し155)。
+
+処理は共通コード `shared/pipeline` の `app.watchaudio.core.export`（`DataExporter`）。DB（`shared/db` の `ExportQueries`）と音声ファイルの両方を読み、日のギャップをタイムラインと同じ `buildDayTimeline`（`app.watchaudio.core.timeline`）で求めるので、DB だけの `shared/db` ではなくここに置く。JSON は `shared/protocol` と同じ kotlinx.serialization。
+
+**1 つの ZIP ファイル**（`watch-audio-<最初の日>_<最後の日>.zip`。1 日だけなら日付 1 つ）にまとめる。中身はファイル名と同じフォルダの下:
+
+```
+watch-audio-2026-10-04_2026-10-10/
+├── README.md                        # 中身の説明（日本語）
+├── export.json                      # 一覧（ExportIndex）
+├── markdown/2026-10-10.md           # 日ごとのノート
+├── json/2026-10-10.json             # 日ごとのデータ（ExportDay）
+└── audio/2026-10-10/070000_<チャンクの UUID>.m4a   # 「音声ファイルを含める」のときだけ
+```
+
+- **日の区切り**: 書き出したときの端末のタイムゾーンの 0:00〜24:00 に**始まった**チャンクがその日に入る（「この日のデータを削除」と同じ。各チャンクはちょうど 1 日に入る）。発話と印はチャンクについていく（23:58 に始まったチャンクの 0:01 の発話は前日のファイル。Markdown では「翌日 00:01:00」と書く）。記録のない日はファイルを作らない。
+- **ZIP**: 無圧縮（STORE。音声はもともと圧縮済み）。`ZipWriter`（共通コード、外部ライブラリなし）が前から順に書き、シークしない。音声ファイルは 1 つずつ 2 回読む（CRC-32 を求めてからコピー）のでメモリに載せない。4 GiB または 65,535 件を超えると ZIP64 で書く（1 年分の音声）。ファイル名は UTF-8。
+- **Markdown**（`renderDayMarkdown`、Obsidian でそのまま読める形）: YAML のフロントマター（`date`・`time_zone`・`recorded_minutes`・`utterances`・`marks`・`gaps`・`tags: [watch-audio]`）、見出し「2026年10月10日(土)」、録音時間・発話・マークの件数、文字起こし待ち・失敗のチャンクがあればその旨、「録音できていない時間」（時刻と理由。理由の言葉はタイムラインと同じ）、「文字起こし」（1 時間ごとの見出しの下に `- HH:mm:ss 発話`・`**マーク**`・*録音停止（充電中）* を時刻順）、音声を含めたときは「音声ファイル」（各チャンクへの相対リンク、保持期間で削除済み・見つからなかったものはその旨）。発話の本文は Markdown・Obsidian の記号（`* _ [ ] < > # | ~ = $ %` など）をエスケープし、改行は空白にする。
+- **JSON**（取り込み直せる形。暗号化バックアップ（§6.7、#40）もこの形式を使う）: すべてのファイルに `"format": "watch-audio-export"` と `"formatVersion": 1`。時刻はエポックミリ秒、チャンクは Watch の UUID で表す（DB の整数のキーは外に出さない、#94）。読み手は知らないキーを無視し、`format` が違うか `formatVersion` が新しすぎるファイルは読まない（`decodeExportDay` / `decodeExportIndex`）。形式を変えるときは、古い読み手が誤読する変更なら `EXPORT_FORMAT_VERSION` を上げる。
+
+| ファイル | 内容 |
+| --- | --- |
+| `export.json`（`ExportIndex`） | `exportedAt`、`timeZone`、`from` / `to`（指定した範囲。「すべて」なら省略）、`includesAudio`、`days`（日ごとの `date`・`json`・`markdown` のパスと、チャンク・発話・マーク・ギャップ・音声ファイルの件数） |
+| `json/<日付>.json`（`ExportDay`） | `date`、`timeZone`、`dayStart` / `dayEnd`、`chunks`、`segments`、`marks`、`gaps` |
+| `chunks[]`（`ExportChunk`） | `id`（UUID）、`sessionId`、`deviceId`、`source`（`wearos` / `watchos`）、`startedAt`、`endedAt`、`timeZone`（Watch の）、`endReason`（`rotation`・`charging` など、マニフェストと同じ値）、`transcription`（`done` / `pending` / `failed` / `none` = 無音）、`audio`（無音チャンクは省略。`codec`・`sizeBytes`・`sha256`・`purgedAt`（保持期間で削除した時刻）・`file`（ZIP 内のパス。含めなかったときは省略）） |
+| `segments[]`（`ExportSegment`） | `chunkId`、`startAt`、`endAt`、`text`、`lang`（不明なら省略）、`engine` |
+| `marks[]`（`ExportMark`） | `chunkId`、`at` |
+| `gaps[]`（`ExportGap`） | `start`、`end`、`cause`（`stopped` + `endReason` / `missing` = 録音中のはずが届いていない / `awaiting` = 書き出し時点で転送待ち）。タイムラインと同じ規則（§9.2）で、日と書き出し時刻で切る。最初の録音より前は含めない |
+
+エラーの扱い: 書き出しの失敗（保存先の容量不足など）は決まった日本語の文言を出し、診断ログには `data_export_failed error=<型>` だけを書く（#135）。成功時は `data_exported`（日数・チャンク数・音声ファイル数だけ。本文は書かない）。途中で失敗・キャンセルしたファイルは消す（Android: 作った文書を削除、iOS: 一時ファイルを削除）。
+
+テスト: 固定した 1 日のデータから作った JSON と Markdown を全文で照合（`ExportGoldenTest`）、JSON の読み戻しで発話・マーク・ギャップが欠けないこと（`ExportFormatTest`）、ZIP を共通の読み手と `java.util.zip`（ZIP64 を含む）で読み戻す（`ZipWriterTest`、`ZipWriterJvmTest`）、実 DB と音声ファイルからの書き出しを ZIP から読み戻して DB と一致すること（`DataExporterTest`、JVM と iOS シミュレータ）、ViewModel と画面（`ExportViewModelTest`、`AppUiTest` の `export.png` / `export-done.png`）。
+
+### 6.7 暗号化バックアップ（#40）
+
+機種変更や故障でデータを失わないように、すべての記録をユーザーのパスフレーズで暗号化した 1 つのファイル（`watch-audio-backup-<日付>.wabackup`）にして、ユーザーが選んだ場所（PC・外部ストレージなど）に置き、別の端末（iOS ↔ Android を含む）で戻せるようにする。状態タブの「暗号化バックアップ」で作成・復元する（UI は [phone-ui.md §1.10](../platforms/phone-ui.md#110-暗号化バックアップ40)）。保存先と読み込み元は OS の画面でユーザーが選び（Android: SAF、iOS: 共有シート / ドキュメントピッカー）、アプリが自動でクラウドなどへ送ることはない（「データはローカルのみ」）。
+
+処理は共通コード `shared/pipeline` の `app.watchaudio.core.backup`（`BackupWriter`・`BackupRestorer`・`BackupCipher`）、暗号の基本操作は `shared/platform` の expect/actual（`Crypto.kt`）。
+
+#### 脅威モデル
+
+| 想定する場面 | 対策 |
+| --- | --- |
+| バックアップファイルが PC・USB メモリ・ユーザー自身が置いたクラウドストレージに残る / 盗まれる | 中身（文字起こし・音声・マーク・受信時刻・日付）はすべて暗号化。平文で読めるのはヘッダー（形式・KDF のパラメータ・ソルト）だけ。総当たりは遅い鍵導出（PBKDF2 600,000 回）とパスフレーズの最低長・強さの目安で抑える |
+| 端末をなくす・壊れる | 端末の外にあるバックアップから、別の端末（OS が違ってもよい）へ戻す |
+| パスフレーズの間違い | ヘッダーの MAC で鍵を確かめ、何も書き込まずに「パスフレーズが違います」 |
+| ファイルの破損・途中まで（コピー失敗）・改ざん（チャンクの差し替え・並べ替え・削除・追加） | チャンクごとの MAC と最終チャンクの印で検出し、**ファイル全体を確かめてから**書き込む。何も変更せずに失敗する |
+| 鍵・パスフレーズの漏えい | パスフレーズと鍵はメモリ上だけで使い、保存・記録・送信しない（診断ログには件数とエラーの型だけ）。使い終えた鍵の配列はゼロで消す（OS のライブラリ内部のコピーまでは消せない） |
+
+想定しないもの: 推測しやすいパスフレーズ（強さの目安を出すだけ）、マルウェアに侵された端末、ファイルの存在・大きさ・ファイル名の日付（暗号化しない）。
+
+#### 暗号方式の選択
+
+- **OS の標準ライブラリだけ**を使い、ネイティブの依存を増やさない。Android / JVM は `javax.crypto`、iOS は CommonCrypto と Security（`SecRandomCopyBytes`）を Kotlin/Native から直接呼ぶ（SHA-256 の `Sha256` と同じやり方）。`shared/platform` の `HmacSha256`・`Aes256Ctr`・`pbkdf2HmacSha256`・`secureRandomBytes`・`toNfc`。どれも公開されたテストベクタ（RFC 4231、NIST SP 800-38A、RFC 7914）で全ターゲット（JVM・Android ホスト・iOS シミュレータ）を確かめる（`CryptoTest`）。
+- **暗号: AES-256-CTR + HMAC-SHA-256（Encrypt-then-MAC）をチャンクごとに認証する STREAM 構成**（Hoang ほか 2015。age・Tink のストリーミング AEAD と同じ考え方）。AES-256-GCM を採らなかったのは、iOS で GCM を使える公開 API が CryptoKit（Swift のみ）で Kotlin/Native から呼べず、CommonCrypto の GCM は非公開 API だから。Swift のブリッジにすると、共通コードの iOS シミュレータテストで同じ実装を確かめられない。
+- **鍵導出: PBKDF2-HMAC-SHA256、600,000 回**（OWASP の 2023 年の推奨値）。Argon2id は両 OS とも標準 API がなく、純 Kotlin の実装は保守と成熟度に不安があり、Kotlin/Native ではメモリハードな設定を実用的な時間で回せないので見送った。アルゴリズムの ID と回数をヘッダーに書くので、後から回数を上げる・Argon2id を足す（KDF ID 2）ことができ、古いファイルも読める。読み込み時は回数を 1〜10,000,000 に制限する（細工したヘッダーで止まらないように）。
+- **パスフレーズ**は Unicode NFC に正規化した UTF-8 のバイト列にしてから使う（iPhone と Android のキーボードで「が」の表し方が違っても同じ鍵になる）。JVM の `SecretKeyFactory` は文字で受け取って内部の変換が実装依存なので、PBKDF2 はバイト列で `javax.crypto.Mac` から計算する（iOS は `CCKeyDerivationPBKDF`）。8 文字以上を必須にし、強さの目安（長さと文字の種類）を出す。
+- **パスフレーズを忘れたら戻せない**。鍵をどこにも預けない設計なので、開発者も復元できない。作成画面で警告し、別の場所に控えるよう促す。
+
+#### ファイル形式（コンテナ）
+
+整数はビッグエンディアン。
+
+| 部分 | 内容 |
+| --- | --- |
+| マジック（9 バイト） | `89 57 41 42 4B 0D 0A 1A 0A`（`\x89WABK\r\n\x1a\n`。テキストとして転送されて壊れたことも分かる） |
+| 形式のバージョン（u16） | 1（`BackupCipher.FORMAT_VERSION`）。新しすぎるファイルは「アプリを更新してください」 |
+| KDF（u8）・回数（u32）・ソルト長（u8）・ソルト | 1 = PBKDF2-HMAC-SHA256、600,000、16、乱数 16 バイト |
+| 暗号（u8）・チャンクの大きさ（u32） | 1 = AES-256-CTR + HMAC-SHA-256、65,536（平文のバイト数） |
+| ファイルのノンス（16 バイト） | 乱数。HKDF のソルト |
+| ヘッダーの MAC（32 バイト） | `HMAC(macKey, ここまでのヘッダー)`。パスフレーズの確認とヘッダーの改ざん検出 |
+| チャンク 0, 1, …, n | `AES-256-CTR(encKey, IV = i（u64）‖ 0（u64）, 平文)` ‖ `HMAC(macKey, ヘッダーの MAC ‖ i（u64）‖ 最終なら 1（u8）‖ 暗号文)` |
+
+- 鍵: `master = PBKDF2(NFC(パスフレーズ), ソルト, 回数, 32)`、`HKDF-SHA256(master, ソルト = ファイルのノンス, info = "watch-audio backup v1 keys", 64)` の前半が暗号鍵、後半が MAC 鍵。ファイルごとにソルトとノンスが違うので鍵も違う（差分バックアップで導出を 1 回にしても、ノンスでファイルごとの鍵を分けられる）。
+- 最終チャンク以外はちょうどチャンクの大きさ、最終チャンクはそれ未満（0 バイトもある）。MAC にチャンク番号と最終の印とヘッダーの MAC を含めるので、並べ替え・削除・追加・切り詰め（チャンクの境目でも）・別ファイルのチャンクの混入はすべて MAC の不一致か最終チャンクの欠落になる。比較は定数時間。
+- IV の上位 64 ビットがチャンク番号、下位がチャンク内のカウンタなので、チャンク同士が鍵ストリームを共有しない。数 GB の音声もチャンク単位で流すのでメモリに載せない。
+
+#### 中身（平文）
+
+平文は **#155 の書き出し ZIP（全期間）そのもの**に、復元に要るファイルを足したもの。復号すれば普通の書き出しとしても読める（§6.6）。
+
+| ファイル | 内容 |
+| --- | --- |
+| `json/<日付>.json` などの書き出しのファイル | §6.6 のとおり（「音声もバックアップする」なら `audio/` も） |
+| `backup/<日付>.json`（`BackupDay`、その日の JSON の直後） | `"format": "watch-audio-backup"`・`formatVersion`・`date`・`chunks[]`（`id`、`receivedAt` = スマホが受け取った時刻、`manifest` = Watch が送ったマニフェストそのまま）。書き出しにない、受信時刻（途絶アラートの判定に使う）とマニフェストを戻すため |
+| `backup.json`（`BackupIndex`、`export.json` の後） | `createdAt`、`kind`（今は `full`）、`includesAudio`、日数・チャンク・発話・マーク・音声ファイルの件数 |
+
+ZIP は前から順に読める形（各エントリーのローカルヘッダーに大きさがある）なので、復元は `ZipStreamReader` で復号しながら読み、シークしない。
+
+#### 復元
+
+`BackupRestorer.restore()` はファイルを **2 回**読む（Android は選ばれた文書を直接、iOS はピッカーが一時ディレクトリに作ったコピーを読む）。
+
+1. **確認**: ヘッダーを読み、鍵を導出してヘッダーの MAC を確かめ（違えば `WrongPassphrase`）、全チャンクを最後まで認証しながら ZIP と JSON をすべて検査する（日とバックアップのデータの対応、発話・マークが同じ日のチャンクを指すこと、`backup.json` の日数）。**ここでは何も書き込まない**。壊れた・途中までの・改ざんされたファイルは `Corrupted`、ほかのファイルは `NotABackup`、新しい形式は `UnsupportedVersion`。
+2. **追加**: もう一度読み（ヘッダーが 1 回目と同じことを確かめ、鍵は再利用）、日ごとに 1 トランザクションで加える。音声は `<音声のルート>/.restore/` に一時的に書いて SHA-256 と大きさを確かめ、取り込みと同じ場所（`yyyy/MM/dd/<UUID>.<拡張子>`、`Ingestor.archivePath`）へ移す。その日のトランザクションが失敗したら移した音声を消す。終わったら `.restore/` を消す。
+
+マージの規則（取り込み直しと同じく **チャンクの UUID で冪等**）:
+
+- 端末にないチャンクは、文字起こし（エンジン名も）・マーク・受信時刻・マニフェスト・音声（含まれていれば）とともに加える。欠損区間はチャンクから求まるので、そのまま戻る。
+- 端末にあるチャンクは**そのまま残す**（新しいデータを上書きしない）。足りないマークだけを加え、端末側にまだ文字起こしがない（待ち・失敗）ときだけバックアップの文字起こしを使う。
+- 同じファイルを何度戻しても増えない。2 回目の途中で失敗（容量不足など）しても、加えた日は完全で、もう一度戻せば残りが加わる。
+
+| バックアップでの状態 | 音声が戻った | 音声が戻らない（「音声もバックアップする」なし・元の端末で保持期間により削除済み・ファイルが見つからなかった） |
+| --- | --- | --- |
+| 文字起こし済み | TRANSCRIBED | TRANSCRIBED（音声は削除済みの扱い: `audio_purged_at`） |
+| 文字起こし待ち | RECEIVED（新しい端末で文字起こし） | FAILED（試行済み。`last_error` = 音声がない。再生も文字起こしもできない） |
+| 失敗 | FAILED（試行済み。「再試行」で再び文字起こしできる） | FAILED（同上） |
+| 無音 | NO_AUDIO | NO_AUDIO |
+
+#### 差分バックアップ（未実装・後続）
+
+今は毎回**全体**のバックアップ（`kind: full`）。形式は差分に広げられるようにしてある:
+
+- `BackupIndex.kind` に `incremental` を足し、元にしたバックアップ（ファイルのノンス）と範囲を書く。
+- 「バックアップ済み」を正しく判定するには、チャンクの最終変更時刻が要る（文字起こしの完了・やり直し、保持期間による削除は受信時刻では分からない）。DB に `updated_at` の列を足す（追記のマイグレーション）か、最後のバックアップ時点で状態が確定していた（文字起こし済み・無音・失敗）チャンクだけを済みとみなす。
+- 復元は今と同じマージなので、全体 → 差分の順に戻せばよい（冪等）。
+
+#### 制限と今後
+
+- ZIP は無圧縮（§6.6）なので、テキストだけでも JSON と Markdown の分の大きさになる。圧縮は今後の検討。
+- 1 つの音声ファイルは 4 GiB 未満（ZIP のエントリーの上限）。
+- 鍵導出（600,000 回）は作成時に 1 回、復元時に 1 回。端末での所要時間は実機で測る。
+- 音声のないバックアップから戻したチャンクは再生できない。オフロード（#156）で消した音声を、音声入りのバックアップから戻すことは未対応。
+
+テスト: 暗号の基本操作のテストベクタ（`CryptoTest`、`shared/platform`）、コンテナの往復・あらゆる切り詰めとビット反転・チャンクの並べ替え / 削除 / 追加・未完了のファイル・NFC（`BackupCipherTest`、HKDF は RFC 5869）、実 DB 同士の往復（音声あり・テキストのみ）・間違ったパスフレーズ / 壊れたファイルで何も変わらない・2 回戻しても増えない・端末のデータを上書きしない（`BackupRestorerTest`）、DB の書き込み（`RestoreQueriesTest`）。**プラットフォーム間の互換**は、決まった入力から作ったバックアップ `shared/pipeline/testdata/backup/v1-with-audio.wabackup`（テストでは Base64 で埋め込み）を、JVM・iOS シミュレータ・Android エミュレータ（`sqliteTest`）のそれぞれで**バイト単位で同じに書けること**と**完全に戻せること**で確かめる（`BackupFixtureTest`。ファイルと埋め込みの一致は `BackupFixtureFileTest`）。どの OS で作ったバックアップもほかの OS で戻せる。形式を変えるときは古いフィクスチャも戻せることを保つ。
+
 ## 7. セキュリティ・プライバシー
 
 | 項目 | 方針 |
 | --- | --- |
 | 保存 | アプリサンドボックス内のみ（§7.1）。iOS・watchOS は `Application Support/WatchAudio`（ファイル保護クラス `CompleteUntilFirstUserAuthentication` を明示。ロック中の録音・送信・BGTask からも読める）、Android は内部ストレージ（`files/`） |
-| バックアップ | OS バックアップの対象外（データを端末外に出さないため。§7.1）。Android / Wear OS は `allowBackup=false` とバックアップ除外ルール、iOS・watchOS は保存先に `NSURLIsExcludedFromBackupKey`。E2E 暗号化バックアップは後続フェーズ（#40） |
+| バックアップ | OS バックアップの対象外（データを端末外に出さないため。§7.1）。Android / Wear OS は `allowBackup=false` とバックアップ除外ルール、iOS・watchOS は保存先に `NSURLIsExcludedFromBackupKey`。代わりに、ユーザーが状態タブの「暗号化バックアップ」を押したときだけ、パスフレーズで暗号化したファイルをユーザーが選んだ保存先に書く（§6.7、#40）。パスフレーズと鍵は端末の外に出さず、保存もしない。アプリが自動でクラウドへ送ることはない |
 | API キー | 現在は扱わない。将来（P2）の BYOK では Keychain（`ThisDeviceOnly`）/ Android Keystore にだけ保存する |
 | 外部送信 | なし（ネットワーク利用は文字起こしモデルのダウンロードのみ。§7.2、CI で検査 §7.3）。将来（P2）に AI プロバイダ（テキストのみ、ユーザーが設定した場合）、本人の AI エージェントへの LAN 内での受け渡し（UC11、ペアリングした端末だけ。方式は [#131](https://github.com/Soichiro5/watch-audio/issues/131) で検討中、[research/agent-access.md](../research/agent-access.md)）、OS ジオコーダを検討（追加時は §7.3 の許可リストを更新）。解析 SDK・広告 SDK・クラッシュ送信 SDK は入れない |
 | 診断ログ | 処理の記録（時刻・ID・処理時間・エラーの種類、異常終了）を端末内の CSV（上限約 1 MB）に残す。文字起こしの本文・音声・例外メッセージは含めない。端末外へは、ユーザーが状態タブの「診断ログを書き出す」から共有先を選んだときだけ出る（#77、[impl/android-phone.md §4.2](../platforms/android-phone.md#42-診断ログ77)） |
+| 書き出し | ユーザーが状態タブの「データの書き出し」を押したときだけ、ユーザーが選んだ保存先にだけ書く（Android: SAF の保存ダイアログで作った文書へ直接、iOS: 一時ファイル → 共有シート。閉じたら一時ファイルを削除）。アプリは通信しない（§6.6、#155） |
 | 同意 | 初回オンボーディングで「録音対象者への告知」の注意喚起。Watch に録音中インジケータを常時表示 |
-| 削除 | 「この日のデータを削除」（その日に始まったチャンクの音声・文字起こし・マーク）と「すべてのデータを削除」（全録音・文字起こし・音声ファイル。DB は `VACUUM` で縮める）。どちらもアプリ内の確認ステップ必須（全削除は「削除」と入力）。システムダイアログは使わない。AI 設定・API キーは実装時に全削除の対象に加える |
+| 削除 | 「この日のデータを削除」（その日に始まったチャンクの音声・文字起こし・マーク）と「すべてのデータを削除」（全録音・文字起こし・音声ファイルとスマホの診断ログ。DB は `VACUUM` で縮める。設定は残す。#159）。どちらもアプリ内の確認ステップ必須（全削除は「削除」と入力）。システムダイアログは使わない。AI 設定・API キーは実装時に全削除の対象に加える |
 
 ### 7.1 保存場所と保護（#76）
 
@@ -342,6 +471,9 @@ interface LlmProvider {
 | iPhone | DB、音声、受信直後のファイル | `Application Support/WatchAudio/`（`watch-audio.db`、`audio/`、`inbox/`） | `NSFileProtectionCompleteUntilFirstUserAuthentication` をディレクトリに明示（`LocalDataDirectory`）。中に作るファイルはこのクラスを引き継ぐ | `NSURLIsExcludedFromBackupKey`（ディレクトリに設定すると中身も対象外） |
 | Android スマホ・iPhone | 診断ログ（イベントの CSV。本文・音声・例外メッセージは含まない）（#77） | Android: `files/diagnostics/`、iPhone: `Application Support/WatchAudio/diagnostics/` | 上の DB と同じ | 上の DB と同じ。端末外へはユーザーが共有シートで書き出したときだけ |
 | iPhone | 文字起こし用の一時ファイル | `tmp/` | 既定（同上） | 一時ディレクトリはバックアップされない。処理後に削除 |
+| iPhone | データの書き出し（#155）の ZIP、暗号化バックアップ（#40）のファイル（暗号化済み） | `tmp/data-export/` | 既定（同上） | 一時ディレクトリはバックアップされない。共有シートを閉じたら削除（次の書き出しでも前回分を削除）。Android はアプリの領域に書かず、ユーザーが作った文書へ直接書く |
+| iPhone | 復元するバックアップ（#40）のコピー（暗号化されたまま） | ドキュメントピッカーが作る `tmp/` 内のコピー | 既定（同上） | 一時ディレクトリはバックアップされない。復元が終われば（失敗でも）削除。Android はユーザーが選んだ文書を直接読み、コピーを作らない |
+| Android スマホ・iPhone | 復元中の音声（バックアップから取り出した平文） | 音声のルートの `.restore/` | 上の音声と同じ | 上の音声と同じ。その日を加えたら所定の場所へ移し、復元の終わりに削除 |
 | Apple Watch | 録音中・送信待ちのチャンク、診断ログ | `Application Support/WatchAudio/`（`recording/`、`outbox/`、`diagnostics.csv`） | `FileProtectionType.completeUntilFirstUserAuthentication` をディレクトリに明示（`LocalDataProtection`） | `isExcludedFromBackup`（同上） |
 | Apple Watch | コンプリケーション用の録音状態（状態・開始時刻・停止理由だけ。音声・文字起こしは含まない）（#41） | App Group の `UserDefaults`（アプリとウィジェット拡張だけが読める、端末内のコンテナ） | 既定（`CompleteUntilFirstUserAuthentication`） | 内容は状態だけで、録音データは入れない |
 
@@ -367,7 +499,7 @@ interface LlmProvider {
 - **バックアップ**: `allowBackup="false"`、`dataExtractionRules` があり、全ドメインを除外している（`<include>` は不可）。`usesCleartextTraffic` と独自の `networkSecurityConfig` も不可。
 - **通信・保護**: 出荷されるソース（Kotlin / Java / Swift、コメントとテストコードを除く）での HTTP クライアント・ソケット・WebView・`URLSession`・Network.framework・サーバー型の `SFSpeech…RecognitionRequest`・`DataClient`・保護なしのファイル（`.noFileProtection` など）の利用、URL リテラル。
 - **依存**: Gradle ファイルに解析・広告・クラッシュ送信・HTTP クライアントの SDK がない。リリースの実行時クラスパス（推移的な依存を含む）がすべて許可リストの範囲内。
-- **iOS**: `project.yml` の Info.plist のキー・`UIBackgroundModes`、entitlements（App Group だけ。Watch アプリとコンプリケーションの間の状態共有、#41）。
+- **iOS**: `project.yml` の Info.plist のキー・`UIBackgroundModes`、entitlements（App Group だけ。Watch アプリとコンプリケーションの間の状態共有、#41）、プライバシーマニフェスト（バンドルごとに 1 つ、追跡・収集なし、理由コードは許可リスト。#159）。
 
 使い方と許可リストの広げ方は [04 §6.4](../dev/04-dev-environment.md#64-local-only-チェックtoolsprivacy-check76)。
 
@@ -433,7 +565,7 @@ interface LlmProvider {
 - 削除対象は**文字起こし完了済み**（`TRANSCRIBED`）かつ終了時刻が「今 − 保持日数」以前のチャンクの音声ファイルだけ。未処理・処理中・失敗のチャンクの音声は消さない。文字起こしは常に残り、UI ではそのチャンクの発話を再生ボタンなしで表示する。
 - 削除は「ファイル削除 → `audio_purged_at` を記録」の順（中断しても次回で整合する）。DB の `audio_path` は残す（タイムライン上は録音できていた時間として表示）。
 - 容量の内訳（音声 / 文字起こし・索引 = DB ファイル / モデル / 空き容量）を状態画面に表示し、空き容量が 1 GB 未満なら警告する。モデルサイズと空き容量はプラットフォーム実装（`StorageEnvironment`）から取得する（iOS の Speech モデルは OS 管理のため不明扱い）。
-- 未対応: バックアップ（#40）済みの音声だけを消す「オフロード」。
+- 未対応: バックアップ（#40）済みの音声だけを消す「オフロード」（#156）。
 
 ### 9.4 OS の制約（要実機検証）
 
