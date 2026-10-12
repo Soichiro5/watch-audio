@@ -1,11 +1,8 @@
 package app.watchaudio.app
 
 import app.watchaudio.app.logic.ArrivalState
-import app.watchaudio.app.logic.GapCause
 import app.watchaudio.app.logic.SnippetPart
-import app.watchaudio.app.logic.TimelineSpan
 import app.watchaudio.app.logic.TranscriptEntry
-import app.watchaudio.app.logic.dayWindow
 import app.watchaudio.app.state.DayDeletion
 import app.watchaudio.app.state.DayViewModel
 import app.watchaudio.app.state.DiagnosticsExport
@@ -34,6 +31,9 @@ import app.watchaudio.core.protocol.ChunkManifest
 import app.watchaudio.core.protocol.SourcePlatform
 import app.watchaudio.core.settings.AppSettings
 import app.watchaudio.core.settings.loadSettings
+import app.watchaudio.core.timeline.GapCause
+import app.watchaudio.core.timeline.TimelineSpan
+import app.watchaudio.core.timeline.dayWindow
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest

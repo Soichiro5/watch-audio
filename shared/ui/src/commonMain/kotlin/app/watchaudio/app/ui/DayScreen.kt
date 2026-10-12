@@ -43,9 +43,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.watchaudio.app.Strings
-import app.watchaudio.app.logic.DayTimeline
-import app.watchaudio.app.logic.GapCause
-import app.watchaudio.app.logic.TimelineSpan
 import app.watchaudio.app.logic.TranscriptEntry
 import app.watchaudio.app.logic.formatClock
 import app.watchaudio.app.logic.formatClockRange
@@ -54,6 +51,9 @@ import app.watchaudio.app.logic.formatDuration
 import app.watchaudio.app.logic.formatPercent
 import app.watchaudio.app.state.DayDeletion
 import app.watchaudio.app.state.DayUiState
+import app.watchaudio.core.timeline.DayTimeline
+import app.watchaudio.core.timeline.GapCause
+import app.watchaudio.core.timeline.TimelineSpan
 import kotlinx.datetime.TimeZone
 
 /** Number of LazyColumn items above the transcript entries (summary, gaps, header). */

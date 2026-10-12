@@ -1,6 +1,5 @@
 package app.watchaudio.app
 
-import app.watchaudio.app.logic.dayWindow
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.db.NewSegment
 import app.watchaudio.core.protocol.AudioCodec
@@ -8,6 +7,7 @@ import app.watchaudio.core.protocol.AudioFile
 import app.watchaudio.core.protocol.ChunkEndReason
 import app.watchaudio.core.protocol.ChunkManifest
 import app.watchaudio.core.protocol.SourcePlatform
+import app.watchaudio.core.timeline.dayWindow
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 

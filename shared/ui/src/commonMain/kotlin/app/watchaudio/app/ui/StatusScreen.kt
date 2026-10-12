@@ -35,7 +35,6 @@ import androidx.compose.ui.unit.dp
 import app.watchaudio.app.ModelSetup
 import app.watchaudio.app.Strings
 import app.watchaudio.app.logic.ArrivalState
-import app.watchaudio.app.logic.Thresholds
 import app.watchaudio.app.logic.formatAgo
 import app.watchaudio.app.logic.formatClock
 import app.watchaudio.app.logic.formatHours
@@ -48,6 +47,7 @@ import app.watchaudio.core.db.StoreStats
 import app.watchaudio.core.pipeline.ModelState
 import app.watchaudio.core.pipeline.ProcessingPolicy
 import app.watchaudio.core.settings.AppSettings
+import app.watchaudio.core.timeline.Thresholds
 import kotlinx.datetime.TimeZone
 
 @Composable

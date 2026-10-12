@@ -5,8 +5,8 @@ import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
-import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
@@ -27,7 +27,6 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
-import app.watchaudio.app.logic.dayWindow
 import app.watchaudio.app.state.NowProvider
 import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
@@ -37,6 +36,7 @@ import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StatusNotice
 import app.watchaudio.core.settings.loadSettings
 import app.watchaudio.core.settings.updateSettings
+import app.watchaudio.core.timeline.dayWindow
 import java.io.File
 import java.nio.file.Files
 import javax.imageio.ImageIO

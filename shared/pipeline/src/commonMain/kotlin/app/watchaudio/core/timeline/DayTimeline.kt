@@ -1,4 +1,4 @@
-package app.watchaudio.app.logic
+package app.watchaudio.core.timeline
 
 import app.watchaudio.core.alert.GapAlertTiming
 import app.watchaudio.core.db.ChunkRecord
