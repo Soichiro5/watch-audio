@@ -44,7 +44,9 @@ class EmbedderParityTest {
                 assertEquals(256, single.size)
                 val cosine = dot(single, expected)
                 println("cosine %.6f  %s".format(cosine, text))
-                assertTrue(cosine > 0.999, "cosine $cosine for '$text'")
+                // ONNX Runtime's int8 kernels differ by CPU (AVX2 / AVX-512 VNNI): across machines the
+                // same model and input agree to about 1e-3 (0.998 seen on a CI runner), not exactly.
+                assertTrue(cosine > CROSS_MACHINE_COSINE, "cosine $cosine for '$text'")
                 if (entry in documents) {
                     val inBatch = batched[documents.indexOf(entry)]
                     assertTrue(dot(inBatch, single) > 0.99999, "embedding several texts changed the vector of '$text'")
@@ -56,4 +58,9 @@ class EmbedderParityTest {
     }
 
     private fun dot(a: FloatArray, b: FloatArray): Double = a.indices.sumOf { a[it].toDouble() * b[it] }
+
+    companion object {
+        /** Least cosine between vectors of the same model and text computed on different CPUs. */
+        const val CROSS_MACHINE_COSINE = 0.995
+    }
 }

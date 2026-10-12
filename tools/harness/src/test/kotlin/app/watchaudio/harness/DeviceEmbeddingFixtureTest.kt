@@ -62,7 +62,7 @@ class DeviceEmbeddingFixtureTest {
         assertEquals(RANKING.map { it.first to it.second }, stored["ranking"]!!.jsonArray.map { r -> r.jsonObject.let { it["query"]!!.jsonPrimitive.int to it["passage"]!!.jsonPrimitive.int } })
         texts.forEachIndexed { i, entry ->
             val expected = entry["vector"]!!.jsonArray.map { it.jsonPrimitive.float }.toFloatArray()
-            assertTrue(dot(expected, vectors[i]) > 0.99999, "fixture vector of '${TEXTS[i].second}' is out of date (UPDATE_EMBEDDING_FIXTURE=1)")
+            assertTrue(dot(expected, vectors[i]) > EmbedderParityTest.CROSS_MACHINE_COSINE, "fixture vector of '${TEXTS[i].second}' is out of date (UPDATE_EMBEDDING_FIXTURE=1)")
         }
     }
 
