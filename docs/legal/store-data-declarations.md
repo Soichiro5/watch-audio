@@ -234,6 +234,7 @@ Play Console で権限の用途を聞かれたとき（アプリのコンテン�
 5. 課金（#34）の方針。決まったら、購入情報は App Store / Google Play が扱い開発者のサーバーは使わない旨をポリシーに追記する
 6. 英語版の位置づけ（日本語を正とする前提で書いた）と、配信する国・地域（法令の確認範囲が変わる）
 7. 法律の専門家のレビューを受けるか、受けるなら範囲（録音の告知・個人情報保護法の扱い・利用規約の免責）
+8. 英語モデル SenseVoice（FunASR Model License。商用利用の明記がなく、改訂は公開時点で効力を持つ）を配布に含めるか（#167）。sherpa-onnx の AAR に含まれる eSpeak NG（GPL-3.0）の扱い（§8）
 
 ## 7. #36 の残作業チェックリスト
 
@@ -260,3 +261,23 @@ Play Console で権限の用途を聞かれたとき（アプリのコンテン�
 - [x] 暗号化バックアップ（#40）をポリシー（第 7 条）とこの申告に追記した
 - [ ] 暗号化の輸出コンプライアンスの回答を運営者が決め、`ITSAppUsesNonExemptEncryption` を設定する（§2.1）
 - [ ] 課金（#34）を公開するときに、ポリシーとこの申告を更新する
+
+## 8. 使っているライブラリとモデルのライセンス（#167）
+
+アプリ内の「状態」タブの一番下の「ライセンス」から、名前・作者・ライセンス・URL を確認できる（一覧は `shared/ui/src/commonMain/kotlin/app/watchaudio/app/licenses/OpenSourceNotices.kt`。Android はスマホと Wear OS アプリの分、iOS は iPhone アプリの分を出す。watchOS アプリは Apple のフレームワークだけ）。Apache-2.0・MIT・BSD の本文は画面に 1 回ずつ載せている。
+
+| 対象 | ライセンス | アプリ |
+| --- | --- | --- |
+| ReazonSpeech k2 v2（日本語の文字起こしモデル、ダウンロード） | Apache-2.0 | Android |
+| Silero VAD（発話区間の検出モデル、ダウンロード） | MIT | Android |
+| SenseVoice Small（英語の文字起こしモデル、「英語も文字起こしする」をオンにしたときだけダウンロード） | FunASR Model Open Source License Agreement v1.1（出典と作者の表示、モデル名の保持が条件。英語のカードにも帰属表示を出す） | Android |
+| sherpa-onnx と、そのネイティブライブラリに含まれる ONNX Runtime（MIT）・kaldi-native-fbank・kaldi-decoder・kaldifst・OpenFst・simple-sentencepiece（Apache-2.0）・JSON for Modern C++・piper-phonemize（MIT）・hclust-cpp（BSD-2-Clause）・eSpeak NG（GPL-3.0） | Apache-2.0 ほか | Android |
+| AndroidX・Kotlin・kotlinx（coroutines・serialization・io・datetime・atomicfu）・Compose Multiplatform・Guava ListenableFuture・JSpecify・JetBrains Java Annotations | Apache-2.0 | Android・Wear OS・iOS（それぞれ使う分） |
+| Google Play services（Wearable ほか） | Android Software Development Kit License | Android・Wear OS |
+| Protocol Buffers（AndroidX Wear ProtoLayout に含まれる） | BSD-3-Clause | Wear OS |
+| SQLite（AndroidX SQLite の bundled に含まれる） | パブリックドメイン | Android・iOS |
+| Skiko と、それに含まれる Skia・libwebp（BSD-3-Clause）・ICU（Unicode License v3）・HarfBuzz（Old MIT）・libpng・zlib・Expat（MIT）・libjpeg-turbo（IJG / BSD-3-Clause） | Apache-2.0 ほか | iOS |
+
+- 一覧は、リリースの実行時クラスパス（`./gradlew :apps:android:dependencies --configuration releaseRuntimeClasspath`、Wear OS も同じ）と各 POM のライセンス、iOS の klib（`:shared:ui` の `iosArm64CompileKlibraries`）、sherpa-onnx の AAR と Skiko の klib に入っているネイティブライブラリ、`ModelManifest` のモデルから作った。依存やモデルを足したら一覧も更新する（Android のモデルは `ModelNoticesTest` が照合する）。
+- **要確認（運営者）**: sherpa-onnx の公開 AAR（v1.13.8）のネイティブライブラリには、音声合成用の eSpeak NG（GPL-3.0）が静的にリンクされている（このアプリは音声合成を使わない）。GPL の条件をどう満たすか、音声合成を外した sherpa-onnx を自前でビルドするかを決める必要がある。
+- SenseVoice（FunASR Model License）を配布に含めるかは運営者の判断（#167 の「判断事項」）。
