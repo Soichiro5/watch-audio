@@ -24,6 +24,14 @@ class WearPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_UPLOAD_ENABLED, true)
         set(value) = prefs.edit { putBoolean(KEY_UPLOAD_ENABLED, value) }
 
+    /**
+     * The wearer answered the body sensor explanation (continued to the system dialog or declined),
+     * so it is not shown again (#161). Declining can be undone in the system settings.
+     */
+    var bodySensorsAnswered: Boolean
+        get() = prefs.getBoolean(KEY_BODY_SENSORS_ANSWERED, false)
+        set(value) = prefs.edit { putBoolean(KEY_BODY_SENSORS_ANSWERED, value) }
+
     var lastAckAtEpochMs: Long
         get() = prefs.getLong(KEY_LAST_ACK, 0L)
         set(value) = prefs.edit { putLong(KEY_LAST_ACK, value) }
@@ -33,5 +41,6 @@ class WearPrefs(context: Context) {
         const val KEY_ARMED = "armed"
         const val KEY_UPLOAD_ENABLED = "upload_enabled"
         const val KEY_LAST_ACK = "last_ack_at"
+        const val KEY_BODY_SENSORS_ANSWERED = "body_sensors_answered"
     }
 }

@@ -39,6 +39,7 @@ fun RecorderScreen(
     onStop: () -> Unit,
     onMark: () -> Unit,
     onUploadEnabledChange: (Boolean) -> Unit,
+    offBodyDetectionOff: Boolean = false,
     debugInputLabel: String? = null,
     onDebugInput: () -> Unit = {},
 ) {
@@ -81,6 +82,8 @@ fun RecorderScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+            // BODY_SENSORS declined (#161): recording works, but taking the watch off does not pause it.
+            if (offBodyDetectionOff) item { SmallText(stringResource(R.string.off_body_detection_off)) }
             val started = state.sessionStartedAtEpochMs
             if (recording && started != null) {
                 item {
