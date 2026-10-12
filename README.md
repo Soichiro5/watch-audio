@@ -36,6 +36,7 @@
 | [docs/research/](docs/research/) | 技術検証の結果（ASR・埋め込み・電池計測手順） |
 | [docs/platforms/android-phone.md](docs/platforms/android-phone.md) | Android スマホ側の実装（受信・ACK・オンデバイス文字起こし・モデル配信） |
 | [docs/platforms/phone-ui.md](docs/platforms/phone-ui.md) | スマホ UI（タイムライン・検索・状態画面）の実装メモ |
+| [docs/legal/](docs/legal/privacy-policy.ja.md) | プライバシーポリシー（日本語・英語）とストア申告の下書き（#36、レビュー前） |
 
 ## 技術スタック
 
