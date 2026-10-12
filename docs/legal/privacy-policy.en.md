@@ -66,7 +66,8 @@ The speech recognition models and libraries the App uses are programs and data t
 
 - **Transcripts** are kept on your device until you delete them.
 - For **audio**, you can choose a retention period (7 days, 30 days, 90 days or unlimited; unlimited by default). Audio older than the period is deleted automatically, but only once it has been transcribed; the transcript is kept.
-- In the App you can **delete the data of a given day** and **delete all data (recordings, audio and transcripts)**. Deleted data cannot be recovered.
+- In the App you can **delete the data of a given day** and **delete all data (recordings, audio, transcripts and the phone's diagnostics log)**. Deleted data cannot be recovered. Deleting all data keeps the App's settings (such as the retention period, notification settings and whether you have seen the introduction).
+- The watch's diagnostics log is stored on the watch and is not deleted from the phone. Its oldest entries are discarded once it reaches its size limit, and uninstalling the App from the watch deletes it entirely.
 - Audio kept temporarily on the watch is deleted once it has been transferred to the phone.
 - Uninstalling the App deletes all of the App's data on that device (including the diagnostics log).
 - Because we hold none of your data, there is no data held by us for you to request access to, correction of or deletion of. You can review and delete your data in the App or on your device as described above.
