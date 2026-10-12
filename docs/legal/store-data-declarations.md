@@ -234,7 +234,7 @@ Play Console で権限の用途を聞かれたとき（アプリのコンテン�
 5. 課金（#34）の方針。決まったら、購入情報は App Store / Google Play が扱い開発者のサーバーは使わない旨をポリシーに追記する
 6. 英語版の位置づけ（日本語を正とする前提で書いた）と、配信する国・地域（法令の確認範囲が変わる）
 7. 法律の専門家のレビューを受けるか、受けるなら範囲（録音の告知・個人情報保護法の扱い・利用規約の免責）
-8. 英語モデル SenseVoice（FunASR Model License。商用利用の明記がなく、改訂は公開時点で効力を持つ）を配布に含めるか（#167）。sherpa-onnx の AAR に含まれる eSpeak NG（GPL-3.0）の扱い（§8）
+8. 英語モデル SenseVoice（FunASR Model License。商用利用の明記がなく、改訂は公開時点で効力を持つ）を配布に含めるか（#167）
 
 ## 7. #36 の残作業チェックリスト
 
@@ -273,13 +273,14 @@ Play Console で権限の用途を聞かれたとき（アプリのコンテン�
 | Ruri v3 30m（意味検索の埋め込みモデル、検索タブを開いたときに Wi-Fi でダウンロード、#24） | Apache-2.0 | Android |
 | JNA（Java Native Access。意味検索のモデルを動かすために ONNX Runtime の C API を呼ぶ、#24） | Apache-2.0（LGPL-2.1 とのデュアル。Apache-2.0 を選ぶ） | Android |
 | SenseVoice Small（英語の文字起こしモデル、「英語も文字起こしする」をオンにしたときだけダウンロード） | FunASR Model Open Source License Agreement v1.1（出典と作者の表示、モデル名の保持が条件。英語のカードにも帰属表示を出す） | Android |
-| sherpa-onnx と、そのネイティブライブラリに含まれる ONNX Runtime（MIT）・kaldi-native-fbank・kaldi-decoder・kaldifst・OpenFst・simple-sentencepiece（Apache-2.0）・JSON for Modern C++・piper-phonemize（MIT）・hclust-cpp（BSD-2-Clause）・eSpeak NG（GPL-3.0） | Apache-2.0 ほか | Android |
+| sherpa-onnx と、そのネイティブライブラリに含まれる ONNX Runtime・JSON for Modern C++（MIT）・kaldi-native-fbank・kaldi-decoder・kaldifst・OpenFst・simple-sentencepiece（Apache-2.0） | Apache-2.0 ほか | Android |
 | AndroidX・Kotlin・kotlinx（coroutines・serialization・io・datetime・atomicfu）・Compose Multiplatform・Guava ListenableFuture・JSpecify・JetBrains Java Annotations | Apache-2.0 | Android・Wear OS・iOS（それぞれ使う分） |
 | Google Play services（Wearable ほか） | Android Software Development Kit License | Android・Wear OS |
 | Protocol Buffers（AndroidX Wear ProtoLayout に含まれる） | BSD-3-Clause | Wear OS |
 | SQLite（AndroidX SQLite の bundled に含まれる） | パブリックドメイン | Android・iOS |
 | Skiko と、それに含まれる Skia・libwebp（BSD-3-Clause）・ICU（Unicode License v3）・HarfBuzz（Old MIT）・libpng・zlib・Expat（MIT）・libjpeg-turbo（IJG / BSD-3-Clause） | Apache-2.0 ほか | iOS |
 
-- 一覧は、リリースの実行時クラスパス（`./gradlew :apps:android:dependencies --configuration releaseRuntimeClasspath`、Wear OS も同じ）と各 POM のライセンス、iOS の klib（`:shared:ui` の `iosArm64CompileKlibraries`）、sherpa-onnx の AAR と Skiko の klib に入っているネイティブライブラリ、`ModelManifest` のモデルから作った。依存やモデルを足したら一覧も更新する（Android のモデルは `ModelNoticesTest` が照合する）。
-- **要確認（運営者）**: sherpa-onnx の公開 AAR（v1.13.8）のネイティブライブラリには、音声合成用の eSpeak NG（GPL-3.0）が静的にリンクされている（このアプリは音声合成を使わない）。GPL の条件をどう満たすか、音声合成を外した sherpa-onnx を自前でビルドするかを決める必要がある。
+- 一覧は、リリースの実行時クラスパス（`./gradlew :apps:android:dependencies --configuration releaseRuntimeClasspath`、Wear OS も同じ）と各 POM のライセンス、iOS の klib（`:shared:ui` の `iosArm64CompileKlibraries`）、アプリに入るネイティブライブラリ（sherpa-onnx はアプリ用にビルドした JNI ライブラリと AAR の ONNX Runtime、Skiko は klib）、`ModelManifest` のモデルから作った。依存やモデルを足したら一覧も更新する（Android のモデルは `ModelNoticesTest` が照合する）。
+- sherpa-onnx の公開 AAR（v1.13.8）の JNI ライブラリには、音声合成用の eSpeak NG（GPL-3.0）・piper-phonemize と話者分離用の hclust-cpp が静的にリンクされている。このアプリは音声合成も話者分離も使わないので、**配布する Android アプリ**には、上流の同じタグを CMake のオプションだけ変えて（音声合成と話者分離をオフ。フォークやパッチではない）CI でビルドした JNI ライブラリを入れ、これらは配布物に含めない（#173。ビルドと検査は [docs/dev/04 §7.3](../dev/04-dev-environment.md#73-sherpa-onnx-の-jni-ライブラリ音声合成なし173)）。配布の経路（`deliver.yml`）と CI の APK（`android.yml`・`emulator.yml`）は、`libsherpa-onnx-jni.so` に eSpeak NG と音声合成の痕跡があれば失敗する。上の一覧はこの配布物に合わせてある。
+- 開発者が手元でビルドする APK（配布しない）は、AAR の JNI ライブラリをそのまま使うので eSpeak NG などを含む。人に渡す APK は、必ず CI（`deliver.yml` など）が作ったものにする。
 - SenseVoice（FunASR Model License）を配布に含めるかは運営者の判断（#167 の「判断事項」）。

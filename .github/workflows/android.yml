@@ -36,7 +36,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # +~7 min when the sherpa-onnx JNI cache misses (a new sherpa-onnx version, #173).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -62,6 +63,11 @@ jobs:
           java-version: 21
 
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      # #173: every APK of this job (debug-apks, release-apks) packs sherpa-onnx's JNI library built
+      # without text-to-speech (the AAR's statically links eSpeak NG, GPL-3.0). Cached; docs/dev/04 §7.3.
+      - name: sherpa-onnx JNI without TTS
+        uses: ./.github/actions/sherpa-onnx-jni
 
       - name: "Unit tests (shared: JVM + Android host; ONNX Runtime binding; phone and Wear OS app JVM tests)"
         run: ./gradlew jvmTest testAndroidHostTest :shared:ort:test :apps:android:testDebugUnitTest :apps:wear:testDebugUnitTest
@@ -157,6 +163,14 @@ jobs:
       - name: Remove the release key
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks"
+
+      # #173: besides verify<Variant>SherpaOnnxJni of assemble (the packed library is the one built
+      # without TTS, linked against the packed libonnxruntime.so), an independent check of the APKs.
+      # Fails on eSpeak NG / TTS / diarization markers in any ABI.
+      - name: sherpa-onnx JNI without TTS (release and debug APKs)
+        run: |
+          tools/sherpa-onnx-android/check-no-tts.sh apps/android/build/outputs/apk/release/*.apk apps/android/build/outputs/apk/debug/*.apk
+          cat apps/android/build/reports/sherpa-onnx-jni/*.txt
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.release.outputs.signed == 'true'

@@ -19,12 +19,10 @@ enum class NoticeKind {
 enum class License(val title: String, val url: String, val text: String? = null) {
     APACHE_2_0("Apache License 2.0", "https://www.apache.org/licenses/LICENSE-2.0", LicenseTexts.APACHE_2_0),
     MIT("MIT License", "https://spdx.org/licenses/MIT.html", LicenseTexts.MIT),
-    BSD_2_CLAUSE("BSD 2-Clause License", "https://spdx.org/licenses/BSD-2-Clause.html", LicenseTexts.BSD_2_CLAUSE),
     BSD_3_CLAUSE("BSD 3-Clause License", "https://spdx.org/licenses/BSD-3-Clause.html", LicenseTexts.BSD_3_CLAUSE),
     PUBLIC_DOMAIN("Public domain", "https://www.sqlite.org/copyright.html"),
     FUNASR_MODEL_1_1("FunASR Model Open Source License Agreement v1.1", "https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE"),
     ANDROID_SDK("Android Software Development Kit License", "https://developer.android.com/studio/terms"),
-    GPL_3_0("GNU General Public License v3.0", "https://www.gnu.org/licenses/gpl-3.0.html"),
     UNICODE_3("Unicode License v3", "https://github.com/unicode-org/icu/blob/main/LICENSE"),
     HARFBUZZ_OLD_MIT("Old MIT License (HarfBuzz)", "https://github.com/harfbuzz/harfbuzz/blob/main/COPYING"),
     LIBPNG_2("PNG Reference Library License version 2", "https://github.com/pnggroup/libpng/blob/libpng16/LICENSE"),
@@ -54,7 +52,8 @@ data class OpenSourceNotice(
  * The third-party components the apps ship or download, shown on the licenses screen (#167).
  *
  * Collected from the release runtime classpaths of `apps/android` and `apps/wear`, the iOS
- * framework's klibs (`shared/ui`), the native libraries inside the sherpa-onnx AAR and Skiko, and the
+ * framework's klibs (`shared/ui`), the native libraries the app ships (sherpa-onnx's JNI library as
+ * CI builds it for distributed APKs, `tools/sherpa-onnx-android/build-jni.sh`; Skiko), and the
  * models in the Android model manifest. A new dependency or model needs an entry here (the Android
  * manifest is checked by a unit test).
  */
@@ -140,7 +139,10 @@ object OpenSourceNotices {
             setOf(NoticeApp.WEAR_OS), copyright = "Copyright 2008 Google Inc. All rights reserved.",
             includedIn = "AndroidX Wear ProtoLayout",
         ),
-        // On-device speech recognition (Android) and what its native libraries contain
+        // On-device speech recognition (Android) and what its native libraries contain. Distributed
+        // APKs pack libsherpa-onnx-jni.so built without text-to-speech and speaker diarization (#173,
+        // checked by CI), so eSpeak NG (GPL-3.0), piper-phonemize and hclust-cpp are not shipped.
+        // Local development builds keep the AAR's library (with them); they are never distributed.
         library(SHERPA_ONNX, "k2-fsa (Next-gen Kaldi), Xiaomi Corporation", License.APACHE_2_0, "https://github.com/k2-fsa/sherpa-onnx", ANDROID),
         library(
             "ONNX Runtime", "Microsoft", License.MIT, "https://github.com/microsoft/onnxruntime", ANDROID,
@@ -157,15 +159,6 @@ object OpenSourceNotices {
         library(
             "JSON for Modern C++", "Niels Lohmann", License.MIT, "https://github.com/nlohmann/json", ANDROID,
             copyright = "Copyright (c) 2013-2025 Niels Lohmann", includedIn = SHERPA_ONNX,
-        ),
-        library(
-            "piper-phonemize", "Michael Hansen", License.MIT, "https://github.com/csukuangfj/piper-phonemize", ANDROID,
-            copyright = "Copyright (c) 2023 Michael Hansen", includedIn = SHERPA_ONNX,
-        ),
-        library("eSpeak NG", "eSpeak NG contributors", License.GPL_3_0, "https://github.com/csukuangfj/espeak-ng", ANDROID, includedIn = SHERPA_ONNX),
-        library(
-            "hclust-cpp (fastcluster)", "Daniel Müllner, Christoph Dalitz", License.BSD_2_CLAUSE, "https://github.com/csukuangfj/hclust-cpp",
-            ANDROID, copyright = "Copyright © 2011 Daniel Müllner, © 2018 Christoph Dalitz. All rights reserved.", includedIn = SHERPA_ONNX,
         ),
         // Compose Multiplatform's renderer on iOS and what it links
         library(SKIKO, "JetBrains", License.APACHE_2_0, "https://github.com/JetBrains/skiko", IOS),
