@@ -167,4 +167,5 @@ val ROUTING_OPTIONS: Map<String, (LanguageRouting, String) -> LanguageRouting> =
     "minLatinShare" to { r, v -> r.copy(minLatinShare = v.toFloat()) },
     // `Infinity` runs the multilingual model on every span.
     "maxPrimaryCharsPerSecond" to { r, v -> r.copy(maxPrimaryCharsPerSecond = v.toFloat()) },
+    "minForeignScriptShare" to { r, v -> r.copy(minForeignScriptShare = v.toFloat()) },
 )

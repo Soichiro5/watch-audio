@@ -46,6 +46,16 @@ class LanguageRoutingTest {
     }
 
     @Test
+    fun katakanaGibberishIsCheckedEvenWhenDense() {
+        // English the Japanese model spelled in katakana: 11 characters in 4.8 s.
+        assertTrue(routing.suspectsOtherLanguage(Recognition("JVキャンストレーション"), 4.8f))
+        assertTrue(routing.suspectsOtherLanguage(Recognition("ｷｬﾝｾﾙ"), 1f))
+        // Ordinary Japanese with a loanword is not.
+        assertFalse(routing.suspectsOtherLanguage(Recognition("ズームのリンクを送ります"), 2f))
+        assertFalse(LanguageRouting(minForeignScriptShare = 1.1f).suspectsOtherLanguage(Recognition("キャンセル"), 1f))
+    }
+
+    @Test
     fun englishTagsOnTextThatIsNotMostlyLatinAreNotTrusted() {
         assertFalse(routing.keeps(Recognition("はい、そうです", lang = "en")))
         assertFalse(routing.keeps(Recognition("", lang = "en")))

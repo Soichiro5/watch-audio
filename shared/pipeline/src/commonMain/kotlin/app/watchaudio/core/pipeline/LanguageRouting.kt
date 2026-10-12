@@ -4,7 +4,8 @@ package app.watchaudio.core.pipeline
  * English transcription next to Japanese (#81, `docs/research/english-asr.md`).
  *
  * The Japanese model ([AsrModelSpec.JA_REAZONSPEECH]) cannot recognize English: for English speech
- * it writes next to nothing (a 「はい」 or 「そう」 for a ten-second sentence). The multilingual model
+ * it writes next to nothing (a 「はい」 or 「そう」 for a ten-second sentence) or katakana gibberish
+ * (「JVキャンストレーション」). The multilingual model
  * ([AsrModelSpec.SENSE_VOICE]) detects the language of what it hears but is much less accurate on
  * Japanese conversation. So with English on, each speech span is recognized by the primary
  * (Japanese) model first; only when its text is suspiciously short for the span
@@ -26,6 +27,11 @@ data class LanguageRouting(
      * digits than this per second of the span (padding included); infinity runs it on every span.
      */
     val maxPrimaryCharsPerSecond: Float = 1.5f,
+    /**
+     * The multilingual model also hears a span whose primary text is at least this share katakana
+     * and Latin letters (the Japanese model writes English as katakana); above 1 never.
+     */
+    val minForeignScriptShare: Float = 0.8f,
 ) {
     /**
      * The recognition to store for one span of [seconds]: [primary]'s, unless it is suspiciously
@@ -39,9 +45,15 @@ data class LanguageRouting(
         return if (keeps(detected)) detected else main
     }
 
-    /** True if [primary]'s text is too short for a span of [seconds] to be sure it was Japanese. */
-    fun suspectsOtherLanguage(primary: Recognition, seconds: Float): Boolean =
-        FalsePositiveFilter.textLength(primary.text) < maxPrimaryCharsPerSecond * seconds
+    /**
+     * True if [primary]'s text is too short for a span of [seconds], or written mostly in katakana
+     * and Latin letters, to be sure the span was Japanese.
+     */
+    fun suspectsOtherLanguage(primary: Recognition, seconds: Float): Boolean {
+        if (FalsePositiveFilter.textLength(primary.text) < maxPrimaryCharsPerSecond * seconds) return true
+        val letters = primary.text.filter { it.isLetter() }
+        return letters.isNotEmpty() && letters.count(::isForeignScript) >= minForeignScriptShare * letters.length
+    }
 
     /** True if [detected] is in one of [languages] and written mostly in Latin letters. */
     fun keeps(detected: Recognition): Boolean {
@@ -62,6 +74,10 @@ data class LanguageRouting(
         fun engineId(primary: AsrModelSpec, detector: AsrModelSpec): String = "${primary.engineId}+${detector.engineId}"
     }
 }
+
+/** Katakana (full and half width, with 「ー」) or a Latin letter: how Japanese text spells foreign words. */
+private fun isForeignScript(c: Char): Boolean =
+    c in '\u30A0'..'\u30FF' || c in '\uFF66'..'\uFF9F' || c in 'a'..'z' || c in 'A'..'Z'
 
 /**
  * The BCP 47 language of a sherpa-onnx SenseVoice language tag (`<|en|>` → `en`), or null for no
