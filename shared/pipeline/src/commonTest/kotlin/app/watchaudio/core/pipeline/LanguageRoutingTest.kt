@@ -11,19 +11,38 @@ class LanguageRoutingTest {
     private val japanese = Recognition("このPRをマージしてください")
 
     @Test
-    fun englishFromTheMultilingualModelIsKeptWithoutRunningTheJapaneseModel() {
-        var primaryRuns = 0
-        val english = Recognition("Let's merge this pull request.", lang = "en")
-        val result = routing.route(english) { primaryRuns++; japanese }
-        assertEquals(english, result)
-        assertEquals(0, primaryRuns)
+    fun japaneseTextOfTheUsualDensityNeverRunsTheMultilingualModel() {
+        var detections = 0
+        // 13 characters in 4 s: 3.25 per second.
+        val result = routing.route(4f, { japanese }) { detections++; Recognition("Merge this PR.", lang = "en") }
+        assertEquals(japanese, result)
+        assertEquals(0, detections)
     }
 
     @Test
-    fun everyOtherLanguageGoesToTheJapaneseModel() {
+    fun englishReplacesTheJapaneseModelsFewCharacters() {
+        // The Japanese model writes a lone 「はい」 for a 6 s English sentence.
+        val english = Recognition("Let's merge this pull request.", lang = "en")
+        assertEquals(english, routing.route(6f, { Recognition("はい") }) { english })
+        // Short spans are checked too: 「はい」 in 2 s is 1 character per second.
+        assertEquals(english, routing.route(2f, { Recognition("はい") }) { english })
+    }
+
+    @Test
+    fun aShortJapaneseReplyStaysJapaneseUnlessHeardAsEnglish() {
+        val reply = Recognition("はい")
         for (lang in listOf("ja", "zh", "ko", "yue", null)) {
-            assertEquals(japanese, routing.route(Recognition("こんにちは", lang = lang)) { japanese }, "lang=$lang")
+            assertEquals(reply, routing.route(2f, { reply }) { Recognition("はい。", lang = lang) }, "lang=$lang")
         }
+    }
+
+    @Test
+    fun theDensityLimitDecidesWhenToAsk() {
+        assertTrue(routing.suspectsOtherLanguage(Recognition(""), 0.5f))
+        assertTrue(routing.suspectsOtherLanguage(Recognition("はい。"), 2f))
+        assertFalse(routing.suspectsOtherLanguage(Recognition("はい。"), 1f))
+        val always = LanguageRouting(maxPrimaryCharsPerSecond = Float.POSITIVE_INFINITY)
+        assertTrue(always.suspectsOtherLanguage(japanese, 4f))
     }
 
     @Test

@@ -29,8 +29,8 @@ import kotlinx.coroutines.withContext
 /**
  * sherpa-onnx on the JVM: Silero VAD finds the utterances, then the ASR model [spec] (by default
  * the Japanese ReazonSpeech Zipformer, int8) transcribes each one. With an [english] model
- * (SenseVoice, #81) each utterance is first recognized by it and routed with [routing], as in the
- * Android app with 「英語も文字起こしする」 on. Everything after the VAD probabilities is the shared
+ * (SenseVoice, #81) utterances are routed with [routing] (the multilingual model hears those the
+ * Japanese model wrote too little for), as in the Android app with 「英語も文字起こしする」 on. Everything after the VAD probabilities is the shared
  * [transcribeSpeech], as in the Android app, so with the same [spec], [english] and [vadSettings]
  * results here predict on-device accuracy (not speed).
  *
@@ -66,9 +66,13 @@ class SherpaTranscriber(
     /** Recognizes [samples] (16 kHz) as one utterance, without VAD, routed like [transcribe]. */
     fun recognition(samples: FloatArray): Recognition {
         val (detectorSpec, detectorRecognizer) = detector ?: return decode(recognizer, spec, samples).also { usage.kept(spec) }
-        val detected = decode(detectorRecognizer, detectorSpec, samples)
-        if (routing.keeps(detected)) return detected.also { usage.kept(detectorSpec) }
-        return decode(recognizer, spec, samples).also { usage.kept(spec) }
+        var detected: Recognition? = null
+        val seconds = samples.size.toFloat() / AsrSettings.SAMPLE_RATE
+        val result = routing.route(seconds, { decode(recognizer, spec, samples) }) {
+            decode(detectorRecognizer, detectorSpec, samples).also { detected = it }
+        }
+        usage.kept(if (result === detected) detectorSpec else spec)
+        return result
     }
 
     /** The text of [recognition]. */
@@ -148,21 +152,26 @@ class SherpaTranscriber(
     }
 }
 
-/** Where a [SherpaTranscriber]'s recognition time went, per engine id (seconds, spans kept). */
+/** Where a [SherpaTranscriber]'s recognition time went, per engine id (seconds, spans heard and kept). */
 class RecognizerUsage {
     val seconds = linkedMapOf<String, Double>()
+    val spans = linkedMapOf<String, Int>()
     val keptSpans = linkedMapOf<String, Int>()
 
-    internal fun spent(spec: AsrModelSpec, value: Double) = seconds.merge(spec.engineId, value, Double::plus)
+    internal fun spent(spec: AsrModelSpec, value: Double) {
+        seconds.merge(spec.engineId, value, Double::plus)
+        spans.merge(spec.engineId, 1, Int::plus)
+    }
 
     internal fun kept(spec: AsrModelSpec) = keptSpans.merge(spec.engineId, 1, Int::plus)
 
     fun clear() {
         seconds.clear()
+        spans.clear()
         keptSpans.clear()
     }
 
     override fun toString() = seconds.keys.union(keptSpans.keys).joinToString(", ") {
-        "%s %.1fs (%d spans kept)".format(it, seconds[it] ?: 0.0, keptSpans[it] ?: 0)
+        "%s %.1fs (%d spans heard, %d kept)".format(it, seconds[it] ?: 0.0, spans[it] ?: 0, keptSpans[it] ?: 0)
     }
 }

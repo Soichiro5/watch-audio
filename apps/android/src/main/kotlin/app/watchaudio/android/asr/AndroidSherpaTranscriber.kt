@@ -40,9 +40,10 @@ class ModelNotReadyException : IllegalStateException("speech model is not downlo
  * by the JVM harness's `SherpaTranscriber` (same models and [VadSettings]), so harness results
  * predict this one; only creating the VAD and the recognizers is Android specific.
  *
- * While [englishEnabled] (「英語も文字起こしする」, #81) and the [english] model is present, each
- * utterance is first recognized by it and routed with [routing]: English text is kept, everything
- * else goes to the Japanese model. [engineId] then names both models.
+ * While [englishEnabled] (「英語も文字起こしする」, #81) and the [english] model is present,
+ * utterances are routed with [routing]: those the Japanese model wrote too little for are heard by
+ * the English (multilingual) model too, whose text is kept when it is English. [engineId] then
+ * names both models.
  *
  * Recognizers are loaded on first use and reused across chunks until [release]; the English one
  * is released as soon as a run no longer uses it.
@@ -81,7 +82,8 @@ class AndroidSherpaTranscriber(
                 if (detector == null || withEnglish == null) {
                     recognize(recognizer, models, span)
                 } else {
-                    routing.route(recognize(detector, withEnglish, span)) { recognize(recognizer, models, span) }
+                    val seconds = span.size.toFloat() / AsrSettings.SAMPLE_RATE
+                    routing.route(seconds, { recognize(recognizer, models, span) }) { recognize(detector, withEnglish, span) }
                 }
             }
         }

@@ -1,6 +1,8 @@
 package app.watchaudio.harness
 
+import app.watchaudio.core.pipeline.AsrModelSpec
 import app.watchaudio.core.pipeline.FalsePositiveFilter
+import app.watchaudio.core.pipeline.LanguageRouting
 import app.watchaudio.core.pipeline.VadSettings
 import app.watchaudio.core.protocol.AudioCodec
 import app.watchaudio.core.protocol.RecordingFormat
@@ -81,6 +83,21 @@ class EvaluateArgsTest {
     }
 
     @Test
+    fun englishIsOffUnlessTurnedOnAndRoutingCanBeOverridden() {
+        assertNull(EvaluateArgs.parse(listOf("m.json", "out")).english)
+        val on = EvaluateArgs.parse(listOf("m.json", "out", "--english", "on", "mixed_wrist"))
+        assertEquals(AsrModelSpec.SENSE_VOICE, on.english)
+        assertEquals(LanguageRouting.DEFAULT, on.routing)
+        assertEquals(setOf("mixed_wrist"), on.recordings)
+        val tuned = EvaluateArgs.parse(listOf("m.json", "out", "--english=maxPrimaryCharsPerSecond=Infinity,languages=en+zh"))
+        assertEquals(AsrModelSpec.SENSE_VOICE, tuned.english)
+        assertEquals(LanguageRouting(languages = setOf("en", "zh"), maxPrimaryCharsPerSecond = Float.POSITIVE_INFINITY), tuned.routing)
+        assertNull(EvaluateArgs.parse(listOf("m.json", "out", "--english", "on", "--english", "off")).english)
+        val names = LanguageRouting::class.java.declaredFields.filterNot { Modifier.isStatic(it.modifiers) }.map { it.name }.toSet()
+        assertEquals(names, ROUTING_OPTIONS.keys)
+    }
+
+    @Test
     fun badInputIsReported() {
         assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json")) }
         assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--vad")) }
@@ -94,6 +111,8 @@ class EvaluateArgsTest {
         assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--format", "codec=mp3")) }
         assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--format", "bitrateBps=0")) }
         assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--format")) }
+        assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--english")) }
+        assertFailsWith<IllegalArgumentException> { EvaluateArgs.parse(listOf("m.json", "out", "--english", "yes")) }
     }
 
     private fun property(settings: VadSettings, name: String): Any =
