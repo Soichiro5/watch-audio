@@ -2,8 +2,11 @@ package app.watchaudio.harness
 
 import java.text.Normalizer
 
-/** A stored transcript segment, with times relative to the start of the recording. */
-data class Hypothesis(val startMs: Long, val endMs: Long, val text: String)
+/**
+ * A stored transcript segment, with times relative to the start of the recording, and its
+ * language when the transcriber said (`ja`, `en`, ...).
+ */
+data class Hypothesis(val startMs: Long, val endMs: Long, val text: String, val lang: String? = null)
 
 /**
  * Text normalization for Japanese CER: NFKC, lower case, punctuation/spaces/symbols removed, and
@@ -85,13 +88,28 @@ object CerText {
 }
 
 /**
+ * Text normalization for English WER, as in the M0-5 spike (`research/asr-benchmark`): NFKC,
+ * lower case, hyphens to spaces, everything but letters, digits and spaces removed, split into
+ * words. Number notation ("twenty" vs "20") is not unified.
+ */
+object WerText {
+    fun words(text: String): List<String> =
+        Normalizer.normalize(text, Normalizer.Form.NFKC).lowercase().replace('-', ' ')
+            .filter { it.isLetterOrDigit() || it.isWhitespace() }
+            .split(Regex("\\s+")).filter { it.isNotEmpty() }
+}
+
+/**
  * Character errors (substitutions + deletions + insertions) of [hyp] against [ref], attributed
  * to the label of the reference character involved (insertions: the preceding one).
  */
-fun alignErrors(ref: List<Pair<Char, String>>, hyp: String): Map<String, Int> {
-    if (ref.isEmpty()) return if (hyp.isEmpty()) emptyMap() else mapOf("" to hyp.length)
+fun alignErrors(ref: List<Pair<Char, String>>, hyp: String): Map<String, Int> = alignErrors(ref, hyp.toList())
+
+/** [alignErrors] over any tokens, e.g. words for WER. */
+fun <T> alignErrors(ref: List<Pair<T, String>>, hyp: List<T>): Map<String, Int> {
+    if (ref.isEmpty()) return if (hyp.isEmpty()) emptyMap() else mapOf("" to hyp.size)
     val n = ref.size
-    val m = hyp.length
+    val m = hyp.size
     val width = m + 1
     val d = IntArray((n + 1) * width)
     for (j in 0..m) d[j] = j
@@ -131,7 +149,10 @@ fun alignErrors(ref: List<Pair<Char, String>>, hyp: String): Map<String, Int> {
 /** One aligned conversation: what was said, what was transcribed, and the errors. */
 data class GroupScore(val id: String, val reference: String, val hypothesis: String, val errors: Int)
 
-/** Accuracy of one recording's transcript against its ground truth. */
+/**
+ * Accuracy of one recording's transcript against its ground truth. Japanese (and any non-English)
+ * groups are scored by characters (CER), English groups by words (WER).
+ */
 data class RecordingScore(
     val utterancesByRole: Map<String, Int>,
     val missedByRole: Map<String, Int>,
@@ -141,6 +162,15 @@ data class RecordingScore(
     val outsideChars: Int,
     val groups: List<GroupScore>,
     val outside: List<Hypothesis>,
+    /** Words of English groups, and their word errors, by role. */
+    val refWordsByRole: Map<String, Int> = emptyMap(),
+    val wordErrorsByRole: Map<String, Int> = emptyMap(),
+    /**
+     * Per spoken language: utterances whose most overlapping segment states a language, and how
+     * many of them state another one (e.g. Japanese stored as English).
+     */
+    val languageChecked: Map<String, Int> = emptyMap(),
+    val languageErrors: Map<String, Int> = emptyMap(),
 ) {
     val utterances get() = utterancesByRole.values.sum()
     val missed get() = missedByRole.values.sum()
@@ -149,6 +179,12 @@ data class RecordingScore(
 
     /** CER including text transcribed outside any conversation. */
     val cer get() = errors.toDouble() / refChars.coerceAtLeast(1)
+
+    /** [cer], or null for a recording without character-scored (non-English) speech. */
+    val cerOrNull: Double? get() = if (refChars == 0) null else cer
+
+    /** WER of the English groups, or null without English speech. */
+    val wer: Double? get() = refWordsByRole.values.sum().takeIf { it > 0 }?.let { wordErrorsByRole.values.sum().toDouble() / it }
     val missRate get() = missed.toDouble() / utterances.coerceAtLeast(1)
 
     fun cerOf(roles: Set<String>): Double? {
@@ -159,10 +195,11 @@ data class RecordingScore(
 
 /**
  * Scores [hypotheses] against [truth]:
- * - CER is aligned per group (conversation): the group's utterances in time order against the
- *   transcript segments that overlap the group's time span (± [marginMs]) the most. Segments
- *   overlapping no group are errors too ([RecordingScore.outsideChars]).
+ * - CER (WER for English groups) is aligned per group (conversation): the group's utterances in
+ *   time order against the transcript segments that overlap the group's time span (± [marginMs])
+ *   the most. Segments overlapping no group are errors too ([RecordingScore.outsideChars]).
  * - An utterance is missed when no transcript segment overlaps it in time.
+ * - An utterance's language is wrong when its most overlapping segment states another language.
  */
 fun scoreRecording(truth: List<TruthSegment>, hypotheses: List<Hypothesis>, marginMs: Long = 1000): RecordingScore {
     val groups = truth.groupBy { it.group }.mapValues { (_, segs) -> segs.sortedBy { it.startMs } }
@@ -179,17 +216,33 @@ fun scoreRecording(truth: List<TruthSegment>, hypotheses: List<Hypothesis>, marg
     }
     val refChars = mutableMapOf<String, Int>()
     val errors = mutableMapOf<String, Int>()
+    val refWords = mutableMapOf<String, Int>()
+    val wordErrors = mutableMapOf<String, Int>()
     val groupScores = groups.map { (id, segs) ->
-        val ref = segs.flatMap { s -> CerText.normalize(s.text).map { it to s.role } }
-        val hyp = assigned[id].orEmpty().joinToString("") { CerText.normalize(it.text) }
-        val errs = alignErrors(ref, hyp)
-        ref.forEach { refChars.merge(it.second, 1, Int::plus) }
-        errs.forEach { (role, e) -> errors.merge(role, e, Int::plus) }
-        GroupScore(id, segs.joinToString(" ") { it.text }, assigned[id].orEmpty().joinToString(" ") { it.text }, errs.values.sum())
+        val texts = assigned[id].orEmpty().map { it.text }
+        val errs = if (segs.first().lang == ENGLISH) {
+            val ref = segs.flatMap { s -> WerText.words(s.text).map { it to s.role } }
+            ref.forEach { refWords.merge(it.second, 1, Int::plus) }
+            alignErrors(ref, texts.flatMap(WerText::words)).onEach { (role, e) -> wordErrors.merge(role, e, Int::plus) }
+        } else {
+            val ref = segs.flatMap { s -> CerText.normalize(s.text).map { it to s.role } }
+            ref.forEach { refChars.merge(it.second, 1, Int::plus) }
+            alignErrors(ref, texts.joinToString("") { CerText.normalize(it) }).onEach { (role, e) -> errors.merge(role, e, Int::plus) }
+        }
+        GroupScore(id, segs.joinToString(" ") { it.text }, texts.joinToString(" "), errs.values.sum())
     }
     val utterances = truth.groupingBy { it.role }.eachCount()
     val missed = truth.filter { t -> hypotheses.none { overlap(t.startMs, t.endMs, it.startMs, it.endMs) > 0 } }
         .groupingBy { it.role }.eachCount()
+    val languageChecked = mutableMapOf<String, Int>()
+    val languageErrors = mutableMapOf<String, Int>()
+    for (t in truth) {
+        val best = hypotheses.maxByOrNull { overlap(t.startMs, t.endMs, it.startMs, it.endMs) } ?: continue
+        val lang = best.lang ?: continue
+        if (overlap(t.startMs, t.endMs, best.startMs, best.endMs) <= 0) continue
+        languageChecked.merge(t.lang, 1, Int::plus)
+        if (lang != t.lang) languageErrors.merge(t.lang, 1, Int::plus)
+    }
     return RecordingScore(
         utterancesByRole = utterances,
         missedByRole = missed,
@@ -198,7 +251,14 @@ fun scoreRecording(truth: List<TruthSegment>, hypotheses: List<Hypothesis>, marg
         outsideChars = outside.sumOf { CerText.normalize(it.text).length },
         groups = groupScores,
         outside = outside,
+        refWordsByRole = refWords,
+        wordErrorsByRole = wordErrors,
+        languageChecked = languageChecked,
+        languageErrors = languageErrors,
     )
 }
+
+/** The language of English ground truth ([TruthSegment.lang]), scored by words. */
+const val ENGLISH = "en"
 
 private fun overlap(a0: Long, a1: Long, b0: Long, b1: Long) = minOf(a1, b1) - maxOf(a0, b0)

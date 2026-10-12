@@ -31,6 +31,7 @@ import app.watchaudio.core.pipeline.PauseReason
 import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StatusNotice
 import app.watchaudio.core.pipeline.StorageManager
+import app.watchaudio.core.settings.loadSettings
 import java.io.File
 import java.io.FileNotFoundException
 import java.text.SimpleDateFormat
@@ -43,7 +44,10 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.io.RawSink
 import kotlinx.io.RawSource
@@ -64,11 +68,18 @@ class AndroidAppServices(
     private val scheduler: TranscriptionScheduler,
     lastChunkReceivedAt: StateFlow<Long?>,
     transcriptionPause: StateFlow<PauseReason?>,
-    scope: CoroutineScope,
+    private val scope: CoroutineScope,
     override val diagnostics: DiagnosticsLog,
     private val onGapAlertSettingsChanged: () -> Unit,
 ) : AppServices {
     override val audioRoot: String = audioRootDir.absolutePath
+
+    /** The English model's state and whether it waits for Wi-Fi, while 「英語も文字起こしする」 is on (#81). */
+    private val english = combine(
+        store.changes.map { store.loadSettings().transcribeEnglish }.distinctUntilChanged(),
+        models.englishState,
+        models.englishDownloadWaiting,
+    ) { enabled, model, waiting -> if (enabled) model to (model == ModelState.Missing && waiting) else null to false }
 
     override val status: StateFlow<ProcessingStatus> = combine(
         models.state,
@@ -84,7 +95,12 @@ class AndroidAppServices(
             notice = if (model == ModelState.Missing && waiting) StatusNotice.ModelWaitingForWifi else null,
             paused = paused,
         )
+    }.combine(english) { status, (englishModel, englishWaiting) ->
+        status.copy(englishModel = englishModel, englishModelWaitingForWifi = englishWaiting)
     }.stateIn(scope, SharingStarted.Eagerly, ProcessingStatus())
+
+    /** English needs the extra SenseVoice model ([ModelManager.englishFiles]). */
+    override val supportsEnglish: Boolean get() = true
 
     private var player: MediaPlayer? = null
 
@@ -267,7 +283,16 @@ class AndroidAppServices(
     /** Only called from the user's tap: the run waives the battery rules (not the thermal one, #75). */
     override fun requestTranscription() = scheduler.requestForUser()
 
-    override fun transcriptionSettingsChanged() = scheduler.settingsChanged()
+    /** Re-plans the transcription work and fetches or removes the English model to match the setting. */
+    override fun transcriptionSettingsChanged() {
+        scheduler.settingsChanged()
+        scope.launch { models.syncEnglish(store.loadSettings().transcribeEnglish) }
+    }
+
+    /** The user asked for the English model now: also over mobile data (~240 MB). */
+    override fun downloadEnglishModel(allowMetered: Boolean) {
+        scope.launch { models.syncEnglish(store.loadSettings().transcribeEnglish, allowMetered) }
+    }
 
     /**
      * Starts downloading the speech models. Without [allowMetered] it waits for Wi-Fi; pass true

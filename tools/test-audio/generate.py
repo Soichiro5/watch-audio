@@ -10,6 +10,8 @@ Usage (from the repository root):
     tools/test-audio/.venv/bin/python tools/test-audio/generate.py --only clean,cafe --no-day
     tools/test-audio/.venv/bin/python tools/test-audio/generate.py \
         --reazon-manifest research/asr-benchmark/data/manifest.jsonl          # + ReazonSpeech
+    tools/test-audio/.venv/bin/python tools/test-audio/generate.py --only english_clean,mixed_wrist \
+        --fleurs-manifest research/asr-benchmark/data/manifest.jsonl          # + English (FLEURS en, #81)
     tools/test-audio/.venv/bin/python tools/test-audio/generate.py --fixtures tools/test-audio/fixtures
 
 Nothing here talks to the network: the socket layer is disabled before any work starts.
@@ -93,6 +95,7 @@ class Placement:
     speaker: str
     voice: str
     text: str
+    lang: str = "ja"
 
 
 @dataclass
@@ -144,7 +147,7 @@ def layout(conv: Conversation, synth: Synthesizer, rng: np.random.Generator) -> 
 
 
 def shifted(placements: list[Placement], offset: int) -> list[Placement]:
-    return [Placement(p.start + offset, p.audio, p.role, p.group, p.speaker, p.voice, p.text) for p in placements]
+    return [Placement(p.start + offset, p.audio, p.role, p.group, p.speaker, p.voice, p.text, p.lang) for p in placements]
 
 
 def sequence(convs: list[tuple[list[Placement], int]], rng: np.random.Generator, lead_s=2.0, gap_s=(4.0, 8.0)) -> Block:
@@ -203,7 +206,7 @@ def write_audio(samples: np.ndarray, out_dir: Path, name: str, flac: bool) -> di
 def segments_of(block: Block, offset: int = 0) -> list[dict]:
     return [
         dict(startMs=round((p.start + offset) * 1000 / SR), endMs=round((p.start + offset + p.audio.size) * 1000 / SR),
-             speaker=p.speaker, role=p.role, voice=p.voice, group=p.group, text=p.text)
+             speaker=p.speaker, role=p.role, voice=p.voice, group=p.group, text=p.text, lang=p.lang)
         for p in sorted(block.placements, key=lambda p: p.start)
     ]
 
@@ -285,6 +288,72 @@ def reazon_blocks(manifest: Path, rng: np.random.Generator, wrist: bool, environ
     return block
 
 
+def research_rows(manifest: Path, dataset: str) -> list[tuple[dict, np.ndarray]]:
+    """Utterances of [dataset] in a research/asr-benchmark manifest, with their 16 kHz audio
+    normalized to the speech level of the synthesized voices, sorted by id."""
+    root = manifest.parent.parent
+    rows = []
+    for row in map(json.loads, manifest.read_text(encoding="utf-8").splitlines()):
+        if row.get("dataset") != dataset:
+            continue
+        audio, rate = sf.read(root / row["path"].format(cond="raw"), dtype="float32")
+        assert rate == SR, rate
+        rows.append((row, fx.normalize_active(audio, SPEECH_LEVEL_DB)))
+    return sorted(rows, key=lambda r: r[0]["id"])
+
+
+# English (#81): FLEURS en test utterances (read speech, real voices). The first half voices the
+# English conversations, the second half the English turns of the mixed conversations.
+ENGLISH_TURNS = 6  # utterances per English conversation (alternating wearer and partner)
+
+
+def english_blocks(rows: list[tuple[dict, np.ndarray]], rng: np.random.Generator, wrist: bool) -> Block:
+    """English conversations: [ENGLISH_TURNS] FLEURS en utterances each, the wearer and a partner
+    taking turns with conversational gaps, 4-8 s between conversations. Each conversation is one
+    alignment group (scored by WER)."""
+    block = Block(length=int(2 * SR), wrist=wrist, label="english")
+    for c in range(0, len(rows), ENGLISH_TURNS):
+        if c:
+            block.length += int(rng.uniform(4.0, 8.0) * SR)
+        group = f"en_{c // ENGLISH_TURNS:02d}"
+        for k, (row, audio) in enumerate(rows[c:c + ENGLISH_TURNS]):
+            if k:
+                block.length += int(np.clip(rng.normal(0.5, 0.2), 0.2, 1.2) * SR)
+            role = "wearer" if k % 2 == 0 else "partner"
+            block.placements.append(Placement(block.length, audio, role, group, f"{group}:{'AB'[k % 2]}",
+                                              "fleurs_en", row["ref"], "en"))
+            block.length += audio.size
+    block.length += int(2 * SR)
+    return block
+
+
+def mixed_blocks(japanese: list[Placement], rows: list[tuple[dict, np.ndarray]], rng: np.random.Generator,
+                 wrist: bool) -> Block:
+    """A bilingual exchange: 1-3 Japanese turns (consecutive lines of the corpus conversations,
+    synthesized) then one English turn (FLEURS en, wearer or partner), with 0.6-1.5 s between
+    turns. Every turn is its own alignment group, so Japanese turns are scored by CER and English
+    turns by WER, and each turn's stored language can be checked."""
+    block = Block(length=int(2 * SR), wrist=wrist, label="mixed")
+    lines = iter(japanese)
+    turn = 0
+
+    def place(audio: np.ndarray, role: str, speaker: str, voice: str, text: str, lang: str) -> None:
+        nonlocal turn
+        if turn:
+            block.length += int(rng.uniform(0.6, 1.5) * SR)
+        block.placements.append(Placement(block.length, audio, role, f"mix_{turn:03d}", speaker, voice, text, lang))
+        block.length += audio.size
+        turn += 1
+
+    for row, audio in rows:
+        for _ in range(int(rng.integers(1, 4))):
+            p = next(lines)
+            place(p.audio, p.role, p.speaker, p.voice, p.text, "ja")
+        place(audio, "wearer" if rng.random() < 0.5 else "partner", "en", "fleurs_en", row["ref"], "en")
+    block.length += int(2 * SR)
+    return block
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", type=Path, default=HERE / "cache" / "out")
@@ -294,10 +363,13 @@ def main() -> None:
     ap.add_argument("--only", help="comma-separated condition ids (default: all)")
     ap.add_argument("--no-day", action="store_true", help="skip the one-hour 'part of a day' recording")
     ap.add_argument("--reazon-manifest", type=Path, help="research/asr-benchmark/data/manifest.jsonl (optional)")
+    ap.add_argument("--fleurs-manifest", type=Path,
+                    help="research/asr-benchmark/data/manifest.jsonl for the English conditions (optional, #81)")
     ap.add_argument("--fixtures", type=Path, help="write the small committed sample set here instead")
     args = ap.parse_args()
-    if args.reazon_manifest and not args.reazon_manifest.exists():
-        ap.error(f"{args.reazon_manifest} not found (run research/asr-benchmark/scripts/prepare_data.py first)")
+    for manifest in (args.reazon_manifest, args.fleurs_manifest):
+        if manifest and not manifest.exists():
+            ap.error(f"{manifest} not found (run research/asr-benchmark/scripts/prepare_data.py first)")
 
     synth = Synthesizer(args.models, HERE / "cache" / "tts")
     convs = load_corpus(args.corpus, VOICES)
@@ -340,6 +412,25 @@ def main() -> None:
             recordings.append(build_recording(rec_id, desc, [block], args.seed, babble, args.out,
                                               extra=dict(condition=rec_id, snrDb=SNR_DB.get(env or ""))))
 
+    if args.fleurs_manifest:
+        english = research_rows(args.fleurs_manifest, "fleurs_en")
+        english = [english[i] for i in stable_rng(args.seed, "english").permutation(len(english))]
+        half = len(english) // 2
+        japanese = [p for c in convs for p in laid_out[c.id][0]]
+        for rec_id, wrist, desc in [
+            ("english_clean", False, f"英語の会話（FLEURS en {half} 文、装着者と相手が交互）・近接"),
+            ("english_wrist", True, f"英語の会話（FLEURS en {half} 文）＋ wrist"),
+            ("mixed_clean", False, f"日英混在: 日本語の発話 1〜3 つごとに英語の発話（FLEURS en {len(english) - half} 文）・近接"),
+            ("mixed_wrist", True, f"日英混在（FLEURS en {len(english) - half} 文）＋ wrist"),
+        ]:
+            if wanted and rec_id not in wanted:
+                continue
+            rng = stable_rng(args.seed, rec_id.split("_")[0])
+            block = english_blocks(english[:half], rng, wrist) if rec_id.startswith("english") \
+                else mixed_blocks(japanese, english[half:], rng, wrist)
+            recordings.append(build_recording(rec_id, desc, [block], args.seed, babble, args.out,
+                                              extra=dict(condition=rec_id, snrDb=None)))
+
     manifest_path = args.out / "manifest.json"
     previous = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
     merged = {r["id"]: r for r in previous.get("recordings", [])}
@@ -349,17 +440,19 @@ def main() -> None:
 
 
 def write_manifest(out: Path, recordings: list[dict], seed: int) -> None:
-    order = {c.id: i for i, c in enumerate(CONDITIONS)} | {"day": 90, "reazon_clean": 91, "reazon_cafe": 92}
+    order = {c.id: i for i, c in enumerate(CONDITIONS)} | {"day": 90, "reazon_clean": 91, "reazon_cafe": 92} | {
+        "english_clean": 93, "english_wrist": 94, "mixed_clean": 95, "mixed_wrist": 96}
     recordings.sort(key=lambda r: order.get(r["id"], 99))
     manifest = dict(version=1, sampleRate=SR, seed=seed, generator="tools/test-audio/generate.py",
                     recordings=recordings)
     (out / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     with open(out / "segments.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["recording", "startMs", "endMs", "speaker", "role", "voice", "group", "text"])
+        w.writerow(["recording", "startMs", "endMs", "speaker", "role", "voice", "group", "text", "lang"])
         for r in recordings:
             for s in r["segments"]:
-                w.writerow([r["id"], s["startMs"], s["endMs"], s["speaker"], s["role"], s["voice"], s["group"], s["text"]])
+                w.writerow([r["id"], s["startMs"], s["endMs"], s["speaker"], s["role"], s["voice"], s["group"], s["text"],
+                            s.get("lang", "ja")])
 
 
 def write_fixtures(args, convs: list[Conversation], synth: Synthesizer, babble: list[np.ndarray]) -> None:

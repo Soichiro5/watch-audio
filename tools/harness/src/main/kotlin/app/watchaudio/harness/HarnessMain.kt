@@ -21,13 +21,14 @@ import kotlinx.io.files.Path
  *   ./gradlew :tools:harness:run --args="record <dataDir> <audio files...>"
  *   ./gradlew :tools:harness:run --args="search <dataDir> <query>"
  *   ./gradlew :tools:harness:run --args="show <dataDir>"
- *   ./gradlew :tools:harness:run --args="evaluate <manifest.json> <workDir> [--vad name=value,...] [--filter off|name=value,...] [--format name=value,...] [recordingIds...]"
+ *   ./gradlew :tools:harness:run --args="evaluate <manifest.json> <workDir> [--vad name=value,...] [--filter off|name=value,...] [--format name=value,...] [--english on|off|name=value,...] [recordingIds...]"
  *   ./gradlew :tools:harness:run --args="filter-study <manifest.json> <workDir> [recordingIds...]"
  *
  * `evaluate` scores a test audio set from tools/test-audio (see docs/dev/test-audio.md); `--vad`
  * overrides [app.watchaudio.core.pipeline.VadSettings] and `--filter` the app's
  * [FalsePositiveFilter] by property name, or turns the filter off, and `--format` the simulated
- * watch's [app.watchaudio.core.protocol.RecordingFormat] (see [EvaluateArgs]).
+ * watch's [app.watchaudio.core.protocol.RecordingFormat], and `--english on` routes each span through
+ * SenseVoice for English like the app's 「英語も文字起こしする」 (see [EvaluateArgs]).
  * `filter-study` re-scores an `evaluate --filter off` run with candidate filters ([FilterStudy]).
  */
 fun main(args: Array<String>) = runBlocking {
@@ -78,8 +79,11 @@ private suspend fun evaluate(models: File, args: EvaluateArgs) {
     println("VAD: ${args.vad}")
     println("Filter: ${args.filter ?: "off (everything is stored)"}")
     println("Format: ${args.format}")
-    TestSetEvaluator(models, workDir, format = args.format, vadSettings = args.vad, segmentFilter = args.filter ?: SegmentFilter.KEEP_ALL)
-        .evaluate(args.manifest, args.recordings)
+    println("English: ${args.english?.let { "${it.id}, ${args.routing}" } ?: "off (Japanese only)"}")
+    TestSetEvaluator(
+        models, workDir, format = args.format, vadSettings = args.vad, segmentFilter = args.filter ?: SegmentFilter.KEEP_ALL,
+        english = args.english, routing = args.routing,
+    ).evaluate(args.manifest, args.recordings)
     val table = TestSetEvaluator.markdownTable(args.manifest, workDir)
     File(workDir, "results.md").writeText(table)
     println()
@@ -98,6 +102,6 @@ private val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZ
 private fun time(epochMs: Long) = formatter.format(Instant.ofEpochMilli(epochMs))
 
 private fun usage(): Nothing {
-    System.err.println("usage: record <dataDir> <audio...> | search <dataDir> <query> | show <dataDir> | evaluate <manifest.json> <workDir> [--vad name=value,...] [--filter off|name=value,...] [--format name=value,...] [ids...] | filter-study <manifest.json> <workDir> [ids...]")
+    System.err.println("usage: record <dataDir> <audio...> | search <dataDir> <query> | show <dataDir> | evaluate <manifest.json> <workDir> [--vad name=value,...] [--filter off|name=value,...] [--format name=value,...] [--english on|off|name=value,...] [ids...] | filter-study <manifest.json> <workDir> [ids...]")
     exitProcess(2)
 }

@@ -19,6 +19,8 @@ tools/test-audio/.venv/bin/python tools/test-audio/generate.py
 #   条件を絞る:            --only clean,cafe --no-day
 #   ReazonSpeech も使う:   --reazon-manifest research/asr-benchmark/data/manifest.jsonl
 #                          （research/asr-benchmark の prepare_data.py で取得済みのテストデータを使う）
+#   英語・日英混在（#81）:  --fleurs-manifest research/asr-benchmark/data/manifest.jsonl
+#                          （同じく取得済みの FLEURS en 120 文を使う。--only english_clean,english_wrist,mixed_clean,mixed_wrist）
 
 # 3. ハーネスで評価（ASR モデルは tools/harness/download-models.sh で取得。全条件で約 15 分）
 ./gradlew --max-workers=2 :tools:harness:run \
@@ -38,6 +40,9 @@ tools/test-audio/.venv/bin/python tools/test-audio/generate.py
 #   RecordingFormat.CURRENT = AAC-LC 16 kHz mono 24 kbps・5 分チャンク）を変えて比べる（#52）:
 #   --args="evaluate tools/test-audio/cache/out/manifest.json build/eval-opus16 --format codec=opus,bitrateBps=16000"
 #   （AAC は ffmpeg 内蔵の aac、Opus は libopus（Ogg）で符号化する。保存された音声のサイズは録音ごとの行に MB/h で出る）
+#   英語も文字起こしする（アプリの設定「英語も文字起こしする」と同じ。SenseVoice が要る、#81）:
+#   --args="evaluate tools/test-audio/cache/out/manifest.json build/eval-en --english on"
+#   （LanguageRouting の値を変える: --english maxPrimaryCharsPerSecond=Infinity は全区間で SenseVoice を動かす）
 #   固定サンプルで動作確認（1 分×3 条件、数十秒で終わる）:
 #   --args="evaluate tools/test-audio/fixtures/manifest.json build/test-audio-fixture"
 ```
@@ -96,6 +101,10 @@ B: {Zoom|ズーム}のリンクを{Slack|スラック}に貼っておきまし�
 | `day` | 約 1 時間の「1 日の一部」: 朝食（家）→ 通勤（屋外、会話なし）→ 定例・1on1（オフィス）→ 15 分の無音（デスクワーク）→ 昼休み（カフェ）→ 電話・レビュー（オフィス）→ 散歩（屋外）→ 買い物（店）→ 電話・宿題（家）→ 無音。場面ごとの雑音、全体に軽い擦れ音（1.5 回/分） |
 | `reazon_clean`（任意） | ReazonSpeech テストセット 150 文（テレビ音声）を 2.5〜4 秒の無音でつないだもの |
 | `reazon_cafe`（任意） | 同じ 150 文を相手の位置（-14 dB・残響）＋ カフェ雑音 |
+| `english_clean`（任意、#81） | 英語の会話: FLEURS en テスト（英語の読み上げ、実際の人の声）60 文を 6 文ずつ 10 会話にし、装着者と相手が交互に話す（間 0.2〜1.2 秒、会話の間 4〜8 秒）。近接。11.3 分。会話ごとに WER で採点 |
+| `english_wrist`（任意） | 同じ 60 文 ＋ `wrist` の加工 |
+| `mixed_clean`（任意、#81） | 日英混在: コーパスの日本語の発話（合成音声、会話の順のまま）1〜3 つごとに英語の発話（FLEURS en、残りの 60 文。装着者か相手）を 1 つ挟む。発話の間 0.6〜1.5 秒。日本語 114・英語 60 発話、18.6 分。発話ごとに採点（日本語は CER、英語は WER）し、保存された言語も確かめる |
+| `mixed_wrist`（任意） | 同じ ＋ `wrist` の加工 |
 
 全条件でマイクの自己雑音（-70 dBFS）と 60 Hz のハイパスを入れる。無音区間は Watch の無音判定（RMS 0.003 ≒ -50 dBFS）を下回るので、`day` の長い無音では Watch が音声なしのチャンクを送る経路も通る。
 
@@ -106,6 +115,8 @@ B: {Zoom|ズーム}のリンクを{Slack|スラック}に貼っておきまし�
 - **CER（文字誤り率）**: 会話ごとに、正解の発話を時刻順に並べた文字列と、その会話の時間帯（±1 秒）と最も重なる文字起こし区間を時刻順に並べた文字列を編集距離で比べる。会話の外（無音・雑音だけの区間）で出た文字起こしは全て挿入誤りとして全体 CER に加える（「発話外の誤認識」列にも文字数を示す）。
   - 正規化: NFKC → 小文字化 → 句読点・空白・記号を除去 → **漢数字を算用数字に統一**（ASR は「三千四百八十円」、正解は「3480円」と書くため）。かな/漢字の表記揺れ（「きょう」と「今日」など）は誤りとして数える。
   - 「CER 装着者」「CER 相手」は、誤りを正解側の文字の話者に割り当てて分けたもの（相手 = 同室の相手と電話の相手）。
+- **WER（単語誤り率、英語、#81）**: 正解が英語（`lang: en`）の会話・発話は単語で比べる。正規化は M0-5 と同じ: NFKC → 小文字化 → ハイフンを空白に → 英数字と空白以外を除去 → 空白で単語に分ける。数字の表記（"twenty" と "20"）は統一しない。CER の列には日本語（英語以外）の発話だけが入り、発話外の誤認識は CER に数える。
+- **言語の誤り（#81）**: 各正解発話と最も重なる保存セグメントの言語（`transcript_segment.lang`）が、正解の言語と違う発話の数（`ja 2/480` = 日本語 480 発話のうち 2 つが別の言語で保存された）。
 - **検出漏れ**: どの文字起こし区間とも時間が重ならない正解発話の割合（括弧内は件数）。VAD が複数の発話を 1 区間にまとめても漏れにはならない。
 - **処理時間・RTF**: `TranscriptionPipeline.processPending()` の実時間と、それを音声長で割った値（この PC の 2 スレッド。実機の速度は別途）。
 
@@ -130,6 +141,35 @@ ASR は Android と同じ sherpa-onnx + Zipformer ReazonSpeech int8、発話の�
 
 - 文字起こし時間・RTF は 4 つの評価を並行したときの値で、速度の比較には使えない。
 - 除去で捨てたセグメント: clean 0、wrist 36、office 50、cafe 41、outdoor 27、day 51、reazon_clean 36。会話の中の 1 発話がまるごと消えて検出漏れになったものが office 1・cafe 2・outdoor 1 件あるが、CER はどの条件も下がった（挿入誤りが減った分が大きい）。
+
+### 英語も文字起こしする（#81）
+
+2026-10-12、この開発環境で生成し直した音声セット（`--seed 56`、日本語 8 条件 + `--fleurs-manifest` の英語・日英混在 4 条件）で、アプリの設定「英語も文字起こしする」のオフ（`--english off`、既定）とオン（`--english on`、`LanguageRouting.DEFAULT`）を評価した。方式の比較と採用の理由は [research/english-asr.md](../research/english-asr.md)。
+
+日本語（CER 全体。main は変更前の main `5681119` で同じ音声セットを評価したもの）:
+
+| 条件 | main | オフ | オン | オンの差 | オンで英語として保存された日本語の発話 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| clean | 14.7% | 14.7% | 14.7% | 0.0 | 0/505 |
+| wrist | 19.4% | 19.4% | 19.5% | +0.1 | 1/505 |
+| office | 24.9% | 24.9% | 24.9% | 0.0 | 0/504 |
+| cafe | 40.9% | 40.9% | 40.9% | 0.0 | 1/494 |
+| outdoor | 38.7% | 38.7% | 38.7% | 0.0 | 0/500 |
+| rub | 26.7% | 26.7% | 26.7% | 0.0 | 0/505 |
+| day | 28.0% | 28.0% | 28.1% | +0.1 | 0/321 |
+| reazon_clean | 9.7% | 9.7% | 9.7% | 0.0 | 0/150 |
+
+- オフは main と保存されたセグメント（開始・終了・本文・言語）まで全条件で一致した。
+- オンでも日本語の CER の差は最大 +0.1 ポイント。SenseVoice が動いた区間は 3〜17%（clean 28/902 〜 reazon_clean 39/225）で、そのうち英語として残ったのは各条件 0〜1 区間。
+
+英語・日英混在（オンの結果。オフでは英語の発話はすべて日本語として保存され、WER は 100%）:
+
+| 条件 | 音声 (分) | 発話数 | CER 日本語 | WER 英語（正解区間で切った場合） | 言語の誤り (発話) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| english_clean | 11.3 | 60 | - | 10.2% (9.0%) | en 0/60 |
+| english_wrist | 11.3 | 60 | - | 11.7% (11.4%) | en 1/60 |
+| mixed_clean | 18.6 | 174 | 9.9%（オフも 9.9%） | 11.0% (7.9%) | ja 0/114, en 1/60 |
+| mixed_wrist | 18.6 | 174 | 11.8%（オフも 11.8%） | 14.1% (10.0%) | ja 0/114, en 0/60 |
 
 ### 録音形式の比較（#52）
 
@@ -372,6 +412,7 @@ VAD の最小無音（0.1〜0.5 秒）と最大発話（15〜20 秒）は、間�
 | HTS voice NIT ATR503 M001（名古屋工業大学） | CC BY 3.0 | 音声 `ojt_m001` |
 | 雑音 | 本リポジトリのコードで生成（外部素材なし） | 全条件 |
 | ReazonSpeech テストセット（任意、`japanese-asr/ja_asr.reazonspeech_test`） | CDLA-Sharing-1.0（日本の著作権法 30 条の 4 の情報解析の範囲で利用） | ローカルでの評価にだけ使い、音声・加工音声はコミットも再配布もしない |
+| FLEURS en テストセット（任意、`google/fleurs` の `en_us`、#81） | CC BY 4.0（Google） | 英語・日英混在の条件の英語の発話。ローカルでの評価にだけ使い、音声・加工音声はコミットも再配布もしない |
 
 kokoro-onnx は英語用に phonemizer（GPL-3.0）と espeak-ng を依存として入れるが、日本語は misaki で音素にしてから渡すので使わない。これらはいずれも開発用ツールであり、アプリには含まれない。
 コミットしている固定サンプル（`tools/test-audio/fixtures/*.m4a`）は Kokoro と HTS 音声（CC BY 3.0: 名古屋工業大学）による合成音声で、上記ライセンスに従う。

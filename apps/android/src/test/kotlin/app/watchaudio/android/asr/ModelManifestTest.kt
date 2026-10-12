@@ -22,8 +22,16 @@ class ModelManifestTest {
     }
 
     @Test
+    fun englishModelIsTheSenseVoiceFilesAlone() {
+        val files = ModelFiles(File("/models"), ModelManifest.englishSpec)
+        assertEquals(files.asrFiles.toSet(), ModelManifest.englishFiles.map(files::fileFor).toSet())
+        assertTrue(ModelManifest.englishBytes in 200_000_000..260_000_000, "English model is ${ModelManifest.englishBytes} bytes")
+        assertTrue(ModelManifest.englishFiles.none { english -> ModelManifest.files.any { it.path == english.path } })
+    }
+
+    @Test
     fun entriesArePinnedAndVerifiable() {
-        for (source in ModelManifest.files) {
+        for (source in ModelManifest.files + ModelManifest.englishFiles) {
             assertTrue(source.url.startsWith("https://"), source.url)
             assertTrue(!source.url.contains("/resolve/main/"), "pin a commit, not a branch: ${source.url}")
             assertTrue(Regex("[0-9a-f]{64}").matches(source.sha256), source.sha256)
@@ -44,7 +52,7 @@ class ModelManifestTest {
             ASSIGNMENT.matchEntire(line)?.let { variables[it.groupValues[1]] = it.groupValues[2] }
             FETCH.matchEntire(line)?.let { fetched += ModelSource(it.groupValues[3], it.groupValues[1], 0, it.groupValues[2]) }
         }
-        for (source in ModelManifest.files) {
+        for (source in ModelManifest.files + ModelManifest.englishFiles) {
             assertTrue(source.copy(size = 0) in fetched, "download-models.sh must fetch ${source.path} from ${source.url}")
         }
     }
