@@ -361,14 +361,14 @@ base64 -w0 watch-audio-release.jks > keystore.b64   # macOS: base64 -i watch-aud
 **なぜ自前でビルドするか**: JitPack の sherpa-onnx の AAR（v1.13.8）に入っている `libsherpa-onnx-jni.so` には、音声合成（TTS）用の **eSpeak NG（GPL-3.0）**・piper-phonemize と、話者分離用の hclust-cpp が静的にリンクされている（上流の Android ビルドは `SHERPA_ONNX_ENABLE_TTS=ON` が既定）。アプリが使うのはオフラインの ASR（Zipformer・SenseVoice）と Silero VAD だけなので、使わない GPL のコードを配布物に入れないように、**同じタグ・同じ NDK・上流と同じビルドスクリプト**で、TTS と話者分離だけを外した JNI ライブラリに差し替える。
 
 - **差し替えるのは `libsherpa-onnx-jni.so` だけ**（`arm64-v8a`・`x86_64`）。Kotlin の API（`OfflineRecognizer`・`Vad` など）と `libonnxruntime.so` は AAR のものを使う。ビルドでリンクする `libonnxruntime.so` は AAR のものとバイト単位で同じことを確かめる（`onnxruntime.sha256.<abi>`）。
-- **動作は変わらない**: オプションで変わるのは TTS・話者分離のソースがビルドに入るかどうかだけで、ASR・VAD とその JNI のソースはこれらのオプションを参照しない（ワークフローのジョブサマリーに、オプションを参照するソースの一覧を出す）。JNI の関数は Kotlin から呼ばれたときに名前で解決されるので、使わないクラス（`OfflineTts` など）の関数がなくても読み込みは失敗しない。release ビルドの文字起こし（`ReleaseAsrTest`）と計装テストの結果で確かめる。
+- **動作は変わらない**: オプションで変わるのは TTS・話者分離のソースがビルドに入るかどうかだけで、ASR・VAD とその JNI のソースはこれらのオプションを参照しない（ワークフローのジョブサマリーに、オプションを参照するソースの一覧を出す。v1.13.8 では C API の `c-api.cc` と Python の `sherpa-onnx.cc` だけで、どちらも JNI ライブラリには入らない）。JNI の関数は Kotlin から呼ばれたときに名前で解決されるので、使わないクラス（`OfflineTts` など）の関数がなくても読み込みは失敗しない。release ビルドの文字起こし（`ReleaseAsrTest`）と計装テストの結果で確かめる。
 - **サイズ**: `libsherpa-onnx-jni.so` は arm64-v8a が 4,771,760 → 3,434,928 バイト、x86_64 が 5,201,192 → 3,715,504 バイト。APK では `.so` を圧縮せずに格納するので、両 ABI 入りの release APK は約 2.8 MB 小さくなる（v1.13.8、#173）。
 - **方式**: CI（GitHub Actions）でビルドし、このリポジトリの GitHub Release に置いたファイルを、SHA-256 を固定してアプリのビルドが取得する。上流には TTS なしの Android 向けの公開ビルドが見つからなかった。ビルドしたファイルを Git に入れる方法は、更新のたびに約 7 MB ずつ履歴が増え、差分をレビューできないので採らなかった。
 
 | 場所 | 役割 |
 | --- | --- |
 | `gradle/sherpa-onnx-jni.properties` | 固定する値: 上流のタグとコミット・NDK・ABI・Release の名前・各 ABI の SHA-256・AAR の `libonnxruntime.so` の SHA-256 |
-| `.github/workflows/sherpa-onnx-android.yml` | 上の値でビルドする（どのブランチでも、このワークフロー・`tools/sherpa-onnx-android/**`・上のファイルを変えた push で動く。手動でも可）。eSpeak NG / TTS の痕跡がないこと、`libonnxruntime.so` が AAR と同じことを検査し、固定した SHA-256 と比べた結果（同じなら「reproduced」）をジョブサマリーに出す。成果物 `sherpa-onnx-jni-<abi>`（90 日）。リポジトリへの書き込みはしない |
+| `.github/workflows/sherpa-onnx-android.yml` | 上の値でビルドする（どのブランチでも、このワークフロー・`tools/sherpa-onnx-android/**`・上のファイルを変えた push で動く。手動でも可）。eSpeak NG / TTS の痕跡がないこと、`libonnxruntime.so` が AAR と同じことを検査し、固定した SHA-256 と比べた結果（同じなら「reproduced」。v1.13.8 は再ビルドでバイト単位まで同じになった）をジョブサマリーに出す。成果物 `sherpa-onnx-jni-<abi>`（90 日）。リポジトリへの書き込みはしない |
 | `tools/sherpa-onnx-android/build-jni.sh` | 上流の `build-android-<abi>.sh` を `SHERPA_ONNX_ENABLE_TTS=OFF`・`SHERPA_ONNX_ENABLE_SPEAKER_DIARIZATION=OFF`・`SHERPA_ONNX_ENABLE_C_API=OFF` で実行する（それ以外は上流の既定のまま） |
 | `tools/sherpa-onnx-android/check-no-tts.sh` | `.so` または APK の中の `libsherpa-onnx-jni.so` に、eSpeak NG のデータ名（`espeak-ng-data`・`phontab`・`phonindex`）か TTS・話者分離の JNI 関数名があれば失敗する（AAR のものでは失敗することを確認済み） |
 | `build-logic` の `SherpaOnnxJniPlugin`（プラグイン ID `watchaudio.android.sherpa-onnx-jni`、`apps/android` が適用） | バリアントごとに `fetch<Variant>SherpaOnnxJni` がファイルを用意して jniLibs に加える（アプリ自身の jniLibs は依存の同じパスのファイルより優先されるので、AAR のものは入らない）。`verify<Variant>SherpaOnnxJni` が `assemble<Variant>` で APK を検査する（上と同じ痕跡、ABI の欠け）。`libs.versions.toml` の sherpa-onnx の版が固定した `version` と違えばビルドを失敗させる |
