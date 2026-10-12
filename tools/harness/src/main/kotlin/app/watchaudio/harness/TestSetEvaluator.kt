@@ -2,9 +2,11 @@ package app.watchaudio.harness
 
 import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.pipeline.AsrModelSpec
 import app.watchaudio.core.pipeline.AsrSettings
 import app.watchaudio.core.pipeline.FalsePositiveFilter
 import app.watchaudio.core.pipeline.Ingestor
+import app.watchaudio.core.pipeline.LanguageRouting
 import app.watchaudio.core.pipeline.SegmentFilter
 import app.watchaudio.core.pipeline.TranscriptionPipeline
 import app.watchaudio.core.pipeline.VadSettings
@@ -23,8 +25,9 @@ import kotlinx.io.files.Path
  * same coded audio, without VAD), which separates segmentation problems from acoustic ones.
  *
  * Speech is found and cut with [vadSettings] and the results filtered with [segmentFilter] (the
- * app's settings and filter unless overridden). Each recording's stored segments are listed with
- * their signals in `<workDir>/<id>/segments.tsv` ([SignalLog]).
+ * app's settings and filter unless overridden). With an [english] model, each span is routed with
+ * [routing] as with the app's 「英語も文字起こしする」 (#81). Each recording's stored segments are
+ * listed with their signals in `<workDir>/<id>/segments.tsv` ([SignalLog]).
  */
 class TestSetEvaluator(
     private val models: File,
@@ -32,6 +35,8 @@ class TestSetEvaluator(
     private val format: RecordingFormat = RecordingFormat.CURRENT,
     private val vadSettings: VadSettings = VadSettings.DEFAULT,
     private val segmentFilter: SegmentFilter = FalsePositiveFilter.DEFAULT,
+    private val english: AsrModelSpec? = null,
+    private val routing: LanguageRouting = LanguageRouting.DEFAULT,
 ) {
     private val signals = SignalLog()
 
@@ -41,6 +46,8 @@ class TestSetEvaluator(
         val score: RecordingScore,
         /** CER when each ground-truth utterance is recognized on its own (oracle segmentation). */
         val oracleCer: Double,
+        /** WER of the English groups with oracle segmentation, or null without English speech. */
+        val oracleWer: Double? = null,
         val chunks: Int,
         val silentChunks: Int,
         val transcribeSeconds: Double,
@@ -50,6 +57,8 @@ class TestSetEvaluator(
         /** Size of the stored (non-silent) chunk files and the recording time they cover. */
         val audioBytes: Long = 0,
         val audioMs: Long = 0,
+        /** Recognition time and kept spans per model, in the pipeline run (see [RecognizerUsage]). */
+        val usage: String = "",
     ) {
         val audioSeconds get() = recording.durationMs / 1000.0
         val rtf get() = transcribeSeconds / audioSeconds
@@ -66,15 +75,16 @@ class TestSetEvaluator(
         val manifest = TestSetManifest.load(manifestFile)
         val recordings = manifest.recordings.filter { only.isEmpty() || it.id in only }
         require(recordings.isNotEmpty()) { "no recordings $only in $manifestFile" }
-        return SherpaTranscriber(models, vadSettings = vadSettings, signalLog = signals).use { transcriber ->
+        return SherpaTranscriber(models, vadSettings = vadSettings, signalLog = signals, english = english, routing = routing).use { transcriber ->
             recordings.map { recording ->
                 evaluate(File(manifestFile.absoluteFile.parentFile, recording.audio), recording, transcriber).also {
                     File(workDir, "${recording.id}/row.md").writeText(markdownRow(it))
                     println(
-                        "%s: CER %.1f%% (oracle segmentation %.1f%%), missed %d/%d, segments median %.1fs max %.1fs, %d chunks (%d silent), audio %d bytes / %d ms (%.2f MB/h), ASR %.0fs (RTF %.3f)".format(
-                            recording.id, it.score.cer * 100, it.oracleCer * 100, it.score.missed, it.score.utterances,
+                        "%s: CER %.1f%% (oracle segmentation %.1f%%), WER %s (oracle segmentation %s), language errors %s, missed %d/%d, segments median %.1fs max %.1fs, %d chunks (%d silent), audio %d bytes / %d ms (%.2f MB/h), ASR %.0fs (RTF %.3f; %s)".format(
+                            recording.id, it.score.cer * 100, it.oracleCer * 100, percent(it.score.wer), percent(it.oracleWer), languageErrors(it.score),
+                            it.score.missed, it.score.utterances,
                             it.medianSegmentSeconds, it.maxSegmentSeconds, it.chunks, it.silentChunks,
-                            it.audioBytes, it.audioMs, it.megabytesPerHour ?: 0.0, it.transcribeSeconds, it.rtf,
+                            it.audioBytes, it.audioMs, it.megabytesPerHour ?: 0.0, it.transcribeSeconds, it.rtf, it.usage,
                         ),
                     )
                 }
@@ -98,13 +108,15 @@ class TestSetEvaluator(
             signals.chunkStarts = store.read { chunksBetween(0, Long.MAX_VALUE) }
                 .mapNotNull { c -> c.audioPath?.let { Path(audioRoot, it).toString() to c.startedAt } }.toMap()
 
+            transcriber.usage.clear()
             val started = System.nanoTime()
             val run = TranscriptionPipeline(store, audioRoot, transcriber, segmentFilter = segmentFilter).processPending()
             val transcribeSeconds = (System.nanoTime() - started) / 1e9
+            val usage = transcriber.usage.toString()
             check(run.failed == 0) { "${run.failed} chunks failed to transcribe" }
 
             val stored = store.read { segmentsBetween(0, Long.MAX_VALUE) }
-            val hypotheses = stored.map { Hypothesis(it.startAt - start, it.endAt - start, it.text) }
+            val hypotheses = stored.map { Hypothesis(it.startAt - start, it.endAt - start, it.text, it.lang) }
             val silent = store.read { chunksBetween(0, Long.MAX_VALUE) }.count { it.state == ChunkState.NO_AUDIO }
             val score = scoreRecording(recording.segments, hypotheses)
             val oracleScore = scoreRecording(recording.segments, oracle)
@@ -118,8 +130,8 @@ class TestSetEvaluator(
             val lengths = hypotheses.map { (it.endMs - it.startMs) / 1000.0 }.sorted().ifEmpty { listOf(0.0) }
             val withAudio = chunks.mapNotNull { c -> c.manifest.audio?.let { it.sizeBytes to c.manifest.durationMs } }
             Result(
-                recording, score, oracleScore.cer, chunks.size, silent, transcribeSeconds, lengths[lengths.size / 2], lengths.last(),
-                audioBytes = withAudio.sumOf { it.first }, audioMs = withAudio.sumOf { it.second },
+                recording, score, oracleScore.cer, oracleScore.wer, chunks.size, silent, transcribeSeconds, lengths[lengths.size / 2], lengths.last(),
+                audioBytes = withAudio.sumOf { it.first }, audioMs = withAudio.sumOf { it.second }, usage = usage,
             )
         }
     }
@@ -135,7 +147,8 @@ class TestSetEvaluator(
         return recording.segments.map { s ->
             val from = ((s.startMs - padMs) * perMs).toInt().coerceIn(0, audio.size)
             val to = ((s.endMs + padMs) * perMs).toInt().coerceIn(from, audio.size)
-            Hypothesis(s.startMs, s.endMs, transcriber.recognize(audio.copyOfRange(from, to)))
+            val recognition = transcriber.recognition(audio.copyOfRange(from, to))
+            Hypothesis(s.startMs, s.endMs, recognition.text, recognition.lang ?: transcriber.spec.language)
         }
     }
 
@@ -159,18 +172,26 @@ class TestSetEvaluator(
         private val OTHERS = setOf("partner", "phone")
 
         const val TABLE_HEADER =
-            "| 条件 | 音声 (分) | 発話数 | CER 全体 | CER 装着者 | CER 相手 | CER（正解区間で切った場合） | 検出漏れ | 発話外の誤認識 (文字) | チャンク (無音) | 文字起こし時間 (s) | RTF |\n" +
-                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
+            "| 条件 | 音声 (分) | 発話数 | CER 全体 | CER 装着者 | CER 相手 | CER（正解区間で切った場合） | WER 英語（正解区間で切った場合） | 言語の誤り (発話) | 検出漏れ | 発話外の誤認識 (文字) | チャンク (無音) | 文字起こし時間 (s) | RTF |\n" +
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
 
         /** One Markdown table row (Japanese headers in [TABLE_HEADER], for docs/dev/test-audio.md). */
         fun markdownRow(r: Result): String {
             val s = r.score
-            return "| %s | %.1f | %d | %s | %s | %s | %s | %s (%d) | %d | %d (%d) | %.0f | %.3f |\n".format(
-                r.recording.id, r.audioSeconds / 60, s.utterances, percent(s.cer), percent(s.cerOf(setOf("wearer"))),
-                percent(s.cerOf(OTHERS)), percent(r.oracleCer), percent(s.missRate), s.missed, s.outsideChars,
-                r.chunks, r.silentChunks, r.transcribeSeconds, r.rtf,
+            val wer = s.wer?.let { "${percent(it)} (${percent(r.oracleWer)})" } ?: "-"
+            return "| %s | %.1f | %d | %s | %s | %s | %s | %s | %s | %s (%d) | %d | %d (%d) | %.0f | %.3f |\n".format(
+                r.recording.id, r.audioSeconds / 60, s.utterances, percent(s.cerOrNull), percent(s.cerOf(setOf("wearer"))),
+                percent(s.cerOf(OTHERS)), percent(r.oracleCer.takeIf { s.refChars > 0 }), wer, languageErrors(s),
+                percent(s.missRate), s.missed, s.outsideChars, r.chunks, r.silentChunks, r.transcribeSeconds, r.rtf,
             )
         }
+
+        /**
+         * Utterances stored in another language, per spoken language (`ja 2/480, en 1/60`), or `-`
+         * when the transcriber states no language.
+         */
+        fun languageErrors(s: RecordingScore): String =
+            s.languageChecked.entries.joinToString(", ") { (lang, n) -> "$lang ${s.languageErrors[lang] ?: 0}/$n" }.ifEmpty { "-" }
 
         /**
          * The table over every recording of [manifestFile] evaluated so far in [workDir] (so that

@@ -58,6 +58,32 @@ class ScoringTest {
     }
 
     @Test
+    fun englishGroupsAreScoredByWordsAndLanguagesAreChecked() {
+        assertEquals(listOf("its", "a", "well", "known", "fact"), WerText.words("It's a well-known fact!"))
+        assertEquals(listOf("well", "known", "20"), WerText.words("Well-known: 20."))
+        val truth = listOf(
+            TruthSegment(1_000, 3_000, "en", "wearer", "m0", "The cat sat down.", lang = "en"),
+            TruthSegment(4_000, 5_000, "m1:A", "partner", "m1", "はい。"),
+            TruthSegment(6_000, 8_000, "en", "partner", "m2", "Good morning.", lang = "en"),
+        )
+        val hypotheses = listOf(
+            Hypothesis(900, 3_100, "The cat sat.", "en"),
+            Hypothesis(3_900, 5_100, "はい", "ja"),
+            // English recognized by the Japanese model
+            Hypothesis(5_900, 8_100, "グッドモーニング", "ja"),
+        )
+        val score = scoreRecording(truth, hypotheses)
+        // words: the cat sat down (4) + good morning (2); errors: "down" deleted, "good morning" -> one wrong word
+        assertEquals(mapOf("wearer" to 4, "partner" to 2), score.refWordsByRole)
+        assertEquals(3.0 / 6, score.wer)
+        assertEquals(0.0, score.cer)
+        assertEquals(2, score.refChars)
+        assertEquals(mapOf("en" to 2, "ja" to 1), score.languageChecked)
+        assertEquals(mapOf("en" to 1), score.languageErrors)
+        assertEquals(null, scoreRecording(truth.filter { it.lang == "en" }, hypotheses).cerOrNull)
+    }
+
+    @Test
     fun committedFixtureManifestParsesAndAPerfectTranscriptScoresZero() {
         val manifest = TestSetManifest.load(File(System.getProperty("watchaudio.fixtures"), "manifest.json"))
         assertTrue(manifest.recordings.size >= 2)

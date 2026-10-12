@@ -82,6 +82,52 @@ class EndToEndTest {
     }
 
     /**
+     * 「英語も文字起こしする」 (#81): with SenseVoice routed in front, an English recording is
+     * stored as English text in `en` and the Japanese ones are still transcribed by the Japanese
+     * model in `ja`.
+     */
+    @Test
+    fun englishIsTranscribedAsEnglishNextToJapanese() = runBlocking {
+        if (!modelsAvailable()) return@runBlocking
+        val english = File(models, "${AsrModelSpec.SENSE_VOICE.id}/test_wavs/en.wav")
+        if (!english.isFile) {
+            check(System.getProperty("watchaudio.requireModels") != "true") { "English model missing in $models" }
+            println("SKIPPED: run tools/harness/download-models.sh to enable the English end-to-end test")
+            return@runBlocking
+        }
+        val dir = Files.createTempDirectory("e2e-en").toFile()
+        try {
+            val gap = FloatArray(3 * Ffmpeg.SAMPLE_RATE)
+            val samples = Ffmpeg.decode(File(testWavs, "1.wav")) + gap + Ffmpeg.decode(english) + gap + Ffmpeg.decode(File(testWavs, "3.wav"))
+            val start = 1_791_622_800_000L
+            val chunks = WatchSimulator(File(dir, "outbox")).record(samples, start)
+            LocalStore.open(File(dir, "db.sqlite").path).use { store ->
+                val audioRoot = Path(File(dir, "audio").path)
+                val ingestor = Ingestor(store, audioRoot)
+                chunks.forEach { assertEquals(AckStatus.STORED, ingestor.ingest(it.manifest, it.file).status) }
+                SherpaTranscriber(models, english = AsrModelSpec.SENSE_VOICE).use { transcriber ->
+                    assertEquals(0, TranscriptionPipeline(store, audioRoot, transcriber).processPending().failed)
+                }
+                val transcript = store.read { segmentsBetween(0, Long.MAX_VALUE) }
+                transcript.forEach { println("+%5.1fs [%s] %s (%s)".format((it.startAt - start) / 1000.0, it.lang, it.text, it.engine)) }
+                // The VAD may split each recording into several segments: compare the runs of languages.
+                val runs = transcript.fold(listOf<Pair<String?, String>>()) { acc, s ->
+                    if (acc.lastOrNull()?.first == s.lang) acc.dropLast(1) + (s.lang to acc.last().second + " " + s.text) else acc + (s.lang to s.text)
+                }
+                assertEquals(listOf("ja", "en", "ja"), runs.map { it.first })
+                val englishText = runs[1].second.lowercase()
+                listOf("chieftain", "boy", "pieces").forEach { assertTrue(it in englishText, "missing '$it' in: $englishText") }
+                assertTrue("気象庁" in runs[0].second, runs[0].second)
+                assertTrue("ヤンバルクイナ" in runs[2].second, runs[2].second)
+                assertTrue(transcript.all { it.engine == "sherpa-zipformer-ja-reazonspeech-int8+sherpa-sensevoice-small-int8" })
+                assertEquals(1, store.read { search("chieftain") }.size)
+            }
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    /**
      * Utterances cut by the watch's chunk rotation are transcribed as if there were no cut,
      * whether the chunks are transcribed in recording order or the later chunk arrives first.
      */

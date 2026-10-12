@@ -19,7 +19,7 @@
 | Wear OS アプリ | **Kotlin + Compose for Wear OS** | 前景サービス・Ongoing Activity・Data Layer（`ChannelClient` / `MessageClient`）はネイティブ API |
 | DB | **SQLite（`androidx.sqlite` の `BundledSQLiteDriver`）+ FTS5 trigram** | 全プラットフォームで同じ SQLite（FTS5 入り）を同梱する。SQL は `LocalStore` に手書きし、スキーマは `shared/db` の `Schema.kt`（`MIGRATIONS`、`PRAGMA user_version` で管理、**追記のみ**）。trigram トークナイザで日本語の部分一致検索ができる。ORM やコード生成（SQLDelight・Room など）は使わない |
 | ファイル・時刻 | kotlinx-io（`Path` / `SystemFileSystem`）、kotlinx-datetime、kotlinx-serialization（manifest / ACK の JSON） | 共通コードからファイル操作・タイムゾーン計算・JSON を扱うため |
-| ASR | iOS: `SpeechAnalyzer`/`SpeechTranscriber`（iOS 26+）<br>Android: sherpa-onnx + ReazonSpeech Zipformer（int8）+ Silero VAD | iOS はモデルが OS 管理でアプリが軽い。Android は日本語対応の高速 OSS。M0-5 の精度比較で Zipformer を採用（モデルは初回にダウンロード、[実装メモ](../platforms/android-phone.md)） |
+| ASR | iOS: `SpeechAnalyzer`/`SpeechTranscriber`（iOS 26+）<br>Android: sherpa-onnx + ReazonSpeech Zipformer（int8）+ Silero VAD。英語は設定でオンにしたときだけ SenseVoice Small（int8）を併用（#81） | iOS はモデルが OS 管理でアプリが軽い。Android は日本語対応の高速 OSS。M0-5 の精度比較で Zipformer を採用（モデルは初回にダウンロード、[実装メモ](../platforms/android-phone.md)） |
 | DI | **手書きの composition root**（DI ライブラリは使わない） | Android スマホ: `AppGraph`（`apps/android`）、iOS: `IosAppGraph`（`shared/ui/iosMain`）、Wear OS: `AppGraph`（`apps/wear/WearApp.kt`）。グラフが小さく、Worker・Service・BGTask から UI なしで同じオブジェクトに届けばよいため |
 | 非同期 | Kotlin Coroutines / Flow | KMP 定番 |
 | バックグラウンド処理 | Android: WorkManager、iOS: `BGProcessingTask` | 文字起こし・保持期間の適用・途絶チェック |
@@ -227,7 +227,8 @@ no_audio（無音チャンク。文字起こししない）
 - 音声の保持期間ポリシー（#33）: 文字起こし完了済みのチャンクのみ削除対象。文字起こしの後に同じ実行（共通の `TranscriptionRun`。Android `TranscriptionWorker`、iOS `BGProcessingTask` / 前面実行から呼ぶ）で `StorageManager.applyRetention()` を実行する。詳細は §9.3。
 - 文字起こしエンジンは共通インターフェース `Transcriber`（`shared/pipeline`）の裏に置く。入力は「音声パーツ（ファイル + 範囲 `[fromMs, toMs)`）のリスト」で、エンジンはそれを連結した 1 本の録音として認識し、連結先頭からの相対時刻で発話を返す（各パーツはちょうど `toMs - fromMs` の長さにする。ファイルが短ければ無音で埋める）。実装: Android = sherpa-onnx（各ファイルを `MediaCodec` でデコードして PCM を連結）、iOS = SpeechAnalyzer（Swift 側で一時 CAF ファイルに連結）、JVM ハーネス = sherpa-onnx（ffmpeg でデコード）。
 - **誤認識の除去は共通の 1 か所**（#136、#105）: `TranscriptionPipeline` は `Transcriber` の結果（`TimedText`）を保存の前に `SegmentFilter`（`shared/pipeline`）に通し、残したものだけを保存する。アプリ（Android・iOS）とハーネスは `FalsePositiveFilter.DEFAULT` を使う（下記「会話以外の誤認識の除去」）。判断の材料として `TimedText` は任意の `speechProbability`（発話区間の Silero の確率の平均）、`levelAboveNoiseDb`（区間の音が雑音の床からどれだけ大きいか、dB）、`confidence`（認識器の確信度）を持つ。前の 2 つは sherpa-onnx の経路（`transcribeSpeech`）で付く。`confidence` は現状どの経路でも null（sherpa-onnx 1.13.8 の Java / Android API の結果はテキスト・トークン・時刻・長さだけでトークンの確率を出さない。iOS の SpeechAnalyzer の経路はどれも null）。いずれも DB には保存しない（スキーマは変えていない）。
-- **モデルの記述**（#136）: sherpa-onnx の ASR モデルは `AsrModelSpec`（`shared/pipeline`: ディレクトリ名 `id`、`engineId`、言語、認識器の種類 `RecognizerKind`、役割ごとのファイル名）で表す。現在は `AsrModelSpec.JA_REAZONSPEECH`（Zipformer ReazonSpeech int8、`ja`）だけ。Android の `ModelFiles`・`ModelManifest` とハーネスの `SherpaTranscriber` はこの spec からファイルの場所と認識器の設定を作るので、別のモデル（英語・日英混在の #81 など）は spec と `RecognizerKind` の追加で足せる。
+- **モデルの記述**（#136）: sherpa-onnx の ASR モデルは `AsrModelSpec`（`shared/pipeline`: ディレクトリ名 `id`、`engineId`、言語、認識器の種類 `RecognizerKind`、役割ごとのファイル名）で表す。既定は `AsrModelSpec.JA_REAZONSPEECH`（Zipformer ReazonSpeech int8、`ja`）。Android の `ModelFiles`・`ModelManifest` とハーネスの `SherpaTranscriber` はこの spec からファイルの場所と認識器の設定を作る。
+- **英語（#81）**: 設定「英語も文字起こしする」（既定オフ、Android のみ）がオンのとき、`AsrModelSpec.SENSE_VOICE`（SenseVoice Small int8、`RecognizerKind.SENSE_VOICE`、言語を判定して結果に付ける）を追加でダウンロードし、共通の `LanguageRouting` で区間ごとに振り分ける: 日本語モデルで認識 → 文字数が区間の長さに対して少ない（1.5 文字/秒未満）かカタカナ・ラテン文字ばかり（8 割以上）のときだけ SenseVoice でも認識 → 英語と判定されラテン文字だけ（9 割以上）なら SenseVoice の文を `lang = en` で保存、それ以外は日本語モデルの文（`ja`）。1 つの発話の中の日英混在はどちらか一方の言語になる。比較と採用の理由は [research/english-asr.md](../research/english-asr.md)。
 
 #### 発話区間の切り出し（Android / JVM ハーネス、#68・#71）
 
@@ -526,7 +527,7 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 
 | 端末 | 通信 | 宛先 | 実装 |
 | --- | --- | --- | --- |
-| Android スマホ | ASR・VAD モデル（sherpa-onnx）のダウンロード（ファイル単位・再開可能・SHA-256 検証） | ASR: `https://huggingface.co/csukuangfj/reazonspeech-k2-v2`（コミット固定）、VAD: `https://github.com/k2-fsa/sherpa-onnx/releases/download/`（GitHub Releases） | URL は `apps/android/.../asr/ModelManifest.kt`、通信は `ModelDownloader.kt`（`HttpURLConnection`）。INTERNET 権限はこのためだけ |
+| Android スマホ | ASR・VAD モデル（sherpa-onnx）のダウンロード（ファイル単位・再開可能・SHA-256 検証）。設定「英語も文字起こしする」がオンのときだけ英語用モデル（SenseVoice、#81）も | ASR: `https://huggingface.co/csukuangfj/reazonspeech-k2-v2`（コミット固定）、VAD: `https://github.com/k2-fsa/sherpa-onnx/releases/download/`（GitHub Releases）、英語: `https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17`（コミット固定） | URL は `apps/android/.../asr/ModelManifest.kt`、通信は `ModelDownloader.kt`（`HttpURLConnection`）。INTERNET 権限はこのためだけ |
 | Wear OS → スマホ | チャンクと ACK | 直接つながっているペアのスマホ（`Node.isNearby`） | `ChannelClient` / `MessageClient`（Wearable Data Layer）。クラウド経由で同期されうる `DataClient` は使わない。Wear OS アプリに INTERNET 権限はない |
 | Apple Watch → iPhone | チャンクと ACK | ペアの iPhone | WatchConnectivity（`transferFile` / `transferUserInfo`）。OS が管理する端末間の転送 |
 | iPhone | 音声認識モデル | Apple（OS が管理） | `SpeechAnalyzer` の `AssetInventory`。アプリは URL を持たない。文字起こし自体は端末上 |

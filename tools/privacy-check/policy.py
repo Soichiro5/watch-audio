@@ -94,6 +94,8 @@ ALLOWED_API_USES = {
 ALLOWED_URL_PREFIXES = {
     "https://huggingface.co/csukuangfj/reazonspeech-k2-v2": "ASR model files, pinned commit (ModelManifest)",
     "https://github.com/k2-fsa/sherpa-onnx/releases/download/": "Silero VAD model (ModelManifest)",
+    "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17":
+        "English (SenseVoice) model files, pinned commit, opt-in download only (ModelManifest.englishFiles, #81)",
 }
 
 # Declared dependencies (gradle/libs.versions.toml, *.gradle.kts) must not match these.

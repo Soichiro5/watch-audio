@@ -28,6 +28,7 @@ class FakeAppServices(
     override val permissions: List<AppPermission> = emptyList(),
     override val modelSetup: ModelSetup = ModelSetup.DOWNLOAD,
     override val storage: StorageManager = StorageManager(store, Path(audioRoot)),
+    override val supportsEnglish: Boolean = false,
     override val exporter: DataExporter = DataExporter(store, Path(audioRoot)),
     // Few PBKDF2 rounds keep the tests fast; the format records the count.
     override val backupWriter: BackupWriter = BackupWriter(store, Path(audioRoot), iterations = 1_000),
@@ -42,6 +43,7 @@ class FakeAppServices(
     var transcriptionRequests = 0
         private set
     val downloadRequests = mutableListOf<Boolean>()
+    val englishDownloadRequests = mutableListOf<Boolean>()
 
     /** Current permission states; [requestPermission] grants unless [deniesOnRequest]. */
     val permissionStates = permissions.associateWith { PermissionStatus.NOT_REQUESTED }.toMutableMap()
@@ -67,6 +69,10 @@ class FakeAppServices(
 
     override fun downloadModels(allowMetered: Boolean) {
         downloadRequests += allowMetered
+    }
+
+    override fun downloadEnglishModel(allowMetered: Boolean) {
+        englishDownloadRequests += allowMetered
     }
 
     override suspend fun permissionStatus(permission: AppPermission): PermissionStatus =

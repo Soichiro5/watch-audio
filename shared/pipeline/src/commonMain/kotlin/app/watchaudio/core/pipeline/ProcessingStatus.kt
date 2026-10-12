@@ -13,6 +13,13 @@ data class ProcessingStatus(
     val notice: StatusNotice? = null,
     /** Why transcription is waiting for the charger or a cooler phone (#75); null while it may run. */
     val paused: PauseReason? = null,
+    /**
+     * The extra English model (#81) while 「英語も文字起こしする」 is on; null when it is off or the
+     * platform does not offer English.
+     */
+    val englishModel: ModelState? = null,
+    /** The English model's download waits for an unmetered network (Android). */
+    val englishModelWaitingForWifi: Boolean = false,
 )
 
 /**

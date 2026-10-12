@@ -16,6 +16,12 @@ data class AppSettings(
     val gapAlertShownFor: Long? = null,
     /** 「充電中のみ文字起こしする」 (#75): no transcription on battery at all. */
     val transcribeOnlyWhileCharging: Boolean = false,
+    /**
+     * 「英語も文字起こしする」 (#81): also recognize English, with an extra model (SenseVoice,
+     * ~240 MB) routed in front of the Japanese one. Off by default. Platforms that cannot do it
+     * ignore it (`AppServices.supportsEnglish`).
+     */
+    val transcribeEnglish: Boolean = false,
 ) {
     /** Key-value form; null values remove the key. */
     fun toEntries(): Map<String, String?> = mapOf(
@@ -26,6 +32,7 @@ data class AppSettings(
         Keys.QUIET_HOURS_END to gapAlert.quietHours.endMinute.toString(),
         Keys.GAP_ALERT_SHOWN_FOR to gapAlertShownFor?.toString(),
         Keys.TRANSCRIBE_ONLY_WHILE_CHARGING to transcribeOnlyWhileCharging.toString(),
+        Keys.TRANSCRIBE_ENGLISH to transcribeEnglish.toString(),
     )
 
     object Keys {
@@ -36,6 +43,7 @@ data class AppSettings(
         const val QUIET_HOURS_END = "gap_alert.quiet_hours.end_minute"
         const val GAP_ALERT_SHOWN_FOR = "gap_alert.shown_for"
         const val TRANSCRIBE_ONLY_WHILE_CHARGING = "transcription.charging_only"
+        const val TRANSCRIBE_ENGLISH = "transcription.english"
     }
 
     companion object {
@@ -58,6 +66,7 @@ data class AppSettings(
                 ),
                 gapAlertShownFor = entries[Keys.GAP_ALERT_SHOWN_FOR]?.toLongOrNull(),
                 transcribeOnlyWhileCharging = bool(Keys.TRANSCRIBE_ONLY_WHILE_CHARGING, defaults.transcribeOnlyWhileCharging),
+                transcribeEnglish = bool(Keys.TRANSCRIBE_ENGLISH, defaults.transcribeEnglish),
             )
         }
     }

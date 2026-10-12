@@ -61,7 +61,7 @@ class AppGraph private constructor(context: Context) {
 
     val scheduler = TranscriptionScheduler(app, scope, chargingOnly = { store.loadSettings().transcribeOnlyWhileCharging })
     val models = ModelManager(app, scope, diagnostics, onReady = scheduler::requestNow)
-    val transcriber = AndroidSherpaTranscriber(models.files)
+    val transcriber = AndroidSherpaTranscriber(models.files, models.englishFiles, englishEnabled = { store.loadSettings().transcribeEnglish })
     val pipeline = TranscriptionPipeline(store, Path(audioRoot.path), transcriber, segmentFilter = FalsePositiveFilter.DEFAULT)
     val storage = StorageManager(
         store,
@@ -147,6 +147,7 @@ class AppGraph private constructor(context: Context) {
         pipeline.recoverInterrupted().let { if (it > 0) Log.i(TAG, "re-queued $it interrupted chunks") }
         store.read { lastReceivedAt() }?.let { stored -> _lastChunkReceivedAt.compareAndSet(null, stored) }
         models.refresh()
+        models.syncEnglish(store.loadSettings().transcribeEnglish)
     }
 
     suspend fun hasPendingChunks(): Boolean = pipeline.hasPending()

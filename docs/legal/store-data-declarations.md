@@ -132,10 +132,10 @@ iPhone アプリの `NSMicrophoneUsageDescription` は削除した（#159）。i
 
 **Android スマホアプリ: `FOREGROUND_SERVICE_DATA_SYNC`（WorkManager の `SystemForegroundService`、`foregroundServiceType="dataSync"`）**
 
-- 機能: 端末内で文字起こしするための日本語音声認識モデル（数百 MB）のダウンロード。初回の準備時にユーザーが開始する（Wi-Fi 接続時だけに限る設定あり）。
+- 機能: 端末内で文字起こしするための日本語音声認識モデル（数百 MB）のダウンロード。初回の準備時にユーザーが開始する（Wi-Fi 接続時だけに限る設定あり）。設定「英語も文字起こしする」をオンにしたときだけ、英語用のモデル（約 240 MB）も同じ方法でダウンロードする（#81）。
 - 前景サービスが必要な理由: ファイルが大きく、アプリを閉じてもダウンロードを続ける必要がある。ダウンロード中は進み具合の通知を表示する。中断しても途中から再開し、SHA-256 で検証する。
 - データの扱い: ダウンロードだけで、ユーザーデータは送らない。
-- 英文案: "The app downloads the Japanese speech recognition model (several hundred MB) that it needs to transcribe recordings on the device. The user starts the download during setup and can restrict it to Wi-Fi. A data sync foreground service keeps the large download running when the app is closed, with a progress notification shown throughout. The download is resumable and verified with SHA-256. No user data is uploaded."
+- 英文案: "The app downloads the Japanese speech recognition model (several hundred MB) that it needs to transcribe recordings on the device. The user starts the download during setup and can restrict it to Wi-Fi. If the user turns on English transcription, an additional English-capable model (about 240 MB) is downloaded the same way. A data sync foreground service keeps the large download running when the app is closed, with a progress notification shown throughout. The download is resumable and verified with SHA-256. No user data is uploaded."
 - **Android 15 以降の実行時間の上限（#159 で確認）**:
   - 公式の基準: `targetSdk` 35 以上のアプリ（本アプリは 37）では、`dataSync` の前景サービスは **24 時間のうち合計 6 時間**まで（アプリのすべての `dataSync` で共有）。上限に達するとシステムが `Service.onTimeout(int, int)` を呼び、数秒以内に `stopSelf()` しないと `RemoteServiceException` で異常終了する。ユーザーがアプリを前面に出すと時間はリセットされる。使い切った後に `dataSync` を始めようとすると `ForegroundServiceStartNotAllowedException` になる（[Foreground service timeouts](https://developer.android.com/develop/background-work/services/fgs/timeout)）。
   - 本アプリの使い方: `dataSync` を使うのは `ModelDownloadWorker`（WorkManager の `CoroutineWorker` が `setForeground` で `FOREGROUND_SERVICE_TYPE_DATA_SYNC` を指定）だけで、モデル（約 160 MB）のダウンロード中だけ動く。開始はユーザーの操作（オンボーディング・状態タブの「ダウンロード」、`ModelManager.download`）と、アプリ起動時の未取得分の再開（`downloadIfMissing`、Wi-Fi 時のみ）。6 時間かかるのは平均 60 kbps 程度より遅い回線のときだけ。
@@ -206,7 +206,7 @@ Play Console で権限の用途を聞かれたとき（アプリのコンテン�
 | 主張 | 根拠 |
 | --- | --- |
 | 解析・広告・クラッシュ送信 SDK、HTTP クライアントのライブラリがない | `tools/privacy-check/policy.py` の `DENIED_DEPENDENCIES` と `ALLOWED_RESOLVED_DEPENDENCIES`（リリースの実行時クラスパスを CI で照合）。`gradle/libs.versions.toml`。iOS は `apps/ios/project.yml` に Swift パッケージなし |
-| 通信はモデルのダウンロードだけ | `policy.py` の `ALLOWED_API_USES`（通信 API は `apps/android/src/main/kotlin/app/watchaudio/android/asr/ModelDownloader.kt` だけ）と `ALLOWED_URL_PREFIXES`（`https://huggingface.co/csukuangfj/reazonspeech-k2-v2`、`https://github.com/k2-fsa/sherpa-onnx/releases/download/`）。URL は `ModelManifest.kt`。[docs/architecture/02 §7.2](../architecture/02-architecture.md#72-通信箇所の一覧) |
+| 通信はモデルのダウンロードだけ | `policy.py` の `ALLOWED_API_USES`（通信 API は `apps/android/src/main/kotlin/app/watchaudio/android/asr/ModelDownloader.kt` だけ）と `ALLOWED_URL_PREFIXES`（`https://huggingface.co/csukuangfj/reazonspeech-k2-v2`、`https://github.com/k2-fsa/sherpa-onnx/releases/download/`、英語用の `https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17`）。URL は `ModelManifest.kt`。[docs/architecture/02 §7.2](../architecture/02-architecture.md#72-通信箇所の一覧) |
 | iOS のモデルは OS がダウンロード、サーバー型の音声認識は使わない | `apps/ios/App/SpeechTranscription.swift`（`AssetInventory`、`SpeechAnalyzer`）。`policy.py` が `SF…RecognitionRequest` を禁止 |
 | Wear OS アプリはインターネットを使わない | `apps/wear/src/main/AndroidManifest.xml` に `INTERNET` なし。`policy.py` の Wear OS の権限の許可リスト |
 | Wear OS → スマホは直接接続のノードだけ、`DataClient` は使わない | `apps/wear/.../outbox/OutboxUploader.kt`（`isNearby` のノードだけ）、スマホ側も `apps/android/.../transfer/ChunkReceiver.kt` で `isNearby` を確認。`policy.py` が `DataClient` を禁止。[docs/platforms/wearos.md](../platforms/wearos.md) の手動確認 17 |
