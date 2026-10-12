@@ -21,6 +21,16 @@ class AsrModelSpecTest {
     }
 
     @Test
+    fun theEnglishModelIsSenseVoiceWhichReportsItsLanguage() {
+        val spec = AsrModelSpec.SENSE_VOICE
+        assertEquals("sherpa-sensevoice-small-int8", spec.engineId)
+        assertEquals(null, spec.language)
+        assertEquals(RecognizerKind.SENSE_VOICE, spec.kind)
+        assertEquals("sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/model.int8.onnx", spec.path(AsrModelFile.MODEL))
+        assertEquals("tokens.txt", spec.fileName(AsrModelFile.TOKENS))
+    }
+
+    @Test
     fun aSpecMustNameExactlyTheFilesItsKindNeeds() {
         val files = AsrModelSpec.JA_REAZONSPEECH.files
         assertFailsWith<IllegalArgumentException> {

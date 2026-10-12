@@ -1,6 +1,8 @@
 package app.watchaudio.harness
 
+import app.watchaudio.core.pipeline.AsrModelSpec
 import app.watchaudio.core.pipeline.FalsePositiveFilter
+import app.watchaudio.core.pipeline.LanguageRouting
 import app.watchaudio.core.pipeline.VadSettings
 import app.watchaudio.core.protocol.AudioCodec
 import app.watchaudio.core.protocol.RecordingFormat
@@ -8,13 +10,16 @@ import java.io.File
 
 /**
  * Arguments of the `evaluate` command:
- * `<manifest.json> <workDir> [--vad name=value[,name=value...]]... [--filter off|name=value[,...]]... [--format name=value[,...]]... [recordingIds...]`.
+ * `<manifest.json> <workDir> [--vad name=value[,name=value...]]... [--filter off|name=value[,...]]... [--format name=value[,...]]... [--english on|off|name=value[,...]]... [recordingIds...]`.
  *
  * `--vad` overrides [VadSettings] properties by name (e.g. `--vad threshold=0.3,minSilenceSeconds=1`),
  * so that settings can be compared on the test audio set without recompiling. Likewise `--filter`
  * overrides [FalsePositiveFilter] properties, or turns the filter off (`--filter off`: everything
  * the recognizer returns is stored). [filter] is null when it is off. `--format` overrides the
  * simulated watch's [RecordingFormat] (e.g. `--format codec=opus,bitrateBps=16000`) to compare codecs.
+ * `--english on` routes each span through SenseVoice first, as the app's 「英語も文字起こしする」
+ * (#81); `name=value` overrides [LanguageRouting] properties and implies `on`. [english] is null
+ * when it is off (the default, like the app).
  */
 data class EvaluateArgs(
     val manifest: File,
@@ -23,6 +28,8 @@ data class EvaluateArgs(
     val vad: VadSettings,
     val filter: FalsePositiveFilter? = FalsePositiveFilter.DEFAULT,
     val format: RecordingFormat = RecordingFormat.CURRENT,
+    val english: AsrModelSpec? = null,
+    val routing: LanguageRouting = LanguageRouting.DEFAULT,
 ) {
     companion object {
         /** Parses [args] (without the command name); throws [IllegalArgumentException] on bad input. */
@@ -31,8 +38,14 @@ data class EvaluateArgs(
             var vad = VadSettings.DEFAULT
             var filter: FalsePositiveFilter? = FalsePositiveFilter.DEFAULT
             var format = RecordingFormat.CURRENT
+            var english: AsrModelSpec? = null
+            var routing = LanguageRouting.DEFAULT
             fun filterOption(value: String) {
                 filter = if (value == "off") null else (filter ?: FalsePositiveFilter.DEFAULT).withOverrides(value)
+            }
+            fun englishOption(value: String) {
+                english = if (value == "off") null else AsrModelSpec.SENSE_VOICE
+                if (value != "on" && value != "off") routing = routing.withOverrides(value)
             }
             var index = 0
             while (index < args.size) {
@@ -53,12 +66,17 @@ data class EvaluateArgs(
                         format = format.withOverrides(args[index++])
                     }
                     arg.startsWith("--format=") -> format = format.withOverrides(arg.removePrefix("--format="))
+                    arg == "--english" -> {
+                        require(index < args.size) { "--english needs on, off or name=value" }
+                        englishOption(args[index++])
+                    }
+                    arg.startsWith("--english=") -> englishOption(arg.removePrefix("--english="))
                     arg.startsWith("--") -> throw IllegalArgumentException("unknown option $arg")
                     else -> positional += arg
                 }
             }
             require(positional.size >= 2) { "evaluate needs <manifest.json> <workDir>" }
-            return EvaluateArgs(File(positional[0]), File(positional[1]), positional.drop(2).toSet(), vad, filter, format)
+            return EvaluateArgs(File(positional[0]), File(positional[1]), positional.drop(2).toSet(), vad, filter, format, english, routing)
         }
     }
 }
@@ -135,4 +153,16 @@ val FORMAT_OPTIONS: Map<String, (RecordingFormat, String) -> RecordingFormat> = 
     "channels" to { f, v -> f.copy(channels = v.toInt()) },
     "bitrateBps" to { f, v -> f.copy(bitrateBps = v.toInt()) },
     "chunkDurationMs" to { f, v -> f.copy(chunkDurationMs = v.toLong()) },
+)
+
+/**
+ * This routing with the comma-separated `name=value` [overrides] applied, names being
+ * [LanguageRouting] property names ([ROUTING_OPTIONS]).
+ */
+fun LanguageRouting.withOverrides(overrides: String): LanguageRouting = applyOverrides(this, overrides, ROUTING_OPTIONS, "English routing")
+
+/** Every [LanguageRouting] property, by name, with how to set it from a string (languages: `en+zh`). */
+val ROUTING_OPTIONS: Map<String, (LanguageRouting, String) -> LanguageRouting> = mapOf(
+    "languages" to { r, v -> r.copy(languages = v.split('+').map(String::trim).filter(String::isNotEmpty).toSet()) },
+    "minLatinShare" to { r, v -> r.copy(minLatinShare = v.toFloat()) },
 )

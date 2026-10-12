@@ -41,4 +41,6 @@ data class TruthSegment(
     val role: String,
     val group: String,
     val text: String,
+    /** BCP 47 language of [text]; English groups are scored by words (WER). */
+    val lang: String = "ja",
 )

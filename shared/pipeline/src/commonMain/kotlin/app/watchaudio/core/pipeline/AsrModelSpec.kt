@@ -2,17 +2,22 @@ package app.watchaudio.core.pipeline
 
 /**
  * How a sherpa-onnx offline recognizer is built from its files. Each kind needs a fixed set of
- * [files]; new kinds (e.g. a multilingual CTC model for #81) are added here and to the
- * recognizer factories of Android (`AndroidSherpaTranscriber`) and the harness
- * (`SherpaTranscriber`).
+ * [files]; new kinds are added here and to the recognizer factories of Android
+ * (`AndroidSherpaTranscriber`) and the harness (`SherpaTranscriber`).
  */
 enum class RecognizerKind(val files: Set<AsrModelFile>) {
     /** Zipformer transducer (encoder, decoder and joiner) with greedy search. */
     TRANSDUCER(setOf(AsrModelFile.ENCODER, AsrModelFile.DECODER, AsrModelFile.JOINER, AsrModelFile.TOKENS)),
+
+    /**
+     * SenseVoice (one CTC model) with automatic language detection and inverse text
+     * normalization: each result carries its language tag ([senseVoiceLanguage]).
+     */
+    SENSE_VOICE(setOf(AsrModelFile.MODEL, AsrModelFile.TOKENS)),
 }
 
 /** The role of one file of an offline recognizer model. */
-enum class AsrModelFile { ENCODER, DECODER, JOINER, TOKENS }
+enum class AsrModelFile { ENCODER, DECODER, JOINER, MODEL, TOKENS }
 
 /**
  * One on-device speech recognition model for the sherpa-onnx path: everything that is specific
@@ -59,6 +64,21 @@ data class AsrModelSpec(
                 AsrModelFile.ENCODER to "encoder-epoch-99-avg-1.int8.onnx",
                 AsrModelFile.DECODER to "decoder-epoch-99-avg-1.int8.onnx",
                 AsrModelFile.JOINER to "joiner-epoch-99-avg-1.int8.onnx",
+                AsrModelFile.TOKENS to "tokens.txt",
+            ),
+        )
+
+        /**
+         * SenseVoice Small (int8): Chinese, English, Japanese, Korean and Cantonese with language
+         * detection. Used only for English, next to [JA_REAZONSPEECH] ([LanguageRouting], #81).
+         */
+        val SENSE_VOICE = AsrModelSpec(
+            id = "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17",
+            engineId = "sherpa-sensevoice-small-int8",
+            language = null,
+            kind = RecognizerKind.SENSE_VOICE,
+            files = mapOf(
+                AsrModelFile.MODEL to "model.int8.onnx",
                 AsrModelFile.TOKENS to "tokens.txt",
             ),
         )
