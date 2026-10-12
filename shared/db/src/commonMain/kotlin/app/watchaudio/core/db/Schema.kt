@@ -219,4 +219,12 @@ internal val MIGRATIONS: List<List<String>> = listOf(
         END
         """,
     ),
+    // 7: audio offload (#156). When the chunk's audio was last written into an encrypted backup
+    // that the user saved (the backup's createdAt), or NULL. Only such audio may be removed from
+    // the phone by the offload; the removal itself is recorded in audio_purged_at like retention.
+    // Adding a nullable column only rewrites the schema, not the table, so this is instant at
+    // any size. The offload query reuses idx_chunk_purgeable.
+    listOf(
+        "ALTER TABLE audio_chunk ADD COLUMN audio_backed_up_at INTEGER",
+    ),
 )

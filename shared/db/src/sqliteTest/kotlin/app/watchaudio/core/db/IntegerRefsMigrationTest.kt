@@ -117,7 +117,7 @@ class IntegerRefsMigrationTest {
         }
 
         BundledSQLiteDriver().open(path).use { db ->
-            assertEquals(listOf("6"), db.texts("PRAGMA user_version"))
+            assertEquals(listOf(MIGRATIONS.size.toString()), db.texts("PRAGMA user_version"))
             assertEquals(listOf("ok"), db.texts("PRAGMA integrity_check"))
             assertEquals(emptyList(), db.texts("PRAGMA foreign_key_check"))
             assertEquals(emptyList(), db.texts("SELECT name FROM sqlite_master WHERE name LIKE '%_v5'"))
