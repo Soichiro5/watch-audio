@@ -3,6 +3,7 @@ package app.watchaudio.core.pipeline
 import app.watchaudio.core.db.AudioUsage
 import app.watchaudio.core.db.ChunkRecord
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.db.StoreTransaction
 import app.watchaudio.core.platform.IoDispatcher
 import kotlin.time.Clock
 import kotlinx.coroutines.CoroutineDispatcher
@@ -38,8 +39,14 @@ data class StorageBreakdown(
     val modelBytes: Long?,
     /** Free space on the device, or null if unknown. */
     val freeBytes: Long?,
-    /** Chunks whose audio was deleted by the retention setting (their transcript is kept). */
+    /** Chunks whose audio was deleted by the retention setting and is in no backup (their transcript is kept). */
     val audioPurgedChunks: Int,
+    /** Chunks whose audio is no longer on the device but is in a backup (#156). */
+    val audioInBackupChunks: Int = 0,
+    /** Audio on the device that is also in a backup and can be offloaded (#156). */
+    val offloadableAudio: AudioUsage = AudioUsage(0, 0),
+    /** Creation time of the newest backup that included audio, or null. */
+    val lastAudioBackupAt: Long? = null,
 ) {
     val totalBytes: Long get() = audioBytes + databaseBytes + (modelBytes ?: 0)
 
@@ -52,10 +59,22 @@ data class StorageBreakdown(
     }
 }
 
+/** What [StorageManager.offloadBackedUpAudio] would remove now, for the confirmation (#156). */
+data class OffloadPreview(
+    val usage: AudioUsage,
+    /** Creation times of the oldest and newest backup holding that audio; null when there is none. */
+    val oldestBackupAt: Long?,
+    val newestBackupAt: Long?,
+)
+
 /**
  * Storage management (#33): applies the audio retention setting, reports usage and deletes data
  * on request. "Keep everything" is the default: transcripts are never deleted by retention, and
  * audio only once it is transcribed and older than the user's [AudioRetention].
+ *
+ * On the user's request it also offloads audio that is in an encrypted backup (#156,
+ * [offloadBackedUpAudio]): the files leave the device, the transcripts stay, and restoring the
+ * backup brings the audio back.
  *
  * Audio files are deleted before the database records it, so an interrupted run leaves at most
  * a chunk marked as having audio whose file is gone; the next run marks it.
@@ -98,12 +117,55 @@ class StorageManager(
         val retention = retention()
         val now = now()
         val cutoff = AudioRetentionPolicy.cutoff(retention, now) ?: return@withLock PurgeResult(0, 0)
+        deleteAudioInBatches(
+            candidates = { limit -> purgeableChunks(cutoff, limit) },
+            eligible = { AudioRetentionPolicy.shouldPurge(it, retention, now) },
+            mark = { ids -> markAudioPurged(ids, now) },
+            shouldContinue = shouldContinue,
+        )
+    }
+
+    /** What [offloadBackedUpAudio] would remove right now for [age] (for the confirmation). */
+    suspend fun previewOffload(age: OffloadAge): OffloadPreview {
+        val cutoff = AudioOffloadPolicy.cutoff(age, now())
+        val (usage, times) = store.read { offloadableUsage(cutoff) to offloadableBackupTimes(cutoff) }
+        return OffloadPreview(usage, times?.first, times?.second)
+    }
+
+    /**
+     * Offloads (#156): deletes the audio files of transcribed chunks whose audio is in an
+     * encrypted backup the user saved and that are at least [age] old, and records that they are
+     * gone; transcripts stay. Audio that was never backed up is never deleted. Stops between
+     * batches once [shouldContinue] is false.
+     */
+    suspend fun offloadBackedUpAudio(age: OffloadAge, shouldContinue: () -> Boolean = { true }): PurgeResult = lock.withLock {
+        val now = now()
+        val cutoff = AudioOffloadPolicy.cutoff(age, now)
+        deleteAudioInBatches(
+            candidates = { limit -> offloadableChunks(cutoff, limit) },
+            eligible = { AudioOffloadPolicy.canOffload(it, cutoff) },
+            mark = { ids -> markAudioOffloaded(ids, now) },
+            shouldContinue = shouldContinue,
+        )
+    }
+
+    /**
+     * Deletes the audio files of the [candidates] that are [eligible] (checked again here, so a
+     * query bug cannot delete more) batch by batch, then records it with [mark]. A file that cannot
+     * be deleted is skipped and keeps its row as it was.
+     */
+    private suspend fun deleteAudioInBatches(
+        candidates: StoreTransaction.(limit: Int) -> List<ChunkRecord>,
+        eligible: (ChunkRecord) -> Boolean,
+        mark: StoreTransaction.(ids: List<String>) -> Int,
+        shouldContinue: () -> Boolean,
+    ): PurgeResult {
         val failed = mutableSetOf<String>()
         var purged = 0
         var bytes = 0L
         while (shouldContinue()) {
-            val batch = store.read { purgeableChunks(cutoff, limit = failed.size + BATCH_SIZE) }
-                .filter { it.id !in failed && AudioRetentionPolicy.shouldPurge(it, retention, now) }
+            val batch = store.read { candidates(failed.size + BATCH_SIZE) }
+                .filter { it.id !in failed && eligible(it) }
             if (batch.isEmpty()) break
             val deleted = withContext(dispatcher) {
                 batch.filter { chunk ->
@@ -111,10 +173,10 @@ class StorageManager(
                 }
             }
             if (deleted.isEmpty()) continue
-            purged += store.transaction { markAudioPurged(deleted.map { it.id }, now) }
+            purged += store.transaction { mark(deleted.map { it.id }) }
             bytes += deleted.sumOf { it.sizeBytes ?: 0 }
         }
-        PurgeResult(purgedChunks = purged, freedBytes = bytes)
+        return PurgeResult(purgedChunks = purged, freedBytes = bytes)
     }
 
     /** Current usage; touches the file system, so call it from a refresh, not per frame. */
@@ -128,6 +190,9 @@ class StorageManager(
                 modelBytes = environment.modelBytes(),
                 freeBytes = environment.freeBytes(),
                 audioPurgedChunks = stats.audioPurgedChunks,
+                audioInBackupChunks = stats.audioInBackupChunks,
+                offloadableAudio = stats.offloadableAudio,
+                lastAudioBackupAt = stats.lastAudioBackupAt,
             )
         }
     }

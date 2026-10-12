@@ -103,6 +103,7 @@ private fun ChunkRecord.toExport(file: AudioFileInfo?, includedPath: String?) = 
             sha256 = file?.sha256,
             purgedAt = audioPurgedAt,
             file = includedPath,
+            backedUpAt = audioBackedUpAt,
         )
     },
 )
