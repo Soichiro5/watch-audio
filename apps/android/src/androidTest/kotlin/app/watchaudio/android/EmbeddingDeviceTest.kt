@@ -28,6 +28,13 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 import kotlinx.coroutines.runBlocking
 import kotlinx.io.files.Path
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.float
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -35,8 +42,10 @@ import org.junit.runner.RunWith
 /**
  * Semantic search on Android (#24): the embedding model runs through ONNX Runtime's C API (JNA)
  * on the very `libonnxruntime.so` sherpa-onnx ships, in the same process as the speech
- * recognizer, and finds a conversation by a paraphrase through the app's embedding step and hybrid
- * search. Logs `EMBED_CHECK` with the timings on this device.
+ * recognizer; it computes the same vectors as the JVM (reference vectors in
+ * `assets/embedding-reference.json`, cosine >= 0.99), ranks queries the JVM decides by a clear
+ * margin the same way, and finds a conversation by meaning through the app's embedding step and
+ * hybrid search. Logs `EMBED_CHECK` (timings, agreement with the JVM) and `EMBED_RANK` / `EMBED_SEARCH`.
  *
  * The model comes from `/data/local/tmp/watchaudio-test/models/ruri-v3-30m` (push-models.sh) and is
  * removed again afterwards, so the other tests run without semantic search as before.
@@ -65,47 +74,65 @@ class EmbeddingDeviceTest {
 
             // The embedding model on the same runtime.
             val ort = OrtApi.load("onnxruntime")
+            assertEquals("1.28.2", ort.runtimeVersion, "the runtime sherpa-onnx ships")
             val embedder = AndroidEmbedding.embedder(asr.root)
+            val reference = Reference.load()
+
+            // (a) The same model: every reference text embeds to the vector the JVM computed
+            // (tools/harness DeviceEmbeddingFixtureTest), queries and passages alike.
             val loadStarted = SystemClock.uptimeMillis()
-            val query = embedder.embedQuery("先週話した旅行の件")
+            val firstQuery = reference.texts.first { it.query }
+            embedder.embedQuery(firstQuery.text)
             val loadMs = SystemClock.uptimeMillis() - loadStarted
-            val passages = listOf(
-                "来月の沖縄だけどさ 飛行機は那覇行きの朝の便でいいかな ホテルは国際通りの近くにしよう",
-                "歯医者の予約 来週の木曜の午後三時に取っといたからね",
-            )
             val passageStarted = SystemClock.uptimeMillis()
-            val vectors = embedder.embedDocuments(passages)
-            val passageMs = (SystemClock.uptimeMillis() - passageStarted) / passages.size
+            val passageVectors = embedder.embedDocuments(reference.texts.filter { !it.query }.map { it.text })
+            val passageMs = (SystemClock.uptimeMillis() - passageStarted) / passageVectors.size
+            var passageIndex = 0
+            val vectors = reference.texts.map { text ->
+                if (text.query) embedder.embedQuery(text.text) else passageVectors[passageIndex++]
+            }
             val queryStarted = SystemClock.uptimeMillis()
-            embedder.embedQuery("歯医者の予約いつだっけ")
+            embedder.embedQuery(firstQuery.text)
             val queryMs = SystemClock.uptimeMillis() - queryStarted
-            val trip = dot(query, vectors[0])
-            val dentist = dot(query, vectors[1])
+            val agreement = reference.texts.indices.map { dot(vectors[it], reference.texts[it].vector) }
             Evidence.log(
                 "EMBED_CHECK ort=${ort.runtimeVersion} load_and_first_query_ms=$loadMs passage_ms=$passageMs query_ms=$queryMs " +
-                    "cos_trip=%.3f cos_dentist=%.3f".format(trip, dentist),
+                    "cos_vs_jvm_min=%.6f cos_vs_jvm=%s".format(agreement.min(), agreement.joinToString(",") { "%.5f".format(it) }),
             )
-            assertEquals("1.28.2", ort.runtimeVersion, "the runtime sherpa-onnx ships")
-            assertEquals(RuriV3.SPEC.dimension, query.size)
-            assertTrue(abs(dot(query, query) - 1.0) < 1e-3)
-            assertTrue(trip > dentist, "trip $trip vs dentist $dentist")
+            for (i in reference.texts.indices) {
+                assertEquals(RuriV3.SPEC.dimension, vectors[i].size)
+                assertTrue(abs(dot(vectors[i], vectors[i]) - 1.0) < 1e-3, "not a unit vector")
+                assertTrue(agreement[i] >= 0.99, "'${reference.texts[i].text}' differs from the JVM: cosine ${agreement[i]}")
+            }
 
-            // The app's pipeline step and hybrid search on a database of its own.
+            // (b) Rankings that the JVM decides by a clear margin (>= 0.05) come out the same here.
+            for ((query, passage) in reference.ranking) {
+                val scores = reference.passages.map { dot(vectors[query], vectors[it]) }
+                Evidence.log("EMBED_RANK '${reference.texts[query].text}' scores=${scores.joinToString(",") { "%.4f".format(it) }}")
+                assertEquals(reference.passages.indexOf(passage), scores.indices.maxBy { scores[it] }, "'${reference.texts[query].text}': $scores")
+            }
+
+            // The app's pipeline step and hybrid search on a database of its own: a query without any
+            // keyword in the transcripts finds its conversation by meaning.
             LocalStore.open(File(dir, "search.db").path).use { store ->
                 val start = System.currentTimeMillis() - 7 * 86_400_000L
-                listOf("trip" to passages[0], "dentist" to passages[1]).forEachIndexed { i, (id, text) ->
+                reference.passages.forEachIndexed { i, p ->
+                    val id = "passage-$i"
                     val at = start + i * 3_600_000L
                     store.transaction {
                         insertChunk(manifest(id, at), "$id.m4a", at)
-                        saveTranscript(id, text.split(' ').mapIndexed { j, part -> NewSegment(at + j * 3_000L, at + j * 3_000L + 2_000, part, "ja") }, "test")
+                        val parts = reference.texts[p].text.split(' ')
+                        saveTranscript(id, parts.mapIndexed { j, part -> NewSegment(at + j * 3_000L, at + j * 3_000L + 2_000, part, "ja") }, "test")
                     }
                 }
                 val index = SemanticIndex(store, embedder, File(dir, "index").path)
                 val outcome = EmbeddingStep(store, embedder, index).run(onBattery = false, nowMs = System.currentTimeMillis()) { true }
-                assertEquals(2, outcome.embeddedChunks)
-                val hits = HybridSearch.search(store, index, "先週話した旅行の件").hits
-                Evidence.log("EMBED_SEARCH hits=${hits.map { it.segment.chunkId to it.byMeaning }}")
-                assertEquals("trip", hits.first().segment.chunkId)
+                assertEquals(reference.passages.size, outcome.embeddedChunks)
+                val (query, passage) = reference.ranking.first { (q, _) -> reference.texts[q].text == SEARCH_QUERY }
+                val hits = HybridSearch.search(store, index, reference.texts[query].text).hits
+                Evidence.log("EMBED_SEARCH query='$SEARCH_QUERY' hits=${hits.map { it.segment.chunkId to it.byMeaning }}")
+                assertTrue(hits.none { it.byKeyword }, "the query shares no keyword with the transcripts")
+                assertEquals("passage-${reference.passages.indexOf(passage)}", hits.first().segment.chunkId)
                 assertTrue(hits.first().byMeaning)
             }
             embedder.release()
@@ -130,6 +157,40 @@ class EmbeddingDeviceTest {
     }
 
     private fun dot(a: FloatArray, b: FloatArray): Double = a.indices.sumOf { a[it].toDouble() * b[it] }
+
+    /**
+     * `assets/embedding-reference.json`: texts with the vectors the JVM computes for them, and which
+     * passage each ranking query must put first (kept in step by tools/harness DeviceEmbeddingFixtureTest).
+     */
+    private class Reference(val texts: List<Text>, val ranking: List<Pair<Int, Int>>) {
+        class Text(val query: Boolean, val text: String, val vector: FloatArray)
+
+        val passages: List<Int> get() = texts.indices.filter { !texts[it].query }
+
+        companion object {
+            fun load(): Reference {
+                val json = InstrumentationRegistry.getInstrumentation().context.assets.open("embedding-reference.json").use { it.readBytes().decodeToString() }
+                val root = Json.parseToJsonElement(json).jsonObject
+                val texts = root["texts"]!!.jsonArray.map { element ->
+                    val entry = element.jsonObject
+                    Text(
+                        entry["query"]!!.jsonPrimitive.boolean,
+                        entry["text"]!!.jsonPrimitive.content,
+                        entry["vector"]!!.jsonArray.map { it.jsonPrimitive.float }.toFloatArray(),
+                    )
+                }
+                val ranking = root["ranking"]!!.jsonArray.map { element ->
+                    element.jsonObject.let { it["query"]!!.jsonPrimitive.int to it["passage"]!!.jsonPrimitive.int }
+                }
+                return Reference(texts, ranking)
+            }
+        }
+    }
+
+    private companion object {
+        /** A ranking query of the reference without any word of the passages (meaning only). */
+        const val SEARCH_QUERY = "サーバー代がいくら増えるって言ってた？"
+    }
 
     private fun manifest(id: String, startedAt: Long) = ChunkManifest(
         chunkId = id,
