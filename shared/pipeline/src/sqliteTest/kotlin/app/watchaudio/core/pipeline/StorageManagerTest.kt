@@ -11,6 +11,7 @@ import app.watchaudio.testing.testManifest
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -18,6 +19,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.IOException
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
@@ -230,5 +232,18 @@ class StorageManagerTest {
         // Logging continues in a fresh file.
         log.log(DiagnosticEvents.APP_START, "version=test")
         assertEquals(1, log.exportTo(dir.resolve("check.csv")))
+    }
+
+    @Test
+    fun deleteAllFailsWhenTheDiagnosticsLogCannotBeCleared() = runTest {
+        // A non-empty directory where the log file should be cannot be deleted.
+        val stuck = dir.resolve("diagnostics/${DiagnosticsLog.FILE_NAME}")
+        SystemFileSystem.createDirectories(stuck)
+        SystemFileSystem.sink(Path(stuck, "x")).buffered().use { it.write(ByteArray(1)) }
+        val withLog = StorageManager(store, audioDir, environment, clock, diagnostics = DiagnosticsLog(stuck))
+        addChunk("a", daysAgo = 1)
+
+        assertFailsWith<IOException> { withLog.deleteAll() }
+        assertEquals(0, store.read { stats() }.chunks, "the recordings are deleted first")
     }
 }

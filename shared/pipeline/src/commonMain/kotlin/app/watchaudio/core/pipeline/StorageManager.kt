@@ -152,12 +152,14 @@ class StorageManager(
      * shrinks the database file and clears the [diagnostics] log (it records when chunks arrived,
      * i.e. when the user was recording; #159). Settings are kept, so the app does not start the
      * onboarding again.
+     * @throws IOException if part of the diagnostics log is left, so the UI does not report success.
      */
     suspend fun deleteAll(): Unit = lock.withLock {
         store.transaction { deleteAllChunks() }
         withContext(dispatcher) { sweepUnreferencedAudio(keep = store.read { audioPaths() }) }
         store.compact()
-        withContext(dispatcher) { diagnostics?.clear() }
+        val cleared = withContext(dispatcher) { diagnostics?.clear() ?: true }
+        if (!cleared) throw IOException("diagnostics log not cleared")
     }
 
     /** @return false only if the file exists and could not be deleted. */
