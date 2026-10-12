@@ -40,7 +40,7 @@ internal class TranscriptSql(private val db: SQLiteConnection) : TranscriptQueri
     private fun insertSegments(chunkKey: Long, segments: List<NewSegment>, engine: String) {
         val stored = segments.filter { it.text.isNotBlank() }
         if (stored.isEmpty()) return
-        val engineId = engineId(engine)
+        val engineId = db.engineKey(engine)
         db.prepare(
             "INSERT INTO transcript_segment (chunk_id, start_at, end_at, text, lang, engine_id) VALUES (?, ?, ?, ?, ?, ?)",
         ).use { st ->
@@ -50,12 +50,6 @@ internal class TranscriptSql(private val db: SQLiteConnection) : TranscriptQueri
                 st.reset()
             }
         }
-    }
-
-    /** Key of the [engine] row, added on first use. */
-    private fun engineId(engine: String): Long {
-        db.execute("INSERT OR IGNORE INTO engine (name) VALUES (?)", engine)
-        return db.queryOne("SELECT id FROM engine WHERE name = ?", engine) { getLong(0) }!!
     }
 
     override fun segmentsBetween(from: Long, to: Long): List<SegmentRecord> = db.queryList(

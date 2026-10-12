@@ -1,6 +1,7 @@
 package app.watchaudio.core.export
 
 import app.watchaudio.core.db.AudioFileInfo
+import app.watchaudio.core.db.ChunkBackupInfo
 import app.watchaudio.core.db.ChunkRecord
 import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.MarkRecord
@@ -27,16 +28,19 @@ data class DayRecords(
     val marks: List<MarkRecord>,
     /** Codec and checksum of the audio of [chunks], by chunk UUID. */
     val audioFiles: Map<String, AudioFileInfo>,
+    /** For a backup (#40) only: what the backup keeps of [chunks] beyond the export, by chunk UUID. */
+    val backupInfo: Map<String, ChunkBackupInfo> = emptyMap(),
 )
 
-/** Reads [DayRecords] for [window]. */
-fun StoreTransaction.readDayRecords(window: DayWindow): DayRecords = DayRecords(
+/** Reads [DayRecords] for [window]; with [forBackup], also [DayRecords.backupInfo]. */
+fun StoreTransaction.readDayRecords(window: DayWindow, forBackup: Boolean = false): DayRecords = DayRecords(
     chunks = chunksStartedBetween(window.start, window.end),
     overlapping = chunksBetween(window.start, window.end),
     previous = lastChunkBefore(window.start),
     segments = segmentsOfChunksStartedBetween(window.start, window.end),
     marks = marksOfChunksStartedBetween(window.start, window.end),
     audioFiles = audioFilesOfChunksStartedBetween(window.start, window.end),
+    backupInfo = if (forBackup) backupInfoOfChunksStartedBetween(window.start, window.end) else emptyMap(),
 )
 
 /**
@@ -117,4 +121,4 @@ fun audioEntryName(date: LocalDate, chunk: ChunkRecord, timeZone: TimeZone, file
 }
 
 /** The watch assigns UUIDs, but a chunk id is never trusted as a path. */
-private fun String.toSafeFileName(): String = map { if (it.isLetterOrDigit() || it == '-' || it == '_') it else '_' }.joinToString("")
+internal fun String.toSafeFileName(): String = map { if (it.isLetterOrDigit() || it == '-' || it == '_') it else '_' }.joinToString("")

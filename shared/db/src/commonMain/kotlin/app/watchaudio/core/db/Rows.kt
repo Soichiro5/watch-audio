@@ -60,6 +60,12 @@ internal fun SQLiteStatement.toSegment() = SegmentRecord(
 internal fun SQLiteConnection.chunkKey(uuid: String): Long? =
     queryOne("SELECT id FROM audio_chunk WHERE uuid = ?", uuid) { getLong(0) }
 
+/** Key of the [engine] row, added on first use. */
+internal fun SQLiteConnection.engineKey(engine: String): Long {
+    execute("INSERT OR IGNORE INTO engine (name) VALUES (?)", engine)
+    return queryOne("SELECT id FROM engine WHERE name = ?", engine) { getLong(0) }!!
+}
+
 /** Runs [sql] with [args] bound in order (String, Long, Int or null) and returns the rows mapped by [row]. */
 internal fun <T> SQLiteConnection.queryList(sql: String, vararg args: Any?, row: SQLiteStatement.() -> T): List<T> =
     prepare(sql).use { st ->
