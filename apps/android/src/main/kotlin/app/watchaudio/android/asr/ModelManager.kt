@@ -41,6 +41,10 @@ import kotlinx.coroutines.withContext
  * The English model ([englishFiles], #81) is an extra download while 「英語も文字起こしする」 is on
  * ([syncEnglish]); turning it off cancels the download and deletes the model.
  *
+ * The embedding model of semantic search (#24, [ModelManifest.embeddingFiles], ~44 MB) is fetched
+ * once the user opens the search screen, on an unmetered network only ([downloadEmbeddingIfMissing]);
+ * until it is there, search finds text by keyword only.
+ *
  * New files are written next to the target and renamed into place only when complete (and,
  * for downloads, verified), so a crash never leaves a half-written model that looks complete.
  */
@@ -62,6 +66,11 @@ class ModelManager(
 
     /** The English model's state; [ModelState.Missing] while the setting is off. */
     val englishState: StateFlow<ModelState> = _englishState.asStateFlow()
+
+    private val _embeddingState = MutableStateFlow<ModelState>(ModelState.Unknown)
+
+    /** The embedding model's state (semantic search, #24). */
+    val embeddingState: StateFlow<ModelState> = _embeddingState.asStateFlow()
 
     private val workManager: WorkManager get() = WorkManager.getInstance(context)
 
@@ -90,6 +99,9 @@ class ModelManager(
     /** Whether the English model's files are all present (the VAD comes with [files]). */
     fun isEnglishReady(): Boolean = englishFiles.hasAsr()
 
+    /** Whether the embedding model's files are all present. */
+    fun isEmbeddingReady(): Boolean = ModelManifest.embeddingFiles.all { files.isPresent(files.fileFor(it)) }
+
     /**
      * Publishes whether the files are (still) complete, e.g. after chunks failed to transcribe
      * ([app.watchaudio.core.pipeline.SpeechModel.recheck]). Leaves a running download alone.
@@ -112,6 +124,7 @@ class ModelManager(
         }
         if (isReady()) ModelManifest.files.forEach { partFile(it).delete() }
         publishPresence()
+        if (isEmbeddingReady()) publishEmbedding()
     }
 
     /**
@@ -128,12 +141,60 @@ class ModelManager(
                 if (_englishState.value !is ModelState.Downloading && _englishState.value !is ModelState.Failed) {
                     _englishState.value = ModelState.Missing
                 }
-                enqueue(ENGLISH_WORK_NAME, allowMetered, if (allowMetered) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP, english = true)
+                enqueue(
+                    ENGLISH_WORK_NAME, allowMetered, if (allowMetered) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
+                    kind = ModelDownloadWorker.KEY_ENGLISH,
+                )
             }
         } else {
             workManager.cancelUniqueWork(ENGLISH_WORK_NAME)
             deleteEnglishModel()
         }
+    }
+
+    /** Startup step for semantic search (#24): publishes whether the embedding model is present. */
+    suspend fun syncEmbedding() = withContext(Dispatchers.IO) {
+        if (isEmbeddingReady()) {
+            ModelManifest.embeddingFiles.forEach { partFile(it).delete() }
+            publishEmbedding()
+        } else if (_embeddingState.value !is ModelState.Downloading && _embeddingState.value !is ModelState.Failed) {
+            _embeddingState.value = ModelState.Missing
+        }
+    }
+
+    @Volatile
+    private var embeddingRequested = false
+
+    /**
+     * Queues the embedding model's download on an unmetered network unless it is present (never
+     * replacing a queued or running one; once per process, WorkManager keeps the request).
+     */
+    fun downloadEmbeddingIfMissing() {
+        if (embeddingRequested || isEmbeddingReady()) return
+        embeddingRequested = true
+        enqueue(EMBEDDING_WORK_NAME, allowMetered = false, ExistingWorkPolicy.KEEP, kind = ModelDownloadWorker.KEY_EMBEDDING)
+    }
+
+    /** Called by [ModelDownloadWorker] for the embedding model, like [performDownload]. */
+    internal suspend fun performEmbeddingDownload() = withContext(Dispatchers.IO) {
+        if (!isEmbeddingReady()) {
+            try {
+                downloadMissing(ModelManifest.embeddingFiles, _embeddingState, detail = "model=embedding ")
+            } catch (e: CancellationException) {
+                _embeddingState.value = if (isEmbeddingReady()) ModelState.Ready else ModelState.Missing
+                throw e
+            }
+        }
+        publishEmbedding()
+    }
+
+    private fun publishEmbedding() {
+        val ready = isEmbeddingReady()
+        val wasReady = _embeddingState.value == ModelState.Ready
+        _embeddingState.value = if (ready) ModelState.Ready else ModelState.Missing
+        // No run is requested: the next transcription run (a new chunk, or the periodic run while
+        // charging) embeds, recent chunks first.
+        if (ready && !wasReady) diagnostics.log(DiagnosticEvents.MODEL_READY, "model=embedding ready=true")
     }
 
     /** Deletes the English model and its partial files (the setting was turned off). */
@@ -157,9 +218,10 @@ class ModelManager(
         if (!isReady()) enqueue(WORK_NAME, allowMetered = false, ExistingWorkPolicy.KEEP)
     }
 
-    private fun enqueue(name: String, allowMetered: Boolean, policy: ExistingWorkPolicy, english: Boolean = false) {
+    /** Queues [ModelDownloadWorker]; [kind] is the input key of an extra model (null: the speech models). */
+    private fun enqueue(name: String, allowMetered: Boolean, policy: ExistingWorkPolicy, kind: String? = null) {
         val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
-            .setInputData(workDataOf(ModelDownloadWorker.KEY_ENGLISH to english))
+            .setInputData(if (kind == null) workDataOf() else workDataOf(kind to true))
             .setConstraints(
                 Constraints.Builder()
                     .setRequiredNetworkType(if (allowMetered) NetworkType.CONNECTED else NetworkType.UNMETERED)
@@ -253,10 +315,14 @@ class ModelManager(
         }
     }
 
-    /** Copies models pushed by a developer to the external files dir (see docs/platforms/android-phone.md). */
+    /**
+     * Copies models pushed by a developer to the external files dir (see docs/platforms/android-phone.md):
+     * the speech models and the embedding model.
+     */
     private fun importSideloaded() {
         val source = context.getExternalFilesDir(null)?.let { ModelFiles(File(it, "models"), files.spec) } ?: return
-        val pairs = source.all.zip(files.all).filter { (from, _) -> from.isFile && from.length() > 0 }
+        val embedding = ModelManifest.embeddingFiles.map { source.fileFor(it) to files.fileFor(it) }
+        val pairs = (source.all.zip(files.all) + embedding).filter { (from, _) -> from.isFile && from.length() > 0 }
         if (pairs.isEmpty()) return
         val temp = File(files.root, TEMP_PREFIX + "sideload").apply { mkdirs() }
         try {
@@ -301,6 +367,7 @@ class ModelManager(
     companion object {
         const val WORK_NAME = "model-download"
         const val ENGLISH_WORK_NAME = "english-model-download"
+        const val EMBEDDING_WORK_NAME = "embedding-model-download"
         private const val TAG = "ModelManager"
         private const val TEMP_PREFIX = ".tmp-"
         private const val ATTEMPTS = 3

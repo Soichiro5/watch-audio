@@ -16,17 +16,21 @@ import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Downloads the speech models (see [ModelManager]), or with [KEY_ENGLISH] the English model while
- * 「英語も文字起こしする」 is on (#81). Runs as a foreground worker when it can, because the files
- * can take longer than WorkManager's 10-minute limit for normal workers.
+ * 「英語も文字起こしする」 is on (#81), or with [KEY_EMBEDDING] the embedding model of semantic search
+ * (#24). Runs as a foreground worker when it can, because the files can take longer than
+ * WorkManager's 10-minute limit for normal workers.
  */
 class ModelDownloadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     private val english get() = inputData.getBoolean(KEY_ENGLISH, false)
+    private val embedding get() = inputData.getBoolean(KEY_EMBEDDING, false)
 
     override suspend fun doWork(): Result {
         val graph = AppGraph.get(applicationContext)
         graph.startup.join()
         val models = graph.models
-        if (english) {
+        if (embedding) {
+            if (models.isEmbeddingReady()) return Result.success()
+        } else if (english) {
             if (models.isEnglishReady() || !graph.store.loadSettings().transcribeEnglish) return Result.success()
         } else if (models.isReady()) {
             return Result.success()
@@ -38,7 +42,9 @@ class ModelDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
             Log.i(TAG, "running without foreground service", e)
         }
         return try {
-            if (english) {
+            if (embedding) {
+                models.performEmbeddingDownload()
+            } else if (english) {
                 models.performEnglishDownload()
                 // Turned off while downloading: do not leave the model behind.
                 if (!graph.store.loadSettings().transcribeEnglish) models.deleteEnglishModel()
@@ -62,22 +68,36 @@ class ModelDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         )
         val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle(if (english) Strings.ENGLISH_MODEL_DOWNLOAD_NOTIFICATION_TITLE else Strings.MODEL_DOWNLOAD_NOTIFICATION_TITLE)
+            .setContentTitle(
+                when {
+                    embedding -> Strings.EMBEDDING_MODEL_DOWNLOAD_NOTIFICATION_TITLE
+                    english -> Strings.ENGLISH_MODEL_DOWNLOAD_NOTIFICATION_TITLE
+                    else -> Strings.MODEL_DOWNLOAD_NOTIFICATION_TITLE
+                },
+            )
             .setProgress(0, 0, true)
             .setOngoing(true)
             .setSilent(true)
             .build()
-        val id = if (english) ENGLISH_NOTIFICATION_ID else NOTIFICATION_ID
+        val id = when {
+            embedding -> EMBEDDING_NOTIFICATION_ID
+            english -> ENGLISH_NOTIFICATION_ID
+            else -> NOTIFICATION_ID
+        }
         return ForegroundInfo(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     }
 
     companion object {
         /** Input: download the English model instead of the speech models. */
         const val KEY_ENGLISH = "english"
+
+        /** Input: download the embedding model of semantic search (#24). */
+        const val KEY_EMBEDDING = "embedding"
         private const val TAG = "ModelDownloadWorker"
         private const val CHANNEL_ID = "model-download"
         private const val NOTIFICATION_ID = 1001
         private const val ENGLISH_NOTIFICATION_ID = 1002
+        private const val EMBEDDING_NOTIFICATION_ID = 1003
         private const val MAX_ATTEMPTS = 5
     }
 }

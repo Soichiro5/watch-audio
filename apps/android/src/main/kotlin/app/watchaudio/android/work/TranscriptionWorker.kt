@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import app.watchaudio.android.AppGraph
+import app.watchaudio.core.embedding.EmbeddingStep
 import app.watchaudio.core.pipeline.TranscriptionPipeline
 import app.watchaudio.core.pipeline.TranscriptionRun
 import app.watchaudio.core.pipeline.TranscriptionRun.FollowUp
@@ -15,7 +16,9 @@ import app.watchaudio.core.pipeline.TranscriptionRun.FollowUp
  * [TranscriptionScheduler]: transcribes pending chunks until none are left, the battery/thermal
  * policy pauses (#75; checked between chunks, then a later run is scheduled) or WorkManager stops
  * the worker, then applies the audio retention setting. Progress lives in the database, so a
- * stopped run loses at most the chunk in progress (it is re-queued).
+ * stopped run loses at most the chunk in progress (it is re-queued). When nothing waits for
+ * transcription, the run also embeds transcripts for semantic search (#24), and its own follow-up
+ * (more to embed while charging, or older chunks waiting for the charger) is scheduled here too.
  */
 class TranscriptionWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
@@ -43,6 +46,16 @@ class TranscriptionWorker(context: Context, params: WorkerParameters) : Coroutin
                 Log.i(TAG, "deleted audio of ${it.purgedChunks} chunks (${it.freedBytes} bytes)")
             }
             is TranscriptionRun.Retention.Failed -> Log.w(TAG, "audio retention failed", retention.error)
+        }
+        if (report.followUp == FollowUp.None) {
+            when (report.embedding?.followUp) {
+                EmbeddingStep.FollowUp.RunAgain -> graph.scheduler.requestNow()
+                EmbeddingStep.FollowUp.OnCharge -> graph.scheduler.requestOnCharge()
+                EmbeddingStep.FollowUp.None, null -> Unit
+            }
+        }
+        report.embedding?.takeIf { it.embeddedChunks > 0 || it.failedChunks > 0 }?.let {
+            Log.i(TAG, "embedded ${it.embeddedChunks} chunks (${it.passages} passages), failed ${it.failedChunks}")
         }
         return when (val followUp = report.followUp) {
             FollowUp.None, FollowUp.Interrupted -> Result.success()

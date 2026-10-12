@@ -12,7 +12,7 @@ ANDROID_APPS = {
     "apps/android": {
         # <uses-permission> in the module's own manifests (src/*/AndroidManifest.xml).
         "permissions": {
-            "android.permission.INTERNET": "ASR model download only (asr/ModelManager.kt)",
+            "android.permission.INTERNET": "model downloads only: ASR and the semantic search's embedding model (asr/ModelManager.kt)",
             "android.permission.ACCESS_NETWORK_STATE": "WorkManager network constraint for the model download",
             "android.permission.FOREGROUND_SERVICE": "model download runs as a foreground worker",
             "android.permission.FOREGROUND_SERVICE_DATA_SYNC": "foreground service type of the model download",
@@ -85,7 +85,7 @@ GUARDED_APIS = (
 # An entry that no longer matches anything is reported too, so the list stays accurate.
 ALLOWED_API_USES = {
     "apps/android/src/main/kotlin/app/watchaudio/android/asr/ModelDownloader.kt": {
-        "URLConnection": "downloads the ASR / VAD model files listed in ModelManifest (resumable, SHA-256)",
+        "URLConnection": "downloads the ASR / VAD / embedding model files listed in ModelManifest (resumable, SHA-256)",
         "openConnection": "same download",
     },
 }
@@ -96,6 +96,10 @@ ALLOWED_URL_PREFIXES = {
     "https://github.com/k2-fsa/sherpa-onnx/releases/download/": "Silero VAD model (ModelManifest)",
     "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17":
         "English (SenseVoice) model files, pinned commit, opt-in download only (ModelManifest.englishFiles, #81)",
+    "https://huggingface.co/onnx-community/ruri-v3-30m-ONNX":
+        "embedding model of semantic search (ruri-v3-30m int8 ONNX), pinned commit, Wi-Fi only (ModelManifest.embeddingFiles, #24)",
+    "https://huggingface.co/cl-nagoya/ruri-v3-30m":
+        "tokenizer of the embedding model, pinned commit, Wi-Fi only (ModelManifest.embeddingFiles, #24)",
 }
 
 # Files whose URL literals are only shown as text and never opened or fetched: any URL is allowed
@@ -132,6 +136,7 @@ ALLOWED_RESOLVED_DEPENDENCIES = (
     (r"com\.google\.guava:listenablefuture", "AndroidX futures"),
     (r"org\.jspecify:jspecify", "nullness annotations"),
     (r"com\.github\.k2-fsa\.sherpa-onnx:[\w.-]+", "on-device ASR"),
+    (r"net\.java\.dev\.jna:jna", "calls ONNX Runtime's C API for the on-device embedding model (shared/ort, #24); no network"),
 )
 
 IOS_PROJECT = "apps/ios/project.yml"

@@ -7,10 +7,13 @@ import androidx.annotation.VisibleForTesting
 import app.watchaudio.android.alert.GapAlertMonitor
 import app.watchaudio.android.asr.AndroidSherpaTranscriber
 import app.watchaudio.android.asr.ModelManager
+import app.watchaudio.android.search.AndroidEmbedding
+import app.watchaudio.android.search.AndroidSemanticSearch
 import app.watchaudio.android.transfer.ChunkReceiver
 import app.watchaudio.android.work.AndroidDeviceConditions
 import app.watchaudio.android.work.TranscriptionScheduler
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.embedding.EmbeddingStep
 import app.watchaudio.core.pipeline.ChunkIntake
 import app.watchaudio.core.pipeline.DeviceConditions
 import app.watchaudio.core.pipeline.DiagnosticsLog
@@ -24,6 +27,7 @@ import app.watchaudio.core.pipeline.SpeechModel
 import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.pipeline.TranscriptionPipeline
 import app.watchaudio.core.pipeline.TranscriptionRun
+import app.watchaudio.core.search.SemanticIndex
 import app.watchaudio.core.settings.loadSettings
 import java.io.File
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -44,7 +48,7 @@ import kotlinx.io.files.Path
  *
  * All data lives in the app's internal storage: the database at `files/watch-audio.db`, audio
  * under `files/audio/`, models under `files/models/`, the diagnostics log under
- * `files/diagnostics/` (#77).
+ * `files/diagnostics/` (#77), the semantic search's vector cache under `files/search/` (#24).
  */
 class AppGraph private constructor(context: Context) {
     private val app = context.applicationContext
@@ -63,11 +67,23 @@ class AppGraph private constructor(context: Context) {
     val models = ModelManager(app, scope, diagnostics, onReady = scheduler::requestNow)
     val transcriber = AndroidSherpaTranscriber(models.files, models.englishFiles, englishEnabled = { store.loadSettings().transcribeEnglish })
     val pipeline = TranscriptionPipeline(store, Path(audioRoot.path), transcriber, segmentFilter = FalsePositiveFilter.DEFAULT)
+
+    /** Semantic search (#24): the embedding model and the vector cache of its passages. */
+    val embedder = AndroidEmbedding.embedder(models.files.root)
+    val semanticIndex = SemanticIndex(
+        store,
+        embedder,
+        File(app.filesDir, "search").path,
+        modelState = { if (models.isEmbeddingReady()) ModelState.Ready else models.embeddingState.value },
+    )
+
     val storage = StorageManager(
         store,
         Path(audioRoot.path),
         AndroidStorageEnvironment(models.files.root, app.filesDir),
         diagnostics = diagnostics,
+        // Deleted transcripts leave no vectors behind in the cache files.
+        onDeleted = { semanticIndex.sync(prune = true) },
     )
 
     /** Battery, battery saver and thermal state for the processing policy (#75); tests substitute their own. */
@@ -87,6 +103,9 @@ class AppGraph private constructor(context: Context) {
 
     /** Why the last run paused (null: it did not), for the status card. */
     val transcriptionPause = MutableStateFlow<PauseReason?>(null)
+
+    /** True while a run embeds for semantic search (#24): the worker runs, but nothing is transcribed. */
+    val embeddingRunning = MutableStateFlow(false)
 
     /** [pipeline] under the battery/thermal policy, with the current [deviceConditions], [processingPolicy] and [clock]. */
     private fun gatedTranscription() = PolicyGatedTranscription(pipeline, store, processingPolicy, deviceConditions, clock, diagnostics)
@@ -108,6 +127,14 @@ class AppGraph private constructor(context: Context) {
         diagnostics = diagnostics,
         gate = ::gatedTranscription,
         releaseTranscriber = transcriber::release,
+        embedding = EmbeddingStep(
+            store,
+            embedder,
+            semanticIndex,
+            diagnostics,
+            isModelReady = models::isEmbeddingReady,
+            onRunning = { embeddingRunning.value = it },
+        ),
     )
 
     private val _lastChunkReceivedAt = MutableStateFlow<Long?>(null)
@@ -136,6 +163,8 @@ class AppGraph private constructor(context: Context) {
         scope,
         diagnostics,
         onGapAlertSettingsChanged = gapAlerts::onSettingsChanged,
+        semanticSearch = AndroidSemanticSearch(semanticIndex, models),
+        embeddingRunning = embeddingRunning,
     )
 
     /**
@@ -148,6 +177,7 @@ class AppGraph private constructor(context: Context) {
         store.read { lastReceivedAt() }?.let { stored -> _lastChunkReceivedAt.compareAndSet(null, stored) }
         models.refresh()
         models.syncEnglish(store.loadSettings().transcribeEnglish)
+        models.syncEmbedding()
     }
 
     suspend fun hasPendingChunks(): Boolean = pipeline.hasPending()
