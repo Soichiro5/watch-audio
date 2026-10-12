@@ -360,13 +360,13 @@ object Strings {
 
     // Licenses (#167). License texts stay in their original English.
     const val LICENSES_TITLE = "ライセンス"
-    const val LICENSES_NOTE = "このアプリが使っているオープンソースのライブラリと、文字起こしのモデルの作者とライセンスです。"
+    const val LICENSES_NOTE = "このアプリが使っているオープンソースのライブラリと、文字起こし・意味検索のモデルの作者とライセンスです。"
     const val SHOW_LICENSES = "ライセンスを表示"
     const val LICENSES_BACK = "戻る"
     const val LICENSES_INTRO =
-        "このアプリが使っているライブラリと、ダウンロードして使う文字起こしのモデルです。" +
+        "このアプリが使っているライブラリと、ダウンロードして使う文字起こし・意味検索のモデルです。" +
             "ライセンスの本文は原文（英語）のまま載せています。URL は長押しで選択してコピーできます。"
-    const val LICENSES_MODELS = "文字起こしのモデル"
+    const val LICENSES_MODELS = "モデル（文字起こし・意味検索）"
     const val LICENSES_LIBRARIES = "ライブラリ"
     const val LICENSES_TEXTS = "ライセンスの本文"
     fun licenseAuthor(author: String) = "作者: $author"

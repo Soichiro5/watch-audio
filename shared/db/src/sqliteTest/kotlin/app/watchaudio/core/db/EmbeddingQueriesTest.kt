@@ -109,9 +109,12 @@ class EmbeddingQueriesTest {
             savePassages("b", "old", chunkSegments("b").map { it.id }, listOf(passage(0, 1)))
         }
         assertEquals(2, store.read { chunksToEmbed("new", 10) }.size)
+        assertTrue(store.read { hasPassagesOfOtherModels("new") })
+        assertFalse(store.read { hasPassagesOfOtherModels("old") })
         assertEquals(1, store.transaction { deletePassagesOfOtherModels("new", 1) })
         assertEquals(1, store.transaction { deletePassagesOfOtherModels("new", 10) })
         assertEquals(0, store.transaction { deletePassagesOfOtherModels("new", 10) })
+        assertFalse(store.read { hasPassagesOfOtherModels("new") })
         // Saving for the new model replaces whatever the chunk had.
         store.transaction { savePassages("a", "old", chunkSegments("a").map { it.id }, listOf(passage(0, 1))) }
         store.transaction { savePassages("a", "new", chunkSegments("a").map { it.id }, listOf(passage(0, 1))) }

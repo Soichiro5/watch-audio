@@ -79,6 +79,9 @@ interface EmbeddingQueries {
     /** For each of [segmentIds] that is in a passage of [model], that passage's id. */
     fun passagesOfSegments(segmentIds: List<Long>, model: String): Map<Long, Long>
 
+    /** Whether passages of models other than [model] are stored (a model change left them). */
+    fun hasPassagesOfOtherModels(model: String): Boolean
+
     /** Deletes up to [limit] passages of models other than [model] (a model change). @return how many. */
     fun deletePassagesOfOtherModels(model: String, limit: Int): Int
 }
@@ -221,14 +224,26 @@ internal class EmbeddingSql(private val db: SQLiteConnection) : EmbeddingQueries
         return out
     }
 
-    override fun deletePassagesOfOtherModels(model: String, limit: Int): Int {
-        val modelKey = modelKey(model) ?: -1L
-        return db.update(
-            "DELETE FROM passage_embedding WHERE id IN (SELECT id FROM passage_embedding WHERE model_id != ? LIMIT ?)",
-            modelKey,
-            limit,
-        )
+    override fun hasPassagesOfOtherModels(model: String): Boolean = otherModelKeys(model).any { key ->
+        db.queryOne("SELECT 1 FROM passage_embedding WHERE model_id = ? LIMIT 1", key) { true } == true
     }
+
+    override fun deletePassagesOfOtherModels(model: String, limit: Int): Int {
+        var deleted = 0
+        for (key in otherModelKeys(model)) {
+            if (deleted >= limit) break
+            // Through idx_passage_model, one model at a time.
+            deleted += db.update(
+                "DELETE FROM passage_embedding WHERE id IN (SELECT id FROM passage_embedding WHERE model_id = ? LIMIT ?)",
+                key,
+                limit - deleted,
+            )
+        }
+        return deleted
+    }
+
+    private fun otherModelKeys(model: String): List<Long> =
+        db.queryList("SELECT id FROM embedding_model WHERE name != ?", model) { getLong(0) }
 
     private fun modelKey(model: String): Long? = db.queryOne("SELECT id FROM embedding_model WHERE name = ?", model) { getLong(0) }
 }

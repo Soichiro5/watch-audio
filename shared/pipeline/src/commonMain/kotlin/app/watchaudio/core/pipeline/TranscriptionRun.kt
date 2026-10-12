@@ -137,7 +137,9 @@ class TranscriptionRun(
             }
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // Also errors (a native library that cannot load): semantic search is optional,
+            // transcription is not.
             diagnostics.log(DiagnosticEvents.EMBEDDING_FAILED, "error=${DiagnosticsLog.typeName(e)}")
             null
         }

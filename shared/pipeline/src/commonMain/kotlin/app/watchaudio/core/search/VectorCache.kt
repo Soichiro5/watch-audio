@@ -93,7 +93,7 @@ class VectorCache private constructor(
         val zeros = ByteArray(dimension)
         val zeroScale = ByteArray(4)
         for (id in passageIds) {
-            val index = ids.binarySearch(id, 0, count)
+            val index = indexOf(id)
             if (index < 0 || scales[index] == 0f) continue
             scales[index] = 0f
             idsFile.write(ID_HEADER + index.toLong() * ID_RECORD + 8, zeroScale)
@@ -134,6 +134,9 @@ class VectorCache private constructor(
         val idsTemp = Path(idsPath.toString() + TEMP_SUFFIX)
         val vecTemp = Path(vecPath.toString() + TEMP_SUFFIX)
         var kept = 0
+        // The new order is only taken over once the new files are in place.
+        val keptIds = LongArray(ids.size)
+        val keptScales = FloatArray(ids.size)
         openPositionalFile(idsTemp.toString()).use { newIds ->
             openPositionalFile(vecTemp.toString()).use { newVec ->
                 newIds.truncate(0)
@@ -152,15 +155,14 @@ class VectorCache private constructor(
                         record.putLong(0, ids[index])
                         record.putInt(8, scales[index].toRawBits())
                         newIds.write(ID_HEADER + kept.toLong() * ID_RECORD, record)
-                        ids[kept] = ids[index]
-                        scales[kept] = scales[index]
+                        keptIds[kept] = ids[index]
+                        keptScales[kept] = scales[index]
                         kept++
                     }
                     start += n
                 }
-                header = header.copy(generation = generation, count = kept)
                 newVec.sync()
-                newIds.write(0, header.encode())
+                newIds.write(0, header.copy(generation = generation, count = kept).encode())
                 newIds.sync()
             }
         }
@@ -171,6 +173,9 @@ class VectorCache private constructor(
         SystemFileSystem.atomicMove(idsTemp, idsPath)
         idsFile = openPositionalFile(idsPath.toString())
         vecFile = openPositionalFile(vecPath.toString())
+        header = header.copy(generation = generation, count = kept)
+        ids = keptIds
+        scales = keptScales
         count = kept
         deleted = 0
     }
@@ -232,6 +237,22 @@ class VectorCache private constructor(
             start += n
         }
         count = header.count
+    }
+
+    /** Position of passage [id] among the records (ids ascend), or -1. */
+    private fun indexOf(id: Long): Int {
+        var low = 0
+        var high = count - 1
+        while (low <= high) {
+            val mid = (low + high) ushr 1
+            val value = ids[mid]
+            when {
+                value < id -> low = mid + 1
+                value > id -> high = mid - 1
+                else -> return mid
+            }
+        }
+        return -1
     }
 
     private fun ensureCapacity(needed: Int) {

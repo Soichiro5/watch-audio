@@ -97,8 +97,9 @@ object HybridSearch {
         if (best == null) emptyList() else hits.filter { it.score >= best - band }
     } catch (e: CancellationException) {
         throw e
-    } catch (e: Exception) {
-        // The keyword results still stand; the model may be missing or broken.
+    } catch (e: Throwable) {
+        // The keyword results still stand; the model may be missing or broken (or its native
+        // library unable to load, an Error).
         emptyList()
     }
 

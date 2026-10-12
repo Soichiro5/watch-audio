@@ -37,6 +37,8 @@ class EmbeddingStep(
     private val limits: Limits = Limits(),
     /** Whether the model's files are on the device; the step does nothing until they are. */
     private val isModelReady: () -> Boolean = { true },
+    /** True while the step embeds (the platform's status shows it is not transcribing then). */
+    private val onRunning: (Boolean) -> Unit = {},
 ) {
     data class Limits(
         /** Chunks per run while charging; more makes the platform run again ([FollowUp.RunAgain]). */
@@ -83,8 +85,11 @@ class EmbeddingStep(
         var failures = 0
         var stopped = false
         var exhausted = false
+        onRunning(true)
         try {
-            store.transaction { deletePassagesOfOtherModels(spec.id, limits.oldModelDeletesPerRun) }
+            if (store.read { hasPassagesOfOtherModels(spec.id) }) {
+                store.transaction { deletePassagesOfOtherModels(spec.id, limits.oldModelDeletesPerRun) }
+            }
             val skipped = HashSet<String>()
             while (embedded + failures < limit) {
                 val batch = store.read { chunksToEmbed(spec.id, BATCH + skipped.size, since) }.filter { it.chunkId !in skipped }
@@ -113,6 +118,7 @@ class EmbeddingStep(
                 if (stopped || failures >= limits.maxFailures || started.elapsedNow().inWholeMilliseconds >= limits.maxRunMs) break
             }
         } finally {
+            onRunning(false)
             if (embedded > 0 || failures > 0) {
                 diagnostics.log(
                     DiagnosticEvents.EMBEDDING_RUN,

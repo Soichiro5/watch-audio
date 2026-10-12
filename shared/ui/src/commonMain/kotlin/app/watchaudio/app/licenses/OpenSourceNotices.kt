@@ -4,7 +4,7 @@ package app.watchaudio.app.licenses
 enum class NoticeApp { ANDROID, WEAR_OS, IOS }
 
 enum class NoticeKind {
-    /** A speech model the app downloads. */
+    /** A model the app downloads (speech recognition, embeddings for semantic search). */
     MODEL,
 
     /** Code compiled into an app. */
@@ -101,7 +101,18 @@ object OpenSourceNotices {
         downloads = listOf("https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/"),
     )
 
-    private val models = listOf(REAZON_SPEECH, SILERO_VAD, SENSE_VOICE)
+    /** The embedding model of semantic search (#24): downloaded automatically, Wi-Fi only. */
+    val RURI_V3 = OpenSourceNotice(
+        name = "Ruri v3 30m (ruri-v3-30m)",
+        author = "Hayato Tsukagoshi, Ryohei Sasano (Nagoya University, cl-nagoya)",
+        license = License.APACHE_2_0,
+        url = "https://huggingface.co/cl-nagoya/ruri-v3-30m",
+        kind = NoticeKind.MODEL,
+        apps = ANDROID,
+        downloads = listOf("https://huggingface.co/onnx-community/ruri-v3-30m-ONNX/", "https://huggingface.co/cl-nagoya/ruri-v3-30m/"),
+    )
+
+    private val models = listOf(REAZON_SPEECH, SILERO_VAD, SENSE_VOICE, RURI_V3)
 
     private val libraries = listOf(
         // Kotlin and Jetpack / Compose
@@ -134,6 +145,9 @@ object OpenSourceNotices {
         library(
             "ONNX Runtime", "Microsoft", License.MIT, "https://github.com/microsoft/onnxruntime", ANDROID,
             copyright = "Copyright (c) Microsoft Corporation", includedIn = SHERPA_ONNX,
+        ),
+        library(
+            "JNA (Java Native Access)", "JNA contributors", License.APACHE_2_0, "https://github.com/java-native-access/jna", ANDROID,
         ),
         library("kaldi-native-fbank", "k2-fsa", License.APACHE_2_0, "https://github.com/csukuangfj/kaldi-native-fbank", ANDROID, includedIn = SHERPA_ONNX),
         library("kaldi-decoder", "k2-fsa", License.APACHE_2_0, "https://github.com/k2-fsa/kaldi-decoder", ANDROID, includedIn = SHERPA_ONNX),
