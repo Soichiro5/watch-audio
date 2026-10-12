@@ -93,12 +93,34 @@ files/models/
 
 - ASR の 4 ファイルは sherpa-onnx の作者が公開している Hugging Face リポジトリ `csukuangfj/reazonspeech-k2-v2`（リリースの tar.bz2 の元になったもの）から、**コミットを固定した URL**（`https://huggingface.co/csukuangfj/reazonspeech-k2-v2/resolve/7ebed8f70b8ef67f656aa08e3084e5885202d0e6/<ファイル名>`）で取得する。SHA-256 はそのコミットの Git LFS のハッシュで、リリースの tar.bz2 に入っているファイル・公式の `reazon-research/reazonspeech-k2-v2` のファイルとも一致することを確認済み。
 - **途中再開**: 受信中のバイトは `files/models/.partial/<SHA-256>.part` に追記し、再試行時（同じワーカー内のリトライ・ワーカーの再実行・アプリ再起動後）は `Range: bytes=<既存サイズ>-` で続きだけを要求する。206 の `Content-Range` の開始位置が合わなければ破棄してやり直し、サーバーが Range を無視して 200 を返した場合は先頭から書き直す。`.part` の名前は内容のハッシュなので、モデルが更新されても古い版の途中データを続きとして使うことはない。
-- **検証と配置**: 受信し終えたファイルはサイズと SHA-256 を検証してから `rename`（`ATOMIC_MOVE`）で所定の場所に置く。所定の場所には検証済みのファイルしか現れないので、途中で落ちても「不完全なのに揃って見える」状態にならない。続きから受信した結果が一致しない場合（途中データが壊れていた等）は `.part` を消して一度だけ最初から取り直し、それでも一致しなければ失敗としてリトライに回す。全ファイルが揃ったら `.partial/` を消す。
+- **検証と配置**: 受信し終えたファイルはサイズと SHA-256 を検証してから `rename`（`ATOMIC_MOVE`）で所定の場所に置く。所定の場所には検証済みのファイルしか現れないので、途中で落ちても「不完全なのに揃って見える」状態にならない。続きから受信した結果が一致しない場合（途中データが壊れていた等）は `.part` を消して一度だけ最初から取り直し、それでも一致しなければ失敗としてリトライに回す。全ファイルが揃ったら、それらの `.part` を消す（英語モデルの途中データは残す）。
 - ダウンロードは受信のみで、ユーザーデータは送らない（リクエストに含まれるのは URL と Range ヘッダだけ）。
-- ハーネス（`tools/harness/download-models.sh`）も同じ URL・SHA-256 のファイルを取得する（加えて E2E 用の `test_wavs/` を同じリポジトリから取得）。両者の一致は `ModelManifestTest` で検査しているので、ハーネスの E2E（CI の「End-to-end without devices」）がアプリと同じファイルで文字起こしできることの確認になる。
+- ハーネス（`tools/harness/download-models.sh`）も同じ URL・SHA-256 のファイルを取得する（加えて E2E 用の `test_wavs/` を同じリポジトリから取得。英語モデル（§3.3）とその `test_wavs/en.wav` も取得し、CI の E2E で英語の経路も確かめる）。両者の一致は `ModelManifestTest` で検査しているので、ハーネスの E2E（CI の「End-to-end without devices」）がアプリと同じファイルで文字起こしできることの確認になる。
 - 実行は `ModelDownloadWorker`（WorkManager、`setForeground` で dataSync の前景ワーカーにする。通知はチャネル `model-download`（「文字起こしモデルのダウンロード」、重要度 LOW）、タイトル「文字起こしモデルをダウンロード中」で、文言は共通の `Strings`。バックグラウンドから開始されて前景化できない場合は通常ワーカーとして続行）。各ファイルは 3 回までその場でリトライし、さらにワーカーとして指数バックオフで最大 5 回まで再試行。
 - **従量制ネットワークでは自動ダウンロードしない**: 起動時の自動取得（`downloadIfMissing()`）は `NetworkType.UNMETERED` 制約付き。モバイル通信で取得するのはユーザー操作で `AndroidAppServices.downloadModels(allowMetered = true)` が呼ばれたときだけ。Wi-Fi 待ちの間は `status.notice` が `StatusNotice.ModelWaitingForWifi` になり、状態タブに「Wi-Fi に接続されたときに、文字起こしモデルを自動でダウンロードします」と出る。
 - 進捗は `ModelState.Downloading(progress)` として `AppServices.status.asrModel` に流れる。完了すると `Ready` になり、保留中のチャンクの文字起こしを自動で要求する。
+
+### 3.3 英語（設定「英語も文字起こしする」、#81）
+
+日本語モデル（Zipformer ReazonSpeech）は英語を認識できない（英語の発話に「はい」「そう」程度しか出さない）。英語は**オプトイン**で、状態タブの設定「英語も文字起こしする」（`AppSettings.transcribeEnglish`、`app_setting.transcription.english`、既定オフ）をオンにしたときだけ、追加のモデルを使う。比較と採用の理由は [research/english-asr.md](../research/english-asr.md)。
+
+```
+files/models/
+  sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/   (AsrModelSpec.SENSE_VOICE)
+    model.int8.onnx   (239,233,841 バイト)
+    tokens.txt        (315,894 バイト)
+```
+
+- **取得**: `ModelManifest.englishFiles`（Hugging Face `csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17`、コミット `2365baea…` に固定。SHA-256 はモデルが Git LFS のハッシュ、tokens はファイルのハッシュで、sherpa-onnx のリリースの tar.bz2 の中身と一致）。合計約 240 MB。途中再開・検証・原子的な配置は §3.1 と同じ `ModelDownloader` で、ワーカーも同じ `ModelDownloadWorker`（入力 `english=true`、unique work `english-model-download`、通知「英語の文字起こしモデルをダウンロード中」）。
+- **いつ取得・削除するか**（`ModelManager.syncEnglish`）: 設定をオンにしたとき（`AppServices.transcriptionSettingsChanged()`）と起動時に、未取得なら **Wi-Fi（`UNMETERED`）待ち**で予約する。状態タブの「モバイルデータ通信でもダウンロード」（`downloadEnglishModel(allowMetered = true)`）を押せばモバイル通信でも始める。オフにすると予約を取り消し、モデルと途中データを削除する（約 240 MB を空ける）。状態は `ProcessingStatus.englishModel`（設定オフのときは null）と `englishModelWaitingForWifi` で状態タブに出る。
+- **文字起こし**（`AndroidSherpaTranscriber`、共通の `LanguageRouting`）: 設定がオンで英語モデルがそろっているときだけ、区間ごとに次の順で処理する。英語モデルが未取得の間は日本語だけで文字起こしする（待たない）。
+  1. 日本語モデルで認識する（従来どおり）。
+  2. 結果の文字数が区間の長さに対して少ない（`LanguageRouting.maxPrimaryCharsPerSecond` = 1.5 文字/秒未満、余白を含む区間の長さで割る）ときだけ、SenseVoice でも認識する。日本語の発話はふつう 2〜6 文字/秒あるので、SenseVoice が動くのは短い相づちや英語の区間だけで、日本語中心の録音では計算量がほとんど増えない。
+  3. SenseVoice が英語（`<|en|>`）と判定し、文字の半分以上がラテン文字なら SenseVoice の文（句読点・大文字小文字つき）を `lang = "en"` で保存する。それ以外は日本語モデルの文を `lang = "ja"` で保存する。
+- エンジン ID は英語オンの実行では `sherpa-zipformer-ja-reazonspeech-int8+sherpa-sensevoice-small-int8`（どちらのモデルの文かはセグメントの `lang` でわかる）。DB のスキーマは変えていない（`lang` 列は以前からある）。
+- 設定をオンにする前に文字起こし済みの録音はやり直さない（オンにした後に文字起こしする分から英語を認識する）。
+- メモリ: 英語オンの実行では 2 つの認識器（int8 で約 155 MB + 約 240 MB）を読み込む。英語を使わない実行では英語の認識器を解放する。実機での速度・電池・メモリは #61 で確認する。
+- **既知の制限**: 1 つの発話の中で日本語と英語が混ざる場合（「このPRをmergeして」）は、どちらか一方の言語として認識される（日本語モデルは英単語をカタカナや別の語にし、SenseVoice の日本語は Zipformer より誤りが多い）。話者交代や 0.2 秒以上の間で区間が分かれていれば、区間ごとに言語を選べる。
 
 ### 3.2 adb でのサイドロード（開発者向け）
 
