@@ -9,7 +9,7 @@
 - アプリは録音・文字起こし・その他のユーザーデータを**端末の外へ送らない**。運営者のサーバーはない。解析・広告・クラッシュ送信の SDK はない。アカウントもない。
 - 端末外への通信は、Android スマホの文字起こしモデルのダウンロード（Hugging Face・GitHub の公開ファイル）と、iOS が行う音声認識モデルのダウンロード（OS 管理）だけ。ユーザーデータは送らない。
 - Watch → スマホの転送は、ユーザー自身の端末間の直接通信（Wear OS: 近くで直接つながったノードだけ、Apple: WatchConnectivity）。開発者には届かない。
-- ユーザーが自分で端末外に出せるのは、診断ログの書き出し（OS の共有シートで送り先をユーザーが選ぶ）だけ。データの書き出し（#155）・暗号化バックアップ（#40）・課金（#34）・AI 機能（P2）は未公開。公開時にこの文書とポリシーを更新する。
+- ユーザーが自分で端末外に出せるのは、診断ログの書き出し（OS の共有シートで送り先をユーザーが選ぶ）と、データの書き出し（#155。文字起こし・マーク・ギャップと任意で音声を ZIP にして、Android は SAF の保存ダイアログ、iOS は共有シートでユーザーが選んだ保存先にだけ書く）だけ。暗号化バックアップ（#40）・課金（#34）・AI 機能（P2）は未公開。公開時にこの文書とポリシーを更新する。
 
 ## 2. App Store
 
@@ -26,6 +26,7 @@
 
 - **Watch → iPhone の転送**: 同じユーザーの端末間で、OS の WatchConnectivity が行う。開発者に届かないので「収集」に当たらない、と整理している。
 - **診断ログの書き出し**: ユーザーが共有シートで送り先を選んだときだけ端末外に出る。ユーザーが問い合わせで運営者にメール送付した場合も、メールアプリからユーザーが送るもので、アプリが送信するのではない。そのため「収集なし」のままでよいと考えているが、問い合わせ窓口で診断ログを受け付ける運用にするなら、Apple の「任意の開示（optional disclosure）」の条件に当たるかを確認する。
+- **データの書き出し（#155）**: 診断ログと同じく、ユーザーが自分で選んだ保存先（共有シート）に、ユーザーの操作でだけ書き出す。開発者には届かないので「収集なし」のままと整理している。
 - **OS のクラッシュ・解析共有**: ユーザーが「App デベロッパと共有」を許可した場合に Apple 経由で届くクラッシュ情報は、Apple が集めるもので、アプリの申告対象ではないと理解している（要確認）。
 
 ### 2.2 審査メモ（App Review への説明文）
@@ -54,7 +55,7 @@
 
 1. iPhone アプリを起動し、オンボーディング（同意・通知・音声認識の許可・モデルの準備）を進める
 2. Apple Watch アプリで録音を開始し、手首を下ろして画面を消したまま 5〜10 分話す（録音は 5 分ごとに区切って iPhone に送られる）
-3. iPhone の「タイムライン」で文字起こしと再生、「検索」でキーワード検索、「状態」タブで受信状況・保持期間・すべてのデータの削除・診断ログの書き出しを確認する
+3. iPhone の「タイムライン」で文字起こしと再生、「検索」でキーワード検索、「状態」タブで受信状況・保持期間・すべてのデータの削除・データの書き出し・診断ログの書き出しを確認する
 
 要確認: iPhone アプリの Info.plist に `NSMicrophoneUsageDescription` があるが、iPhone アプリはマイクを使っていない（録音は Watch のみ）。使わない権限の説明文は審査で質問されうるので、削除するか、残す理由を決める（§4 の残作業）。
 
@@ -85,6 +86,7 @@
 
 - **モデルのダウンロード**: Hugging Face・GitHub への HTTP リクエストで、相手のサーバーには IP アドレスなど通信に必要な情報が届く。送るのは公開ファイルの取得要求だけで、ユーザーデータは送らず、開発者はそのログを受け取らないため「収集・共有なし」と整理している。
 - **診断ログの書き出し**: ユーザーが共有シートで選んだ送り先に渡すもので、Google の定義の「ユーザーが開始した操作で、ユーザーが合理的に予期する転送」に当たり、「共有」の対象外と整理している。
+- **データの書き出し（#155）**: ユーザーが SAF の保存ダイアログで作った文書にだけ書く（アプリは通信しない）。診断ログと同じく「ユーザーが開始した操作で、ユーザーが合理的に予期する転送」で、「共有」の対象外と整理している。
 - **Android vitals**: ユーザーが Google と使用状況・診断情報の共有を許可している場合に Play Console に届くクラッシュ統計は、Google（OS）が集めるもので、アプリの申告対象ではないと理解している。
 
 ### 3.2 前景サービスの申告（Play Console の「前景サービスの権限」）
@@ -150,6 +152,7 @@
 | OS バックアップの対象外、Android スマホは端末間の直接転送だけ許可 | `apps/android/src/main/AndroidManifest.xml`（`allowBackup="false"`）、`apps/android/src/main/res/xml/data_extraction_rules.xml`（`cloud-backup` で全ドメイン除外、`device-transfer` は許可）、Wear OS は両方除外。iOS・watchOS は `NSURLIsExcludedFromBackupKey`。[docs/architecture/02 §7.1](../architecture/02-architecture.md#71-保存場所と保護76) |
 | iOS・watchOS のファイル保護 | `CompleteUntilFirstUserAuthentication` を `LocalDataDirectory`（shared/ui iosMain）と `LocalDataProtection`（watchOS）で明示。`policy.py` が保護なしの指定を禁止 |
 | 診断ログに本文・音声・例外メッセージを含まない、ユーザーの書き出しでだけ外に出る | `shared/pipeline/src/commonMain/kotlin/app/watchaudio/core/pipeline/Diagnostics.kt`（ID・件数・時間・エラーの型だけ、`exportTo`）、`apps/android/.../diag/CrashRecorder.kt`（型と上位フレームだけ）、`apps/android/src/main/AndroidManifest.xml` の `FileProvider`（共有シート用）。Android の `app_start` は `version`・`sdk`・`device=Build.MODEL`、iOS は `version`・`os`。Watch の診断ログ（`apps/wear/.../diag/DiagnosticsLog.kt`、`apps/ios/Watch/Recording/DiagnosticsLog.swift`）は電池残量・充電状態も持つが、アプリからの書き出し機能はない |
+| データの書き出しはユーザーが選んだ保存先にだけ書き、通信しない（#155） | 共通処理 `shared/pipeline/src/commonMain/kotlin/app/watchaudio/core/export/DataExporter.kt`（渡された出力先に ZIP を書くだけ）、保存先は `apps/android/.../AndroidAppServices.kt` の `saveExport`（SAF の `CreateDocument` で作った文書だけ）と `shared/ui/src/iosMain/.../IosAppServices.kt` の `saveExport`（`tmp/data-export/` → 共有シート、閉じたら削除）。ボタンを押したときだけ（`ExportViewModel`）。`tools/privacy-check` は通信 API の追加がないことを確認 |
 | 識別子はランダム | `deviceId` は Wear OS がインストールごとの `UUID.randomUUID()`（`apps/wear/.../WearPrefs.kt`）、watchOS も `UUID`（`RecorderController.swift`）。チャンク・セッションも UUID |
 | 保持期間（7/30/90 日・無期限、既定は無期限、文字起こし済みの音声だけ削除） | `shared/pipeline/.../AudioRetention.kt`、文言は `shared/ui/.../Strings.kt` |
 | 日ごとの削除・すべてのデータの削除 | `shared/pipeline/.../StorageManager.kt`（`deleteAll` は全チャンク・音声を消し DB を `VACUUM`）、UI は `shared/ui/.../ui/StorageCard.kt`。**設定と診断ログは全削除の対象外**（ポリシーでは「すべてのデータ（録音・音声・文字起こし）」と書き、アンインストールで診断ログも消えると書いた） |
@@ -188,4 +191,5 @@
 - [ ] 「すべてのデータを削除」で診断ログも消すかを決める（現在は残る。ID と時刻だけだが、録音した時刻の記録にはなる）
 - [ ] シミュレータ・エミュレータでのスクリーンショット作成（§4）
 - [ ] Wear OS の品質ガイドラインとの照合
-- [ ] 書き出し（#155）・暗号化バックアップ（#40）・課金（#34）を公開するときに、ポリシーとこの申告を更新する
+- [x] データの書き出し（#155）をポリシー（第 7 条）とこの申告に追記した
+- [ ] 暗号化バックアップ（#40）・課金（#34）を公開するときに、ポリシーとこの申告を更新する

@@ -188,7 +188,7 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 
 ### 4.3 データの書き出し（#155）
 
-状態タブの「データの書き出し」→「書き出す」（範囲の確認と ZIP の中身は共通コード、[phone-ui.md §1.9](phone-ui.md#19-データの書き出し155)）。`AndroidAppServices.saveExport()` が `MainActivity` の登録した `ActivityResultContracts.CreateDocument("application/zip")` で SAF の保存ダイアログを開き、ユーザーが作った文書の `ContentResolver.openOutputStream(uri, "wt")` に ZIP を直接書く（`kotlinx.io` の `asSink()`）。アプリの領域（`cache/` など）にはコピーを作らないので、音声を含めても端末の空きを二重に使わない。キャンセルなら何も書かない。書き込みに失敗・中断したら `DocumentsContract.deleteDocument` で作りかけの文書を消す。保存先（端末内・SD カード・ユーザーが入れたクラウドのアプリなど）はユーザーが選ぶもので、アプリ自身は通信しない。新しい権限・通信・SDK は追加していない（SAF は権限不要）。
+状態タブの「データの書き出し」→「書き出す」（範囲の確認と ZIP の中身は共通コード、[phone-ui.md §1.9](phone-ui.md#19-データの書き出し155)）。`AndroidAppServices.saveExport()` が `MainActivity` の登録した `ActivityResultContracts.CreateDocument("application/zip")` で SAF の保存ダイアログを開き、ユーザーが作った文書の `ContentResolver.openOutputStream(uri, "w")`（新しく作った空の文書なので切り詰めの `"wt"` は使わない。対応しない保存先がある）に ZIP を直接書く（`kotlinx.io` の `asSink()`）。アプリの領域（`cache/` など）にはコピーを作らないので、音声を含めても端末の空きを二重に使わない。キャンセルなら何も書かない。書き込みに失敗・中断したら `DocumentsContract.deleteDocument` で作りかけの文書を消す。保存先（端末内・SD カード・ユーザーが入れたクラウドのアプリなど）はユーザーが選ぶもので、アプリ自身は通信しない。新しい権限・通信・SDK は追加していない（SAF は権限不要）。
 
 
 - `android:allowBackup="false"`、`dataExtractionRules` でクラウドバックアップは全ドメイン除外（端末間移行 = device-transfer はローカル転送なので許可）。Android 11 以前向けに `fullBackupContent` でも全除外。
