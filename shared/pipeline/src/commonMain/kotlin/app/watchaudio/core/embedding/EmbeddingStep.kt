@@ -25,7 +25,8 @@ import kotlin.time.TimeSource
  * [Limits.batteryChunksPerRun] per run (the day's new conversations, seconds of CPU); the backfill
  * of older data waits for the charger.
  *
- * Afterwards the search's [index] catches up (and prunes the deletion log).
+ * Afterwards the search's [index] catches up (and prunes the deletion log). Nothing happens while
+ * the model is not downloaded ([isModelReady]).
  */
 class EmbeddingStep(
     private val store: LocalStore,
@@ -34,6 +35,8 @@ class EmbeddingStep(
     private val diagnostics: Diagnostics = Diagnostics.NONE,
     private val rules: EmbeddingPassages.Rules = EmbeddingPassages.Rules(),
     private val limits: Limits = Limits(),
+    /** Whether the model's files are on the device; the step does nothing until they are. */
+    private val isModelReady: () -> Boolean = { true },
 ) {
     data class Limits(
         /** Chunks per run while charging; more makes the platform run again ([FollowUp.RunAgain]). */
@@ -70,6 +73,7 @@ class EmbeddingStep(
      * @param nowMs the current time, for the battery window.
      */
     suspend fun run(onBattery: Boolean, nowMs: Long, mayContinue: suspend () -> Boolean): Outcome {
+        if (!isModelReady()) return Outcome(0, 0, 0, FollowUp.None)
         val spec = embedder.spec
         val started = TimeSource.Monotonic.markNow()
         val limit = if (onBattery) limits.batteryChunksPerRun else limits.chunksPerRun

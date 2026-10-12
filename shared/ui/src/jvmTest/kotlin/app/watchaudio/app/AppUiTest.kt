@@ -33,6 +33,9 @@ import app.watchaudio.app.state.NowProvider
 import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.db.NewSegment
+import app.watchaudio.core.search.VectorHit
+import app.watchaudio.core.search.SemanticStatus
+import app.watchaudio.core.db.NewPassage
 import app.watchaudio.core.pipeline.ModelState
 import app.watchaudio.core.pipeline.PauseReason
 import app.watchaudio.core.pipeline.ProcessingStatus
@@ -537,6 +540,31 @@ class AppUiTest {
         assertTrue(onAllNodes(hasText("MediaCodec", substring = true)).fetchSemanticsNodes().isEmpty())
         assertNoEnglish()
         screenshot("timeline-failed")
+    }
+
+    /** Search by meaning (#24): the indexing note, and a passage found by meaning with its label. */
+    @Test
+    fun searchByMeaning() = runDesktopComposeUiTest(width = 412, height = 915) {
+        val semantic = FakeSemanticSearch(SemanticStatus.Indexing(0.42f))
+        runBlocking {
+            DemoData.seed(store, day, tokyo, until = now - 20 * 60_000L)
+            store.updateSettings { it.copy(onboardingCompleted = true) }
+            val chunk = store.read { chunksToEmbed("fake-model", 1) }.single().chunkId
+            val segments = store.read { chunkSegments(chunk) }
+            store.transaction {
+                savePassages(chunk, "fake-model", segments.map { it.id }, listOf(NewPassage(0, segments.size, segments[0].startAt, 0.01f, ByteArray(4))))
+            }
+            semantic.hits = listOf(VectorHit(store.read { passageVectors("fake-model", 0, 1) }.single().id, 0.9f))
+        }
+        showApp(FakeAppServices(store, audioRoot = audioDir.path, semanticSearch = semantic))
+        waitForText("2026年10月10日(土)")
+        onNodeWithText(Strings.TAB_SEARCH).performClick()
+        waitForText(Strings.semanticStatus(SemanticStatus.Indexing(0.42f))!!)
+        waitForText(Strings.SEARCH_HINT_SEMANTIC)
+        onNode(hasSetTextAction()).performTextInput("この前の予定の話")
+        waitForText(Strings.MATCH_BY_MEANING)
+        assertNoEnglish()
+        screenshot("search-meaning")
     }
 
     /** Fails on any text on screen (scrolled away or not) with an English word and no Japanese. */

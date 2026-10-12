@@ -46,6 +46,10 @@ object HybridSearch {
     /** Longest text shown for a meaning-only hit. */
     const val PASSAGE_SNIPPET_CHARS = 80
 
+    /**
+     * Searches [query]; [keywordHits] are the keyword search's results for it if the caller already
+     * has them (the search screen shows them before the meaning search is done).
+     */
     suspend fun search(
         store: LocalStore,
         semantic: SemanticSearch?,
@@ -53,10 +57,11 @@ object HybridSearch {
         keywordLimit: Int = 100,
         meaningLimit: Int = MEANING_LIMIT,
         band: Float = MEANING_BAND,
+        keywordHits: List<SearchHit>? = null,
     ): HybridResults {
         val q = query.trim()
         if (q.isEmpty()) return HybridResults(emptyList(), keywordLimited = false)
-        val keyword = store.read { search(q, keywordLimit) }
+        val keyword = keywordHits ?: store.read { search(q, keywordLimit) }
         val limited = keyword.size >= keywordLimit
         val meaning = semantic?.let { meaningHits(it, q, meaningLimit, band) }.orEmpty()
         if (meaning.isEmpty()) return HybridResults(keyword.map { it.toHit(byMeaning = false) }, limited)

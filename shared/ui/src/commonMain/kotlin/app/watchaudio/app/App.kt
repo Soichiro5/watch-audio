@@ -177,10 +177,12 @@ private fun MainTabs(
                 val query by searchViewModel.query.collectAsStateWithLifecycle()
                 val results by searchViewModel.results.collectAsStateWithLifecycle()
                 val searching by searchViewModel.searching.collectAsStateWithLifecycle()
+                val semanticStatus by searchViewModel.semanticStatus.collectAsStateWithLifecycle()
                 SearchScreen(
                     query = query,
                     results = results,
                     searching = searching,
+                    semanticStatus = semanticStatus,
                     onQueryChange = searchViewModel::setQuery,
                     onOpen = { result ->
                         dayViewModel.openSegment(result.chunkId, result.segmentId, result.startAt)
