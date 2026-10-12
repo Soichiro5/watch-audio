@@ -1,0 +1,6 @@
+{
+  "lowBatteryStopPercent": 10,
+  "lowBatteryResumePercent": 15,
+  "silencePeakDbfs": -40,
+  "silenceMinCoveragePercent": 80
+}

@@ -49,6 +49,15 @@ class ProtocolTest {
     }
 
     @Test
+    fun recorderRulesMatchSharedTestVector() {
+        // Same JSON as shared/protocol/testdata/recorder-rules.json, which the Swift side compares
+        // with its RecorderRules.current: both watches stop, resume and drop silence alike (#137).
+        assertEquals(RecorderRules.CURRENT, ProtocolJson.decodeFromString(RecorderRules.serializer(), TestVectors.RECORDER_RULES))
+        assertFailsWith<IllegalArgumentException> { RecorderRules.CURRENT.copy(lowBatteryResumePercent = 5) }
+        assertFailsWith<IllegalArgumentException> { RecorderRules.CURRENT.copy(silencePeakDbfs = 0) }
+    }
+
+    @Test
     fun recordingFormatDescribesChunkFiles() {
         val audio = RecordingFormat.CURRENT.audioFile("a.m4a", sizeBytes = 4, sha256 = "00")
         assertEquals(AudioFile("a.m4a", AudioCodec.AAC, 16_000, 1, 24_000, 4, "00"), audio)

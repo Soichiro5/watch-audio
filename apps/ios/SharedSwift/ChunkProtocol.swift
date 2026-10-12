@@ -46,7 +46,9 @@ enum AudioCodec: String, Codable, Sendable, CaseIterable {
 enum ChunkEndReason: String, Codable, Sendable, CaseIterable {
     /// Regular rotation; the next chunk continues seamlessly.
     case rotation
-    /// The wearer tapped Mark; recording continues in a new chunk.
+    /// The wearer tapped Mark and the chunk was closed there. No longer emitted (#137): a mark
+    /// is an offset in `markOffsetsMs` of the current chunk, as on Wear OS. Kept for chunks
+    /// recorded by older builds; continues seamlessly like `rotation`.
     case mark
     case userStop = "user_stop"
     /// Phone call, Siri or another app took the microphone.

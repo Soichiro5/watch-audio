@@ -109,6 +109,14 @@ final class ChunkProtocolTests: XCTestCase {
         )
     }
 
+    /// Both watches stop, resume and drop silence by the rules in recorder-rules.json
+    /// (Kotlin: RecorderRules.CURRENT, #137).
+    func testRecorderRulesMatchKotlin() throws {
+        let original = try vector("recorder-rules")
+        XCTAssertEqual(try ChunkProtocol.decode(RecorderRules.self, from: original), RecorderRules.current)
+        XCTAssertEqual(try jsonObject(ChunkProtocol.encode(RecorderRules.current)), try jsonObject(original))
+    }
+
     func testFileDigestMatchesKnownVector() throws {
         let url = FileManager.default.temporaryDirectory.appending(path: "digest-\(UUID().uuidString).bin")
         defer { try? FileManager.default.removeItem(at: url) }
