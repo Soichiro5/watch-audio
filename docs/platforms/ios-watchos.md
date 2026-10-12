@@ -30,7 +30,7 @@ Apple Watch で装着中ずっと録音 → WatchConnectivity で iPhone へ（�
 | 〃 | `IosSpeechTranscriber.kt` | Swift 実装を受けるコールバック型インターフェースと共通 `Transcriber` へのアダプタ |
 | 〃 | `MainViewController.kt` | Compose UI のエントリ（Swift から引数なしで呼ぶ） |
 | テスト | `apps/ios/Tests/ProtocolTests/ChunkProtocolTests.swift` | Swift プロトコル実装と録音形式（`RecordingFormat.current`）を Kotlin のテストベクタ（`shared/protocol/testdata/*.json`）で検証 |
-| 〃 | `apps/ios/Tests/WatchLogicTests/RecorderPolicyTests.swift` | 停止理由（充電・低電池・ストレージ不足・割り込み・ユーザー停止・レコーダー停止）の判定、ヒステリシス、自動再開、通知、無音判定、停止理由がマニフェストの `endReason` に書かれること（#15） |
+| 〃 | `apps/ios/Tests/WatchLogicTests/RecorderPolicyTests.swift` | 停止理由（充電・低電池・ストレージ不足・割り込み・ユーザー停止・レコーダー停止）の判定、ヒステリシス（10% 未満で停止・15% 以上で再開）、自動再開、通知、無音判定（ピーク −40 dBFS）、停止理由がマニフェストの `endReason` に書かれること（#15）、しきい値が共通の `RecorderRules` と一致すること、Mark でチャンクを閉じずオフセットが manifest に入ること（#137） |
 | 〃 | `apps/ios/Tests/WatchLogicTests/ChunkOutboxTests.swift` | 送信キュー: 最終 ACK で削除、CORRUPT で再送（上限つき）、REJECTED は保持、ACK が無ければ 15 分後に再送、送信中は二重送信しない、再起動後も残り再送される、強制終了からの復旧（#17） |
 | 〃 | `apps/ios/Tests/SpeechTests/SpeechTranscriptionTests.swift` | シミュレータで SpeechTranscriber（ja_JP）が既知の日本語音声（16 kHz AAC）を時刻付きで文字起こしできるか（#21）。使えなければ理由を記録してスキップ |
 | 〃 | `shared/ui/src/iosTest/.../IosPlaybackTest.kt` | `IosAppServices.play` が正しいチャンクのファイルを AVAudioPlayer で開き、指定位置（±0.2 秒）に合わせ、長さも正しいこと。共有 UI で前日のタイムライン → 発話タップ、検索 → 1 タップ → その発話の位置（#19, #25）。テスト実行ファイルはアプリではないため `play()` は false を返し、`started=` は記録のみ |
@@ -49,7 +49,7 @@ sequenceDiagram
   participant K as iPhone: IosAppGraph (Kotlin)
   participant S as SpeechAnalyzerTranscriber
 
-  R->>O: 5 分ごと / Mark / 停止でチャンクを確定（音声移動・SHA-256・manifest.json）
+  R->>O: 5 分ごと / 停止でチャンクを確定（音声移動・SHA-256・manifest.json。Mark はオフセットとして含む）
   R->>T: send(item)
   T->>WC: transferFile(audio, metadata: [manifest, chunkId])<br/>無音チャンクは transferUserInfo([manifest, chunkId])
   WC->>P: session(_:didReceive:) / didReceiveUserInfo
@@ -79,15 +79,16 @@ sequenceDiagram
 
 - **形式**: AAC-LC 16 kHz mono 24 kbps、5 分チャンク（`SharedSwift/RecordingFormat.swift` の `RecordingFormat.current`。Kotlin の `RecordingFormat.CURRENT` と同じ値であることを `shared/protocol/testdata/recording-format.json` で両側からテストする。`ChunkAudioFormat` はそれを `AVAudioRecorder` の設定に変換するだけ。約 10.8 MB/時）。`AVAudioSession(.record)` + `UIBackgroundModes: audio` で画面消灯中も継続（M0-3 で確認済みの方式）。
 - **ローテーション**: 5 分ごと。次のファイルの `record()` を開始してから前のファイルを `stop()` する（数 ms 重なるが欠けない）。2 本同時に開けなかった場合は stop → start にフォールバックし、診断ログに `rotate_fallback` を残す。
-- **Mark**: 現在チャンクにオフセットを記録してチャンクを閉じる（`endReason = mark`）。マークした瞬間が早く iPhone に届く。
-- **無音判定**: `isMeteringEnabled = true` にして 1 秒ごとに `updateMeters()` → `averagePower` / `peakPower` をサンプリング。チャンク全体で一度も閾値（平均 −50 dBFS / ピーク −35 dBFS）を超えず、かつサンプルがチャンク長の 80% 以上取れていた場合のみ「確実に無音」とし、音声を削除して manifest のみ送る。サンプル不足（タイマーが止まっていた等）の場合は音声を残す（安全側）。閾値は実機で要調整。
+- **Mark**: 現在チャンクの先頭からのオフセットを `markOffsetsMs` に記録し、すぐに録音中チャンクの状態ファイルに保存する。**チャンクは閉じない**（Wear OS と同じ。#137 までは Mark でチャンクを閉じて `endReason = mark` にしていた）。iPhone にはそのチャンクが閉じたとき（5 分ごとのローテーション・停止）に届く。
+- **無音判定**: `isMeteringEnabled = true` にして 1 秒ごとに `updateMeters()` → `peakPower`（dBFS）をサンプリング。チャンク全体で一度もピークが −40 dBFS に届かず、かつサンプルがチャンク長の 80% 以上取れていた場合のみ「確実に無音」とし、音声を削除して manifest のみ送る。サンプル不足（タイマーが止まっていた等）の場合は音声を残す（安全側）。−40 dBFS と 80% は Wear OS と共通の `RecorderRules`（`SharedSwift/RecorderRules.swift`、#137 までは平均 −50 dBFS またはピーク −35 dBFS を超えたら音あり）。閾値は実機で要調整。
+- **共通ルール**: 電池・無音・Mark の扱いは Wear OS と揃えている（[02 §6.1「両 Watch で共通の録音ルール」](../architecture/02-architecture.md#両-watch-で共通の録音ルール137)）。値は `RecorderRules.current` にあり、Kotlin の `RecorderRules.CURRENT` と同じであることを `shared/protocol/testdata/recorder-rules.json` で両側からテストする。
 - **停止理由と自動再開**（`wantsRecording` を UserDefaults に保持し、「ユーザーが録音したい状態」なら条件が解けたときに再開する）:
 
 | 状況 | 終了理由 | 再開 |
 | --- | --- | --- |
 | ユーザーが停止 | `user_stop` | しない |
 | 充電開始（`WKInterfaceDevice.batteryState` を 30 秒ごとに確認） | `charging` | 充電器から外れ、アプリが動いている/前面に来たとき |
-| 電池 10% 未満 | `low_battery` | 15% 以上に戻ったとき + ハプティクスと通知 |
+| 電池 10% 未満（`batteryLevel` を四捨五入した整数 % で比べる。15% 未満では録音を開始しない） | `low_battery` | 15% 以上に戻ったとき + ハプティクスと通知 |
 | 空き容量 100 MB 未満 | `low_storage` | 空きが戻ったとき + 通知 |
 | 通話・Siri など（`AVAudioSession.interruptionNotification`） | `interruption` | `.ended` で再開を試行（`shouldResume` が無くても試す）。失敗時はハプティクス + ローカル通知。中断時に 2 分後の通知を予約し、再開できたら取り消す（アプリがサスペンドされても通知が出るように） |
 | レコーダーが通知なしに停止 | `error` | 最大 3 回まで自動再開、超えたら通知 |
@@ -109,7 +110,7 @@ sequenceDiagram
 
 - WatchConnectivity は Apple が管理するペアリング端末間のローカル転送（Bluetooth / P2P Wi-Fi 等、経路は OS が選択・キューイング・バックグラウンド配送）。自前のサーバーやクラウドには一切送らない。
 - 送信条件: `activationState == .activated`（または `isReachable`）のときのみ。`transferFile` / `transferUserInfo` は相手が不在でも OS がキューに保持する。
-- 二重送信防止: `outstandingFileTransfers` / `outstandingUserInfoTransfers` のメタデータ `chunkId` と照合。送信済みで ACK 待ちのものは 15 分間は再送しない（`ChunkSendTracker`。送信失敗の通知を受けたものはすぐ再送対象）。
+- 二重送信防止: `outstandingFileTransfers` / `outstandingUserInfoTransfers` のメタデータ `chunkId` と照合。送信済みで ACK 待ちのものは 15 分間は再送しない（`ChunkSendTracker.resendAfter`。送信失敗の通知を受けたものはすぐ再送対象）。WatchConnectivity は転送を OS のキューに預けて届くまでに時間がかかることがあり、早く再送すると同じチャンクが二重に届くため、Wear OS（`ChannelClient`、3 分）より長くしている（[02 §6.1](../architecture/02-architecture.md#両-watch-で共通の録音ルール137)）。
 - 再送: WCSession が activated になるたび（= アプリ起動ごと）に未 ACK の全チャンクを再送（iPhone は `duplicate` で最終 ACK を返すので安全）。`corrupt` は最大 3 回まで即再送。`rejected`（新しいスキーマ等）は保持して次回起動時に再提示。
 - iPhone 側は `session(_:didReceive:)` 内でファイルを `Application Support/WatchAudio/inbox/` に**同期的に** move してから非同期で取り込む。取り込みは `UIApplication.beginBackgroundTask` で保護。取り込み前にプロセスが落ちた inbox の残骸は次回起動時に削除（Watch が再送する）。
 - 取り込み自体は Android と共通の `ChunkIntake.receive`（#134）: manifest が読めないがチャンク ID は読めるなら `rejected`、ID も読めない・DB に書けないなら ACK なし（`nil`）。inbox のファイルは結果にかかわらずアーカイブへ移すか削除する。
@@ -215,7 +216,7 @@ Android と同じ共通の `DiagnosticsLog`（`shared/pipeline`、形式・上�
 2. 5 分ごとにチャンクが確定し、iPhone 到着後に Watch の「未送信」が減る（ACK で削除）。
 3. iPhone アプリがバックグラウンド / 未起動でも、チャンクが届き DB に入る（OS がアプリをバックグラウンド起動する）。アプリ切り替え画面でスワイプ終了した後の挙動も確認する。
 4. iPhone を Watch から離して（機内モード等）録音 → 戻したときに未送信分がまとめて届く。重複が DB に入らない。
-5. Mark を押すとチャンクが閉じ、Mark 時刻がタイムラインに出る。
+5. Mark を押してもチャンクは閉じない（診断ログに `mark: +…ms`、チャンクは 5 分のローテーションで `rotation` として閉じる）。そのチャンクが届くと manifest の `markOffsetsMs` に入り、iPhone の DB の `mark` 表に記録される。
 6. 静かな部屋に 5 分以上置いたチャンクが「無音」になり音声が保存されない。小声の会話チャンクが無音扱いされない（閾値調整）。
 7. 充電器に置く → `charging` で停止 → 外してアプリを開くと自動再開。
 8. 録音中に電話を受ける / Siri を使う → `interruption` で区切られ、終了後に再開する。再開できない場合は通知が来る。
@@ -235,7 +236,7 @@ Android と同じ共通の `DiagnosticsLog`（`shared/pipeline`、形式・上�
 - **音声認識の認可**: SpeechTranscriber が `SFSpeechRecognizer` の認可を必要とするかは未確認。念のためオンボーディングで要求している。不要と確認できたら `IosPermissions.all` から外す。
 - **充電後の自動再開**はアプリが前面に来たときのみ（上記 4 章）。バックグラウンドで録音を開始できるかは watchOS の制約次第。
 - **割り込み後の再開**: watchOS が中断後にバックグラウンドでの録音再開を許すかは M0-3 の検証課題。失敗時は通知でユーザーに促す。
-- **無音判定の閾値**（−50 / −35 dBFS）は仮の値。実機で誤判定（会話を捨てる）が無いことを最優先で確認する。
+- **無音判定の閾値**（ピーク −40 dBFS、Wear OS と共通）は仮の値。実機で誤判定（会話を捨てる）が無いことを最優先で確認する。`peakPower` は `updateMeters()` を呼んだ時点のメーターの値で、Wear OS の `getMaxAmplitude()`（1 秒間の最大値）とは集計の仕方が違うので、短い音を取りこぼさないかもあわせて確かめる。
 - **BGProcessingTask の実行頻度**は OS 任せ（充電中・アイドル時）。前面で開いている間が最も確実。
 - 共有パイプラインの `TranscriptionPipeline` はキャンセル時の `resetInterrupted()` が（キャンセル済みのため）実行されない場合があるが、iOS では毎回の実行前に `recoverInterrupted()` を呼んで補っている。
 
@@ -248,7 +249,7 @@ Android と同じ共通の `DiagnosticsLog`（`shared/pipeline`、形式・上�
 - `RecorderController` は各チャンクのファイルを `ChunkAudioInput` で書く。本番（Release を含む）は常に `MicrophoneChunkInput`（`AVAudioRecorder`）。
 - `DebugAudioFileInput.swift` はファイル全体が `#if DEBUG` で囲まれており、`RecorderController` / `ContentView` 側の呼び出しも `#if DEBUG` の中だけにある。XcodeGen の Debug 構成は `SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG` を設定し、Release は設定しないため、Release ビルドにはファイル入力のコードが含まれない。
 - `DebugAudioPlayback`: `AVAudioFile(forReading:)` で読み、チャンネル平均 + 線形補間で 16 kHz mono に変換。連続するチャンクで共有するので、ローテーションしても続きから流れる。
-- `DebugAudioFileInput`: `record()` からの経過時間（壁時計）分のサンプルを、毎秒の `updateMeters()` と `stop()` のたびに `AVAudioFile(forWriting:settings: ChunkAudioFormat.recorderSettings, ...)` へ書き（本番と同じ AAC 16 kHz mono 24 kbps）、そのサンプルの RMS / ピークを dBFS で返す（`averagePower` / `peakPower`）。`stop()` で `close()` してから確定する。
+- `DebugAudioFileInput`: `record()` からの経過時間（壁時計）分のサンプルを、毎秒の `updateMeters()` と `stop()` のたびに `AVAudioFile(forWriting:settings: ChunkAudioFormat.recorderSettings, ...)` へ書き（本番と同じ AAC 16 kHz mono 24 kbps）、そのサンプルのピークを dBFS で返す（`peakPower`）。`stop()` で `close()` してから確定する。
 - **実時間のみ**（watchOS 側は壁時計でチャンク長を測るため倍速はない。倍速で試したいときは Wear OS 版を使う）。
 - ファイルの終わりで録音を停止し、最後のチャンクは `user_stop` で閉じる。以後の入力はマイクに戻る。
 
@@ -282,7 +283,7 @@ cat "$DATA/Library/Application Support/WatchAudio/diagnostics.csv"
 - Xcode から起動する場合は、スキームの Run → Arguments → Arguments Passed On Launch に `-debugAudioInput test.wav` を追加する。
 - 画面からも操作できる: Debug ビルドの画面の一番下に `Documents/debug-input` のファイルが「▶ ファイル名」として並び、タップで開始（録音中なら一度止めてから）。「ファイル入力を止める」で停止してマイクに戻る。
 - 充電中・電池残量低下の判定は本番どおり働く（シミュレータの電池状態によっては `charging` で止まる）。
-- 期待される結果の例: 12 分 30 秒のファイル → 5 分・5 分・2 分 30 秒の 3 チャンク（`rotation`, `rotation`, `user_stop`）。5 分間ほぼ無音（平均 −50 dBFS・ピーク −35 dBFS 以下）のチャンクは `audio` なしの manifest。
+- 期待される結果の例: 12 分 30 秒のファイル → 5 分・5 分・2 分 30 秒の 3 チャンク（`rotation`, `rotation`, `user_stop`）。5 分間ほぼ無音（ピーク −40 dBFS 未満）のチャンクは `audio` なしの manifest。
 
 ### 13.3 検証状況
 

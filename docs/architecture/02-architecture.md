@@ -157,9 +157,29 @@ erDiagram
 
 - **開始**: ユーザーが Watch アプリでタップ（前景）。watchOS は `AVAudioSession(.record)` + background audio、Wear OS は `foregroundServiceType=microphone` の前景サービス + Ongoing Activity。一度 ON にすると、充電・非装着（Wear OS のみ検出）・電池残量低下・容量不足・割り込みで一時停止し、条件が解けたら自動で再開する（watchOS の充電後の再開はアプリが前面に戻ったとき）。
 - **エンコード**: 16kHz / mono / AAC-LC 24kbps（.m4a、1 時間 ≈ 11MB。ffmpeg での実測 11.1MB、§9.3）。値は両 Watch 共通の `RecordingFormat`（`shared/protocol`、Swift 側は同じ値をテストベクタで確認）。
-- **チャンク化**: 約 5 分ごと（停止・一時停止でも閉じる。watchOS は Mark でも閉じる）にファイルをローテーション。各チャンクに manifest（`ChunkManifest`: チャンク UUID、セッション ID、デバイス ID、開始時刻、長さ、タイムゾーン、Mark のオフセット、音声ファイルの形式・サイズ・SHA-256、終了理由）を付ける。
-- **無音スキップ**: 1 秒ごとのレベル（Wear OS: ピーク、watchOS: 平均・ピーク）がチャンク全体で一度もしきい値を超えなかった場合だけ「確実に無音」として音声を捨て、`audio` なしの manifest で時間範囲だけを送る（タイムライン上は無音区間として残る）。
+- **チャンク化**: 約 5 分ごと（停止・一時停止でも閉じる。Mark では閉じない）にファイルをローテーション。各チャンクに manifest（`ChunkManifest`: チャンク UUID、セッション ID、デバイス ID、開始時刻、長さ、タイムゾーン、Mark のオフセット、音声ファイルの形式・サイズ・SHA-256、終了理由）を付ける。
+- **Mark**: 録音中のチャンクに、チャンク先頭からのオフセットとして記録する（`markOffsetsMs`）。スマホには、そのチャンクが閉じたときに一緒に届く。
+- **無音スキップ**: 1 秒ごとのピークがチャンク全体で一度も −40 dBFS に届かなかった場合だけ「確実に無音」として音声を捨て、`audio` なしの manifest で時間範囲だけを送る（タイムライン上は無音区間として残る）。
 - **割り込み・停止**: 終了理由（`interruption` / `charging` / `off_body` / `low_battery` / `terminated` など）を manifest に記録し、欠損の理由としてタイムラインに出す。予期しない停止は Watch 上で通知/ハプティクスを出す。
+
+#### 両 Watch で共通の録音ルール（#137）
+
+同じ製品なので、Watch の機種によって録音が止まる条件や Mark の扱いが変わらないようにする。数値は `shared/protocol` の `RecorderRules.CURRENT` に 1 か所で置き、watchOS は同じ値を `RecorderRules.current`（`apps/ios/SharedSwift/RecorderRules.swift`）に持つ。両側が `shared/protocol/testdata/recorder-rules.json` と一致することをテストする（`RecordingFormat` と同じ方式）。値を変えるときは、この 3 か所とこの表を一緒に直す。
+
+| 項目 | 共通のルール | Wear OS | watchOS |
+| --- | --- | --- | --- |
+| 電池残量低下で停止 | 充電していないとき、録音中に残量が **10% 未満**になったら止める（`low_battery`、通知とハプティクス） | `RecorderPolicy.LOW_BATTERY_PERCENT`。残量は整数 % | `RecorderPolicy.lowBatteryPercent`。`batteryLevel` を四捨五入した整数 % で比べる |
+| 電池での再開 | 残量が **15% 以上**に戻るか充電したら再開する。10〜14% の間は止まったまま（ヒステリシス） | `LOW_BATTERY_RESUME_PERCENT`（録音の開始は 10% 以上ならできる） | `resumeBatteryPercent`（録音の開始もこの値以上が条件） |
+| 無音の判定 | 約 1 秒ごとのピークが**一度も −40 dBFS に届かなかった**チャンクだけ、音声を捨てて manifest だけ送る | `getMaxAmplitude()`（前回の取得からの最大値、0〜32767）が 328（= −40 dBFS）以上なら音あり | `AVAudioRecorder.peakPower`（dBFS）が −40 以上なら音あり |
+| 無音判定の安全策 | ピークを取れた回数がチャンク長の **80% 以上**でなければ音声を残す | 加えて 10 回未満（短すぎるチャンク）も残す | — |
+| Mark | 録音中のチャンクに `markOffsetsMs`（チャンク先頭からの ms）として記録し、**チャンクは閉じない** | `ChunkTracker.mark` | `RecorderController.mark`（`RecorderPolicy.markOffsetMs`） |
+| ACK が無いときの再送待ち | **転送方式ごとに違う値**（下記） | 3 分（`Outbox.ACK_TIMEOUT_MS`） | 15 分（`ChunkSendTracker.resendAfter`） |
+| 空き容量不足（#137 の対象外） | 空きが 100 MB 未満で止める | 150 MB 以上で再開 | 100 MB 以上で再開（ヒステリシスなし） |
+
+- **電池**: 以前は Wear OS が 5% 以下で停止・10% 以上で再開、watchOS が 10% 未満で停止・15% 以上で再開だった。最後のチャンクを確定して送る余裕を残すため、watchOS の値に揃えた。
+- **無音**: 以前の watchOS は「平均が −50 dBFS を超えるか、ピークが −35 dBFS を超えたら音あり」だった。Wear OS では平均が取れない（`getMaxAmplitude()` だけ）ので、ピーク −40 dBFS の 1 本に揃えた。音声を捨てると取り戻せないので保守的（音声を残す側）な値で、実機で調整する（#59・#60）。なお「ピーク」の意味は少し違い、Wear OS は前回の取得からの 1 秒間の最大値、watchOS は `updateMeters()` を呼んだ時点のメーターの値である。
+- **Mark**: 以前の watchOS は Mark でチャンクを閉じていた（終了理由 `mark`）。マークした瞬間が早くスマホに届く代わりに、短いチャンクが増え、チャンクの区切りが機種で変わっていた。Wear OS に合わせて閉じないようにした（スマホに届くのはそのチャンクが閉じたとき、最大 約 5 分後）。終了理由 `mark` はプロトコルと過去のデータのために残すが、どちらの Watch も出さない。スマホは Mark を `markOffsetsMs` から DB の `mark` 表に入れるので、チャンクの閉じ方によらず同じに扱う（`mark` で終わったチャンクも `rotation` と同じく欠損にしない）。
+- **再送待ち**: Wear OS の `ChannelClient` は、送り終えた時点で相手に届いているので、3 分 ACK が来なければ失われたとみて再送する。watchOS の WatchConnectivity は転送を OS のキューに預け、届くまでに時間がかかることがある。早く再送すると同じチャンクがキューに重なって二重に届くので、15 分にしている。どちらでも、二重に届いたチャンクにはスマホが `duplicate` を返すので、値の違いは保存されるデータには影響しない。
 
 ### 6.2 転送（Watch → Phone）
 

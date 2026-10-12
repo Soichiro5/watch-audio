@@ -39,7 +39,7 @@
 - **チャンク長**: 約 5 分。`setNextOutputFile` はファイルサイズ上限（`setMaxFileSize`）でしか機能しないため、`24 kbps × 300 s ≈ 900 KB`（`ChunkRecorder.CHUNK_BYTES`）をサイズ上限にしている。上限が近づく（`MAX_FILESIZE_APPROACHING`）と次のファイルを渡し、エンコーダが切り替えた瞬間（`NEXT_OUTPUT_FILE_STARTED`）を正確な境界とする。
 - **時刻**: 最初のチャンクは `start()` 直後の壁時計。以降のチャンクの `startedAtEpochMs` は「前チャンクの開始 + `elapsedRealtime` で測った長さ」で求めるので、連続するチャンクは隙間も重なりもなくつながる（壁時計の補正の影響を受けない）。
 - **ID**: `chunkId` はチャンクごとの UUID。`sessionId` は録音開始ごとの UUID（一時停止→再開でも新しいセッション。manifest の定義「開始から、理由を問わず停止するまで」に従う）。`deviceId` はインストールごとに固定。
-- **Mark**: 現在のチャンク先頭からのオフセット（ms）として `markOffsetsMs` に記録する。チャンクは区切らない。
+- **Mark**: 現在のチャンク先頭からのオフセット（ms）として `markOffsetsMs` に記録する。チャンクは区切らない（watchOS も同じ。[02 §6.1「両 Watch で共通の録音ルール」](../architecture/02-architecture.md#両-watch-で共通の録音ルール137)）。
 - **ジャーナル**: 録音中のチャンクは `files/recording/<id>.m4a` と `<id>.journal.json`（開始時刻・Mark・無音統計・最終生存時刻）。ジャーナルは開始時・Mark 時・30 秒ごとに書き換える。
 - **確定**: チャンクを閉じたら SHA-256（`shared/platform` の `sha256Of`。スマホ側の検証と同じ実装）とサイズを計算し、音声を `files/outbox/<id>.m4a` へ移動 → manifest を `files/outbox/<id>.json` に**最後に**原子的に書く（`.tmp` → rename）。
 - **プロセスが死んだ場合**: 次にプロセスが起動したとき（`WearApp.onCreate`。録音中のレコーダーは存在し得ないタイミング）にジャーナルが残っていれば `endReason = TERMINATED` で確定する。長さは最終生存時刻（30 秒ごと）まで。`MediaRecorder` が `stop()` されないと MP4 の `moov` が書かれず再生できないため、その場合は音声を捨てて **`durationMs = 0` の manifest**（欠損の開始位置と理由だけを伝える）にする。`audio == null` で長さがあると、スマホ側では「無音区間」と解釈されてしまうため。→ 最悪でも失うのは録音中の 1 チャンク（≤ 5 分）。
@@ -47,7 +47,7 @@
 ### 2.1 無音スキップ
 
 - 1 秒ごとに `MediaRecorder.getMaxAmplitude()`（前回呼び出し以降のピーク、0〜32767）を取り、チャンクごとに集計する。
-- しきい値 `SilenceDetector.SILENCE_PEAK_THRESHOLD = 300`（≈ -40 dBFS ピーク）。**一度でも超えたら音声を残す**。さらに、取得回数が想定の 80 % 未満（ポーリングが止まっていた）や 10 回未満（短すぎる）の場合も残す。
+- しきい値 `SilenceDetector.SILENCE_PEAK_THRESHOLD = 328`（= -40 dBFS ピーク）。**一度でも届いたら音声を残す**。さらに、取得回数が想定の 80 % 未満（ポーリングが止まっていた）や 10 回未満（短すぎる）の場合も残す。-40 dBFS と 80 % は watchOS と共通の `RecorderRules`（`shared/protocol`）から取る（#137、[02 §6.1](../architecture/02-architecture.md#両-watch-で共通の録音ルール137)。以前は 300 ≈ -40.8 dBFS）。
 - 無音と判定したチャンクは音声を削除し、`audio = null` の manifest（時間範囲は残る）を送る。
 - しきい値は保守的（音声を残す側）に置いた。実機で寝室・静かな会議室・屋外の雑音レベルを測って調整する（§8）。
 
@@ -64,7 +64,7 @@ stateDiagram-v2
   state "Paused（前景サービスは動作継続）" as Paused {
     Charging: 充電中 / CHARGING
     OffBody: 非装着 / OFF_BODY
-    LowBattery: 電池 5% 以下 / LOW_BATTERY
+    LowBattery: 電池 10% 未満 / LOW_BATTERY
     LowStorage: 空き 100MB 未満 / LOW_STORAGE
     Interrupted: マイク使用不可 / INTERRUPTION・ERROR
   }
@@ -74,8 +74,8 @@ stateDiagram-v2
   Charging --> OffBody: 給電終了 かつ 非装着
   Recording --> OffBody: 非装着が 10 秒続く
   OffBody --> Recording: 装着
-  Recording --> LowBattery: 残量 ≤ 5%（通知）
-  LowBattery --> Recording: 残量 ≥ 10% / 充電後
+  Recording --> LowBattery: 残量 < 10%（通知）
+  LowBattery --> Recording: 残量 ≥ 15% / 充電後
   Recording --> LowStorage: 空き < 100MB（通知）
   LowStorage --> Recording: 空き ≥ 150MB（転送で空く）
   Recording --> Interrupted: 他アプリ/通話で無音化・レコーダー異常
@@ -85,7 +85,7 @@ stateDiagram-v2
 
 - **優先順位**（同時に成り立つとき）: 充電 > 非装着 > 電池残量低下 > 容量不足 > 割り込み。
 - **非装着の猶予 10 秒**: ベルトの付け直しなどでチャンクが細切れにならないように。装着に戻ったら即再開。センサーがない機種・まだ値が来ていない間は「装着中」とみなす。
-- **ヒステリシス**: 電池は 5 % 以下で停止・10 % 以上で再開（充電すれば解除）、容量は 100 MB 未満で停止・150 MB 以上で再開。
+- **ヒステリシス**: 電池は 10 % 未満で停止・15 % 以上で再開（充電すれば解除。watchOS と共通の `RecorderRules`、#137 で 5 % 以下・10 % 以上から変更）、容量は 100 MB 未満で停止・150 MB 以上で再開。
 - **割り込み**: `AudioRecordingCallback` で自分のセッションが `isClientSilenced` になった、またはポーリングで検出 → `INTERRUPTION` でチャンクを閉じる。`MediaRecorder` のエラー・開始失敗・ローテーション失敗は `ERROR`。いずれも 5 s → 15 s → 30 s → 1 min → 2 min → 以降 5 min 間隔で**ユーザーが停止するまで再試行し続ける**（前景サービスを止めると、バックグラウンドからは二度と開始できないため）。再試行直後 10 秒以内に再び無音化された「試し録り」は捨てる（前の `INTERRUPTION` から続く欠損として扱う）。30 秒正常に録れたら回復とみなす。
 - **前景サービスは止めない**: 一時停止中も `microphone` 前景サービスを維持する。Android 14 以降は `microphone` 前景サービスをバックグラウンドから開始できないが、動作中のサービス内で録音を再開するのは許可されている。これが「装着したら自動再開」「充電器から外したら自動再開」を実現する鍵。
 
@@ -127,7 +127,7 @@ sequenceDiagram
 - **outbox の構成**: `<id>.m4a`（無音なら無し）、`<id>.json`（manifest。存在 = 送信待ち）、`<id>.state`（試行回数・次回送信時刻・REJECTED 等）。すべて `filesDir` 内なのでプロセスが死んでも残る。
 - **再送**:
   - 送信失敗（チャネルが開けない・途中で切れた）: 30 s, 1 min, 2 min … 最大 30 min。
-  - ACK なし: 完全に送った後 3 分で再送対象（スマホは不正フレーム・中断・DB エラーでは ACK を返さない）。再送済みのチャンクは `DUPLICATE` が返り削除される。
+  - ACK なし: 完全に送った後 3 分（`Outbox.ACK_TIMEOUT_MS`）で再送対象（スマホは不正フレーム・中断・DB エラーでは ACK を返さない）。再送済みのチャンクは `DUPLICATE` が返り削除される。`ChannelClient` は送り終えた時点で相手に届いているので短くしている（watchOS は WatchConnectivity のキューのため 15 分。[02 §6.1](../architecture/02-architecture.md#両-watch-で共通の録音ルール137)）。
   - `UploadWorker` は送るものがなくなるまで送り、ACK 待ちが残っていれば WorkManager のバックオフ（30 s〜）で再実行。スマホが見つからないときはリトライせず終了し、①スマホの capability 変化（再接続）、②次のチャンク確定（録音中は約 5 分ごと）、③15 分ごとの定期ジョブ、のいずれかで再開する。
   - スマホに ACK の再送を頼むメッセージはない。ACK を失ったときの回復は Watch からの再送（`DUPLICATE` が返る）だけ。
 - **同時実行**: サービスからの即時送信と WorkManager は同じプロセス内の `Mutex` で直列化。
@@ -172,7 +172,7 @@ sequenceDiagram
 | 検証できる（単体テスト） | 実機が必要 |
 | --- | --- |
 | 状態機械（優先順位・非装着の猶予・電池/容量のヒステリシス・割り込みのアラート条件・バックオフ） | `MediaRecorder` の `setNextOutputFile` が本当に無音ギャップなしで切り替わるか、`NEXT_OUTPUT_FILE_STARTED` 時点で前ファイルの `moov` が書かれているか（コードは最大 10 秒待つ） |
-| 無音判定（しきい値・カバレッジ・短すぎるチャンク） | 無音しきい値（≈ -40 dBFS）が実環境で妥当か |
+| 無音判定（しきい値・カバレッジ・短すぎるチャンク） | 無音しきい値（-40 dBFS、watchOS と共通）が実環境で妥当か |
 | チャンク確定（SHA-256・サイズ・Mark の並べ替えと範囲内への丸め・無音/破損時の manifest） | オフボディセンサーの有無・権限の要否・反応（Pixel Watch / Galaxy Watch） |
 | プロセス死後の回収（`moov` 有無で音声を残すか、孤立ファイルの掃除） | 通話・アシスタント・他アプリ録音時の `isClientSilenced` と自動復帰 |
 | outbox の ACK 処理（削除・再送・保持・タイムアウト・永続化） | 充電器に置いた/外したとき・装着/非装着のときの自動停止/再開 |
@@ -200,7 +200,7 @@ sequenceDiagram
 5. **非装着**: 外して机に置く → 約 10 秒で「一時停止・未装着」（`off_body`）、チャンクは `off_body` で閉じる。再装着で即再開（新しい session）。通知は出ない。
 6. **充電**: 充電器に置く → 「一時停止・充電中」（`charging`）。外して装着 → 自動再開。外して机に置いたまま → 「一時停止・未装着」。
 7. **割り込み**: 録音中に電話を受ける / アシスタントを起動 / 他の録音アプリ → `interrupted` → 終了後にバックオフで自動再開（`recovered`）。2 分以上続くと通知 + 振動。
-8. **電池低下**: 5 % 以下 → 停止して通知 + 振動。充電後に自動再開。
+8. **電池低下**: 10 % 未満 → 停止して通知 + 振動。15 % 以上に戻るか充電すると自動再開。
 9. **容量不足**（任意）: スマホとの接続を切って長時間録音、またはダミーファイルで空きを減らす → `low_storage` で停止・通知、転送で空くと再開。
 10. **転送 / ACK**: スマホのアプリで受信を確認。画面の「未送信」が 0 に戻り「最終受領」が更新される。`files/outbox` が空になる（`adb shell run-as app.watchaudio ls files/outbox`）。
 11. **切断と再送**: スマホの Bluetooth を 30 分 OFF → 「未送信」が増える → ON に戻すと数分以内に全件送られ ACK される（`phone_reachable` または次のチャンク確定で再開）。
