@@ -209,7 +209,7 @@ class AndroidAppServices(
         }.await() ?: return false
         try {
             withContext(Dispatchers.IO) {
-                val stream = context.contentResolver.openOutputStream(uri, "wt") ?: throw FileNotFoundException("no stream for the chosen document")
+                val stream = context.contentResolver.openOutputStream(uri, "w") ?: throw FileNotFoundException("no stream for the chosen document")
                 stream.asSink().use { write(it) }
             }
         } catch (e: Throwable) {

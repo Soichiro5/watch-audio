@@ -84,12 +84,16 @@ class DataExporterTest {
         SystemFileSystem.delete(Path(audioDir, "2026/10/c0.m4a"))
     }
 
+    private val progress = mutableListOf<ExportProgress>()
+
     private suspend fun export(range: ExportRange, includeAudio: Boolean): Triple<ExportPlan, ExportSummary, Map<String, ByteArray>> {
         val plan = assertNotNull(exporter.plan(ExportRequest(range, includeAudio, tokyo, exportedAt)))
         val buffer = Buffer()
-        val progress = mutableListOf<ExportProgress>()
         val summary = exporter.write(plan, buffer) { progress += it }
-        assertEquals((1..plan.dayCount).map { ExportProgress(it, plan.dayCount) }, progress)
+        // Rising to the whole range; days without chunks are skipped.
+        assertEquals(progress.sortedBy { it.doneDays }, progress)
+        assertTrue(progress.all { it.totalDays == plan.dayCount })
+        assertEquals(plan.dayCount, progress.last().doneDays)
         return Triple(plan, summary, readStoredZip(buffer.readByteArray()))
     }
 
@@ -101,6 +105,7 @@ class DataExporterTest {
         assertEquals(oct9, plan.firstDay)
         assertEquals(oct12, plan.lastDay)
         assertEquals("watch-audio-2026-10-09_2026-10-12.zip", plan.fileName)
+        assertEquals(listOf(1, 2, 4), progress.map { it.doneDays }) // Oct 11 has nothing
         assertEquals(ExportSummary(days = 3, chunks = 6, segments = 5, marks = 2, audioFiles = 3, missingAudioFiles = 1), summary)
 
         val root = "watch-audio-2026-10-09_2026-10-12/"

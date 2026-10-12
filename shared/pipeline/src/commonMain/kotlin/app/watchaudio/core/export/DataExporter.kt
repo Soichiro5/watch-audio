@@ -63,7 +63,7 @@ data class ExportSummary(
     val missingAudioFiles: Int,
 )
 
-/** Progress of [DataExporter.write]: [doneDays] of [totalDays] calendar days written. */
+/** Progress of [DataExporter.write]: the first [doneDays] of [totalDays] calendar days are written. */
 data class ExportProgress(val doneDays: Int, val totalDays: Int)
 
 /**
@@ -109,7 +109,6 @@ class DataExporter(
         var missingAudio = 0
 
         var date = plan.firstDay
-        var done = 0
         while (date <= plan.lastDay) {
             currentCoroutineContext().ensureActive()
             val window = dayWindow(date, zone)
@@ -147,9 +146,10 @@ class DataExporter(
                     audioFiles = included.size,
                 )
             }
-            done++
-            onProgress(ExportProgress(done, plan.dayCount))
-            date = date.plus(1, DateTimeUnit.DAY)
+            onProgress(ExportProgress(plan.firstDay.daysUntil(date) + 1, plan.dayCount))
+            // Days without chunks are skipped in one step (a watch clock far off can stretch the range).
+            val next = store.read { firstChunkStartAtOrAfter(window.end) } ?: break
+            date = maxOf(date.plus(1, DateTimeUnit.DAY), localDateOf(next, zone))
         }
 
         val index = ExportIndex(
