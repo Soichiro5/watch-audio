@@ -57,7 +57,10 @@ interface StorageQueries {
      */
     fun deleteChunks(ids: List<String>): Int
 
-    /** Deletes every chunk, transcript and mark; settings are kept. @return number of chunks deleted. */
+    /**
+     * Deletes every chunk, transcript, mark and passage embedding; settings are kept.
+     * @return number of chunks deleted.
+     */
     fun deleteAllChunks(): Int
 
     /** Relative paths of all audio files that should exist (not purged). */
@@ -161,7 +164,16 @@ internal class StorageSql(private val db: SQLiteConnection) : StorageQueries {
 
     override fun deleteChunks(ids: List<String>): Int = ids.sumOf { id -> db.update("DELETE FROM audio_chunk WHERE uuid = ?", id) }
 
-    override fun deleteAllChunks(): Int = db.update("DELETE FROM audio_chunk")
+    override fun deleteAllChunks(): Int {
+        val deleted = db.update("DELETE FROM audio_chunk")
+        // Every passage is gone: the deletion log is not needed, and pruning it all tells the
+        // search's vector cache to start over (EmbeddingQueries.pruneDeletions).
+        db.execute(
+            "UPDATE embedding_state SET deletion_floor = MAX(deletion_floor, COALESCE((SELECT MAX(seq) FROM passage_deletion), 0))",
+        )
+        db.execute("DELETE FROM passage_deletion")
+        return deleted
+    }
 
     override fun audioPaths(): Set<String> = db.queryList(
         "SELECT audio_path FROM audio_chunk WHERE audio_path IS NOT NULL AND audio_purged_at IS NULL",

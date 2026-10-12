@@ -125,12 +125,16 @@ class IntegerRefsMigrationTest {
             assertEquals(listOf(ENGINE_B, ENGINE_A), db.texts("SELECT name FROM engine ORDER BY id"))
             assertEquals(emptyList(), db.texts("SELECT at FROM mark"), "marks of the deleted chunk")
             assertEquals(
-                listOf("idx_chunk_purgeable", "idx_chunk_started_at", "idx_chunk_state", "idx_segment_chunk", "idx_segment_start_at"),
+                listOf(
+                    "idx_chunk_purgeable", "idx_chunk_started_at", "idx_chunk_state", "idx_passage_chunk", "idx_passage_model",
+                    "idx_segment_chunk", "idx_segment_start_at",
+                ),
                 db.texts("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_%' ORDER BY name"),
             )
             assertEquals(
-                // segment_change_*: change tracking for diff backups (migration 8, #164).
-                listOf("segment_ad", "segment_ai", "segment_change_ad", "segment_change_ai"),
+                // segment_change_*: change tracking for diff backups (migration 8, #164);
+                // segment_passage_*: invalidating passage embeddings (migration 9, #24).
+                listOf("segment_ad", "segment_ai", "segment_change_ad", "segment_change_ai", "segment_passage_ad", "segment_passage_ai"),
                 db.texts("SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'transcript_segment' ORDER BY name"),
             )
             // The chunk key is an INTEGER PRIMARY KEY (a rowid alias), so VACUUM cannot renumber it.
