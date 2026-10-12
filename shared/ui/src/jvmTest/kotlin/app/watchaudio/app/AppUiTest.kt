@@ -258,6 +258,46 @@ class AppUiTest {
         screenshot("status-model-failed")
     }
 
+    /**
+     * #81: 「英語も文字起こしする」 is offered where the platform supports English, is stored and
+     * reported, and the English model's state (and the mobile-data download) shows below it.
+     */
+    @Test
+    fun englishSwitchShowsTheEnglishModel() = runDesktopComposeUiTest(width = 412, height = 915) {
+        runBlocking { store.updateSettings { it.copy(onboardingCompleted = true) } }
+        val services = FakeAppServices(store, audioRoot = audioDir.path, initialStatus = ProcessingStatus(asrModel = ModelState.Ready), supportsEnglish = true)
+        showApp(services)
+        waitForText(Strings.TAB_STATUS)
+        onNodeWithText(Strings.TAB_STATUS).performClick()
+        onNodeWithText(Strings.ENGLISH_SWITCH).performScrollTo().performClick()
+        waitUntil(timeoutMillis = 10_000) { services.transcriptionSettingsChanges == 1 }
+        assertEquals(true, runBlocking { store.loadSettings() }.transcribeEnglish)
+
+        services.mutableStatus.value = ProcessingStatus(asrModel = ModelState.Ready, englishModel = ModelState.Missing, englishModelWaitingForWifi = true)
+        waitForText(Strings.englishModelState(ModelState.Missing, waitingForWifi = true))
+        onNodeWithText(Strings.ENGLISH_DOWNLOAD_NOW).performScrollTo().performClick()
+        waitUntil(timeoutMillis = 10_000) { services.englishDownloadRequests == listOf(true) }
+
+        services.mutableStatus.value = ProcessingStatus(asrModel = ModelState.Ready, englishModel = ModelState.Downloading(0.3f))
+        waitForText(Strings.englishModelState(ModelState.Downloading(0.3f), waitingForWifi = false))
+        assertNoEnglish()
+        screenshot("status-english-downloading")
+
+        onNodeWithText(Strings.ENGLISH_SWITCH).performScrollTo().performClick()
+        waitUntil(timeoutMillis = 10_000) { services.transcriptionSettingsChanges == 2 }
+        assertEquals(false, runBlocking { store.loadSettings() }.transcribeEnglish)
+    }
+
+    @Test
+    fun englishSwitchIsHiddenWithoutEnglishSupport() = runDesktopComposeUiTest(width = 412, height = 915) {
+        runBlocking { store.updateSettings { it.copy(onboardingCompleted = true) } }
+        showApp(FakeAppServices(store, audioRoot = audioDir.path, initialStatus = ProcessingStatus(asrModel = ModelState.Ready)))
+        waitForText(Strings.TAB_STATUS)
+        onNodeWithText(Strings.TAB_STATUS).performClick()
+        waitForText(Strings.CHARGING_ONLY_SWITCH)
+        assertTrue(onAllNodes(hasText(Strings.ENGLISH_SWITCH)).fetchSemanticsNodes().isEmpty())
+    }
+
     /** #144: a failed chunk shows a fixed Japanese note, never the exception message stored in the DB. */
     @Test
     fun timelineFailureShowsNoExceptionMessage() = runDesktopComposeUiTest(width = 412, height = 915) {

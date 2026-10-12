@@ -346,6 +346,13 @@ class ViewModelTest {
         assertEquals(true, store.loadSettings().transcribeOnlyWhileCharging)
         assertEquals(1, services.transcriptionSettingsChanges)
         assertEquals(2, services.gapAlertSettingsChanges)
+
+        // #81: the English switch is stored and reported, so the platform fetches or removes its model.
+        vm.setTranscribeEnglish(true)
+        runCurrent()
+        assertEquals(true, vm.settings.value!!.transcribeEnglish)
+        assertEquals(true, store.loadSettings().transcribeEnglish)
+        assertEquals(2, services.transcriptionSettingsChanges)
     }
 
     @Test
