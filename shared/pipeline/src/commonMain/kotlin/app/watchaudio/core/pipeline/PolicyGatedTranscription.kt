@@ -91,6 +91,19 @@ class PolicyGatedTranscription(
         }
     }
 
+    /**
+     * The policy's decision for other background work right now (the embedding step of semantic
+     * search, #24), with the same device state, setting and hourly budget as transcription; the
+     * budget is not charged (that work is small next to transcription).
+     */
+    suspend fun decideOtherWork(chargingOnly: Boolean): ProcessingDecision {
+        val budget = store.read { batteryBudget() }
+        return policy.decide(conditions(), chargingOnly, budget, clock())
+    }
+
+    /** The clock the policy uses (epoch ms). */
+    fun now(): Long = clock()
+
     companion object {
         /** `app_setting` keys of the [BatteryBudget] (state, not a user preference). */
         const val KEY_BUDGET_WINDOW_START = "transcription.battery_budget.window_start"

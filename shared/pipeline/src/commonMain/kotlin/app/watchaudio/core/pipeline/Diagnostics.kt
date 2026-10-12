@@ -50,6 +50,12 @@ object DiagnosticEvents {
     const val TRANSCRIPTION_POLICY = "transcription_policy"
     const val RETENTION_PURGE = "retention_purge"
 
+    /** A run of the embedding step for semantic search (#24): counts and duration only. */
+    const val EMBEDDING_RUN = "embedding_run"
+
+    /** A chunk could not be embedded (#24): its id and the error type. */
+    const val EMBEDDING_FAILED = "embedding_failed"
+
     const val MODEL_DOWNLOAD_START = "model_download_start"
     const val MODEL_DOWNLOAD_PROGRESS = "model_download_progress"
     const val MODEL_DOWNLOAD_DONE = "model_download_done"
