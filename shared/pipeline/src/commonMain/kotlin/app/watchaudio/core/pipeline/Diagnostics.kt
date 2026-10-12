@@ -67,6 +67,12 @@ object DiagnosticEvents {
     /** The user exported their data (#155): counts only (days, chunks, audio files), never content. */
     const val DATA_EXPORTED = "data_exported"
     const val DATA_EXPORT_FAILED = "data_export_failed"
+
+    /** An encrypted backup (#40) was written / restored: counts only, never content or the passphrase. */
+    const val BACKUP_CREATED = "backup_created"
+    const val BACKUP_FAILED = "backup_failed"
+    const val BACKUP_RESTORED = "backup_restored"
+    const val BACKUP_RESTORE_FAILED = "backup_restore_failed"
 }
 
 /**

@@ -6,6 +6,12 @@ import app.watchaudio.core.protocol.AudioCodec
 /** A stored mark: the wearer tapped "Mark" at [at] (epoch ms) during chunk [chunkId]. */
 data class MarkRecord(val chunkId: String, val at: Long)
 
+/**
+ * What a backup (#40) keeps of a chunk beyond the export: when this phone received it and the
+ * manifest exactly as the watch sent it.
+ */
+data class ChunkBackupInfo(val receivedAt: Long, val manifestJson: String)
+
 /** How a chunk's audio was encoded, as the watch described it in the manifest. */
 data class AudioFileInfo(val codec: AudioCodec, val sha256: String)
 
@@ -26,6 +32,9 @@ interface ExportQueries {
 
     /** Codec and checksum of the audio of the chunks that started in `[from, to)`, by chunk UUID. */
     fun audioFilesOfChunksStartedBetween(from: Long, to: Long): Map<String, AudioFileInfo>
+
+    /** [ChunkBackupInfo] of the chunks that started in `[from, to)`, by chunk UUID. */
+    fun backupInfoOfChunksStartedBetween(from: Long, to: Long): Map<String, ChunkBackupInfo>
 }
 
 internal class ExportSql(private val db: SQLiteConnection) : ExportQueries {
@@ -56,4 +65,10 @@ internal class ExportSql(private val db: SQLiteConnection) : ExportQueries {
         from,
         to,
     ) { getText(0) to AudioFileInfo(AudioCodec.valueOf(getText(1)), getText(2)) }.toMap()
+
+    override fun backupInfoOfChunksStartedBetween(from: Long, to: Long): Map<String, ChunkBackupInfo> = db.queryList(
+        "SELECT uuid, received_at, manifest_json FROM audio_chunk WHERE started_at >= ? AND started_at < ?",
+        from,
+        to,
+    ) { getText(0) to ChunkBackupInfo(getLong(1), getText(2)) }.toMap()
 }

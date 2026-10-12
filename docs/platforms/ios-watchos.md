@@ -177,6 +177,10 @@ Android と同じ共通の `DiagnosticsLog`（`shared/pipeline`、形式・上�
 
 状態タブの「データの書き出し」→「書き出す」（ZIP の中身は共通コード、[phone-ui.md §1.9](phone-ui.md#19-データの書き出し155)）。`IosAppServices.saveExport()` が一時ディレクトリ（`tmp/data-export/`、前回分は削除）に ZIP を書き、`UIActivityViewController`（共有シート）を最前面の画面から表示する。保存先（「ファイルに保存」・AirDrop など）はユーザーが選ぶ。シートを閉じたら（保存・送信・キャンセルのどれでも）`completionWithItemsHandler` で一時ファイルを消す。書き込みに失敗したら一時ファイルを消す。Swift 側の変更はない。
 
+### 7.4 暗号化バックアップ（#40）
+
+状態タブの「暗号化バックアップ」（暗号化・復元の処理は共通コード、[phone-ui.md §1.10](phone-ui.md#110-暗号化バックアップ40)、形式は [02 §6.7](../architecture/02-architecture.md#67-暗号化バックアップ40)）。作成は §7.3 と同じ `saveExport()`（`tmp/data-export/` に暗号化済みのファイルを書いて共有シート、閉じたら削除）。復元は `IosAppServices.openBackup()` が `UIDocumentPickerViewController(forOpeningContentTypes: [UTTypeItem], asCopy: true)` を最前面の画面から表示し（delegate は UIKit が弱参照で持つので、選ぶまで `IosAppServices` が保持）、OS が `tmp/` に作ったコピーを 2 回（確認と追加）読み、終わったら（失敗でも）消す。暗号は CommonCrypto（`CCCryptorCreateWithMode` の CTR・`CCHmac`・`CCKeyDerivationPBKDF`）と Security（`SecRandomCopyBytes`）を Kotlin/Native から直接呼ぶ（`shared/platform` の `Crypto.ios.kt`）。CryptoKit（Swift のみ）は使わないので Swift 側の変更はない。標準の暗号化を OS の API で使っているため、App Store Connect の輸出コンプライアンスの申告が必要（[store-data-declarations.md](../legal/store-data-declarations.md)）。
+
 
 - iPhone: `Application Support/WatchAudio/`（`watch-audio.db`、`audio/yyyy/MM/dd/<chunkId>.m4a`、`inbox/`、`diagnostics/`（§7.2））。`LocalDataDirectory`（shared/ui/iosMain）がディレクトリに `NSURLIsExcludedFromBackupKey` を設定して iCloud / PC バックアップに含めず、ファイル保護クラス `CompleteUntilFirstUserAuthentication`（BGTask・ロック中の取り込みから読める）を明示する（#76）。
 - Watch: `Application Support/WatchAudio/`（録音中・送信待ちチャンク、診断ログ）。ACK 後に削除。`ChunkOutbox` が `LocalDataProtection`（apps/ios/SharedSwift）で同じくバックアップ除外と `completeUntilFirstUserAuthentication` を設定する（画面オフ・ロック中も録音・再送できる）。
@@ -235,6 +239,7 @@ iPhone アプリはマイクを使わない（録音は Watch だけ。再生は
 13. コンプリケーション（§14、#60）: 文字盤に「watch-audio / 録音状態」を追加 → 停止中は「停止中」、録音開始で「録音中」+ 経過時間、充電器に置くと「一時停止（充電中）」に変わる。停止中にタップ → アプリが開いて録音が始まる。通話などで中断した後にタップ → 1 タップで再開する。
 14. iPhone の状態タブ「診断ログを書き出す」→ 共有シートが開き、ファイルに保存した CSV に受信・文字起こし（RTF）・BGTask の開始/終了が残っている（本文は含まれない）。長時間の検証ではこのファイルを証拠に添える。
 15. 状態タブ「データの書き出し」（#155）→「期間を指定」で記録のある日を選び「音声ファイルを含める」→「書き出す」→ 共有シートの「ファイルに保存」で保存 → ファイル App で ZIP を開くと `markdown/`・`json/`・`audio/` があり、Markdown の文字起こしとマーク・録音できていない時間がタイムラインと一致し、音声が再生できる。シートを閉じた後、アプリの `tmp/data-export/` に ZIP が残っていない。
+16. 状態タブ「暗号化バックアップ」（#40）→ パスフレーズと確認を入れ「音声もバックアップする」→「バックアップを作成」→ 共有シートの「ファイルに保存」で保存。別の端末（Android を含む）の「バックアップから戻す」でそのファイルを選んで同じパスフレーズを入れると、タイムラインのチャンク・文字起こし・マーク・録音できていない時間が元の端末と一致し、音声が再生できる。違うパスフレーズでは「パスフレーズが違います」と出て何も増えない。Android で作ったバックアップをこの iPhone で戻す逆方向も確かめる。終わった後、アプリの `tmp/` にバックアップのコピーが残っていない。
 
 ## 12. 既知のリスク・制約
 

@@ -1,5 +1,10 @@
 package app.watchaudio.core.export
 
+import app.watchaudio.core.backup.BACKUP_INDEX_ENTRY
+import app.watchaudio.core.backup.BackupIndex
+import app.watchaudio.core.backup.backupDay
+import app.watchaudio.core.backup.backupDayEntry
+import app.watchaudio.core.backup.toJson
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.platform.IoDispatcher
 import app.watchaudio.core.timeline.dayWindow
@@ -38,6 +43,11 @@ data class ExportRequest(
     val timeZone: TimeZone,
     /** When the export is made (epoch ms): gaps end there. */
     val exportedAt: Long,
+    /**
+     * Write the plaintext of an encrypted backup (#40): also `backup/<date>.json` per day and
+     * `backup.json` (`core/backup/BackupFormat.kt`).
+     */
+    val forBackup: Boolean = false,
 )
 
 /** An export with something in it: the days from the first to the last chunk in the range. */
@@ -74,6 +84,8 @@ data class ExportProgress(val doneDays: Int, val totalDays: Int)
  * - `README.md`, `export.json` ([ExportIndex])
  * - `markdown/<date>.md` ([renderDayMarkdown]) and `json/<date>.json` ([ExportDay]) per day
  * - `audio/<date>/<HHmmss>_<chunk UUID>.<ext>` when [ExportRequest.includeAudio]
+ * - for [ExportRequest.forBackup], `backup/<date>.json` after each day's JSON and `backup.json`
+ *   after `export.json` (`core/backup/BackupFormat.kt`)
  *
  * Days are read one at a time and audio files are streamed, so memory does not grow with the
  * size of the export. The database is only locked while a day is read.
@@ -112,7 +124,7 @@ class DataExporter(
         while (date <= plan.lastDay) {
             currentCoroutineContext().ensureActive()
             val window = dayWindow(date, zone)
-            val records = store.read { readDayRecords(window) }
+            val records = store.read { readDayRecords(window, request.forBackup) }
             if (records.chunks.isNotEmpty()) {
                 val included = mutableMapOf<String, String>()
                 if (request.includeAudio) {
@@ -132,6 +144,10 @@ class DataExporter(
                 val markdown = "markdown/$date.md"
                 withContext(dispatcher) {
                     zip.addFile("$root/$json", day.toJson().encodeToByteArray())
+                    if (request.forBackup) {
+                        val extras = backupDay(date, day.chunks.map { it.id }, records.backupInfo)
+                        zip.addFile("$root/${backupDayEntry(date)}", extras.toJson().encodeToByteArray())
+                    }
                     zip.addFile("$root/$markdown", renderDayMarkdown(day).encodeToByteArray())
                 }
                 audioFiles += included.size
@@ -160,12 +176,7 @@ class DataExporter(
             includesAudio = request.includeAudio,
             days = days,
         )
-        withContext(dispatcher) {
-            zip.addFile("$root/export.json", index.toJson().encodeToByteArray())
-            zip.addFile("$root/README.md", MarkdownText.readme(request.includeAudio).encodeToByteArray())
-            zip.finish()
-        }
-        return ExportSummary(
+        val summary = ExportSummary(
             days = days.size,
             chunks = days.sumOf { it.chunks },
             segments = days.sumOf { it.segments },
@@ -173,5 +184,23 @@ class DataExporter(
             audioFiles = audioFiles,
             missingAudioFiles = missingAudio,
         )
+        withContext(dispatcher) {
+            zip.addFile("$root/export.json", index.toJson().encodeToByteArray())
+            if (request.forBackup) {
+                val backupIndex = BackupIndex(
+                    createdAt = request.exportedAt,
+                    includesAudio = request.includeAudio,
+                    days = summary.days,
+                    chunks = summary.chunks,
+                    segments = summary.segments,
+                    marks = summary.marks,
+                    audioFiles = summary.audioFiles,
+                )
+                zip.addFile("$root/$BACKUP_INDEX_ENTRY", backupIndex.toJson().encodeToByteArray())
+            }
+            zip.addFile("$root/README.md", MarkdownText.readme(request.includeAudio).encodeToByteArray())
+            zip.finish()
+        }
+        return summary
     }
 }

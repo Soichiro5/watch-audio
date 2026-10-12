@@ -70,11 +70,9 @@ class Ingestor(
     }
 
     private fun archive(manifest: ChunkManifest, source: Path, codec: AudioCodec): String {
-        val date = Instant.fromEpochMilliseconds(manifest.startedAtEpochMs).toLocalDateTime(TimeZone.UTC).date
-        val directory = "${date.year}/${date.month.number.pad2()}/${date.day.pad2()}"
-        val relative = "$directory/${manifest.chunkId}.${codec.fileExtension}"
+        val relative = archivePath(manifest.chunkId, manifest.startedAtEpochMs, codec.fileExtension)
         val target = Path(audioRoot, relative)
-        SystemFileSystem.createDirectories(Path(audioRoot, directory))
+        SystemFileSystem.createDirectories(target.parent!!)
         try {
             SystemFileSystem.atomicMove(source, target)
         } catch (e: kotlinx.io.IOException) {
@@ -87,10 +85,22 @@ class Ingestor(
         return relative
     }
 
-    private fun Int.pad2() = toString().padStart(2, '0')
-
     private fun deleteQuietly(path: Path) = runCatching { SystemFileSystem.delete(path, mustExist = false) }
 
     private fun ack(manifest: ChunkManifest, status: AckStatus, detail: String? = null) =
         ChunkAck(chunkId = manifest.chunkId, status = status, detail = detail)
+
+    companion object {
+        /**
+         * Path, relative to the audio root, of the audio of chunk [chunkId] that started at
+         * [startedAt]: `yyyy/MM/dd/<chunkId>.<extension>` (UTC date). A restored backup (#40) puts
+         * its audio at the same place.
+         */
+        fun archivePath(chunkId: String, startedAt: Long, extension: String): String {
+            val date = Instant.fromEpochMilliseconds(startedAt).toLocalDateTime(TimeZone.UTC).date
+            return "${date.year}/${date.month.number.pad2()}/${date.day.pad2()}/$chunkId.$extension"
+        }
+
+        private fun Int.pad2() = toString().padStart(2, '0')
+    }
 }

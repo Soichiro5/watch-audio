@@ -39,6 +39,7 @@ import app.watchaudio.app.logic.formatAgo
 import app.watchaudio.app.logic.formatClock
 import app.watchaudio.app.logic.formatHours
 import app.watchaudio.app.logic.formatMinuteOfDay
+import app.watchaudio.app.state.BackupUiState
 import app.watchaudio.app.state.DiagnosticsExport
 import app.watchaudio.app.state.ExportUiState
 import app.watchaudio.app.state.StatusUiState
@@ -66,6 +67,8 @@ internal fun StatusScreen(
     onExportDiagnostics: () -> Unit,
     export: ExportUiState,
     exportCallbacks: ExportCallbacks,
+    backup: BackupUiState,
+    backupCallbacks: BackupCallbacks,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -79,6 +82,7 @@ internal fun StatusScreen(
         state.stats?.let { StatsCard(it) }
         state.storage?.let { StorageCard(it, state.storageActions, storageCallbacks) }
         ExportCard(export, state.storage?.breakdown?.audioBytes, exportCallbacks)
+        BackupCard(backup, state.storage?.breakdown?.audioBytes, backupCallbacks)
         Section(Strings.PRIVACY_TITLE) {
             Text(Strings.PRIVACY_NOTE, style = MaterialTheme.typography.bodyMedium)
         }

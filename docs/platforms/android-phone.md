@@ -192,6 +192,10 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 
 状態タブの「データの書き出し」→「書き出す」（範囲の確認と ZIP の中身は共通コード、[phone-ui.md §1.9](phone-ui.md#19-データの書き出し155)）。`AndroidAppServices.saveExport()` が `MainActivity` の登録した `ActivityResultContracts.CreateDocument("application/zip")` で SAF の保存ダイアログを開き、ユーザーが作った文書の `ContentResolver.openOutputStream(uri, "w")`（新しく作った空の文書なので切り詰めの `"wt"` は使わない。対応しない保存先がある）に ZIP を直接書く（`kotlinx.io` の `asSink()`）。アプリの領域（`cache/` など）にはコピーを作らないので、音声を含めても端末の空きを二重に使わない。キャンセルなら何も書かない。書き込みに失敗・中断したら `DocumentsContract.deleteDocument` で作りかけの文書を消す。保存先（端末内・SD カード・ユーザーが入れたクラウドのアプリなど）はユーザーが選ぶもので、アプリ自身は通信しない。新しい権限・通信・SDK は追加していない（SAF は権限不要）。
 
+### 4.4 暗号化バックアップ（#40）
+
+状態タブの「暗号化バックアップ」（暗号化・復元の処理は共通コード、[phone-ui.md §1.10](phone-ui.md#110-暗号化バックアップ40)、形式は [02 §6.7](../architecture/02-architecture.md#67-暗号化バックアップ40)）。作成は §4.3 と同じ `saveExport()` で、`MainActivity` が MIME タイプごとに登録した `CreateDocument("application/octet-stream")` の保存ダイアログを開き、ユーザーが作った文書へ直接書く（失敗したら作りかけの文書を消す）。復元は `openBackup()` が `ActivityResultContracts.OpenDocument()`（種類は `*/*`。`.wabackup` に登録された MIME タイプはない）で選ばせ、選ばれた文書を `ContentResolver.openInputStream` で 2 回（確認と追加）直接読む。アプリの領域にコピーを作らない。暗号は `javax.crypto`（`AES/CTR/NoPadding`・`HmacSHA256`・`SecureRandom`）だけで、新しい依存・権限・通信はない。パスフレーズと鍵は保存せず、端末の外に出さない。
+
 
 - `android:allowBackup="false"`、`dataExtractionRules` でクラウドバックアップは全ドメイン除外（端末間移行 = device-transfer はローカル転送なので許可）。Android 11 以前向けに `fullBackupContent` でも全除外。
 - `INTERNET` 権限はモデルのダウンロードのためだけに使う。解析 SDK・広告 SDK・クラッシュ収集 SDK はなし（異常終了は §4.2 の診断ログに端末内で残す）。
@@ -273,5 +277,5 @@ Watch が無くても、ADB 経由の Wear OS エミュレータとスマホエ�
 - 録音の途絶アラートは WorkManager の精度に依存する（タイマーは Doze で遅れうる、定期チェックは最短 15 分）。厳密な時刻が必要なら `AlarmManager` を検討。実機での確認（Watch の録音を強制停止 → 10〜25 分以内に通知）が必要。
 - 通知権限の「拒否済み」は同じプロセス内で拒否された場合しか区別できない（再起動後は「未許可」と表示し、要求すると OS が即座に拒否を返して「拒否済み」になる）。
 - `AudioDecoder` は 1 チャンク分（5 分 ≈ 480 万サンプル ≈ 19 MB）をメモリに展開する。極端に長いチャンクが来る場合はストリーミング VAD に変える。
-- データの書き出し（§4.3、#155）の保存ダイアログ（SAF）から実際の文書に書く部分は、エミュレータの計装テストがまだない（ZIP の中身・画面・失敗時の扱いは共通コードのテストで確認済み）。実機で、保存した ZIP を開けること・キャンセルで何も残らないことを確かめる。
+- データの書き出し（§4.3、#155）と暗号化バックアップ（§4.4、#40）の保存・選択ダイアログ（SAF）から実際の文書を書く・読む部分は、エミュレータの計装テストがまだない（ZIP・暗号化の中身・画面・失敗時の扱いは共通コードのテストで確認済み。バックアップの書き出しと復元はエミュレータの `sqliteTest` でも確認）。実機で、保存した ZIP を開けること・キャンセルで何も残らないこと、作ったバックアップを別の端末（iPhone を含む）で戻せることを確かめる。
 - 48 kHz などからのダウンサンプルは低域通過フィルタなしの線形補間（Watch は 16 kHz で録音するので通常は通らない）。

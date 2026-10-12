@@ -193,6 +193,54 @@ object Strings {
     fun exportMissingAudio(count: Int) = "音声ファイルが見つからなかった ${count}件は、文字起こしだけを書き出しました"
     const val DATE_PICKER_CONFIRM = "決定"
 
+    // Encrypted backup (#40)
+    const val BACKUP_TITLE = "暗号化バックアップ"
+    const val BACKUP_NOTE =
+        "機種変更や故障に備えて、すべての記録をパスフレーズで暗号化した 1 つのファイルにします。保存先（PC・外部ストレージなど）は" +
+            "あなたが選びます。アプリが自動でクラウドなどへ送ることはありません。このファイルから別の端末（iPhone と Android の間も）へ戻せます。"
+    const val BACKUP_PASSPHRASE = "パスフレーズ"
+    const val BACKUP_PASSPHRASE_CONFIRM = "パスフレーズ（確認）"
+    const val BACKUP_PASSPHRASE_MISMATCH = "確認のパスフレーズが一致しません"
+    const val BACKUP_FORGOTTEN_WARNING =
+        "パスフレーズを忘れると、このバックアップは誰にも（開発者にも）戻せません。パスフレーズはどこにも保存されないので、" +
+            "紙やパスワード管理アプリなど別の場所に控えてください。"
+    const val PASSPHRASE_TOO_SHORT = "8文字以上にしてください"
+    const val PASSPHRASE_WEAK = "強さ: 弱い（長くするか、文字の種類を増やしてください）"
+    const val PASSPHRASE_FAIR = "強さ: ふつう"
+    const val PASSPHRASE_STRONG = "強さ: 強い"
+    const val BACKUP_INCLUDE_AUDIO = "音声もバックアップする"
+    fun backupIncludeAudioDetail(size: String) =
+        "端末にある音声は全部で $size です。含めないと、戻した端末では文字起こしだけになり、音声は再生できません。"
+    const val BACKUP_CREATE_BUTTON = "バックアップを作成"
+    const val BACKUP_CREATING = "暗号化して書き出し中…"
+    const val BACKUP_NOTHING = "バックアップする記録がありません"
+    /** No raw reason (#135); the diagnostics log has the error type. */
+    const val BACKUP_FAILED = "バックアップを作成できませんでした。保存先の空き容量を確認して、もう一度試してください。"
+    fun backedUp(days: Int, chunks: Int, audioFiles: Int) =
+        "${days}日分（チャンク ${chunks}件" + (if (audioFiles > 0) "、音声 ${audioFiles}件" else "") +
+            "）をバックアップしました。パスフレーズを忘れないようにしてください。"
+    fun backupMissingAudio(count: Int) = "音声ファイルが見つからなかった ${count}件は、文字起こしだけをバックアップしました"
+    const val RESTORE_TITLE = "バックアップから戻す"
+    const val RESTORE_NOTE =
+        "バックアップファイルを選び、作ったときのパスフレーズを入力します。この端末の記録は消えず、ない分だけが加わります" +
+            "（同じファイルを何度戻しても重複しません）。"
+    const val RESTORE_PASSPHRASE = "バックアップのパスフレーズ"
+    const val RESTORE_BUTTON = "ファイルを選んで戻す"
+    const val RESTORE_VERIFYING = "パスフレーズとファイル全体を確認中…（この間は何も変更しません）"
+    fun restoring(doneDays: Int, totalDays: Int) = "戻しています…（$doneDays / ${totalDays}日）"
+    fun restored(added: Int, segments: Int, audioFiles: Int, alreadyPresent: Int) =
+        "チャンク ${added}件を戻しました（発話 ${segments}件" + (if (audioFiles > 0) "、音声 ${audioFiles}件" else "") + "）。" +
+            (if (alreadyPresent > 0) "すでにこの端末にあった ${alreadyPresent}件はそのままです。" else "")
+    const val RESTORE_WRONG_PASSPHRASE = "パスフレーズが違います（またはファイルが壊れています）。何も変更していません。"
+    const val RESTORE_CORRUPTED = "ファイルが壊れているか、途中までしかありません。何も変更していません。"
+    const val RESTORE_NOT_A_BACKUP = "このアプリのバックアップファイルではありません。何も変更していません。"
+    const val RESTORE_UNSUPPORTED = "新しいバージョンのアプリで作られたバックアップです。アプリを更新してから戻してください。何も変更していません。"
+    /** Before anything was written (e.g. the file could not be read). */
+    const val RESTORE_FAILED = "戻せませんでした。もう一度試してください。何も変更していません。"
+    /** After some days were added (e.g. the storage is full): restoring again adds the rest. */
+    const val RESTORE_FAILED_PARTWAY =
+        "途中で戻せなくなりました。端末の空き容量を確認して、同じファイルでもう一度戻してください（戻した分は重複せず、残りが加わります）。"
+
     // Status screen: alert settings (#43)
     const val ALERTS_TITLE = "通知"
     const val GAP_ALERT_SWITCH = "録音が届かないときに通知"

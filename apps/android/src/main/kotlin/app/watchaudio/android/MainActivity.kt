@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import app.watchaudio.app.App
+import app.watchaudio.app.BACKUP_MIME_TYPE
 
 class MainActivity : ComponentActivity() {
     private val services: AndroidAppServices get() = (application as WatchAudioApp).services
@@ -20,18 +21,32 @@ class MainActivity : ComponentActivity() {
             services.onExportDestination(uri)
         }
 
+    /** The save dialog of an encrypted backup (#40). */
+    private val backupSaveLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument(BACKUP_MIME_TYPE)) { uri ->
+            services.onExportDestination(uri)
+        }
+
+    /** The file picker for restoring a backup (#40): the user picks the document it is read from. */
+    private val backupOpenLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> services.onBackupPicked(uri) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val services = services
         services.attachPermissionLauncher(permissionLauncher)
-        services.attachExportLauncher(exportLauncher)
+        services.attachSaveLauncher(AndroidAppServices.EXPORT_MIME_TYPE, exportLauncher)
+        services.attachSaveLauncher(BACKUP_MIME_TYPE, backupSaveLauncher)
+        services.attachOpenBackupLauncher(backupOpenLauncher)
         setContent { App(services) }
     }
 
     override fun onDestroy() {
         services.detachPermissionLauncher(permissionLauncher)
-        services.detachExportLauncher(exportLauncher)
+        services.detachSaveLauncher(AndroidAppServices.EXPORT_MIME_TYPE, exportLauncher)
+        services.detachSaveLauncher(BACKUP_MIME_TYPE, backupSaveLauncher)
+        services.detachOpenBackupLauncher(backupOpenLauncher)
         super.onDestroy()
     }
 }
