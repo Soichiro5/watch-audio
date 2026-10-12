@@ -66,25 +66,32 @@ struct RecorderDecision: Equatable, Sendable {
 /// `RecorderController` feeds it device readings and recorder events and applies the result.
 /// Counterpart of the Wear OS `RecorderPolicy`.
 enum RecorderPolicy {
-    /// Stop below this battery level so the last chunk can still be finalized.
-    static let lowBatteryLevel: Float = 0.10
-    /// Start or resume only at or above this level, so a reading that hovers around
-    /// [lowBatteryLevel] does not create a stream of tiny chunks.
-    static let resumeBatteryLevel: Float = 0.15
+    /// Stop below this battery percentage so the last chunk can still be finalized and sent.
+    /// Shared with Wear OS through `RecorderRules` (#137).
+    static let lowBatteryPercent = RecorderRules.current.lowBatteryStopPercent
+    /// Start or resume only at or above this percentage, so a reading that hovers around
+    /// [lowBatteryPercent] does not create a stream of tiny chunks.
+    static let resumeBatteryPercent = RecorderRules.current.lowBatteryResumePercent
     static let minFreeBytes: Int64 = 100 * 1024 * 1024
-    /// dBFS. A metering sample counts as "sound" if the average or the peak power exceeds these.
-    static let silenceAverageThresholdDb: Float = -50
-    static let silencePeakThresholdDb: Float = -35
+    /// dBFS. A metering sample counts as "sound" if its peak power is at or above this, the same
+    /// rule as the Wear OS `SilenceDetector` (#137).
+    static let silencePeakThresholdDb = Float(RecorderRules.current.silencePeakDbfs)
     /// Only drop a chunk's audio as silent if metering covered at least this share of it.
-    static let minMeterCoverage = 0.8
+    static let minMeterCoverage = Double(RecorderRules.current.silenceMinCoveragePercent) / 100
     /// Ticks in a row in which the recorder unexpectedly was not recording before it counts as stalled.
     static let stalledTicksBeforeRestart = 5
     static let maxAutoRestarts = 3
 
+    /// Battery level (0...1) as a whole percentage, as shown to the wearer and compared with the
+    /// thresholds (Wear OS reports whole percentages too).
+    static func batteryPercent(_ level: Float) -> Int {
+        Int((level * 100).rounded())
+    }
+
     /// Why recording cannot start (or resume) right now, if anything.
     static func startBlocker(_ device: DeviceConditions) -> ChunkEndReason? {
         if device.charging { return .charging }
-        if let level = device.batteryLevel, level < resumeBatteryLevel { return .lowBattery }
+        if let level = device.batteryLevel, batteryPercent(level) < resumeBatteryPercent { return .lowBattery }
         if let free = device.freeBytes, free < minFreeBytes { return .lowStorage }
         return nil
     }
@@ -92,7 +99,7 @@ enum RecorderPolicy {
     /// Checked periodically while recording: the reason to stop now, if any.
     static func stopReason(_ device: DeviceConditions) -> ChunkEndReason? {
         if device.charging { return .charging }
-        if let level = device.batteryLevel, level < lowBatteryLevel { return .lowBattery }
+        if let level = device.batteryLevel, batteryPercent(level) < lowBatteryPercent { return .lowBattery }
         if let free = device.freeBytes, free < minFreeBytes { return .lowStorage }
         return nil
     }
@@ -141,9 +148,9 @@ enum RecorderPolicy {
         }
     }
 
-    /// One metering sample: whether it is above the silence thresholds.
-    static func isSound(averagePowerDb: Float, peakPowerDb: Float) -> Bool {
-        averagePowerDb > silenceAverageThresholdDb || peakPowerDb > silencePeakThresholdDb
+    /// One metering sample: whether its peak power (dBFS) reaches the silence threshold.
+    static func isSound(peakPowerDb: Float) -> Bool {
+        peakPowerDb >= silencePeakThresholdDb
     }
 
     /// A chunk is sent without audio only if no sample was sound and metering covered enough of
@@ -151,5 +158,13 @@ enum RecorderPolicy {
     static func isSilent(heardSound: Bool, meterSamples: Int, durationMs: Int64, tickSeconds: Double) -> Bool {
         let expectedSamples = Double(durationMs) / 1000 / tickSeconds
         return !heardSound && Double(meterSamples) >= expectedSamples * minMeterCoverage
+    }
+
+    /// Offset of a mark tapped at [date] in the chunk that started at [chunkStartedAt] (never
+    /// negative). A mark is only recorded in the current chunk's `markOffsetsMs`; the chunk keeps
+    /// recording and closes at its regular rotation, as on Wear OS (#137). No decision closes a
+    /// chunk with `ChunkEndReason.mark` any more.
+    static func markOffsetMs(at date: Date, chunkStartedAt: Date) -> Int64 {
+        max(0, Int64(date.timeIntervalSince(chunkStartedAt) * 1000))
     }
 }

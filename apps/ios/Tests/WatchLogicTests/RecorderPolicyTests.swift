@@ -30,8 +30,11 @@ final class RecorderPolicyTests: XCTestCase {
         XCTAssertEqual(RecorderPolicy.startBlocker(device), .charging)
     }
 
-    func testLowBatteryPausesAndAlerts() {
+    func testLowBatteryPausesBelowTenPercentAndAlerts() {
         var device = healthy
+        // At the stop threshold itself recording continues; it stops only below it (as on Wear OS).
+        device.batteryLevel = 0.10
+        XCTAssertEqual(decide(.statusCheck(device), .recording), .noAction)
         device.batteryLevel = 0.09
         XCTAssertEqual(
             decide(.statusCheck(device), .recording),
@@ -46,9 +49,28 @@ final class RecorderPolicyTests: XCTestCase {
         XCTAssertEqual(decide(.statusCheck(device), .recording), .noAction)
         XCTAssertEqual(RecorderPolicy.startBlocker(device), .lowBattery)
         XCTAssertEqual(decide(.retryCheck(device), .paused(.lowBattery)), .noAction)
+        device.batteryLevel = 0.14
+        XCTAssertEqual(RecorderPolicy.startBlocker(device), .lowBattery)
         device.batteryLevel = 0.15
         XCTAssertNil(RecorderPolicy.startBlocker(device))
         XCTAssertEqual(decide(.retryCheck(device), .paused(.lowBattery)), RecorderDecision(resume: true))
+    }
+
+    /// Same values as the Wear OS `RecorderPolicy` (shared/protocol RecorderRules, #137).
+    func testThresholdsAreTheSharedRecorderRules() {
+        XCTAssertEqual(RecorderPolicy.lowBatteryPercent, 10)
+        XCTAssertEqual(RecorderPolicy.resumeBatteryPercent, 15)
+        XCTAssertEqual(RecorderPolicy.lowBatteryPercent, RecorderRules.current.lowBatteryStopPercent)
+        XCTAssertEqual(RecorderPolicy.resumeBatteryPercent, RecorderRules.current.lowBatteryResumePercent)
+        XCTAssertEqual(RecorderPolicy.silencePeakThresholdDb, -40)
+        XCTAssertEqual(RecorderPolicy.minMeterCoverage, 0.8, accuracy: 1e-9)
+    }
+
+    func testBatteryLevelIsComparedAsWholePercent() {
+        XCTAssertEqual(RecorderPolicy.batteryPercent(0.096), 10, "rounds like the percentage shown on the watch")
+        XCTAssertEqual(RecorderPolicy.batteryPercent(0.094), 9)
+        XCTAssertEqual(RecorderPolicy.batteryPercent(1), 100)
+        XCTAssertEqual(RecorderPolicy.batteryPercent(0), 0)
     }
 
     func testUnknownBatteryLevelIsNotLow() {
@@ -135,15 +157,63 @@ final class RecorderPolicyTests: XCTestCase {
     }
 
     func testSilenceDetection() {
-        XCTAssertFalse(RecorderPolicy.isSound(averagePowerDb: -60, peakPowerDb: -40))
-        XCTAssertTrue(RecorderPolicy.isSound(averagePowerDb: -45, peakPowerDb: -60), "average above -50 dBFS")
-        XCTAssertTrue(RecorderPolicy.isSound(averagePowerDb: -70, peakPowerDb: -30), "peak above -35 dBFS")
+        // One rule on both watches (#137): a sample is sound when its peak reaches -40 dBFS.
+        XCTAssertTrue(RecorderPolicy.isSound(peakPowerDb: -40), "the threshold itself is sound")
+        XCTAssertTrue(RecorderPolicy.isSound(peakPowerDb: -20))
+        XCTAssertFalse(RecorderPolicy.isSound(peakPowerDb: -40.5))
+        XCTAssertFalse(RecorderPolicy.isSound(peakPowerDb: -160), "metering floor")
 
         // 5 minutes at one sample per second: 240 samples (80 %) are enough to call it silent.
         XCTAssertTrue(RecorderPolicy.isSilent(heardSound: false, meterSamples: 240, durationMs: 300_000, tickSeconds: 1))
         XCTAssertFalse(RecorderPolicy.isSilent(heardSound: false, meterSamples: 200, durationMs: 300_000, tickSeconds: 1),
                        "metering gaps must not make speech disappear")
         XCTAssertFalse(RecorderPolicy.isSilent(heardSound: true, meterSamples: 300, durationMs: 300_000, tickSeconds: 1))
+    }
+
+    func testMarkOffsetIsMeasuredFromTheChunkStart() {
+        let start = Date(timeIntervalSince1970: 1_791_622_800)
+        XCTAssertEqual(RecorderPolicy.markOffsetMs(at: start.addingTimeInterval(12.5), chunkStartedAt: start), 12_500)
+        XCTAssertEqual(RecorderPolicy.markOffsetMs(at: start.addingTimeInterval(-1), chunkStartedAt: start), 0, "never negative")
+    }
+
+    /// A mark no longer closes the chunk (#137, as on Wear OS): no event ends a chunk with
+    /// `.mark`; marks travel as `markOffsetsMs` of the chunk that was recording.
+    func testNoDecisionClosesAChunkForAMark() throws {
+        var lowBattery = healthy
+        lowBattery.batteryLevel = 0.05
+        let events: [RecorderEvent] = [
+            .userStop, .statusCheck(healthy), .statusCheck(lowBattery), .retryCheck(healthy),
+            .interruptionBegan, .interruptionEnded, .recorderStalled(restartsSoFar: 0),
+            .recorderStalled(restartsSoFar: RecorderPolicy.maxAutoRestarts),
+            .rotationFailed(lowStorage: true), .rotationFailed(lowStorage: false),
+        ]
+        let phases: [RecorderPhase] = [.idle, .recording] + ChunkEndReason.allCases.map { RecorderPhase.paused($0) }
+        for event in events {
+            for phase in phases {
+                XCTAssertNotEqual(decide(event, phase).stopReason, ChunkEndReason.mark, "\(event) in \(phase)")
+            }
+        }
+
+        // Marks tapped during a chunk end up in its manifest, which closes as a regular rotation.
+        let root = FileManager.default.temporaryDirectory.appending(path: "marks-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let outbox = ChunkOutbox(root: root)
+        let start = Date(timeIntervalSince1970: 1_791_622_800)
+        var chunk = InProgressChunk(
+            chunkId: "marked",
+            sessionId: "session",
+            startedAtEpochMs: Int64(start.timeIntervalSince1970 * 1000),
+            timeZone: "Asia/Tokyo",
+            markOffsetsMs: []
+        )
+        for seconds in [12.0, 240.5] {
+            chunk.markOffsetsMs.append(RecorderPolicy.markOffsetMs(at: start.addingTimeInterval(seconds), chunkStartedAt: start))
+            outbox.saveInProgress(chunk)
+        }
+        try Data([1, 2, 3, 4]).write(to: outbox.recordingAudioURL(chunk.chunkId))
+        let item = try outbox.commit(chunk, deviceId: "watch", durationMs: 300_000, endReason: .rotation, keepAudio: true)
+        XCTAssertEqual(item.manifest.markOffsetsMs, [12_000, 240_500])
+        XCTAssertEqual(item.manifest.endReason, .rotation)
     }
 
     private struct StopCase {
