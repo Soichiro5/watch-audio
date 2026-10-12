@@ -38,7 +38,13 @@ class ModelDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
             Log.i(TAG, "running without foreground service", e)
         }
         return try {
-            if (english) models.performEnglishDownload() else models.performDownload()
+            if (english) {
+                models.performEnglishDownload()
+                // Turned off while downloading: do not leave the model behind.
+                if (!graph.store.loadSettings().transcribeEnglish) models.deleteEnglishModel()
+            } else {
+                models.performDownload()
+            }
             Result.success()
         } catch (e: CancellationException) {
             throw e

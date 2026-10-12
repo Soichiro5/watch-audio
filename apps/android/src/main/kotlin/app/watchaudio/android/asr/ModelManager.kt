@@ -21,8 +21,8 @@ import java.nio.file.StandardCopyOption
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
@@ -132,14 +132,18 @@ class ModelManager(
             }
         } else {
             workManager.cancelUniqueWork(ENGLISH_WORK_NAME)
-            val existed = englishFiles.asrFiles.any { it.exists() }
-            englishFiles.asrDir.deleteRecursively()
-            ModelManifest.englishFiles.forEach { partFile(it).delete() }
-            if (existed) diagnostics.log(DiagnosticEvents.MODEL_READY, "model=en ready=false")
-            _englishState.value = ModelState.Missing
+            deleteEnglishModel()
         }
     }
 
+    /** Deletes the English model and its partial files (the setting was turned off). */
+    internal suspend fun deleteEnglishModel() = withContext(Dispatchers.IO) {
+        val existed = englishFiles.asrFiles.any { it.exists() }
+        englishFiles.asrDir.deleteRecursively()
+        ModelManifest.englishFiles.forEach { partFile(it).delete() }
+        if (existed) diagnostics.log(DiagnosticEvents.MODEL_READY, "model=en ready=false")
+        _englishState.value = ModelState.Missing
+    }
 
     /**
      * Downloads missing models. Without [allowMetered] the download waits for an unmetered
