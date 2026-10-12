@@ -12,7 +12,7 @@ import kotlinx.serialization.json.Json
 // ([ExportDay]) per day. They are meant to be read back (the encrypted backup, #40, reuses them),
 // so the format is versioned and only grows: a reader ignores unknown keys, and a change that an
 // older reader would misread raises [EXPORT_FORMAT_VERSION]. Times are epoch ms; chunks are
-// known by the watch's UUID (database keys never leave the device). Spec: docs/architecture/02 §6.5.
+// known by the watch's UUID (database keys never leave the device). Spec: docs/architecture/02 §6.6.
 
 /** Value of `format` in every export JSON file. */
 const val EXPORT_FORMAT = "watch-audio-export"

@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 
 /**
  * The export of a fixed day (#155), compared in full: what a user (Markdown) and a re-import
- * (JSON) get. A change here changes the export format: update docs/architecture/02 §6.5 and, for
+ * (JSON) get. A change here changes the export format: update docs/architecture/02 §6.6 and, for
  * the JSON, consider [EXPORT_FORMAT_VERSION].
  */
 class ExportGoldenTest {
