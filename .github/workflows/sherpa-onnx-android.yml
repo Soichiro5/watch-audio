@@ -77,7 +77,7 @@ jobs:
             echo '```'
             grep -rlE 'SHERPA_ONNX_ENABLE_(TTS|SPEAKER_DIARIZATION)' upstream/sherpa-onnx --include='*.cc' --include='*.h' | sed 's|^upstream/||' | sort
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Compare with the pinned SHA-256
         run: |

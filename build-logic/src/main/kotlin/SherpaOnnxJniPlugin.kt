@@ -38,7 +38,8 @@ class SherpaOnnxJniPlugin : Plugin<Project> {
                     "${pins.version}: rebuild it for $aarVersion (docs/dev/04-dev-environment.md §7.3)",
             )
         }
-        val localDir = providers.gradleProperty(LOCAL_DIR_PROPERTY).map { rootProject.file(it).absolutePath }
+        val rootDir = rootProject.projectDir
+        val localDir = providers.gradleProperty(LOCAL_DIR_PROPERTY).map { rootDir.resolve(it).absolutePath }
         val cacheDir = File(gradle.gradleUserHomeDir, "caches/watchaudio/sherpa-onnx-jni")
 
         pluginManager.withPlugin("com.android.application") {
