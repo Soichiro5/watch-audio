@@ -11,10 +11,10 @@ protocol ChunkAudioInput: AnyObject {
     func record() -> Bool
     /// Stops and finalizes the chunk file.
     func stop()
-    /// Refreshes the levels returned by `averagePower` / `peakPower` (called once per tick).
+    /// Refreshes the level returned by `peakPower` (called once per tick).
     func updateMeters()
-    /// dBFS since the previous `updateMeters()`, like `AVAudioRecorder`.
-    func averagePower(forChannel channelNumber: Int) -> Float
+    /// Peak level in dBFS (-160...0) as of the last `updateMeters()`, like `AVAudioRecorder`.
+    /// The silence rule (`RecorderPolicy.isSound`, #137) uses the peak only.
     func peakPower(forChannel channelNumber: Int) -> Float
 }
 
@@ -32,6 +32,5 @@ final class MicrophoneChunkInput: ChunkAudioInput {
     func record() -> Bool { recorder.record() }
     func stop() { recorder.stop() }
     func updateMeters() { recorder.updateMeters() }
-    func averagePower(forChannel channelNumber: Int) -> Float { recorder.averagePower(forChannel: channelNumber) }
     func peakPower(forChannel channelNumber: Int) -> Float { recorder.peakPower(forChannel: channelNumber) }
 }

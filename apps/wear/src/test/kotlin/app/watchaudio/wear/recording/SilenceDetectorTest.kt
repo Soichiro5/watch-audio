@@ -1,5 +1,8 @@
 package app.watchaudio.wear.recording
 
+import app.watchaudio.core.protocol.RecorderRules
+import kotlin.math.log10
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.Test
@@ -19,6 +22,20 @@ class SilenceDetectorTest {
     fun `a single loud poll keeps the audio`() {
         val amplitudes = IntArray(300) { 120 }.also { it[150] = SilenceDetector.SILENCE_PEAK_THRESHOLD }
         assertFalse(detector(*amplitudes).isSilent(fiveMinutes))
+    }
+
+    @Test
+    fun `threshold is a peak of -40 dBFS like on watchOS`() {
+        // Shared rule (shared/protocol RecorderRules, #137): sound from -40 dBFS peak upwards.
+        assertEquals(328, SilenceDetector.SILENCE_PEAK_THRESHOLD)
+        assertEquals(SilenceDetector.amplitudeAt(RecorderRules.CURRENT.silencePeakDbfs), SilenceDetector.SILENCE_PEAK_THRESHOLD)
+        val dbfs = 20 * log10(SilenceDetector.SILENCE_PEAK_THRESHOLD / 32_767.0)
+        assertTrue(dbfs >= -40.0 && dbfs < -39.97, "$dbfs")
+        assertTrue(20 * log10((SilenceDetector.SILENCE_PEAK_THRESHOLD - 1) / 32_767.0) < -40.0)
+        assertEquals(0.8, SilenceDetector.MIN_COVERAGE)
+
+        val justBelow = IntArray(300) { SilenceDetector.SILENCE_PEAK_THRESHOLD - 1 }
+        assertTrue(detector(*justBelow).isSilent(fiveMinutes))
     }
 
     @Test

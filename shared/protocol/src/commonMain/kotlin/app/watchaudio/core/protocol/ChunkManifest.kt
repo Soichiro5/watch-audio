@@ -108,7 +108,11 @@ enum class AudioCodec(val fileExtension: String) {
 enum class ChunkEndReason(val startsGap: Boolean) {
     /** Regular rotation; the next chunk continues seamlessly. */
     @SerialName("rotation") ROTATION(startsGap = false),
-    /** The wearer tapped Mark; recording continues in a new chunk. */
+    /**
+     * The wearer tapped Mark and the chunk was closed there. No longer emitted (#137): both
+     * watches record a mark as an offset in [ChunkManifest.markOffsetsMs] without closing the
+     * chunk. Kept for chunks from older watchOS builds; continues seamlessly like [ROTATION].
+     */
     @SerialName("mark") MARK(startsGap = false),
     /** The wearer tapped Stop. */
     @SerialName("user_stop") USER_STOP(startsGap = true),

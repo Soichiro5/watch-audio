@@ -55,11 +55,20 @@ internal object TestVectors {
 }
 """
 
+    const val RECORDER_RULES: String = """{
+  "lowBatteryStopPercent": 10,
+  "lowBatteryResumePercent": 15,
+  "silencePeakDbfs": -40,
+  "silenceMinCoveragePercent": 80
+}
+"""
+
     /** Every constant above by its file name in testdata/ (checked against the files in jvmTest). */
     val FILES: Map<String, String> = mapOf(
         "manifest-v1.json" to MANIFEST_V1,
         "manifest-v1-silent.json" to MANIFEST_V1_SILENT,
         "ack-v1.json" to ACK_V1,
         "recording-format.json" to RECORDING_FORMAT,
+        "recorder-rules.json" to RECORDER_RULES,
     )
 }

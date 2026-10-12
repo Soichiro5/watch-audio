@@ -13,7 +13,7 @@ object TestAudio {
     fun tone(sampleIndex: Long, sampleRate: Int, amplitude: Int = 8_000): Short =
         (amplitude * sin(2 * PI * 440 * sampleIndex / sampleRate)).roundToInt().toShort()
 
-    /** A quiet room: deterministic noise with a peak of 100 (below the threshold of 300). */
+    /** A quiet room: deterministic noise with a peak of 100 (about -50 dBFS, below the -40 dBFS threshold). */
     fun quiet(sampleIndex: Long): Short = (((sampleIndex * 7_919) % 201) - 100).toShort()
 
     /** Writes [frames] frames of [channels]-channel audio produced by [sample] (frame, channel). */

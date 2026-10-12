@@ -1,5 +1,9 @@
 package app.watchaudio.wear.recording
 
+import app.watchaudio.core.protocol.RecorderRules
+import kotlin.math.ceil
+import kotlin.math.pow
+
 /**
  * Decides whether a whole chunk was confidently silent from periodic
  * `MediaRecorder.getMaxAmplitude()` polls (the peak absolute sample, 0..32767, since the
@@ -35,21 +39,28 @@ class SilenceDetector(
     }
 
     companion object {
+        /** Full scale of `MediaRecorder.getMaxAmplitude()` (16-bit PCM). */
+        const val FULL_SCALE_AMPLITUDE = 32_767
+
         /**
-         * Peak amplitude below which a poll counts as silence: 300/32767 ≈ -40 dBFS peak. Normal
-         * speech near the watch peaks far above this (typically > -20 dBFS) and even distant
-         * speech in a quiet room stays above it, while a quiet bedroom's noise floor sits below.
-         * Deliberately low: dropping a chunk loses its audio forever, keeping one costs ~0.9 MB.
-         * Tune on real devices (docs/platforms/wearos.md).
+         * Peak amplitude at or above which a poll counts as sound: the shared
+         * [RecorderRules.silencePeakDbfs] (-40 dBFS → 328/32767), the same rule as the watchOS
+         * recorder (#137). Normal speech near the watch peaks far above this (typically > -20
+         * dBFS) and even distant speech in a quiet room stays above it, while a quiet bedroom's
+         * noise floor sits below. Deliberately low: dropping a chunk loses its audio forever,
+         * keeping one costs ~0.9 MB. Tune on real devices (docs/platforms/wearos.md).
          */
-        const val SILENCE_PEAK_THRESHOLD = 300
+        val SILENCE_PEAK_THRESHOLD: Int = amplitudeAt(RecorderRules.CURRENT.silencePeakDbfs)
 
         const val POLL_INTERVAL_MS = 1_000L
 
         /** Fraction of the expected polls that must have happened to trust the decision. */
-        const val MIN_COVERAGE = 0.8
+        val MIN_COVERAGE: Double = RecorderRules.CURRENT.silenceMinCoveragePercent / 100.0
 
         /** Very short chunks (stopped right after start) are never declared silent. */
         const val MIN_SAMPLES = 10
+
+        /** Smallest amplitude whose level is at least [dbfs] relative to [FULL_SCALE_AMPLITUDE]. */
+        fun amplitudeAt(dbfs: Int): Int = ceil(FULL_SCALE_AMPLITUDE * 10.0.pow(dbfs / 20.0)).toInt()
     }
 }

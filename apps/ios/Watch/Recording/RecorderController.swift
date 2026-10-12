@@ -30,8 +30,10 @@ private final class ActiveChunk {
 ///   instead of losing audio.
 /// - Every chunk gets a ChunkManifest (UUID, start, duration, marks, SHA-256, end reason) and
 ///   goes into a persistent outbox until the iPhone sends a final ACK.
-/// - Silent chunks: audio levels are sampled every second via metering; a chunk in which no
-///   sample exceeded the threshold (and enough samples were taken) is sent as a manifest only.
+/// - Silent chunks: the peak level is sampled every second via metering; a chunk in which no
+///   sample reached the shared threshold (`RecorderRules`, -40 dBFS) and enough samples were
+///   taken is sent as a manifest only.
+/// - Marks are recorded as offsets in the current chunk, which is not closed (#137).
 /// - Stops with a reason on charging, low battery, low storage and interruptions, and resumes
 ///   automatically when possible (see `appBecameActive` / `tick`). The decisions themselves are
 ///   in `RecorderPolicy` (unit tested); this class applies them.
@@ -132,16 +134,16 @@ final class RecorderController {
         apply(.userStop)
     }
 
+    /// Records a mark in the current chunk (saved right away, so it survives a crash). The chunk
+    /// keeps recording and reaches the phone at its regular rotation or stop, as on Wear OS (#137).
     func mark() {
         guard phase == .recording, let active else { return }
-        let offset = Int64(Date.now.timeIntervalSince(active.startedAt) * 1000)
-        active.info.markOffsetsMs.append(max(0, offset))
+        let offset = RecorderPolicy.markOffsetMs(at: .now, chunkStartedAt: active.startedAt)
+        active.info.markOffsetsMs.append(offset)
         outbox.saveInProgress(active.info)
         marks += 1
         WKInterfaceDevice.current().play(.click)
-        record("mark")
-        // Close the chunk so the marked moment reaches the phone promptly.
-        rotate(reason: .mark)
+        record("mark", "+\(offset)ms")
     }
 
     /// The app came to the foreground: resend what is pending and resume if the wearer wants to
@@ -361,10 +363,7 @@ final class RecorderController {
         chunk.stalledTicks = 0
         recorder.updateMeters()
         chunk.meterSamples += 1
-        if RecorderPolicy.isSound(
-            averagePowerDb: recorder.averagePower(forChannel: 0),
-            peakPowerDb: recorder.peakPower(forChannel: 0)
-        ) {
+        if RecorderPolicy.isSound(peakPowerDb: recorder.peakPower(forChannel: 0)) {
             chunk.heardSound = true
         }
     }
@@ -483,7 +482,7 @@ final class RecorderController {
 
     private func refreshBattery() {
         let level = WKInterfaceDevice.current().batteryLevel
-        batteryPercent = level >= 0 ? Int((level * 100).rounded()) : nil
+        batteryPercent = level >= 0 ? RecorderPolicy.batteryPercent(level) : nil
     }
 
     private func refreshPending() {
@@ -541,7 +540,7 @@ final class RecorderController {
         log.append(
             event: event,
             detail: detail,
-            batteryPercent: level >= 0 ? Int((level * 100).rounded()) : nil,
+            batteryPercent: level >= 0 ? RecorderPolicy.batteryPercent(level) : nil,
             charging: isCharging
         )
     }

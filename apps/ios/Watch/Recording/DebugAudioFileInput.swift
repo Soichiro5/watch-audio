@@ -92,7 +92,7 @@ final class DebugAudioPlayback {
 
 /// Writes one chunk from `DebugAudioPlayback` in real time: each meter update (once per tick)
 /// and `stop()` append the samples due since `record()` to an AAC file with the production
-/// settings (`ChunkAudioFormat.recorderSettings`), and report their levels like
+/// settings (`ChunkAudioFormat.recorderSettings`), and report their peak level in dBFS like
 /// `AVAudioRecorder` metering.
 @MainActor
 final class DebugAudioFileInput: ChunkAudioInput {
@@ -100,10 +100,7 @@ final class DebugAudioFileInput: ChunkAudioInput {
     private let output: AVAudioFile
     private var startedAt: Date?
     private var framesWritten: Int64 = 0
-    private var sumOfSquares: Double = 0
-    private var measured = 0
     private var maxAbs: Float = 0
-    private var average: Float = -160
     private var peak: Float = -160
     private(set) var isRecording = false
 
@@ -132,14 +129,10 @@ final class DebugAudioFileInput: ChunkAudioInput {
 
     func updateMeters() {
         pump()
-        average = measured > 0 ? Self.decibels(Float((sumOfSquares / Double(measured)).squareRoot())) : -160
         peak = Self.decibels(maxAbs)
-        sumOfSquares = 0
-        measured = 0
         maxAbs = 0
     }
 
-    func averagePower(forChannel channelNumber: Int) -> Float { average }
     func peakPower(forChannel channelNumber: Int) -> Float { peak }
 
     /// Writes the samples due by now. At the end of the file it writes nothing more and asks
@@ -153,10 +146,8 @@ final class DebugAudioFileInput: ChunkAudioInput {
                let channel = buffer.floatChannelData?[0] {
                 for (i, sample) in samples.enumerated() {
                     channel[i] = sample
-                    sumOfSquares += Double(sample * sample)
                     maxAbs = max(maxAbs, abs(sample))
                 }
-                measured += samples.count
                 buffer.frameLength = AVAudioFrameCount(samples.count)
                 do {
                     try output.write(from: buffer)
