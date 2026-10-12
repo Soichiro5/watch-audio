@@ -106,7 +106,7 @@ class DataExporterTest {
         assertEquals(oct12, plan.lastDay)
         assertEquals("watch-audio-2026-10-09_2026-10-12.zip", plan.fileName)
         assertEquals(listOf(1, 2, 4), progress.map { it.doneDays }) // Oct 11 has nothing
-        assertEquals(ExportSummary(days = 3, chunks = 6, segments = 5, marks = 2, audioFiles = 3, missingAudioFiles = 1), summary)
+        assertEquals(ExportSummary(days = 3, chunks = 6, segments = 5, marks = 2, audioFiles = 3, missingAudioFiles = 1, audioChunkIds = listOf("a0", "b0", "b1")), summary)
 
         val root = "watch-audio-2026-10-09_2026-10-12/"
         assertTrue(files.keys.all { it.startsWith(root) }, "everything under one folder: ${files.keys}")

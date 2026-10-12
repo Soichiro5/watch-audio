@@ -52,6 +52,17 @@ wait
 xcrun simctl bootstatus "$udid" -b > /dev/null
 echo "Timing: then waited ${SECONDS}s for the boot"
 
+# While the first boot of the iPhone still migrates its data, xcodebuild can give up resolving the
+# destination ("Unable to find a device matching the provided destination specifier", no build
+# ran). The device is booted now, so build once more.
+if [ $status -ne 0 ] && grep -q "Unable to find a device matching the provided destination specifier" "$log"; then
+  echo "::warning::$scheme: the simulator was not available to xcodebuild during its boot; building again now that it is booted"
+  SECONDS=0
+  xcode build-for-testing >> "$log" 2>&1
+  status=$?
+  echo "Timing: build-for-testing again took ${SECONDS}s"
+fi
+
 # Hosted tests: start from a fresh install of the host app. With the app still installed from
 # the launch smoke step (or the previous hosted test), the test host was launched from the
 # replaced (dead) container and the test bundle could not be loaded ("Failed to create a bundle

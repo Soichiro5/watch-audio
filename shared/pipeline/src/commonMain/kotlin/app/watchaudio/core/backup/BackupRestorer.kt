@@ -1,5 +1,7 @@
 package app.watchaudio.core.backup
 
+import app.watchaudio.core.db.AudioFileInfo
+import app.watchaudio.core.db.ChunkRecord
 import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.db.RestoredChunk
@@ -46,6 +48,11 @@ data class RestoreSummary(
     val audioFilesRestored: Int,
     /** Added chunks with recorded audio that is not on this device (not in the backup, or deleted before it). */
     val chunksWithoutAudio: Int,
+    /**
+     * Audio files brought back for chunks that were already on this device without their audio
+     * (offloaded, #156, or deleted by retention).
+     */
+    val audioFilesReturned: Int = 0,
 )
 
 /** Where [BackupRestorer.restore] is. */
@@ -68,7 +75,12 @@ sealed interface RestoreProgress {
  * Merging is idempotent by chunk UUID, like receiving a chunk again from the watch:
  * - a chunk that is not stored is added with its transcript, marks and (if included) audio;
  * - a stored chunk is kept as it is, so newer local data is never overwritten. It only gains the
- *   backup's marks it lacks, and the backup's transcript if it has none yet (not transcribed).
+ *   backup's marks it lacks, the backup's transcript if it has none yet (not transcribed), and
+ *   the backup's audio file if its own is no longer on the device (offloaded, #156, or deleted by
+ *   retention) and the backup's copy is the same file (size and SHA-256).
+ *
+ * Audio the backup holds counts as backed up at the backup's creation time
+ * ([app.watchaudio.core.db.ChunkRecord.audioBackedUpAt]): the user has that file.
  * Restoring the same backup again therefore adds nothing. If the second pass fails part way
  * (e.g. the storage is full), the days already added stay complete and restoring again adds the rest.
  *
@@ -106,7 +118,7 @@ class BackupRestorer(
                 open().buffered().use { source ->
                     val again = BackupCipher.readHeader(source)
                     if (!again.sameAs(header!!)) throw BackupException.Corrupted("the file changed between the passes")
-                    val applier = Applier(clock.now().toEpochMilliseconds()) { done ->
+                    val applier = Applier(clock.now().toEpochMilliseconds(), verified.createdAt) { done ->
                         onProgress(RestoreProgress.Applying(done, verified.days))
                     }
                     try {
@@ -121,8 +133,8 @@ class BackupRestorer(
             }
         }
 
-    /** Counts of a verified backup. */
-    private class Walked(val days: Int)
+    /** Counts of a verified backup, and when it was created ([BackupIndex.createdAt]). */
+    private class Walked(val days: Int, val createdAt: Long)
 
     /** An audio entry of the current day: its staged copy (second pass only). */
     private class Staged(val path: Path?, val size: Long, val sha256: String?)
@@ -193,7 +205,7 @@ class BackupRestorer(
         if (pendingDay != null) throw ZipFormatException("day without backup data")
         if (index == null || !sawExportIndex) throw ZipFormatException("no index")
         if (index.days != days) throw ZipFormatException("index lists ${index.days} days, found $days")
-        return Walked(days)
+        return Walked(days, index.createdAt)
     }
 
     /** Fails if [extras] does not belong to [day] or the day refers to chunks it does not hold. */
@@ -207,7 +219,7 @@ class BackupRestorer(
     }
 
     /** Adds verified days to the store (second pass). */
-    private inner class Applier(private val now: Long, private val onDay: (Int) -> Unit) {
+    private inner class Applier(private val now: Long, private val backupCreatedAt: Long, private val onDay: (Int) -> Unit) {
         private var days = 0
         private var added = 0
         private var present = 0
@@ -215,10 +227,14 @@ class BackupRestorer(
         private var marks = 0
         private var audioFiles = 0
         private var withoutAudio = 0
+        private var returned = 0
 
         suspend fun apply(day: ExportDay, extras: BackupDay, staged: Map<String, Staged>) {
             val extraById = extras.chunks.associateBy { it.id }
-            val stored = store.read { day.chunks.mapNotNull { chunk(it.id) }.associateBy { it.id } }
+            val (stored, storedFiles) = store.read {
+                day.chunks.mapNotNull { chunk(it.id) }.associateBy { it.id } to
+                    audioFilesOfChunksStartedBetween(day.dayStart, day.dayEnd)
+            }
             val segmentsByChunk = day.segments.groupBy { it.chunkId }
             val marksByChunk = day.marks.groupBy({ it.chunkId }, { it.at })
             val moved = mutableListOf<Path>()
@@ -234,6 +250,26 @@ class BackupRestorer(
                 }
                 restoredChunk(chunk, relative, audioRestored = relative != null && file != null, extraById[chunk.id])
             }
+            // Stored chunks whose audio the backup holds: back on the device if it was not, and
+            // in any case known to be in this backup.
+            val inBackup = mutableListOf<String>()
+            val returnedIds = mutableListOf<String>()
+            stored.values.forEach { local ->
+                val backup = day.chunks.first { it.id == local.id }
+                val file = backup.audio?.file?.let { staged[it] }?.takeIf { it.matches(backup) && it.sameAs(local, storedFiles[local.id]) }
+                    ?: return@forEach
+                val relative = local.audioPath ?: return@forEach
+                if (local.hasAudioFile) {
+                    inBackup += local.id
+                    return@forEach
+                }
+                val target = Path(audioRoot, relative)
+                if (file.path == null || SystemFileSystem.exists(target)) return@forEach
+                SystemFileSystem.createDirectories(target.parent!!)
+                SystemFileSystem.atomicMove(file.path, target)
+                moved += target
+                returnedIds += local.id
+            }
             try {
                 store.transaction {
                     newChunks.forEach { chunk ->
@@ -247,6 +283,8 @@ class BackupRestorer(
                         segments += restored.size
                         marks += addMarks(chunk.id, marksByChunk[chunk.id].orEmpty())
                     }
+                    if (inBackup.isNotEmpty()) markAudioBackedUp(inBackup, backupCreatedAt)
+                    returnedIds.forEach { id -> if (markAudioRestored(id, backupCreatedAt)) returned++ }
                     stored.values.forEach { local ->
                         present++
                         marks += addMarks(local.id, marksByChunk[local.id].orEmpty())
@@ -274,6 +312,7 @@ class BackupRestorer(
             marksAdded = marks,
             audioFilesRestored = audioFiles,
             chunksWithoutAudio = withoutAudio,
+            audioFilesReturned = returned,
         )
 
         private fun restoredChunk(chunk: ExportChunk, audioPath: String?, audioRestored: Boolean, extra: BackupChunk?): RestoredChunk {
@@ -311,6 +350,11 @@ class BackupRestorer(
                     audio.purgedAt != null -> audio.purgedAt
                     audioRestored -> null
                     else -> now
+                },
+                audioBackedUpAt = when {
+                    audio == null -> null
+                    audioRestored -> maxOf(backupCreatedAt, audio.backedUpAt ?: backupCreatedAt)
+                    else -> audio.backedUpAt
                 },
             )
         }
@@ -352,6 +396,12 @@ class BackupRestorer(
             val audio = chunk.audio ?: return false
             if (audio.sizeBytes != null && audio.sizeBytes != size) return false
             return audio.sha256 == null || sha256 == null || sha256.equals(audio.sha256, ignoreCase = true)
+        }
+
+        /** The staged file is the stored chunk's own audio ([stored] = its codec and checksum on this device). */
+        private fun Staged.sameAs(local: ChunkRecord, stored: AudioFileInfo?): Boolean {
+            if (local.sizeBytes != null && local.sizeBytes != size) return false
+            return stored == null || sha256 == null || sha256.equals(stored.sha256, ignoreCase = true)
         }
 
         private fun ExportSegment.toRestored() = RestoredSegment(startAt, endAt, text, lang, engine)

@@ -71,6 +71,11 @@ data class ExportSummary(
     val audioFiles: Int,
     /** Chunks whose audio should still be on the device but whose file was not found. */
     val missingAudioFiles: Int,
+    /**
+     * UUIDs of the chunks whose audio file was written (one per [audioFiles]): what a saved
+     * backup records as backed up (#156).
+     */
+    val audioChunkIds: List<String> = emptyList(),
 )
 
 /** Progress of [DataExporter.write]: the first [doneDays] of [totalDays] calendar days are written. */
@@ -117,7 +122,7 @@ class DataExporter(
         val root = plan.baseName
         val zip = ZipWriter(sink, Instant.fromEpochMilliseconds(request.exportedAt).toLocalDateTime(zone))
         val days = mutableListOf<ExportIndexDay>()
-        var audioFiles = 0
+        val audioChunkIds = mutableListOf<String>()
         var missingAudio = 0
 
         var date = plan.firstDay
@@ -150,7 +155,7 @@ class DataExporter(
                     }
                     zip.addFile("$root/$markdown", renderDayMarkdown(day).encodeToByteArray())
                 }
-                audioFiles += included.size
+                audioChunkIds += included.keys
                 days += ExportIndexDay(
                     date = date,
                     json = json,
@@ -181,8 +186,9 @@ class DataExporter(
             chunks = days.sumOf { it.chunks },
             segments = days.sumOf { it.segments },
             marks = days.sumOf { it.marks },
-            audioFiles = audioFiles,
+            audioFiles = audioChunkIds.size,
             missingAudioFiles = missingAudio,
+            audioChunkIds = audioChunkIds,
         )
         withContext(dispatcher) {
             zip.addFile("$root/export.json", index.toJson().encodeToByteArray())

@@ -12,6 +12,7 @@ import app.watchaudio.core.backup.BackupException
 import app.watchaudio.core.backup.BackupWriter
 import app.watchaudio.core.backup.RestoreProgress
 import app.watchaudio.core.backup.RestoreSummary
+import app.watchaudio.core.export.ExportPlan
 import app.watchaudio.core.export.ExportSummary
 import app.watchaudio.core.pipeline.DiagnosticEvents
 import app.watchaudio.core.pipeline.DiagnosticsLog
@@ -109,6 +110,7 @@ class BackupViewModel(
             })
         }
         val written = summary?.takeIf { saved } ?: return null
+        recordSaved(writer, plan, written)
         services.diagnostics.log(
             DiagnosticEvents.BACKUP_CREATED,
             "days=${written.days} chunks=${written.chunks} audio_files=${written.audioFiles} missing_audio=${written.missingAudioFiles}",
@@ -118,6 +120,21 @@ class BackupViewModel(
             written.missingAudioFiles.takeIf { it > 0 }?.let(Strings::backupMissingAudio),
         ).joinToString("\n")
         return Created(message, done = true)
+    }
+
+    /**
+     * Marks the audio of the saved backup as backed up, so it may be offloaded (#156). Only after
+     * the platform reported the file saved. A failure here does not make the saved backup fail:
+     * the audio just stays on the phone (as if never backed up) and the log gets the error type.
+     */
+    private suspend fun recordSaved(writer: BackupWriter, plan: ExportPlan, summary: ExportSummary) {
+        try {
+            writer.recordSaved(plan, summary)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            services.diagnostics.log(DiagnosticEvents.BACKUP_RECORD_FAILED, "error=${DiagnosticsLog.typeName(e)}")
+        }
     }
 
     fun restore() {
@@ -138,9 +155,16 @@ class BackupViewModel(
                     services.diagnostics.log(
                         DiagnosticEvents.BACKUP_RESTORED,
                         "days=${done.days} added=${done.chunksAdded} present=${done.chunksAlreadyPresent} " +
-                            "audio_files=${done.audioFilesRestored} without_audio=${done.chunksWithoutAudio}",
+                            "audio_files=${done.audioFilesRestored} without_audio=${done.chunksWithoutAudio} " +
+                            "audio_returned=${done.audioFilesReturned}",
                     )
-                    Strings.restored(done.chunksAdded, done.segmentsAdded, done.audioFilesRestored, done.chunksAlreadyPresent)
+                    Strings.restored(
+                        done.chunksAdded,
+                        done.segmentsAdded,
+                        done.audioFilesRestored,
+                        done.chunksAlreadyPresent,
+                        done.audioFilesReturned,
+                    )
                 }
             } catch (e: CancellationException) {
                 throw e

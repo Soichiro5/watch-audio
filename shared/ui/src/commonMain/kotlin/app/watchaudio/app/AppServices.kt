@@ -103,10 +103,13 @@ interface AppServices {
      * - Android: the system's save dialog (SAF `ACTION_CREATE_DOCUMENT`); [write] streams straight
      *   into the document the user created.
      * - iOS: [write] fills a file in the app's temporary directory, then the share sheet opens
-     *   (「ファイルに保存」 and the other destinations the user may pick); the file is deleted when
-     *   the sheet closes.
+     *   (「ファイルに保存」 and the other destinations the user may pick) and this waits until it
+     *   closes; the file is deleted then.
      *
-     * @return false if the user cancelled before anything was written (or the platform cannot save).
+     * @return true only once the file reached the destination the user chose (Android: the document
+     *   is written; iOS: the picked destination reported success). False if the user cancelled,
+     *   before or after [write] ran (closing the share sheet), or the platform cannot save. A saved
+     *   backup counts as holding its audio (#156) only on true.
      * @throws Exception from [write] or the destination; a partly written document is removed.
      */
     suspend fun saveExport(fileName: String, mimeType: String, write: suspend (RawSink) -> Unit): Boolean = false

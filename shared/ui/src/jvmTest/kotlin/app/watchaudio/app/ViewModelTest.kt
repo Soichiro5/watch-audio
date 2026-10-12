@@ -21,6 +21,8 @@ import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.db.NewSegment
 import app.watchaudio.core.pipeline.AudioRetention
 import app.watchaudio.core.pipeline.ModelState
+import app.watchaudio.core.pipeline.OffloadAge
+import app.watchaudio.core.pipeline.OffloadPreview
 import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageEnvironment
 import app.watchaudio.core.pipeline.StorageManager
@@ -492,6 +494,83 @@ class ViewModelTest {
     }
 
     @Test
+    fun offloadRemovesOnlyBackedUpAudioAfterConfirmation() = runVmTest {
+        val tenDaysAgo = at(9) - 10 * 24 * 3_600_000L
+        addChunk("old", tenDaysAgo)
+        transcribe("old", NewSegment(tenDaysAgo + 1_000, tenDaysAgo + 2_000, "先週の会話", "ja"))
+        addChunk("today", at(9))
+        transcribe("today", NewSegment(at(9) + 1_000, at(9) + 2_000, "今日の会話", "ja"))
+        addChunk("notBackedUp", at(10))
+        transcribe("notBackedUp", NewSegment(at(10) + 1_000, at(10) + 2_000, "バックアップ前の会話", "ja"))
+        addChunk("pending", at(11))
+        store.transaction { markAudioBackedUp(listOf("old", "today", "pending"), at(12)) }
+        val vm = StatusViewModel(services, clock, scope = backgroundScope)
+        backgroundScope.launch { vm.state.collect {} }
+        runCurrent()
+
+        val breakdown = vm.state.value.storage!!.breakdown
+        assertEquals(AudioUsage(2, 200_000), breakdown.offloadableAudio)
+        assertEquals(at(12), breakdown.lastAudioBackupAt)
+
+        // Opening shows what would go; nothing is deleted until the user confirms.
+        vm.openOffload()
+        runCurrent()
+        val pending = assertNotNull(vm.state.value.storageActions.pendingOffload)
+        assertEquals(OffloadAge.ALL, pending.age)
+        assertEquals(OffloadPreview(AudioUsage(2, 200_000), at(12), at(12)), pending.preview)
+        vm.selectOffloadAge(OffloadAge.DAYS_7)
+        runCurrent()
+        assertEquals(AudioUsage(1, 100_000), vm.state.value.storageActions.pendingOffload!!.preview.usage)
+        vm.cancelOffload()
+        runCurrent()
+        assertNull(vm.state.value.storageActions.pendingOffload)
+        assertTrue(audioFile("old").exists())
+
+        vm.openOffload()
+        runCurrent()
+        vm.confirmOffload()
+        runCurrent()
+        val after = vm.state.value
+        assertEquals(Strings.audioOffloaded(2, "0.2 MB"), after.storageActions.message)
+        assertNull(after.storageActions.pendingOffload)
+        assertFalse(audioFile("old").exists())
+        assertFalse(audioFile("today").exists())
+        assertTrue(audioFile("notBackedUp").exists(), "audio that is in no backup is kept")
+        assertTrue(audioFile("pending").exists(), "untranscribed audio is kept")
+        assertEquals(2, after.storage!!.breakdown.audioInBackupChunks)
+        assertEquals(0, after.storage.breakdown.offloadableAudio.chunks)
+        assertEquals(listOf("今日の会話"), store.read { search("今日の会話") }.map { it.segment.text })
+        assertEquals(listOf("audio_offloaded chunks=2 bytes=200000"), services.diagnosticsLines)
+
+        // Nothing left to offload: the confirmation cannot go ahead.
+        vm.openOffload()
+        runCurrent()
+        assertFalse(vm.state.value.storageActions.pendingOffload!!.canConfirm)
+        vm.confirmOffload()
+        runCurrent()
+        assertNotNull(vm.state.value.storageActions.pendingOffload)
+    }
+
+    @Test
+    fun aFailedOffloadShowsAFixedText() = runVmTest {
+        addChunk("a", at(9))
+        transcribe("a")
+        store.transaction { markAudioBackedUp(listOf("a"), at(12)) }
+        val vm = StatusViewModel(services, clock, scope = backgroundScope)
+        backgroundScope.launch { vm.state.collect {} }
+        runCurrent()
+        vm.openOffload()
+        runCurrent()
+        store.close() // the database fails under the offload
+
+        vm.confirmOffload()
+        runCurrent()
+        assertEquals(Strings.OFFLOAD_FAILED, vm.state.value.storageActions.message)
+        assertTrue(services.diagnosticsLines.single().startsWith("storage_action_failed action=offload error="))
+        assertTrue(audioFile("a").exists())
+    }
+
+    @Test
     fun deleteAllNeedsTheTypedConfirmation() = runVmTest {
         addChunk("a", at(9))
         transcribe("a", NewSegment(at(9) + 1_000, at(9) + 2_000, "消える発話", "ja"))
@@ -624,6 +703,33 @@ class ViewModelTest {
         assertNull(state.nowPlaying)
         assertTrue(state.content!!.entries.isEmpty())
         assertEquals(0, state.content.chunksStartedThisDay)
+    }
+
+    @Test
+    fun offloadedAudioShowsInBackupInsteadOfPlayback() = runVmTest {
+        addChunk("a", at(9))
+        transcribe("a", NewSegment(at(9) + 1_000, at(9) + 2_000, "バックアップにある発話", "ja"))
+        addChunk("b", at(10))
+        transcribe("b", NewSegment(at(10) + 1_000, at(10) + 2_000, "端末にある発話", "ja"))
+        store.transaction { markAudioBackedUp(listOf("a", "b"), at(12)) }
+        storage.offloadBackedUpAudio(OffloadAge.ALL) { true }.let { assertEquals(2, it.purgedChunks) }
+        store.transaction { markAudioRestored("b", at(12)) } // b came back from the backup
+        val vm = DayViewModel(services, tokyo, clock, scope = backgroundScope)
+        backgroundScope.launch { vm.state.collect {} }
+        runCurrent()
+
+        val content = vm.state.value.content!!
+        assertEquals(0, content.audioPurgedChunks)
+        assertEquals(1, content.audioInBackupChunks)
+        assertEquals(at(12), content.audioBackupAt)
+        val (offloaded, onPhone) = content.entries.map { it as TranscriptEntry.Utterance }
+        assertNull(offloaded.audioPath)
+        assertTrue(offloaded.audioInBackup)
+        assertEquals("2026/10/10/b.m4a", onPhone.audioPath)
+        assertFalse(onPhone.audioInBackup)
+        vm.play(offloaded)
+        runCurrent()
+        assertTrue(services.played.isEmpty())
     }
 
     @Test

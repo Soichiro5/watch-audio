@@ -50,7 +50,9 @@ class BackupRestorerTest {
         val writer = BackupWriter(source, sourceAudio, iterations = 1_000)
         val plan = assertNotNull(writer.plan(includeAudio, tokyo, createdAt))
         val out = Buffer()
-        writer.write(plan, PASSPHRASE, out, chunkSize = chunkSize)
+        val summary = writer.write(plan, PASSPHRASE, out, chunkSize = chunkSize)
+        // As the app does once the file is saved (#156): the source's audio is in this backup.
+        writer.recordSaved(plan, summary)
         return out.readByteArray()
     }
 

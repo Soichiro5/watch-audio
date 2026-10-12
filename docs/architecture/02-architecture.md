@@ -113,7 +113,7 @@ erDiagram
 
 | テーブル | 主なカラム |
 | --- | --- |
-| `audio_chunk` | id（整数のキー）, uuid（Watch 採番の UUID、一意）, session_id, device_id, source（watchos/wearos…）, started_at, ended_at, time_zone, audio_path（相対。無音チャンクは NULL）, codec, size_bytes, sha256, end_reason（rotation/mark/user_stop/charging/off_body/…）, state（received/transcribing/transcribed/failed/no_audio）, attempts, last_error, received_at, manifest_json, audio_purged_at（保持期間で音声を削除した時刻。文字起こしは残る） |
+| `audio_chunk` | id（整数のキー）, uuid（Watch 採番の UUID、一意）, session_id, device_id, source（watchos/wearos…）, started_at, ended_at, time_zone, audio_path（相対。無音チャンクは NULL）, codec, size_bytes, sha256, end_reason（rotation/mark/user_stop/charging/off_body/…）, state（received/transcribing/transcribed/failed/no_audio）, attempts, last_error, received_at, manifest_json, audio_purged_at（音声を端末から削除した時刻。保持期間またはオフロード。文字起こしは残る）, audio_backed_up_at（音声を入れた暗号化バックアップのうち最新のものの作成時刻、マイグレーション 7、§6.8） |
 | `mark` | chunk_id（`audio_chunk.id`）, at（PK は両方） |
 | `transcript_segment` | id, chunk_id（`audio_chunk.id`）, start_at, end_at, text, lang, engine_id（`engine.id`） |
 | `engine` | id, name（文字起こしエンジンの ID。`Transcriber.engineId`、一意） |
@@ -345,7 +345,7 @@ watch-audio-2026-10-04_2026-10-10/
 | --- | --- |
 | `export.json`（`ExportIndex`） | `exportedAt`、`timeZone`、`from` / `to`（指定した範囲。「すべて」なら省略）、`includesAudio`、`days`（日ごとの `date`・`json`・`markdown` のパスと、チャンク・発話・マーク・ギャップ・音声ファイルの件数） |
 | `json/<日付>.json`（`ExportDay`） | `date`、`timeZone`、`dayStart` / `dayEnd`、`chunks`、`segments`、`marks`、`gaps` |
-| `chunks[]`（`ExportChunk`） | `id`（UUID）、`sessionId`、`deviceId`、`source`（`wearos` / `watchos`）、`startedAt`、`endedAt`、`timeZone`（Watch の）、`endReason`（`rotation`・`charging` など、マニフェストと同じ値）、`transcription`（`done` / `pending` / `failed` / `none` = 無音）、`audio`（無音チャンクは省略。`codec`・`sizeBytes`・`sha256`・`purgedAt`（保持期間で削除した時刻）・`file`（ZIP 内のパス。含めなかったときは省略）） |
+| `chunks[]`（`ExportChunk`） | `id`（UUID）、`sessionId`、`deviceId`、`source`（`wearos` / `watchos`）、`startedAt`、`endedAt`、`timeZone`（Watch の）、`endReason`（`rotation`・`charging` など、マニフェストと同じ値）、`transcription`（`done` / `pending` / `failed` / `none` = 無音）、`audio`（無音チャンクは省略。`codec`・`sizeBytes`・`sha256`・`purgedAt`（端末から削除した時刻。保持期間またはオフロード）・`file`（ZIP 内のパス。含めなかったときは省略）・`backedUpAt`（その音声を入れた暗号化バックアップの作成時刻、§6.8。なければ省略）） |
 | `segments[]`（`ExportSegment`） | `chunkId`、`startAt`、`endAt`、`text`、`lang`（不明なら省略）、`engine` |
 | `marks[]`（`ExportMark`） | `chunkId`、`at` |
 | `gaps[]`（`ExportGap`） | `start`、`end`、`cause`（`stopped` + `endReason` / `missing` = 録音中のはずが届いていない / `awaiting` = 書き出し時点で転送待ち）。タイムラインと同じ規則（§9.2）で、日と書き出し時刻で切る。最初の録音より前は含めない |
@@ -420,7 +420,7 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 マージの規則（取り込み直しと同じく **チャンクの UUID で冪等**）:
 
 - 端末にないチャンクは、文字起こし（エンジン名も）・マーク・受信時刻・マニフェスト・音声（含まれていれば）とともに加える。欠損区間はチャンクから求まるので、そのまま戻る。
-- 端末にあるチャンクは**そのまま残す**（新しいデータを上書きしない）。足りないマークだけを加え、端末側にまだ文字起こしがない（待ち・失敗）ときだけバックアップの文字起こしを使う。
+- 端末にあるチャンクは**そのまま残す**（新しいデータを上書きしない）。足りないマークだけを加え、端末側にまだ文字起こしがない（待ち・失敗）ときだけバックアップの文字起こしを使う。端末側に音声ファイルがない（オフロード・保持期間で削除済み）チャンクは、バックアップの音声が同じファイル（大きさと SHA-256 が端末の記録と一致）なら端末の `audio_path` に戻し、`audio_purged_at` を消す（§6.8。結果の `audioFilesReturned`）。
 - 同じファイルを何度戻しても増えない。2 回目の途中で失敗（容量不足など）しても、加えた日は完全で、もう一度戻せば残りが加わる。
 
 | バックアップでの状態 | 音声が戻った | 音声が戻らない（「音声もバックアップする」なし・元の端末で保持期間により削除済み・ファイルが見つからなかった） |
@@ -443,9 +443,52 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 - ZIP は無圧縮（§6.6）なので、テキストだけでも JSON と Markdown の分の大きさになる。圧縮は今後の検討。
 - 1 つの音声ファイルは 4 GiB 未満（ZIP のエントリーの上限）。
 - 鍵導出（600,000 回）は作成時に 1 回、復元時に 1 回。端末での所要時間は実機で測る。
-- 音声のないバックアップから戻したチャンクは再生できない。オフロード（#156）で消した音声を、音声入りのバックアップから戻すことは未対応。
+- 音声のないバックアップから戻したチャンクは再生できない。音声入りのバックアップを後から戻せば、その音声が加わる（§6.8）。
 
 テスト: 暗号の基本操作のテストベクタ（`CryptoTest`、`shared/platform`）、コンテナの往復・あらゆる切り詰めとビット反転・チャンクの並べ替え / 削除 / 追加・未完了のファイル・NFC（`BackupCipherTest`、HKDF は RFC 5869）、実 DB 同士の往復（音声あり・テキストのみ）・間違ったパスフレーズ / 壊れたファイルで何も変わらない・2 回戻しても増えない・端末のデータを上書きしない（`BackupRestorerTest`）、DB の書き込み（`RestoreQueriesTest`）。**プラットフォーム間の互換**は、決まった入力から作ったバックアップ `shared/pipeline/testdata/backup/v1-with-audio.wabackup`（テストでは Base64 で埋め込み）を、JVM・iOS シミュレータ・Android エミュレータ（`sqliteTest`）のそれぞれで**バイト単位で同じに書けること**と**完全に戻せること**で確かめる（`BackupFixtureTest`。ファイルと埋め込みの一致は `BackupFixtureFileTest`）。どの OS で作ったバックアップもほかの OS で戻せる。形式を変えるときは古いフィクスチャも戻せることを保つ。
+
+### 6.8 バックアップ済みの音声のオフロード（#156）
+
+1 年分の音声（20〜40 GB、§9.3）を残したい人が、暗号化バックアップ（§6.7）に入れた音声を端末から外して空き容量を増やす。文字起こし・検索・タイムラインはそのまま使え、音声はそのバックアップから戻せば再生できる。**バックアップに入っていない音声は、この操作では決して消さない**。UI は [phone-ui.md §1.4](../platforms/phone-ui.md#14-ストレージ管理33)。
+
+#### 「バックアップ済み」の定義
+
+- `audio_chunk.audio_backed_up_at`（マイグレーション 7。NULL を許す列の追加なので、表の大きさによらず一瞬で終わる）= **その音声を入れた暗号化バックアップのファイルを、ユーザーが保存先に渡した**ときの、そのバックアップの作成時刻（`BackupIndex.createdAt`、ファイル名の日付と同じ）。何度もバックアップすれば新しい方が残る。
+- 記録するのは、`BackupWriter.write` が音声ファイルを ZIP に書いたチャンク（`ExportSummary.audioChunkIds`）だけで、プラットフォームが**保存できた**と答えた後（`AppServices.saveExport` が true）に `BackupWriter.recordSaved` が付ける。Android は SAF でユーザーが作った文書に書き終えたとき、iOS は共有シートで選んだ保存先（「ファイルに保存」など）が完了を返したとき。キャンセル・失敗・音声なしのバックアップでは何も付けない。記録に失敗しても保存したバックアップは成功のまま（音声はバックアップしていない扱いで端末に残り、診断ログに `backup_record_failed error=<型>`）。
+- バックアップから戻したときも、そのファイルに入っていた音声はそのファイルの作成時刻で「バックアップ済み」になる（ユーザーの手元にあるファイルなので）。書き出しの JSON（§6.6）の `audio.backedUpAt` でも運ぶので、音声を外した後に作ったバックアップ（その音声は入らない）から新しい端末に戻しても、どのバックアップに音声があるかは分かる。
+- **アプリはバックアップファイルを後から確かめられない**（場所はユーザーが選び、アプリはアクセスを持ち続けない）。そのため「バックアップ済み」は「その日に作ったバックアップに入れた」という意味で、ファイルが今もあることは保証しない。オフロードの確認画面ではバックアップの作成日を示し、ファイルとパスフレーズが手元にあることを確かめるよう促す。
+
+#### オフロード
+
+`StorageManager.offloadBackedUpAudio(age)`（判定は純粋関数 `AudioOffloadPolicy.canOffload`、DB の候補は `StorageQueries.offloadableChunks`）。対象は次をすべて満たすチャンクの音声だけ:
+
+- 文字起こし済み（`TRANSCRIBED`）。待ち・処理中・失敗は、端末で文字起こしするために音声を残す（保持期間と同じ）
+- 音声ファイルが端末にある（`audio_purged_at` が NULL）
+- `audio_backed_up_at` がある
+- 「すべて」/「7日より前」/「30日より前」（`OffloadAge`）のどれかで選んだ古さ以上（終了時刻で判定）
+
+ファイルを消してから `audio_purged_at` を記録する（`markAudioOffloaded` は SQL でも「文字起こし済み・バックアップ済み」を条件にする）。途中で止まっても、消えたのにまだ記録されていないファイルは次の操作で記録される。保持期間の削除と同じ一括処理（`deleteAudioInBatches`）で、候補ごとに純粋関数でもう一度確かめる。
+
+**状態の持ち方**: オフロードは新しい状態を作らず、保持期間と同じ `audio_purged_at`（端末に音声がない）を使い、`audio_backed_up_at` との組み合わせで表示を分ける。
+
+| `audio_purged_at` | `audio_backed_up_at` | 意味 | 表示 |
+| --- | --- | --- | --- |
+| NULL | NULL | 端末にある。バックアップなし | ▶ |
+| NULL | あり | 端末にあり、バックアップにも入れた（オフロードできる） | ▶ |
+| あり | あり | 端末にない。バックアップにある（`ChunkRecord.isAudioOnlyInBackup`） | 「バックアップにあり」 |
+| あり | NULL | 端末にない。保持期間で削除し、バックアップもない | 再生なし（「保持期間を過ぎた音声は削除済みです」） |
+
+既存のコード（再生できるか `hasAudioFile`、容量の集計、書き出し・バックアップで音声を含めるか、全削除の掃除）は「端末に音声がない」だけを見ればよいので、そのまま正しく動く。列を分けると、これらすべてに新しい状態を足す必要があった。
+
+**保持期間（#33）との関係**: 保持期間は今までどおり、バックアップの有無を見ずに、文字起こし済みで設定より古い音声を自動で消す（ユーザーが明示的に選んだ設定なので変えない）。オフロードは状態タブからユーザーが確かめて実行する手動の操作で、バックアップ済みの音声だけを対象にする。どちらで消えても `audio_purged_at` が付き、バックアップ済みなら「バックアップにあり」と表示する（保持期間で消えた音声でも、バックアップに入れていればそのバックアップから戻せる）。すべての音声を残したい人は保持期間を「無期限」のままにし、バックアップの後でオフロードする。
+
+**戻す**: 「バックアップから戻す」（§6.7）で音声入りのバックアップを選ぶと、端末に音声がないチャンク（オフロード・保持期間のどちらで消えたものも）にファイルが戻り、`audio_purged_at` が消えて再び再生できる。端末の他のデータは変えない。保持期間が設定されていれば、戻した音声も次の文字起こしの後に保持期間の規則で消える（戻した音声を残すには保持期間を「無期限」にする）。
+
+**診断ログ**: 成功は `audio_offloaded chunks=<件数> bytes=<バイト数>`、失敗は `storage_action_failed action=offload error=<型>`（画面には決まった文言「音声を端末から外せませんでした。もう一度試してください。」、#135）。復元の `backup_restored` に `audio_returned=<件数>` を足した。
+
+**バックアップとの関係で気をつけること**: 外した音声はその後のバックアップには入らない（端末にないため）。外した音声を持っているのは、それを入れた**前のバックアップのファイル**だけなので、そのファイルは消さずに残す。差分バックアップ（§6.7）を作るときも同じ考え方で、`audio_backed_up_at` を「どのファイルにあるか」の手がかりに使える。
+
+テスト: `OffloadQueriesTest`（`shared/db`、マイグレーション 6 → 7 を含む）、`AudioOffloadPolicyTest`（`commonTest`）、`OffloadRestoreTest`（`shared/pipeline` の `sqliteTest`。保存していない・音声なしのバックアップでは何も消えない、バックアップ後に届いた音声と未処理の音声は残る、文字起こしと検索は変わらない、戻すと音声が同じバイトで戻る、新しい端末でも「バックアップにあり」が分かる、古さの条件）、`BackupViewModelTest`（保存できたときだけ記録、iOS で共有シートを閉じた・失敗・音声なしでは記録しない）、`ViewModelTest`（確認してから外す、外したチャンクの発話は再生しない、失敗の文言）、`AppUiTest`（`offload-confirm.png`・`offload-done.png`・`timeline-offloaded.png`・`search-offloaded.png`）。
 
 ## 7. セキュリティ・プライバシー
 

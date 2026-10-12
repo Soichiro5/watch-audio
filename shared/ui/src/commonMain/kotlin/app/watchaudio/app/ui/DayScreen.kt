@@ -54,6 +54,7 @@ import app.watchaudio.app.state.DayUiState
 import app.watchaudio.core.timeline.DayTimeline
 import app.watchaudio.core.timeline.GapCause
 import app.watchaudio.core.timeline.TimelineSpan
+import app.watchaudio.core.timeline.localDateOf
 import kotlinx.datetime.TimeZone
 
 /** Number of LazyColumn items above the transcript entries (summary, gaps, header). */
@@ -141,6 +142,14 @@ private fun DayContentList(
                 if (content.audioPurgedChunks > 0) {
                     Text(
                         Strings.AUDIO_PURGED_NOTE,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
+                content.audioBackupAt?.takeIf { content.audioInBackupChunks > 0 }?.let { backupAt ->
+                    Text(
+                        Strings.audioInBackupNote(formatDate(localDateOf(backupAt, timeZone))),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp),
@@ -302,13 +311,20 @@ private fun UtteranceRow(
             )
             Spacer(Modifier.width(8.dp))
             Text(entry.segment.text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            // No play affordance once the audio is gone (retention): the transcript stays.
+            // No play affordance once the audio is gone (retention, offload): the transcript stays.
             if (entry.audioPath != null) {
                 Icon(
                     AppIcons.Play,
                     contentDescription = Strings.PLAY,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(start = 8.dp).size(20.dp),
+                )
+            } else if (entry.audioInBackup) {
+                Text(
+                    Strings.AUDIO_IN_BACKUP,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 8.dp, top = 2.dp),
                 )
             }
         }

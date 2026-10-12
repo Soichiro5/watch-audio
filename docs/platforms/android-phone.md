@@ -202,6 +202,7 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 | `retention_purge` | 保持期間による音声の削除（#33、`TranscriptionRun`） | `chunks=12 bytes=…` |
 | `model_download_*` / `model_ready` | `ModelManager`（開始・10% ごとの進捗・完了・失敗（HTTP ステータスなど）・準備完了） | `pct=30 bytes=…`、`error=java.io.IOException message=HTTP 404 for …` |
 | `gap_alert` / `gap_alert_blocked` | `GapAlertMonitor`（通知した / 通知が許可されておらず出せなかった） | `last_received_at=…` |
+| `audio_offloaded` | 共通 UI の `StatusViewModel`（バックアップ済みの音声を端末から外した、#156。件数とバイト数だけ） | `chunks=12 bytes=…` |
 | `storage_action_failed` / `diagnostics_export_failed` | 共通 UI の `StatusViewModel`（状態タブからの削除・診断ログの書き出しの失敗。画面には例外のメッセージを出さず決まった文言を出すので、エラーの種類はここで見る、#135）。`AppServices.diagnostics` 経由 | `action=delete_all error=java.io.IOException` |
 
 **書き出し**: 状態タブの「診断ログを書き出す」→ `AndroidAppServices.exportDiagnostics()` が `.1` と現在のファイルを 1 つの CSV（`cache/diagnostics-export/watch-audio-diagnostics-<日時>.csv`、前回の書き出しは削除）にまとめ、`FileProvider`（authority `app.watchaudio.diagnostics`、公開するのはこのディレクトリだけ）経由で共有シート（`ACTION_SEND`）を開く。ユーザーが選んだ共有先だけに読み取り権限が付く。**自動では送らない**。新しい権限・通信・SDK は追加していない。
@@ -212,7 +213,7 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 
 ### 4.3 データの書き出し（#155）
 
-状態タブの「データの書き出し」→「書き出す」（範囲の確認と ZIP の中身は共通コード、[phone-ui.md §1.9](phone-ui.md#19-データの書き出し155)）。`AndroidAppServices.saveExport()` が `MainActivity` の登録した `ActivityResultContracts.CreateDocument("application/zip")` で SAF の保存ダイアログを開き、ユーザーが作った文書の `ContentResolver.openOutputStream(uri, "w")`（新しく作った空の文書なので切り詰めの `"wt"` は使わない。対応しない保存先がある）に ZIP を直接書く（`kotlinx.io` の `asSink()`）。アプリの領域（`cache/` など）にはコピーを作らないので、音声を含めても端末の空きを二重に使わない。キャンセルなら何も書かない。書き込みに失敗・中断したら `DocumentsContract.deleteDocument` で作りかけの文書を消す。保存先（端末内・SD カード・ユーザーが入れたクラウドのアプリなど）はユーザーが選ぶもので、アプリ自身は通信しない。新しい権限・通信・SDK は追加していない（SAF は権限不要）。
+状態タブの「データの書き出し」→「書き出す」（範囲の確認と ZIP の中身は共通コード、[phone-ui.md §1.9](phone-ui.md#19-データの書き出し155)）。`AndroidAppServices.saveExport()` が `MainActivity` の登録した `ActivityResultContracts.CreateDocument("application/zip")` で SAF の保存ダイアログを開き、ユーザーが作った文書の `ContentResolver.openOutputStream(uri, "w")`（新しく作った空の文書なので切り詰めの `"wt"` は使わない。対応しない保存先がある）に ZIP を直接書く（`kotlinx.io` の `asSink()`）。アプリの領域（`cache/` など）にはコピーを作らないので、音声を含めても端末の空きを二重に使わない。キャンセルなら何も書かない。書き込みに失敗・中断したら `DocumentsContract.deleteDocument` で作りかけの文書を消す。書き終えて文書を閉じたら `true` を返す（暗号化バックアップでは、このときだけ音声を「バックアップ済み」と記録する、#156）。保存先（端末内・SD カード・ユーザーが入れたクラウドのアプリなど）はユーザーが選ぶもので、アプリ自身は通信しない。新しい権限・通信・SDK は追加していない（SAF は権限不要）。
 
 ### 4.4 暗号化バックアップ（#40）
 
@@ -299,5 +300,5 @@ Watch が無くても、ADB 経由の Wear OS エミュレータとスマホエ�
 - 録音の途絶アラートは WorkManager の精度に依存する（タイマーは Doze で遅れうる、定期チェックは最短 15 分）。厳密な時刻が必要なら `AlarmManager` を検討。実機での確認（Watch の録音を強制停止 → 10〜25 分以内に通知）が必要。
 - 通知権限の「拒否済み」は同じプロセス内で拒否された場合しか区別できない（再起動後は「未許可」と表示し、要求すると OS が即座に拒否を返して「拒否済み」になる）。
 - `AudioDecoder` は 1 チャンク分（5 分 ≈ 480 万サンプル ≈ 19 MB）をメモリに展開する。極端に長いチャンクが来る場合はストリーミング VAD に変える。
-- データの書き出し（§4.3、#155）と暗号化バックアップ（§4.4、#40）の保存・選択ダイアログ（SAF）から実際の文書を書く・読む部分は、エミュレータの計装テストがまだない（ZIP・暗号化の中身・画面・失敗時の扱いは共通コードのテストで確認済み。バックアップの書き出しと復元はエミュレータの `sqliteTest` でも確認）。実機で、保存した ZIP を開けること・キャンセルで何も残らないこと、作ったバックアップを別の端末（iPhone を含む）で戻せることを確かめる。
+- データの書き出し（§4.3、#155）と暗号化バックアップ（§4.4、#40）の保存・選択ダイアログ（SAF）から実際の文書を書く・読む部分は、エミュレータの計装テストがまだない（ZIP・暗号化の中身・画面・失敗時の扱いは共通コードのテストで確認済み。バックアップの書き出しと復元はエミュレータの `sqliteTest` でも確認）。実機で、保存した ZIP を開けること・キャンセルで何も残らないこと、作ったバックアップを別の端末（iPhone を含む）で戻せることを確かめる。オフロード（#156）は、音声入りのバックアップを保存 → 状態タブの「バックアップ済みの音声を端末から外す」で外す → タイムラインに「バックアップにあり」・検索は変わらない → そのバックアップを戻すと再生できる、を実機で確かめる（保存ダイアログでキャンセルしたバックアップでは外せる音声が増えないことも）。
 - 48 kHz などからのダウンサンプルは低域通過フィルタなしの線形補間（Watch は 16 kHz で録音するので通常は通らない）。

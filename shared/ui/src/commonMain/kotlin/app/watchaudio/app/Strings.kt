@@ -2,6 +2,7 @@ package app.watchaudio.app
 
 import app.watchaudio.core.pipeline.AudioRetention
 import app.watchaudio.core.pipeline.ModelState
+import app.watchaudio.core.pipeline.OffloadAge
 import app.watchaudio.core.pipeline.PauseReason
 import app.watchaudio.core.pipeline.StatusNotice
 import app.watchaudio.core.protocol.ChunkEndReason
@@ -33,6 +34,11 @@ object Strings {
     const val RETRY = "再試行"
     const val PLAY = "再生"
     const val AUDIO_PURGED_NOTE = "保持期間を過ぎた音声は削除済みです（文字起こしは残っています）"
+    /** Instead of the play button of an utterance whose audio was offloaded (#156). */
+    const val AUDIO_IN_BACKUP = "バックアップにあり"
+    fun audioInBackupNote(backupDate: String) =
+        "「バックアップにあり」の音声は、この端末から外して暗号化バックアップ（$backupDate 作成）に入っています。" +
+            "そのバックアップから戻すと再生できます（文字起こしは残っています）。"
     const val DELETE_DAY = "この日のデータを削除"
     fun confirmDeleteDay(date: String, count: Int) =
         "$date に始まった録音 ${count}件の音声と文字起こしを、この端末から削除します。元に戻せません。"
@@ -139,6 +145,34 @@ object Strings {
     fun lowFreeSpace(free: String) =
         "端末の空き容量が残り $free です。録音を保存できなくなる前に、音声の保持期間を短くするか、不要な日のデータを削除してください。"
     fun audioPurgedChunks(count: Int) = "保持期間を過ぎて音声を削除したチャンク ${count}件（文字起こしは残っています）"
+
+    // Offloading backed-up audio (#156)
+    const val OFFLOAD_TITLE = "バックアップ済みの音声"
+    const val OFFLOAD_NO_BACKUP =
+        "「暗号化バックアップ」で音声も含めてバックアップすると、バックアップに入れた音声をこの端末から外して空き容量を増やせます。"
+    const val OFFLOADABLE_AUDIO = "端末から外せる音声"
+    fun offloadableAudio(count: Int, size: String) = "$size（${count}件）"
+    fun lastAudioBackup(date: String) = "音声を含む最後のバックアップ: $date"
+    fun audioInBackupChunks(count: Int) = "端末から外し、バックアップにだけある音声 ${count}件（文字起こしは残っています）"
+    const val OFFLOAD_NOTE =
+        "バックアップ済みの音声だけを端末から外します。バックアップしていない音声と、文字起こしがまだの音声は外しません。" +
+            "外した音声はタイムラインで「バックアップにあり」と表示され、文字起こしと検索はそのまま使えます。"
+    const val OFFLOAD_BUTTON = "バックアップ済みの音声を端末から外す"
+    const val OFFLOAD_CONFIRM = "端末から外す"
+    fun offloadAge(age: OffloadAge): String = when (age) {
+        OffloadAge.ALL -> "すべて"
+        OffloadAge.DAYS_7 -> "7日より前"
+        OffloadAge.DAYS_30 -> "30日より前"
+    }
+    fun confirmOffload(count: Int, size: String, backupDates: String) =
+        "暗号化バックアップ（$backupDates 作成）に入っている音声 ${count}件（$size）を、この端末から削除します。" +
+            "文字起こしは残ります。音声を再び聞くには、そのバックアップファイルとパスフレーズが必要です。" +
+            "アプリはバックアップファイルがまだあるかを確かめられないので、ファイルを消していないことを確認してから進めてください。"
+    const val OFFLOAD_NOTHING = "この条件で外せる音声はありません"
+    fun audioOffloaded(count: Int, size: String) = "音声 ${count}件（$size）を端末から外しました"
+    const val OFFLOADING = "端末から外しています…"
+    /** No raw reason (#135); the diagnostics log has the error type. */
+    const val OFFLOAD_FAILED = "音声を端末から外せませんでした。もう一度試してください。"
     const val RETENTION = "音声の保持期間"
     const val RETENTION_NOTE =
         "文字起こしは常に無期限で保存します。保持期間を過ぎた音声は、文字起こしが終わったものだけ自動で削除します。"
@@ -230,9 +264,10 @@ object Strings {
     const val RESTORE_BUTTON = "ファイルを選んで戻す"
     const val RESTORE_VERIFYING = "パスフレーズとファイル全体を確認中…（この間は何も変更しません）"
     fun restoring(doneDays: Int, totalDays: Int) = "戻しています…（$doneDays / ${totalDays}日）"
-    fun restored(added: Int, segments: Int, audioFiles: Int, alreadyPresent: Int) =
+    fun restored(added: Int, segments: Int, audioFiles: Int, alreadyPresent: Int, returnedAudio: Int = 0) =
         "チャンク ${added}件を戻しました（発話 ${segments}件" + (if (audioFiles > 0) "、音声 ${audioFiles}件" else "") + "）。" +
-            (if (alreadyPresent > 0) "すでにこの端末にあった ${alreadyPresent}件はそのままです。" else "")
+            (if (alreadyPresent > 0) "すでにこの端末にあった ${alreadyPresent}件はそのままです。" else "") +
+            (if (returnedAudio > 0) "端末から外していた音声 ${returnedAudio}件を戻しました。" else "")
     const val RESTORE_WRONG_PASSPHRASE = "パスフレーズが違います（またはファイルが壊れています）。何も変更していません。"
     const val RESTORE_CORRUPTED = "ファイルが壊れているか、途中までしかありません。何も変更していません。"
     const val RESTORE_NOT_A_BACKUP = "このアプリのバックアップファイルではありません。何も変更していません。"
