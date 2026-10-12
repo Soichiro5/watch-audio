@@ -78,7 +78,9 @@ The App never sends data off your device without your action. Data goes to a des
 
 - **Exporting the diagnostics log**: from "Export diagnostics log" on the phone app's Status tab, you choose a destination (e-mail, a file location, etc.) through the OS share sheet. The destination service handles it under its own terms.
 
-> [Note for the operator: when data export (#155) or encrypted backup (#40) ships, add it here as a feature that writes to a destination you choose, by your action.]
+- **Exporting your data**: from "データの書き出し" (Export data) on the phone app's Status tab, you can put the transcripts, marks and gaps in recording of the period you choose (and, if you choose, the recorded audio) into one ZIP file and save it to a destination you choose (Android: the system's save screen; iPhone: the OS share sheet). The App sends the data nowhere else. The destination (such as a cloud storage service) handles it under its own terms. The exported file is not encrypted, so take care when storing or sharing it.
+
+> [Note for the operator: when encrypted backup (#40) ships, add it here as a feature that writes to a destination you choose, by your action.]
 
 ## 8. Permissions and why they are used
 

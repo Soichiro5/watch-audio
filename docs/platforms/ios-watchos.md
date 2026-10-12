@@ -173,7 +173,10 @@ Android と同じ共通の `DiagnosticsLog`（`shared/pipeline`、形式・上�
 - 書き出し: 状態タブの「診断ログを書き出す」→ `IosAppServices.exportDiagnostics()` が一時ディレクトリ（`tmp/diagnostics-export/`、前回分は削除）に 1 つの CSV をまとめ、`UIActivityViewController`（共有シート）を最前面の画面から表示する。送り先はユーザーが選ぶ（AirDrop・ファイルに保存など）。自動では送らない。
 - 削除: 状態タブの「すべてのデータを削除」で、ログと `tmp/diagnostics-export/` のコピーも消える（`StorageManager.deleteAll` → `DiagnosticsLog.clear`、#159）。Apple Watch の `diagnostics.csv` は Watch 側にあり対象外。
 
-## 8. 保存場所とプライバシー
+### 7.3 データの書き出し（#155）
+
+状態タブの「データの書き出し」→「書き出す」（ZIP の中身は共通コード、[phone-ui.md §1.9](phone-ui.md#19-データの書き出し155)）。`IosAppServices.saveExport()` が一時ディレクトリ（`tmp/data-export/`、前回分は削除）に ZIP を書き、`UIActivityViewController`（共有シート）を最前面の画面から表示する。保存先（「ファイルに保存」・AirDrop など）はユーザーが選ぶ。シートを閉じたら（保存・送信・キャンセルのどれでも）`completionWithItemsHandler` で一時ファイルを消す。書き込みに失敗したら一時ファイルを消す。Swift 側の変更はない。
+
 
 - iPhone: `Application Support/WatchAudio/`（`watch-audio.db`、`audio/yyyy/MM/dd/<chunkId>.m4a`、`inbox/`、`diagnostics/`（§7.2））。`LocalDataDirectory`（shared/ui/iosMain）がディレクトリに `NSURLIsExcludedFromBackupKey` を設定して iCloud / PC バックアップに含めず、ファイル保護クラス `CompleteUntilFirstUserAuthentication`（BGTask・ロック中の取り込みから読める）を明示する（#76）。
 - Watch: `Application Support/WatchAudio/`（録音中・送信待ちチャンク、診断ログ）。ACK 後に削除。`ChunkOutbox` が `LocalDataProtection`（apps/ios/SharedSwift）で同じくバックアップ除外と `completeUntilFirstUserAuthentication` を設定する（画面オフ・ロック中も録音・再送できる）。
@@ -231,6 +234,7 @@ iPhone アプリはマイクを使わない（録音は Watch だけ。再生は
 12. Watch の `diagnostics.csv` で電池消費（%/時）を確認（M0-3 と比較）。
 13. コンプリケーション（§14、#60）: 文字盤に「watch-audio / 録音状態」を追加 → 停止中は「停止中」、録音開始で「録音中」+ 経過時間、充電器に置くと「一時停止（充電中）」に変わる。停止中にタップ → アプリが開いて録音が始まる。通話などで中断した後にタップ → 1 タップで再開する。
 14. iPhone の状態タブ「診断ログを書き出す」→ 共有シートが開き、ファイルに保存した CSV に受信・文字起こし（RTF）・BGTask の開始/終了が残っている（本文は含まれない）。長時間の検証ではこのファイルを証拠に添える。
+15. 状態タブ「データの書き出し」（#155）→「期間を指定」で記録のある日を選び「音声ファイルを含める」→「書き出す」→ 共有シートの「ファイルに保存」で保存 → ファイル App で ZIP を開くと `markdown/`・`json/`・`audio/` があり、Markdown の文字起こしとマーク・録音できていない時間がタイムラインと一致し、音声が再生できる。シートを閉じた後、アプリの `tmp/data-export/` に ZIP が残っていない。
 
 ## 12. 既知のリスク・制約
 

@@ -172,6 +172,27 @@ object Strings {
     const val DIAGNOSTICS_EMPTY = "書き出せる診断ログがありません"
     const val DIAGNOSTICS_EXPORT_FAILED = "診断ログを書き出せませんでした。もう一度試してください。"
 
+    // Data export (#155)
+    const val EXPORT_TITLE = "データの書き出し"
+    const val EXPORT_NOTE =
+        "文字起こし・マーク・録音できていない時間を、日ごとの Markdown（Obsidian などで読める形）と JSON にまとめた " +
+            "ZIP ファイルにします。保存先はあなたが選びます。アプリが自動でどこかへ送ることはありません。"
+    const val EXPORT_RANGE_ALL = "すべて"
+    const val EXPORT_RANGE_DATES = "期間を指定"
+    fun exportFrom(date: String) = "開始日 $date"
+    fun exportTo(date: String) = "終了日 $date"
+    const val EXPORT_INCLUDE_AUDIO = "音声ファイルを含める"
+    fun exportIncludeAudioDetail(size: String) = "端末にある音声は全部で $size です。含めると ZIP ファイルが大きくなります。"
+    const val EXPORT_BUTTON = "書き出す"
+    const val EXPORTING = "書き出し中…"
+    const val EXPORT_NOTHING = "この期間に書き出せる記録はありません"
+    /** No raw reason (#135): it may be an English exception message; the diagnostics log has the type. */
+    const val EXPORT_FAILED = "書き出せませんでした。保存先の空き容量を確認して、もう一度試してください。"
+    fun exported(days: Int, segments: Int, audioFiles: Int) =
+        "${days}日分を書き出しました（発話 ${segments}件" + (if (audioFiles > 0) "、音声 ${audioFiles}件" else "") + "）"
+    fun exportMissingAudio(count: Int) = "音声ファイルが見つからなかった ${count}件は、文字起こしだけを書き出しました"
+    const val DATE_PICKER_CONFIRM = "決定"
+
     // Status screen: alert settings (#43)
     const val ALERTS_TITLE = "通知"
     const val GAP_ALERT_SWITCH = "録音が届かないときに通知"

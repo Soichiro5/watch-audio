@@ -10,6 +10,7 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
+import android.provider.DocumentsContract
 import android.provider.Settings
 import android.util.Log
 import androidx.activity.result.ActivityResultLauncher
@@ -30,17 +31,21 @@ import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StatusNotice
 import app.watchaudio.core.pipeline.StorageManager
 import java.io.File
+import java.io.FileNotFoundException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
+import kotlinx.io.RawSink
+import kotlinx.io.asSink
 import kotlinx.io.files.Path
 
 /**
@@ -84,6 +89,10 @@ class AndroidAppServices(
     private var permissionLauncher: ActivityResultLauncher<String>? = null
     private var pendingPermission: CompletableDeferred<Boolean>? = null
     private var notificationsRefused = false
+
+    // The save dialog of the data export (#155) goes through the visible activity; main thread only.
+    private var exportLauncher: ActivityResultLauncher<String>? = null
+    private var pendingExport: CompletableDeferred<Uri?>? = null
 
     /** POST_NOTIFICATIONS is a runtime permission from Android 13 (API 33). */
     override val permissions: List<AppPermission> =
@@ -168,6 +177,50 @@ class AndroidAppServices(
         return true
     }
 
+    fun attachExportLauncher(launcher: ActivityResultLauncher<String>) {
+        exportLauncher = launcher
+    }
+
+    fun detachExportLauncher(launcher: ActivityResultLauncher<String>) {
+        if (exportLauncher === launcher) exportLauncher = null
+    }
+
+    /** The document the user created in the save dialog started by [saveExport], or null if they cancelled. */
+    fun onExportDestination(uri: Uri?) {
+        pendingExport?.complete(uri)
+        pendingExport = null
+    }
+
+    /**
+     * Opens the system's save dialog (SAF `ACTION_CREATE_DOCUMENT`, [EXPORT_MIME_TYPE] only) and
+     * streams the export straight into the document the user created there: no copy in the app's
+     * storage, and the only place it is written is the one they chose. A failed or cancelled write
+     * deletes the partial document.
+     */
+    override suspend fun saveExport(fileName: String, mimeType: String, write: suspend (RawSink) -> Unit): Boolean {
+        require(mimeType == EXPORT_MIME_TYPE) { "The save dialog is registered for $EXPORT_MIME_TYPE only" }
+        val uri = withContext(Dispatchers.Main) {
+            val launcher = exportLauncher ?: error("no visible activity to show the save dialog from")
+            val result = CompletableDeferred<Uri?>()
+            pendingExport?.complete(null)
+            pendingExport = result
+            launcher.launch(fileName)
+            result
+        }.await() ?: return false
+        try {
+            withContext(Dispatchers.IO) {
+                val stream = context.contentResolver.openOutputStream(uri, "w") ?: throw FileNotFoundException("no stream for the chosen document")
+                stream.asSink().use { write(it) }
+            }
+        } catch (e: Throwable) {
+            withContext(Dispatchers.IO + NonCancellable) {
+                runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
+            }
+            throw e
+        }
+        return true
+    }
+
     /** Only called from the user's tap: the run waives the battery rules (not the thermal one, #75). */
     override fun requestTranscription() = scheduler.requestForUser()
 
@@ -226,8 +279,11 @@ class AndroidAppServices(
     internal fun playingPositionMs(): Int? =
         runCatching { player?.takeIf { it.isPlaying }?.currentPosition }.getOrNull()
 
-    private companion object {
-        const val TAG = "AndroidAppServices"
+    companion object {
+        /** The data export (#155) is one ZIP archive; [MainActivity] registers its save dialog for it. */
+        const val EXPORT_MIME_TYPE = "application/zip"
+
+        private const val TAG = "AndroidAppServices"
 
         /** Must match the diagnostics FileProvider in the manifest. */
         const val DIAGNOSTICS_AUTHORITY_SUFFIX = ".diagnostics"

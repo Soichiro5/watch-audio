@@ -15,8 +15,10 @@ import kotlinx.cinterop.alloc
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.value
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.io.RawSink
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import platform.AVFAudio.AVAudioPlayer
@@ -102,6 +104,34 @@ class IosAppServices internal constructor(
         // Required on iPad, where the sheet is a popover.
         sheet.popoverPresentationController?.sourceView = presenter.view
         presenter.presentViewController(sheet, animated = true, completion = null)
+        return true
+    }
+
+    /**
+     * Writes the data export (#155) to the temporary directory (`tmp/data-export/`, replacing earlier
+     * exports), then presents the share sheet, where the user picks 「ファイルに保存」 or another
+     * destination. The file is deleted when the sheet closes. Main thread (called from the UI).
+     */
+    override suspend fun saveExport(fileName: String, mimeType: String, write: suspend (RawSink) -> Unit): Boolean {
+        val target = withContext(IoDispatcher) {
+            val dir = Path(NSTemporaryDirectory(), "data-export")
+            SystemFileSystem.createDirectories(dir)
+            SystemFileSystem.list(dir).forEach { SystemFileSystem.delete(it, mustExist = false) }
+            Path(dir, fileName)
+        }
+        try {
+            withContext(IoDispatcher) { SystemFileSystem.sink(target).use { write(it) } }
+            val presenter = topViewController() ?: error("no visible screen to present the share sheet from")
+            val sheet = UIActivityViewController(activityItems = listOf(NSURL.fileURLWithPath(target.toString())), applicationActivities = null)
+            // Required on iPad, where the sheet is a popover.
+            sheet.popoverPresentationController?.sourceView = presenter.view
+            // The destination has its copy once the sheet closes (saved, sent or cancelled).
+            sheet.completionWithItemsHandler = { _, _, _, _ -> SystemFileSystem.delete(target, mustExist = false) }
+            presenter.presentViewController(sheet, animated = true, completion = null)
+        } catch (e: Throwable) {
+            withContext(IoDispatcher + NonCancellable) { SystemFileSystem.delete(target, mustExist = false) }
+            throw e
+        }
         return true
     }
 

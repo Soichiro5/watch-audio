@@ -27,9 +27,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.watchaudio.app.Strings
-import app.watchaudio.app.logic.DayTimeline
-import app.watchaudio.app.logic.GapCause
-import app.watchaudio.app.logic.TimelineSpan
+import app.watchaudio.core.timeline.DayTimeline
+import app.watchaudio.core.timeline.GapCause
+import app.watchaudio.core.timeline.TimelineSpan
 
 @Immutable
 internal data class TimelineColors(

@@ -6,8 +6,8 @@ import app.watchaudio.app.AppServices
 import app.watchaudio.app.logic.SnippetPart
 import app.watchaudio.app.logic.formatClock
 import app.watchaudio.app.logic.formatDateShort
-import app.watchaudio.app.logic.localDateOf
 import app.watchaudio.app.logic.parseSnippet
+import app.watchaudio.core.timeline.localDateOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview

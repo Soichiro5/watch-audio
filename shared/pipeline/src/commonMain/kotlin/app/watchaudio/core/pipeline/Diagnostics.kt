@@ -63,6 +63,10 @@ object DiagnosticEvents {
     /** A deletion from the status tab failed (#33); the UI shows a fixed text, not the error (#135). */
     const val STORAGE_ACTION_FAILED = "storage_action_failed"
     const val DIAGNOSTICS_EXPORT_FAILED = "diagnostics_export_failed"
+
+    /** The user exported their data (#155): counts only (days, chunks, audio files), never content. */
+    const val DATA_EXPORTED = "data_exported"
+    const val DATA_EXPORT_FAILED = "data_export_failed"
 }
 
 /**

@@ -123,23 +123,39 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
 - 状態は `StatusUiState.diagnosticsExport`（`busy` の間はボタンを無効化）。共有シートが開けば追加の表示はなし。記録が 1 件もなければ「書き出せる診断ログがありません」、失敗すると「診断ログを書き出せませんでした。もう一度試してください。」（例外のメッセージは出さず、診断ログに `diagnostics_export_failed error=<型>` を書く、#135）。
 - 何をどこに記録するかは [android-phone.md §4.2](android-phone.md#42-診断ログ77) と [ios-watchos.md §7.2](ios-watchos.md#72-診断ログ77)。
 
+### 1.9 データの書き出し（#155）
+
+状態タブの「ストレージ」の下に「データの書き出し」カード。文字起こし・マーク・録音できていない時間を、日ごとの Markdown（Obsidian などで読める形）と JSON にまとめた ZIP ファイルにする。形式は [02 §6.6](../architecture/02-architecture.md#66-データの書き出し155)。
+
+| 項目 | 内容 |
+| --- | --- |
+| 期間 | 「すべて」（既定）/「期間を指定」。指定すると「開始日」「終了日」のボタン（Material の `DatePicker` のダイアログ。今日より後は選べない）。開始日を終了日より後にすると終了日が、終了日を開始日より前にすると開始日がついてくる。初期値は今日までの 7 日間。日は端末のタイムゾーン |
+| 音声ファイルを含める | スイッチ（既定オフ）。端末にある音声の合計（「ストレージ」の内訳と同じ値）を添えて、ZIP が大きくなることを示す |
+| 書き出す | `ExportViewModel.export()`: ① `DataExporter.plan` で範囲にチャンクがあるか確かめ、なければ「この期間に書き出せる記録はありません」（保存先は聞かない）、② `AppServices.saveExport(ファイル名, "application/zip") { sink -> … }` でプラットフォームが保存先を聞き、③ `DataExporter.write` がそこへ ZIP を流し込む。書き出し中はボタンを無効にし「書き出し中…」と進捗（日数の割合）を出す |
+| 結果 | 「N日分を書き出しました（発話 N件、音声 N件）」。見つからなかった音声ファイルがあれば「音声ファイルが見つからなかった N件は、文字起こしだけを書き出しました」。保存先の画面でキャンセルしたら何も出さない。失敗は「書き出せませんでした。保存先の空き容量を確認して、もう一度試してください。」（例外のメッセージは出さず、診断ログに `data_export_failed error=<型>`。成功時は `data_exported` に件数だけ） |
+
+- 保存先: Android は `MainActivity` が登録した `ActivityResultContracts.CreateDocument("application/zip")`（SAF の保存ダイアログ）。ユーザーが作った文書に `ContentResolver.openOutputStream` で直接書くので、アプリの領域にコピーを作らない。iOS は一時ディレクトリ（`tmp/data-export/`）に書いてから共有シート（`UIActivityViewController`、「ファイルに保存」・AirDrop など）を開き、閉じたら消す。どちらも**ボタンを押したときだけ**で、保存先はユーザーが選ぶ。途中で失敗したら作りかけのファイルを消す。
+- 書き出しの処理（ZIP・Markdown・JSON）は共通コード（`shared/pipeline` の `core/export`）で、プラットフォームは保存先を開くだけ。`AppServices.exporter` は既定で `DataExporter(store, audioRoot)`。
+- Markdown のギャップの理由の言葉（`MarkdownText`）はタイムラインの `Strings.endReason` などと同じ（`ExportTextTest` で確認）。
+
 ## 2. データの流れ
 
 ```mermaid
 flowchart LR
   P[プラットフォーム<br>AndroidAppServices / IosAppServices] -- AppServices --> App
   subgraph shared/ui
-    App --> DVM[DayViewModel] & SVM[SearchViewModel] & STVM[StatusViewModel] & SEVM[SettingsViewModel] & OVM[OnboardingViewModel]
+    App --> DVM[DayViewModel] & SVM[SearchViewModel] & STVM[StatusViewModel] & EVM[ExportViewModel] & SEVM[SettingsViewModel] & OVM[OnboardingViewModel]
     DVM & SVM & STVM & SEVM -- "store.read { … }" --> DB[(LocalStore)]
     DVM --> L1[buildDayTimeline<br>buildTranscriptEntries]
     SVM --> L2[parseSnippet]
     STVM --> L3[arrivalState]
+    EVM --> X[DataExporter<br>shared/pipeline]
   end
 ```
 
-- プラットフォームとの契約は `AppServices`（`store`, `audioRoot`, `storage`, `status`, `requestTranscription()`, `play()`, `stopPlayback()`, `downloadModels(allowMetered)`, `modelSetup`, `permissions` / `permissionStatus()` / `requestPermission()` / `openAppSettings()`, `gapAlertSettingsChanged()`, `transcriptionSettingsChanged()`）。追加分はすべてデフォルト実装あり（権限なし・`DOWNLOAD`・no-op）。iOS は `downloadModels` で OS にモデルのインストールを依頼する。
+- プラットフォームとの契約は `AppServices`（`store`, `audioRoot`, `storage`, `status`, `requestTranscription()`, `play()`, `stopPlayback()`, `downloadModels(allowMetered)`, `modelSetup`, `permissions` / `permissionStatus()` / `requestPermission()` / `openAppSettings()`, `gapAlertSettingsChanged()`, `transcriptionSettingsChanged()`, `exportDiagnostics()`, `diagnostics`, `exporter`, `saveExport()`）。追加分はすべてデフォルト実装あり（権限なし・`DOWNLOAD`・no-op・保存先なし）。iOS は `downloadModels` で OS にモデルのインストールを依頼する。
 - `status` の型 `ProcessingStatus` / `ModelState`、設定 `AppSettings`、途絶アラートの判定はバックグラウンド処理（文字起こしの実行・通知）も使うので、UI ではない `shared/pipeline` にある（`app.watchaudio.core.pipeline` / `.settings` / `.alert`、#134）。UI はそれを import して使う。
-- 計算はすべて UI から独立した純粋関数（`logic/`）で、`commonTest` でテストしている。
+- 計算はすべて UI から独立した純粋関数（`logic/`）で、`commonTest` でテストしている。日のタイムライン（`buildDayTimeline`・`DayWindow`・`GapCause`）は書き出し（#155）も同じギャップを使うので `shared/pipeline` の `app.watchaudio.core.timeline` にある（テストは UI の `DayTimelineTest`）。
 - 時刻表示は端末のタイムゾーン（`TimeZone.currentSystemDefault()`、kotlinx-datetime）。チャンクの `timeZone` も DB に保存されているが、表示には使っていない。
 
 ### 2.1 再読み込みのタイミング
@@ -154,7 +170,7 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 
 ## 3. ホストへの組み込み
 
-- Android: `MainActivity` で `App((application as WatchAudioApp).services)`。権限要求の launcher も `MainActivity` が登録して `AndroidAppServices` に渡す。
+- Android: `MainActivity` で `App((application as WatchAudioApp).services)`。権限要求と、データの書き出しの保存ダイアログ（`CreateDocument`）の launcher も `MainActivity` が登録して `AndroidAppServices` に渡す。
 - iOS: Swift から `MainViewControllerKt.MainViewController()`（`IosAppGraph.services` を使う）。
 - `FakeAppServices`（`jvmTest`）は呼び出しを記録するだけのテスト用の実装。アプリ（iOS の framework を含む）には入らない。
 
@@ -172,8 +188,11 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 | `commonTest/…/GapAlertTextTest` | 途絶アラートの通知文 |
 | `commonTest/…/StatusNoticeTextTest` | すべての `StatusNotice`、状態タブの失敗の文言（モデル・削除・診断ログの書き出し）、通知の文言（途絶アラート・モデルのダウンロード）が空でなく、文ごとに日本語であること（#135） |
 | `jvmTest/…/ViewModelTest` | 一時ファイルの実 `LocalStore` + 一時ディレクトリの音声 + テストディスパッチャで、日付移動・変更時の再読み込み・周期更新・再試行・検索→該当日へ移動・受信途絶の警告、容量表示と保持期間の確認・適用・空き容量警告、「削除」入力による全削除、確認付きの日単位削除、削除済み音声の発話が再生されないこと、設定の保存、オンボーディングのステップ・同意必須・権限要求・拒否時に設定画面を開き戻ったら読み直す（`refusedPermissionLeadsToTheSystemSettingsAndIsReReadOnReturn`）、診断ログの書き出しはボタンでのみ依頼し結果（空・失敗）を表示する（`exportingDiagnosticsAsksThePlatformOnlyOnTapAndReportsTheOutcome`）、削除や書き出しの失敗は決まった文言を出し診断ログにはエラーの種類だけを書く（`aFailedDeletionShowsAFixedTextAndLogsOnlyTheErrorType`、#135） |
+| `jvmTest/…/ExportViewModelTest` | データの書き出し（#155）: 既定の選択（すべて・直近 7 日）と範囲の補正、ボタンを押すまで保存先を聞かないこと、書き出した ZIP の中身（JSON・Markdown・音声）と結果の文言、範囲に記録がなければ保存先を聞かない、キャンセルでは何も出さない、失敗は決まった文言で診断ログには型だけ |
+| `commonTest/…/ExportTextTest` | 書き出す Markdown のギャップの理由・曜日がタイムラインの文言と同じ |
+| `shared/pipeline` の `ExportGoldenTest`・`ExportFormatTest`・`ZipWriterTest`（`commonTest`）、`ZipWriterJvmTest`（`jvmTest`）、`DataExporterTest`（`sqliteTest`） | 書き出しの形式（[02 §6.6](../architecture/02-architecture.md#66-データの書き出し155)）: 固定データの JSON・Markdown の全文照合、JSON の読み戻し、ZIP（ZIP64 を含む）の読み戻し、実 DB からの書き出し |
 | `shared/pipeline` の `sqliteTest/…/GapAlertEvaluatorTest` | 実 DB 上で途絶アラートの判定・設定の反映 |
-| `jvmTest/…/AppUiTest` | Skia でヘッドレス描画し、(1) タイムライン→再生→検索→結果を開く→状態→おやすみ時間の切り替え→ストレージ（「削除」を入力して全削除）→「診断ログを書き出す」、(2) オンボーディング（同意しないと次へ進めない→通知許可→モデルのダウンロード選択→はじめる→タブ画面→説明をもう一度）、(3) 通知を拒否したときの「設定を開く」（`onboarding-permission-denied.png`）を操作。(4) 状態タブのお知らせ（Wi-Fi 待ち・文字起こし失敗）とモデルのダウンロード失敗（英語の `reason` を渡しても表示されない）を表示し、画面上に英語だけのテキストがないことを確認（`status-waiting-for-wifi.png`、`status-notice.png`、`status-model-failed.png`、#135）。(5) DB に英語の例外メッセージを持つ失敗チャンクのあるタイムラインで、失敗の行に決まった文言だけが出て例外のメッセージが表示されず、英語だけのテキストもないことを確認（`timeline-failed.png`、#144）。スクリーンショットを `shared/ui/build/screenshots/` に出力（CI の成果物 `ui-screenshots`） |
+| `jvmTest/…/AppUiTest` | Skia でヘッドレス描画し、(1) タイムライン→再生→検索→結果を開く→状態→おやすみ時間の切り替え→ストレージ（「削除」を入力して全削除）→「診断ログを書き出す」、(2) オンボーディング（同意しないと次へ進めない→通知許可→モデルのダウンロード選択→はじめる→タブ画面→説明をもう一度）、(3) 通知を拒否したときの「設定を開く」（`onboarding-permission-denied.png`）を操作。(4) 状態タブのお知らせ（Wi-Fi 待ち・文字起こし失敗）とモデルのダウンロード失敗（英語の `reason` を渡しても表示されない）を表示し、画面上に英語だけのテキストがないことを確認（`status-waiting-for-wifi.png`、`status-notice.png`、`status-model-failed.png`、#135）。(5) DB に英語の例外メッセージを持つ失敗チャンクのあるタイムラインで、失敗の行に決まった文言だけが出て例外のメッセージが表示されず、英語だけのテキストもないことを確認（`timeline-failed.png`、#144）。(6) 「データの書き出し」で「期間を指定」と「音声ファイルを含める」を選び、押すまで保存先を聞かないこと、押すと ZIP が渡され結果が出ること（`export.png`、`export-done.png`、#155）。スクリーンショットを `shared/ui/build/screenshots/` に出力（CI の成果物 `ui-screenshots`） |
 | `apps/android/src/androidTest/…/PlaybackTest` | エミュレータ上の実アプリで、実際の AAC を MediaPlayer が指定位置から再生すること、検索 → 結果を 1 タップ → 発話の位置から再生されることを確認（CI `emulator.yml`、[android-phone.md §6.1](android-phone.md#61-実機なしlinux--ci)） |
 | `apps/android/src/androidTest/…/PermissionDeniedTest` | エミュレータでオンボーディングから通知の許可を求め、システムのダイアログで拒否 → 理由と「設定を開く」が表示され、押すとアプリの設定画面が開く（インストール直後に `phone-scenarios.sh` から実行。スクリーンショット `onboarding-permission-denied.png` ほか） |
 | `apps/android/src/androidTest/…/ModelWaitTest` | モデルなしの状態タブ（「モデルが未ダウンロードです」・文字起こし待ち）と、モデルを置いた後の「準備完了」のスクリーンショット（`status-model-*.png`） |

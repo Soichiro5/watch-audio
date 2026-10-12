@@ -35,12 +35,12 @@ import androidx.compose.ui.unit.dp
 import app.watchaudio.app.ModelSetup
 import app.watchaudio.app.Strings
 import app.watchaudio.app.logic.ArrivalState
-import app.watchaudio.app.logic.Thresholds
 import app.watchaudio.app.logic.formatAgo
 import app.watchaudio.app.logic.formatClock
 import app.watchaudio.app.logic.formatHours
 import app.watchaudio.app.logic.formatMinuteOfDay
 import app.watchaudio.app.state.DiagnosticsExport
+import app.watchaudio.app.state.ExportUiState
 import app.watchaudio.app.state.StatusUiState
 import app.watchaudio.core.alert.GapAlertSettings
 import app.watchaudio.core.alert.QuietHours
@@ -48,6 +48,7 @@ import app.watchaudio.core.db.StoreStats
 import app.watchaudio.core.pipeline.ModelState
 import app.watchaudio.core.pipeline.ProcessingPolicy
 import app.watchaudio.core.settings.AppSettings
+import app.watchaudio.core.timeline.Thresholds
 import kotlinx.datetime.TimeZone
 
 @Composable
@@ -63,6 +64,8 @@ internal fun StatusScreen(
     onShowOnboarding: () -> Unit,
     storageCallbacks: StorageCallbacks,
     onExportDiagnostics: () -> Unit,
+    export: ExportUiState,
+    exportCallbacks: ExportCallbacks,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -75,6 +78,7 @@ internal fun StatusScreen(
         settings?.let { AlertSettingsCard(it.gapAlert, onGapAlertsEnabledChange, onQuietHoursChange) }
         state.stats?.let { StatsCard(it) }
         state.storage?.let { StorageCard(it, state.storageActions, storageCallbacks) }
+        ExportCard(export, state.storage?.breakdown?.audioBytes, exportCallbacks)
         Section(Strings.PRIVACY_TITLE) {
             Text(Strings.PRIVACY_NOTE, style = MaterialTheme.typography.bodyMedium)
         }
@@ -143,7 +147,7 @@ private fun AlertSettingsCard(
 }
 
 @Composable
-private fun SwitchRow(title: String, detail: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+internal fun SwitchRow(title: String, detail: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth().toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
         verticalAlignment = Alignment.CenterVertically,

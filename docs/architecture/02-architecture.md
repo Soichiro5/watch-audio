@@ -79,7 +79,7 @@ watch-audio/
 │   ├── protocol/              #   ChunkManifest / ChunkAck / ChunkFrame / RecordingFormat（Wear OS・スマホ共通。testdata/ は Swift 側と共有）
 │   ├── platform/              #   expect/actual: SHA-256、IoDispatcher など
 │   ├── db/                    #   LocalStore（手書き SQL。StoreTransaction はチャンク・文字起こし・検索・容量管理・設定ごとのファイルに分割）、Schema.kt のマイグレーション、FTS5 検索
-│   ├── pipeline/              #   Ingestor・ChunkIntake（受信の入口）、TranscriptionPipeline・TranscriptionRun（文字起こし 1 回分）、Transcriber、発話区間の切り出し、境界の連結、StorageManager、設定（AppSettings）・状態（ProcessingStatus）・途絶アラートの判定
+│   ├── pipeline/              #   Ingestor・ChunkIntake（受信の入口）、TranscriptionPipeline・TranscriptionRun（文字起こし 1 回分）、Transcriber、発話区間の切り出し、境界の連結、StorageManager、設定（AppSettings）・状態（ProcessingStatus）・途絶アラートの判定、日のタイムライン（ギャップ）、データの書き出し（export）
 │   ├── testing/               #   テスト専用: TempDir、manifest の組み立て（testManifest）。各モジュールのテストだけが使う
 │   └── ui/                    #   スマホ UI（Compose MP、Android/iOS 共通）、AppServices、ViewModel。iosMain に IosAppGraph と Swift とのブリッジ
 ├── build-logic/               # Gradle の convention plugin（KMP ライブラリ共通設定、SQLite テストを JVM/Android/iOS で動かす設定、Android アプリ共通設定と release、Wear OS の debug 入力の混入検査）
@@ -318,6 +318,41 @@ interface LlmProvider {
 - 送信前に `PrivacyFilter` を必ず通す（音声・生の心拍値・正確な座標は型レベルで送れない設計にする）。
 - 自動レビューは「1 日あたりの上限回数/トークン」を設定可能にし、想定外の課金を防ぐ。
 
+### 6.6 データの書き出し（#155）
+
+ためた記録を、ユーザーが読める形・ほかのアプリで使える形で端末の外に持ち出す。状態タブの「データの書き出し」で期間（すべて / 日付の範囲）と「音声ファイルを含める」を選び、「書き出す」を押したときだけ動く。保存先は OS の画面でユーザーが選ぶ（Android: SAF の保存ダイアログ、iOS: 共有シートの「ファイルに保存」など）。アプリが自動でどこかへ送ることはない（§7）。UI と各プラットフォームの実装は [phone-ui.md §1.9](../platforms/phone-ui.md#19-データの書き出し155)。
+
+処理は共通コード `shared/pipeline` の `app.watchaudio.core.export`（`DataExporter`）。DB（`shared/db` の `ExportQueries`）と音声ファイルの両方を読み、日のギャップをタイムラインと同じ `buildDayTimeline`（`app.watchaudio.core.timeline`）で求めるので、DB だけの `shared/db` ではなくここに置く。JSON は `shared/protocol` と同じ kotlinx.serialization。
+
+**1 つの ZIP ファイル**（`watch-audio-<最初の日>_<最後の日>.zip`。1 日だけなら日付 1 つ）にまとめる。中身はファイル名と同じフォルダの下:
+
+```
+watch-audio-2026-10-04_2026-10-10/
+├── README.md                        # 中身の説明（日本語）
+├── export.json                      # 一覧（ExportIndex）
+├── markdown/2026-10-10.md           # 日ごとのノート
+├── json/2026-10-10.json             # 日ごとのデータ（ExportDay）
+└── audio/2026-10-10/070000_<チャンクの UUID>.m4a   # 「音声ファイルを含める」のときだけ
+```
+
+- **日の区切り**: 書き出したときの端末のタイムゾーンの 0:00〜24:00 に**始まった**チャンクがその日に入る（「この日のデータを削除」と同じ。各チャンクはちょうど 1 日に入る）。発話と印はチャンクについていく（23:58 に始まったチャンクの 0:01 の発話は前日のファイル。Markdown では「翌日 00:01:00」と書く）。記録のない日はファイルを作らない。
+- **ZIP**: 無圧縮（STORE。音声はもともと圧縮済み）。`ZipWriter`（共通コード、外部ライブラリなし）が前から順に書き、シークしない。音声ファイルは 1 つずつ 2 回読む（CRC-32 を求めてからコピー）のでメモリに載せない。4 GiB または 65,535 件を超えると ZIP64 で書く（1 年分の音声）。ファイル名は UTF-8。
+- **Markdown**（`renderDayMarkdown`、Obsidian でそのまま読める形）: YAML のフロントマター（`date`・`time_zone`・`recorded_minutes`・`utterances`・`marks`・`gaps`・`tags: [watch-audio]`）、見出し「2026年10月10日(土)」、録音時間・発話・マークの件数、文字起こし待ち・失敗のチャンクがあればその旨、「録音できていない時間」（時刻と理由。理由の言葉はタイムラインと同じ）、「文字起こし」（1 時間ごとの見出しの下に `- HH:mm:ss 発話`・`**マーク**`・*録音停止（充電中）* を時刻順）、音声を含めたときは「音声ファイル」（各チャンクへの相対リンク、保持期間で削除済み・見つからなかったものはその旨）。発話の本文は Markdown・Obsidian の記号（`* _ [ ] < > # | ~ = $ %` など）をエスケープし、改行は空白にする。
+- **JSON**（取り込み直せる形。暗号化バックアップ #40 もこの形式を使う）: すべてのファイルに `"format": "watch-audio-export"` と `"formatVersion": 1`。時刻はエポックミリ秒、チャンクは Watch の UUID で表す（DB の整数のキーは外に出さない、#94）。読み手は知らないキーを無視し、`format` が違うか `formatVersion` が新しすぎるファイルは読まない（`decodeExportDay` / `decodeExportIndex`）。形式を変えるときは、古い読み手が誤読する変更なら `EXPORT_FORMAT_VERSION` を上げる。
+
+| ファイル | 内容 |
+| --- | --- |
+| `export.json`（`ExportIndex`） | `exportedAt`、`timeZone`、`from` / `to`（指定した範囲。「すべて」なら省略）、`includesAudio`、`days`（日ごとの `date`・`json`・`markdown` のパスと、チャンク・発話・マーク・ギャップ・音声ファイルの件数） |
+| `json/<日付>.json`（`ExportDay`） | `date`、`timeZone`、`dayStart` / `dayEnd`、`chunks`、`segments`、`marks`、`gaps` |
+| `chunks[]`（`ExportChunk`） | `id`（UUID）、`sessionId`、`deviceId`、`source`（`wearos` / `watchos`）、`startedAt`、`endedAt`、`timeZone`（Watch の）、`endReason`（`rotation`・`charging` など、マニフェストと同じ値）、`transcription`（`done` / `pending` / `failed` / `none` = 無音）、`audio`（無音チャンクは省略。`codec`・`sizeBytes`・`sha256`・`purgedAt`（保持期間で削除した時刻）・`file`（ZIP 内のパス。含めなかったときは省略）） |
+| `segments[]`（`ExportSegment`） | `chunkId`、`startAt`、`endAt`、`text`、`lang`（不明なら省略）、`engine` |
+| `marks[]`（`ExportMark`） | `chunkId`、`at` |
+| `gaps[]`（`ExportGap`） | `start`、`end`、`cause`（`stopped` + `endReason` / `missing` = 録音中のはずが届いていない / `awaiting` = 書き出し時点で転送待ち）。タイムラインと同じ規則（§9.2）で、日と書き出し時刻で切る。最初の録音より前は含めない |
+
+エラーの扱い: 書き出しの失敗（保存先の容量不足など）は決まった日本語の文言を出し、診断ログには `data_export_failed error=<型>` だけを書く（#135）。成功時は `data_exported`（日数・チャンク数・音声ファイル数だけ。本文は書かない）。途中で失敗・キャンセルしたファイルは消す（Android: 作った文書を削除、iOS: 一時ファイルを削除）。
+
+テスト: 固定した 1 日のデータから作った JSON と Markdown を全文で照合（`ExportGoldenTest`）、JSON の読み戻しで発話・マーク・ギャップが欠けないこと（`ExportFormatTest`）、ZIP を共通の読み手と `java.util.zip`（ZIP64 を含む）で読み戻す（`ZipWriterTest`、`ZipWriterJvmTest`）、実 DB と音声ファイルからの書き出しを ZIP から読み戻して DB と一致すること（`DataExporterTest`、JVM と iOS シミュレータ）、ViewModel と画面（`ExportViewModelTest`、`AppUiTest` の `export.png` / `export-done.png`）。
+
 ## 7. セキュリティ・プライバシー
 
 | 項目 | 方針 |
@@ -327,6 +362,7 @@ interface LlmProvider {
 | API キー | 現在は扱わない。将来（P2）の BYOK では Keychain（`ThisDeviceOnly`）/ Android Keystore にだけ保存する |
 | 外部送信 | なし（ネットワーク利用は文字起こしモデルのダウンロードのみ。§7.2、CI で検査 §7.3）。将来（P2）に AI プロバイダ（テキストのみ、ユーザーが設定した場合）、本人の AI エージェントへの LAN 内での受け渡し（UC11、ペアリングした端末だけ。方式は [#131](https://github.com/Soichiro5/watch-audio/issues/131) で検討中、[research/agent-access.md](../research/agent-access.md)）、OS ジオコーダを検討（追加時は §7.3 の許可リストを更新）。解析 SDK・広告 SDK・クラッシュ送信 SDK は入れない |
 | 診断ログ | 処理の記録（時刻・ID・処理時間・エラーの種類、異常終了）を端末内の CSV（上限約 1 MB）に残す。文字起こしの本文・音声・例外メッセージは含めない。端末外へは、ユーザーが状態タブの「診断ログを書き出す」から共有先を選んだときだけ出る（#77、[impl/android-phone.md §4.2](../platforms/android-phone.md#42-診断ログ77)） |
+| 書き出し | ユーザーが状態タブの「データの書き出し」を押したときだけ、ユーザーが選んだ保存先にだけ書く（Android: SAF の保存ダイアログで作った文書へ直接、iOS: 一時ファイル → 共有シート。閉じたら一時ファイルを削除）。アプリは通信しない（§6.6、#155） |
 | 同意 | 初回オンボーディングで「録音対象者への告知」の注意喚起。Watch に録音中インジケータを常時表示 |
 | 削除 | 「この日のデータを削除」（その日に始まったチャンクの音声・文字起こし・マーク）と「すべてのデータを削除」（全録音・文字起こし・音声ファイルとスマホの診断ログ。DB は `VACUUM` で縮める。設定は残す。#159）。どちらもアプリ内の確認ステップ必須（全削除は「削除」と入力）。システムダイアログは使わない。AI 設定・API キーは実装時に全削除の対象に加える |
 
@@ -341,6 +377,7 @@ interface LlmProvider {
 | iPhone | DB、音声、受信直後のファイル | `Application Support/WatchAudio/`（`watch-audio.db`、`audio/`、`inbox/`） | `NSFileProtectionCompleteUntilFirstUserAuthentication` をディレクトリに明示（`LocalDataDirectory`）。中に作るファイルはこのクラスを引き継ぐ | `NSURLIsExcludedFromBackupKey`（ディレクトリに設定すると中身も対象外） |
 | Android スマホ・iPhone | 診断ログ（イベントの CSV。本文・音声・例外メッセージは含まない）（#77） | Android: `files/diagnostics/`、iPhone: `Application Support/WatchAudio/diagnostics/` | 上の DB と同じ | 上の DB と同じ。端末外へはユーザーが共有シートで書き出したときだけ |
 | iPhone | 文字起こし用の一時ファイル | `tmp/` | 既定（同上） | 一時ディレクトリはバックアップされない。処理後に削除 |
+| iPhone | データの書き出し（#155）の ZIP | `tmp/data-export/` | 既定（同上） | 一時ディレクトリはバックアップされない。共有シートを閉じたら削除（次の書き出しでも前回分を削除）。Android はアプリの領域に書かず、ユーザーが作った文書へ直接書く |
 | Apple Watch | 録音中・送信待ちのチャンク、診断ログ | `Application Support/WatchAudio/`（`recording/`、`outbox/`、`diagnostics.csv`） | `FileProtectionType.completeUntilFirstUserAuthentication` をディレクトリに明示（`LocalDataProtection`） | `isExcludedFromBackup`（同上） |
 | Apple Watch | コンプリケーション用の録音状態（状態・開始時刻・停止理由だけ。音声・文字起こしは含まない）（#41） | App Group の `UserDefaults`（アプリとウィジェット拡張だけが読める、端末内のコンテナ） | 既定（`CompleteUntilFirstUserAuthentication`） | 内容は状態だけで、録音データは入れない |
 

@@ -3,12 +3,12 @@ package app.watchaudio.app.state
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.watchaudio.app.AppServices
-import app.watchaudio.app.logic.DayTimeline
 import app.watchaudio.app.logic.TranscriptEntry
-import app.watchaudio.app.logic.buildDayTimeline
 import app.watchaudio.app.logic.buildTranscriptEntries
-import app.watchaudio.app.logic.dayWindow
-import app.watchaudio.app.logic.localDateOf
+import app.watchaudio.core.timeline.DayTimeline
+import app.watchaudio.core.timeline.buildDayTimeline
+import app.watchaudio.core.timeline.dayWindow
+import app.watchaudio.core.timeline.localDateOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
