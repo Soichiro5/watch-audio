@@ -53,6 +53,10 @@ dependencies {
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.play.services.wearable)
     implementation(libs.sherpa.onnx.android)
+    // Semantic search (#24): the embedding model runs on sherpa-onnx's ONNX Runtime through its C
+    // API (shared/ort); JNA's AAR brings libjnidispatch.so for each ABI.
+    implementation(projects.shared.ort)
+    implementation(libs.jna) { artifact { type = "aar" } }
 
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.junit)

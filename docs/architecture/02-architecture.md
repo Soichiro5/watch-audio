@@ -1,6 +1,6 @@
 # 02. 全体構成（アーキテクチャ）
 
-> 現在のゴール（[03-roadmap.md](../product/03-roadmap.md)）は「装着中は常時録音 → スマホでオンデバイス文字起こし → 端末内に蓄積」。この文書は**実装済みの構成**を基本に書き、AI 要約・チャット・意味検索・体調・場所など後回し（P2）の部分は「将来（P2）」と明記して区別する。
+> 現在のゴール（[03-roadmap.md](../product/03-roadmap.md)）は「装着中は常時録音 → スマホでオンデバイス文字起こし → 端末内に蓄積」。この文書は**実装済みの構成**を基本に書き、AI 要約・チャット・体調・場所など後回し（P2）の部分は「将来（P2）」と明記して区別する。意味検索（#24）は Android で実装済み（iOS はキーワード検索のみ、§6.4）。
 
 ## 1. 設計方針
 
@@ -24,8 +24,9 @@
 | 非同期 | Kotlin Coroutines / Flow | KMP 定番 |
 | バックグラウンド処理 | Android: WorkManager、iOS: `BGProcessingTask` | 文字起こし・保持期間の適用・途絶チェック |
 | ネットワーク | 専用の HTTP クライアントは使わない | 通信はモデルのダウンロードだけ（Android は `HttpURLConnection`、iOS は OS 管理）。AI 機能（P2）の HTTP クライアントは P2 で決める。CI の `tools/privacy-check` が通信 API・依存を検査（§7.3） |
+| 意味検索（#24） | 埋め込みモデル `cl-nagoya/ruri-v3-30m`（int8 ONNX、256 次元）、純 Kotlin の SentencePiece Unigram トークナイザ、int8 ベクトルの総当たり検索 + FTS5 との RRF。Android は ONNX Runtime の C API を JNA で（sherpa-onnx 同梱の `libonnxruntime.so` を共用、`shared/ort`）。iOS は未対応（キーワード検索のみ） | M0-6 で比較して採用（[research/m0-6](../research/m0-6-embedding-desktop.md)）。ONNX Runtime の Java パッケージを使わない理由は [android-phone §3.4](../platforms/android-phone.md#34-意味検索の埋め込みモデル24) |
 | CI | GitHub Actions（`android.yml` / `emulator.yml`: ubuntu、`ios.yml`: macOS、`deliver.yml`: `main` で APK を保存） | |
-| 将来（P2） | 埋め込み（multilingual-e5-small, ONNX）によるベクトル検索、BYOK の LLM（要約・チャット）と API キー保管（Keychain / Keystore）、HealthKit / Health Connect | M0-6 で埋め込みモデルを比較済み（[spikes](../research/m0-6-embedding-desktop.md)）。採用ライブラリは着手時に決める |
+| 将来（P2） | BYOK の LLM（要約・チャット）と API キー保管（Keychain / Keystore）、HealthKit / Health Connect | 採用ライブラリは着手時に決める |
 
 **代替案**: Flutter（UI 開発速度は高いが、iOS バックグラウンド処理と Wear OS 連携でネイティブ実装比率が高くなる）。チームが Dart に強い場合のみ再検討。
 
@@ -51,6 +52,8 @@ flowchart LR
     ING --> JOB[Job Scheduler<br>WorkManager / BGProcessingTask]
     JOB --> PIPE[TranscriptionPipeline<br>境界の連結・リトライ] --> ASR[Transcriber<br>sherpa-onnx + VAD / SpeechAnalyzer] --> DB
     JOB --> RET[StorageManager<br>音声の保持期間] --> AUD
+    JOB --> EMB[EmbeddingStep<br>passage の埋め込み（Android）] --> DB
+    DB --> VEC[(ベクトルのキャッシュ<br>search/)]
     UI[Compose MP UI<br>日別タイムライン / 検索 / 状態 / オンボーディング] --> DB
     UI --> AUD
   end
@@ -58,7 +61,7 @@ flowchart LR
   MODEL[(モデル配布元<br>GitHub Releases / OS)] -. "モデルのダウンロードのみ" .-> ASR
 ```
 
-将来（P2）は、文字起こしの後に「埋め込み → ベクトル検索」「1 時間ごとの要約・1 日の振り返り・記憶の抽出」「チャット（RAG）」を追加する（§6.4・§6.5）。
+文字起こしの後に埋め込み（意味検索、#24。Android のみ）を行う（§6.3・§6.4）。将来（P2）は「1 時間ごとの要約・1 日の振り返り・記憶の抽出」「チャット（RAG）」を追加する（§6.4・§6.5）。
 
 ## 4. リポジトリ構成（モノレポ）
 
@@ -107,6 +110,8 @@ erDiagram
   AUDIO_CHUNK ||--o{ MARK : has
   ENGINE ||--o{ TRANSCRIPT_SEGMENT : produced
   TRANSCRIPT_SEGMENT ||--|| SEGMENT_FTS : indexed_by
+  AUDIO_CHUNK ||--o{ PASSAGE_EMBEDDING : embedded_as
+  EMBEDDING_MODEL ||--o{ PASSAGE_EMBEDDING : produced
 ```
 
 チャンク・エンジンは**整数のキーで参照**する（マイグレーション 6、#94）。Watch が採番した UUID は `audio_chunk.uuid` にだけ持ち、セグメントと印は `audio_chunk.id`（INTEGER PRIMARY KEY。VACUUM で番号が変わらない）を指す。整数のキーは `shared/db` の中だけで使い、公開 API（`ChunkRecord.id`・`SegmentRecord.chunkId`・`SegmentRecord.engine`）は従来どおり UUID とエンジン名の文字列で返す。
@@ -119,6 +124,10 @@ erDiagram
 | `engine` | id, name（文字起こしエンジンの ID。`Transcriber.engineId`、一意） |
 | `segment_fts` | FTS5(trigram) の contentless 仮想テーブル（本文 + 改行 2 つをトリガで索引。語彙 `segment_fts_terms` で 1〜2 文字の検索にも使う。マイグレーション 5、#72） |
 | `app_setting` | key, value（音声の保持期間・通知設定など。`CREATE TABLE IF NOT EXISTS` で冪等に作成） |
+| `embedding_model` | id, name（埋め込みモデルの ID。`EmbeddingModelSpec.id`、一意。マイグレーション 9、#24） |
+| `passage_embedding` | id（AUTOINCREMENT。再利用しない）, chunk_id（`audio_chunk.id`、チャンクの削除で消える）, model_id（`embedding_model.id`）, first_index・segment_count（チャンクのセグメントを (start_at, id) 順に並べたときの範囲）, start_at, scale, vector（int8 の BLOB、256 バイト）。セグメントの追加・削除でそのチャンクの行はトリガが消す（派生データ。§6.3） |
+| `passage_deletion` | seq, passage_id（消えた passage の記録。検索用のキャッシュが読んで捨てる。§6.4） |
+| `embedding_state` | 1 行だけ: token（この DB を表す乱数。別の DB から作ったキャッシュを使わない）, deletion_floor（捨てた削除記録の最大の seq） |
 | `backup_state` | 1 行だけ（id = 1）: epoch（今のバックアップのエポック）, deleted_epoch（最後にチャンクを削除したエポック）, saved_at・saved_diff・saved_epoch（最後に保存できたバックアップの作成時刻・差分か・含むエポック）, full_saved_at・full_epoch（その元の全体のバックアップ）, diffs_since_full（マイグレーション 8、§6.7） |
 
 時刻はすべてエポックミリ秒。
@@ -129,7 +138,6 @@ AI 要約・チャット・意味検索・体調/場所に着手するときに�
 
 ```mermaid
 erDiagram
-  TRANSCRIPT_SEGMENT ||--o| SEGMENT_EMBEDDING : has
   HOUR_REVIEW ||--o{ HIGHLIGHT : produces
   HIGHLIGHT }o--o{ TRANSCRIPT_SEGMENT : cites
   DAY ||--o{ HOUR_REVIEW : has
@@ -142,7 +150,6 @@ erDiagram
 
 | テーブル | 主なカラム |
 | --- | --- |
-| `segment_embedding` | segment_id, model_id, vector(int8 BLOB), scale |
 | `hour_review` | day, hour, density_score, summary, state, provider, model |
 | `highlight` | id, hour_review_id, title, body, cited_segment_ids |
 | `daily_reflection` | day, body |
@@ -198,11 +205,22 @@ received → transcribing → transcribed
 no_audio（無音チャンク。文字起こししない）
 ```
 
-- ジョブはべき等・再開可能（各チャンクの `state` で進捗管理）。将来（P2）は文字起こしの後に埋め込み・要約などの段を追加する。
+- ジョブはべき等・再開可能（各チャンクの `state` で進捗管理）。文字起こしの後に埋め込みの段（下記「埋め込み（意味検索、#24）」）がある。将来（P2）は要約などの段を追加する。
 - iOS: 前景時は即時処理、バックグラウンドは `BGProcessingTask`（充電中、`requiresExternalPower = true`）。
 - Android: WorkManager。チャンク受信ごとに unique な 1 回限りジョブ（実行中なら後続を 1 つだけ追加）、保険として充電中に 6 時間ごとの定期ジョブ（詳細は [docs/platforms/android-phone.md](../platforms/android-phone.md)）。
 - **文字起こし 1 回分は共通**（#134）: `TranscriptionRun`（`shared/pipeline`）が、① 前回中断したチャンク（`TRANSCRIBING`）をキューに戻す（毎回、実行の直列化ロックの中で）、② モデルの確認（`SpeechModel`。未準備なら文字起こしをしない）、③ 電池と発熱の方針つきの文字起こし（失敗したチャンクがあればモデルを確認し直す）、④ 音声の保持期間による削除、⑤ 診断ログ（`worker_start` / `worker_stop`、チャンクごとの `transcription_*`）、⑥ 次の予約の判定（`FollowUp`: なし / すぐ再実行 / 方針による休止（遅延・充電時）/ OS による停止 / モデル待ち）を行う。Android（WorkManager）と iOS（前面実行・BGTask）は `FollowUp` を自分のスケジューラに対応づけるだけ。試行回数の上限（3 回）は `TranscriptionPipeline.DEFAULT_MAX_ATTEMPTS` の 1 か所。
 - 電池と発熱の方針（#75）: どのプラットフォームでも、文字起こしは下の「充電していないときの処理方針」に従い、**チャンクごとに**処理してよいかを判定する（下記）。
+
+#### 埋め込み（意味検索、#24）
+
+`TranscriptionRun` は、文字起こし待ちのチャンクが無くなった後に `EmbeddingStep`（`shared/pipeline`、Android は埋め込みモデルがあるときだけ。iOS は無し）を動かす。文字起こしを遅らせないこと、電池・発熱の方針に従うことが条件。
+
+1. **対象**: 文字起こし済み（`TRANSCRIBED`）でセグメントがあり、今のモデル（`EmbeddingModelSpec.id`）の passage が無いチャンク。**新しい順**（最近の会話から意味で探せるようになる）。
+2. **短いセグメントの結合**（`EmbeddingPassages`）: #68 以降のセグメントは 1 つが 2 秒前後・12 文字前後と短く、そのままでは埋め込みの意味が弱く、1 年で 310 万件にもなる。チャンクの中で連続するセグメントを、トークン数（モデルのトークナイザで数える）が 24 以上になるまでつなぎ（最大 128、30 秒を超える間では切る）、1 つの passage として埋め込む。最後が短ければ 1 つ前に足す。評価（[m0-6 §9.2](../research/m0-6-embedding-desktop.md#92-検索品質キーワードのみ-と-ハイブリッド上位-5-件)）で 16〜24 が会話コーパスで最もよく、24 で約 3.2 セグメントが 1 passage（1 年 約 100 万件）。
+3. **埋め込み**: 「検索文書: 」を前に付けてトークナイズ（`UnigramTokenizer`、純 Kotlin で HF `tokenizers` と同じ ID 列）、`EncoderRuntime`（プラットフォーム。Android は ONNX Runtime）で `last_hidden_state`、平均プーリング、L2 正規化。1 件ずつ（int8 モデルはパディングで値が変わるため）。
+4. **保存**: ベクトルごとの対称 int8 量子化（`Int8Vectors`、scale = 最大絶対値 / 127）で `passage_embedding` に。保存の直前に、読んだときとチャンクのセグメントが同じか確かめる（違えば保存せず、次の実行で埋め込み直す）。
+5. **埋め込み直し**: セグメントが変わる（境界の再認識 §6.3「チャンク境界をまたぐ発話」、文字起こしのやり直し、復元）とトリガがそのチャンクの passage を消すので、次の実行で 1 から埋め込み直す。モデルを変えたら（`id` が変わる）古いモデルの passage を少しずつ消し、全チャンクを埋め込み直す（その間も、埋め込んだ分は新しいモデルで探せる）。
+6. **電池**: 方針（`ProcessingPolicy`）が「実行してよい」と言う間だけ。電池駆動では受信から 48 時間以内のチャンクを 1 回 50 件まで（その日の会話）。古い分（初回のバックフィル・埋め込み直し）は充電中だけ、1 回 300 件・4 分まで。チャンクの合間ごとに、新しいチャンクの到着・OS の停止・方針の変化を確かめて止まる。失敗は文字起こしに影響しない（診断ログ `embedding_run` / `embedding_failed`）。
 
 #### 充電していないときの処理方針（#75）
 
@@ -294,11 +312,32 @@ Watch は発話に関係なく約 5 分ごとにチャンクを区切るので�
 
 ### 6.4 検索
 
-実装済み: `transcript_segment` の FTS5（trigram）によるキーワードの部分一致検索。trigram は 3 文字未満の語を引けないので、1〜2 文字の検索は `idx_segment_start_text` を新しい順に走査する `LIKE` で補う（#23、性能は §8）。
+キーワード: `transcript_segment` の FTS5（trigram）によるキーワードの部分一致検索。trigram は 3 文字未満の語を引けないので、1〜2 文字の検索は `idx_segment_start_text` を新しい順に走査する `LIKE` で補う（#23、性能は §8）。
 
-#### 将来（P2）: 意味検索とチャット（RAG）
+#### 意味検索とハイブリッド（#24、Android のみ）
 
-1. クエリを埋め込み → ベクトル上位 K 件 + FTS5 上位 K 件を RRF（Reciprocal Rank Fusion）で統合。
+言い回しが違っても意味の近い会話を探せるように、キーワード検索に意味検索を組み合わせる（`HybridSearch`、`shared/pipeline` の `app.watchaudio.core.search`）。
+
+1. **キーワード**: 上の FTS5 の検索（新しい順、最大 100 件）。画面にはまずこれを出す。
+2. **意味**: クエリに「検索クエリ: 」を付けて埋め込み、int8 に量子化し、今のモデルの全 passage と総当たりで内積（≈ コサイン類似度）を取って上位 20 件（`SemanticIndex`）。ruri-v3 の類似度は無関係な会話でも 0.8〜0.9 と高く固定のしきい値では分けられないので、**最上位から 0.04 以内**のものだけ残す。
+3. **統合**: 2 つの順位を RRF（Reciprocal Rank Fusion、k = 60）で統合する。キーワードで見つかったセグメントが、意味でも見つかった passage に含まれていれば同じ結果として数える（passage ごとに最初の 1 件）ので、両方で見つかった会話が上に来る。意味だけで見つかった結果は passage の本文（最大 80 文字）を出し、そのセグメントの先頭から開く。
+4. 意味検索ができない間（iOS・モデル未取得・失敗）は**キーワード検索そのまま**。
+
+**総当たりの検索**（`VectorCache`）: 毎回 SQLite から全ベクトルを読むと数秒かかる（M0-6 §4.3）ので、今のモデルのベクトルをアプリのデータ領域のフラットなファイル（Android `files/search/<モデル>.ids` / `.vec`）にも持つ。`.ids` は passage ID と scale（1 件 12 バイト。開くときにメモリへ読む）、`.vec` は int8 の値（1 件 256 バイト。検索時にブロックごとに読む。Java のヒープには載せず、OS のページキャッシュに任せる）。走査は行の範囲を 4 スレッドに分けて並列に行い、各スレッドの上位 K 件をまとめる。このファイルは**派生データのキャッシュ**で、正本は SQLite:
+
+- 追加: passage ID は再利用されない（AUTOINCREMENT）ので、前回より大きい ID の行を読んで末尾に足す。
+- 削除: passage の削除（チャンクの削除・埋め込み直し）はトリガが `passage_deletion` に記録し、キャッシュはそれを読んで該当レコードを**ゼロで上書き**する（消えた会話の意味をファイルに残さない）。適用した分は埋め込みの段の後に記録から消し、消した位置（`deletion_floor`）より古い状態のキャッシュは作り直す。全削除・日の削除の後はすぐに反映する（`StorageManager` の `onDeleted`）。
+- 整合: 追記とゼロ書きの後でヘッダ（件数・適用済みの位置）を最後に書くので、途中で落ちても次に開いたときにヘッダの件数まで切り詰めれば元に戻る。別の DB（`embedding_state.token`）・別のモデル・壊れたファイルなら作り直す。削除が 4 分の 1 を超えたら詰め直す。
+- 性能（JVM、[m0-6 §9.3](../research/m0-6-embedding-desktop.md#93-速度jvmこのコンテナの-4-vcpu負荷はほぼなし)）: 50 万件で p50 40 ms / p95 47 ms、110 万件（約 1 年）で 69 / 96 ms（4 スレッド）。スマホは 2〜3 倍と見込む（実機は未計測）。
+- 品質（m0-6 §9.2）: 会話らしい言い換えのクエリで上位 5 件に正解が入る割合が、キーワードのみ 0.00 → ハイブリッド 0.76（49 件）。
+
+**オンデバイスのみ**: クエリ・その埋め込み・passage・ベクトルはすべて端末内で扱い、どこにも送らない（`OnnxEmbedder` と `shared/ort` は通信しない。通信はモデルのダウンロードだけ、§7.2）。
+
+**iOS**: 共通コード（トークナイザ・passage・キャッシュ・統合）は iOS でもそのまま動くが、埋め込みモデルを動かす `EncoderRuntime` とモデルのダウンロードが無いので、`AppServices.semanticSearch` は null（キーワード検索のみ）。方針は [ios-watchos.md](../platforms/ios-watchos.md#15-意味検索24未対応) にまとめた。
+
+#### 将来（P2）: チャット（RAG）
+
+1. 上のハイブリッド検索で文脈を集める。
 2. 日付/時間帯フィルタ（「先週の火曜」など）は LLM の関数呼び出しで抽出（AI 未設定時は UI フィルタ）。
 3. 前後の文脈セグメント + 関連記憶 + 1 時間ごとの要約をコンテキストにして LLM へ。
 4. 回答中の引用 `[seg:123]` を UI で原文・音声再生へのリンクに変換。
@@ -410,6 +449,8 @@ watch-audio-2026-10-04_2026-10-10/
 | `backup.json`（`BackupIndex`、`export.json` の後） | `formatVersion`（全体は 1、差分は 2）、`createdAt`、`kind`（`full` / `diff`）、`includesAudio`、日数・チャンク・発話・マーク・音声ファイルの件数、差分なら `base`（下記） |
 
 ZIP は前から順に読める形（各エントリーのローカルヘッダーに大きさがある）なので、復元は `ZipStreamReader` で復号しながら読み、シークしない。
+
+**意味検索の埋め込み（#24）はバックアップにも書き出しにも入れない**。文字起こしから作り直せる派生データで、モデルが変われば使えなくなり、入れると 1 年で約 0.3 GB 増えるため。復元で加わったチャンク（とセグメントが変わったチャンク）は passage が無い状態になり、埋め込みの段（§6.3）が次の実行から作り直す（古い分は充電中に。作り終わるまで検索画面に「意味で探す準備中 N%」と出る）。
 
 #### 復元
 
@@ -532,7 +573,7 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 | 保存 | アプリサンドボックス内のみ（§7.1）。iOS・watchOS は `Application Support/WatchAudio`（ファイル保護クラス `CompleteUntilFirstUserAuthentication` を明示。ロック中の録音・送信・BGTask からも読める）、Android は内部ストレージ（`files/`） |
 | バックアップ | OS バックアップの対象外（データを端末外に出さないため。§7.1）。Android / Wear OS は `allowBackup=false` とバックアップ除外ルール、iOS・watchOS は保存先に `NSURLIsExcludedFromBackupKey`。代わりに、ユーザーが状態タブの「暗号化バックアップ」を押したときだけ、パスフレーズで暗号化したファイルをユーザーが選んだ保存先に書く（§6.7、#40）。パスフレーズと鍵は端末の外に出さず、保存もしない。アプリが自動でクラウドへ送ることはない |
 | API キー | 現在は扱わない。将来（P2）の BYOK では Keychain（`ThisDeviceOnly`）/ Android Keystore にだけ保存する |
-| 外部送信 | なし（ネットワーク利用は文字起こしモデルのダウンロードのみ。§7.2、CI で検査 §7.3）。将来（P2）に AI プロバイダ（テキストのみ、ユーザーが設定した場合）、本人の AI エージェントへの LAN 内での受け渡し（UC11。ペアリングした PC だけ、本人が ON にした間だけ。中継サーバーは持たない。エージェントがクラウドの LLM を使う場合、取り出した分はその提供元に届く。方針は [research/agent-access.md](../research/agent-access.md)、詳細は [#131](https://github.com/Soichiro5/watch-audio/issues/131)）、OS ジオコーダを検討（追加時は §7.3 の許可リストを更新）。解析 SDK・広告 SDK・クラッシュ送信 SDK は入れない |
+| 外部送信 | なし（ネットワーク利用はモデル（文字起こし・意味検索の埋め込み）のダウンロードのみ。§7.2、CI で検査 §7.3）。意味検索のクエリ・埋め込み・ベクトルも端末内だけで扱う（§6.4）。将来（P2）に AI プロバイダ（テキストのみ、ユーザーが設定した場合）、本人の AI エージェントへの LAN 内での受け渡し（UC11。ペアリングした PC だけ、本人が ON にした間だけ。中継サーバーは持たない。エージェントがクラウドの LLM を使う場合、取り出した分はその提供元に届く。方針は [research/agent-access.md](../research/agent-access.md)、詳細は [#131](https://github.com/Soichiro5/watch-audio/issues/131)）、OS ジオコーダを検討（追加時は §7.3 の許可リストを更新）。解析 SDK・広告 SDK・クラッシュ送信 SDK は入れない |
 | 診断ログ | 処理の記録（時刻・ID・処理時間・エラーの種類、異常終了）を端末内の CSV（上限約 1 MB）に残す。文字起こしの本文・音声・例外メッセージは含めない。端末外へは、ユーザーが状態タブの「診断ログを書き出す」から共有先を選んだときだけ出る（#77、[impl/android-phone.md §4.2](../platforms/android-phone.md#42-診断ログ77)） |
 | 書き出し | ユーザーが状態タブの「データの書き出し」を押したときだけ、ユーザーが選んだ保存先にだけ書く（Android: SAF の保存ダイアログで作った文書へ直接、iOS: 一時ファイル → 共有シート。閉じたら一時ファイルを削除）。アプリは通信しない（§6.6、#155） |
 | 同意 | 初回オンボーディングで「録音対象者への告知」の注意喚起。Watch に録音中インジケータを常時表示 |
@@ -542,7 +583,7 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 
 | 端末 | データ | 場所 | 保存時の保護 | バックアップ |
 | --- | --- | --- | --- | --- |
-| Android スマホ | DB（文字起こし・チャンク）、音声、ASR モデル | `files/watch-audio.db`、`files/audio/`、`files/models/` | 内部ストレージ（ファイルベース暗号化の資格情報暗号化領域。初回ロック解除後に読める） | `allowBackup="false"`。`data_extraction_rules`（Android 12+）と `backup_rules`（11 以下）で全ドメインをクラウドバックアップから除外。機種変更時の端末間転送（ケーブル・ローカル Wi-Fi）は端末間で完結するため許可 |
+| Android スマホ | DB（文字起こし・チャンク・意味検索のベクトル）、音声、モデル（ASR・埋め込み）、意味検索のベクトルのキャッシュ（#24） | `files/watch-audio.db`、`files/audio/`、`files/models/`、`files/search/` | 内部ストレージ（ファイルベース暗号化の資格情報暗号化領域。初回ロック解除後に読める） | `allowBackup="false"`。`data_extraction_rules`（Android 12+）と `backup_rules`（11 以下）で全ドメインをクラウドバックアップから除外。機種変更時の端末間転送（ケーブル・ローカル Wi-Fi）は端末間で完結するため許可 |
 | Android スマホ | 受信中のチャンク | `cache/incoming/` | 同上 | 同上 |
 | Wear OS | 録音中・送信待ちのチャンク | `files/recording/`、`files/outbox/` | 同上 | `allowBackup="false"`。`data_extraction_rules` でクラウドバックアップと端末間転送の両方から全ドメインを除外 |
 | Wear OS | 診断ログ（イベントと電池残量の CSV。音声・文字起こしは含まない） | アプリ専用の外部ストレージ `Android/data/app.watchaudio/files/diagnostics/` | 他アプリからは読めない（Android 11+）。adb では取り出せる（電池計測用） | 同上（`external` ドメインも除外） |
@@ -562,7 +603,7 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 
 | 端末 | 通信 | 宛先 | 実装 |
 | --- | --- | --- | --- |
-| Android スマホ | ASR・VAD モデル（sherpa-onnx）のダウンロード（ファイル単位・再開可能・SHA-256 検証）。設定「英語も文字起こしする」がオンのときだけ英語用モデル（SenseVoice、#81）も | ASR: `https://huggingface.co/csukuangfj/reazonspeech-k2-v2`（コミット固定）、VAD: `https://github.com/k2-fsa/sherpa-onnx/releases/download/`（GitHub Releases）、英語: `https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17`（コミット固定） | URL は `apps/android/.../asr/ModelManifest.kt`、通信は `ModelDownloader.kt`（`HttpURLConnection`）。INTERNET 権限はこのためだけ |
+| Android スマホ | ASR・VAD モデル（sherpa-onnx）のダウンロード（ファイル単位・再開可能・SHA-256 検証）。設定「英語も文字起こしする」がオンのときだけ英語用モデル（SenseVoice、#81）も。検索タブを開いたら（Wi-Fi のみ）意味検索の埋め込みモデル（ruri-v3-30m、#24）も | ASR: `https://huggingface.co/csukuangfj/reazonspeech-k2-v2`（コミット固定）、VAD: `https://github.com/k2-fsa/sherpa-onnx/releases/download/`（GitHub Releases）、英語: `https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17`（コミット固定）、埋め込み: `https://huggingface.co/onnx-community/ruri-v3-30m-ONNX`・`https://huggingface.co/cl-nagoya/ruri-v3-30m`（どちらもコミット固定） | URL は `apps/android/.../asr/ModelManifest.kt`、通信は `ModelDownloader.kt`（`HttpURLConnection`）。INTERNET 権限はこのためだけ |
 | Wear OS → スマホ | チャンクと ACK | 直接つながっているペアのスマホ（`Node.isNearby`） | `ChannelClient` / `MessageClient`（Wearable Data Layer）。クラウド経由で同期されうる `DataClient` は使わない。Wear OS アプリに INTERNET 権限はない |
 | Apple Watch → iPhone | チャンクと ACK | ペアの iPhone | WatchConnectivity（`transferFile` / `transferUserInfo`）。OS が管理する端末間の転送 |
 | iPhone | 音声認識モデル | Apple（OS が管理） | `SpeechAnalyzer` の `AssetInventory`。アプリは URL を持たない。文字起こし自体は端末上 |
@@ -589,7 +630,7 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 | 転送遅延 | 接続中は録音から 20 分以内に Phone 着 |
 | 文字起こし | 充電中なら 1 日分（8h 録音）を 1 時間以内に処理 |
 | スマホの電池（文字起こし、#75） | 充電していない間の本アプリの文字起こしによる消費が 1 日あたり電池の 3% 以下（電池駆動では残量 50% 以上・1 時間に録音 10 分ぶんまで。推定値、#61 で実測）。発熱時（Android MODERATE / iOS serious 以上）は処理しない（[§6.3](#充電していないときの処理方針75)） |
-| 検索応答 | 1 年分のデータで 300ms 以内（#68 以降の発話単位で 1 年 320 万セグメントの JVM ベンチマークで最悪の p95 が 150ms 以下（CI の実行ごとに約 100〜150ms）: [04 §5](../dev/04-dev-environment.md#5-検索の性能ベンチマーク23-72)。実機は未計測） |
+| 検索応答 | 1 年分のデータで 300ms 以内（#68 以降の発話単位で 1 年 320 万セグメントの JVM ベンチマークで最悪の p95 が 150ms 以下（CI の実行ごとに約 100〜150ms）: [04 §5](../dev/04-dev-environment.md#5-検索の性能ベンチマーク23-72)。意味検索（#24）の総当たりは JVM の 4 スレッドで 50 万件 p95 47ms・110 万件 p95 96ms、クエリの埋め込み 3〜7ms（[m0-6 §9.3](../research/m0-6-embedding-desktop.md#93-速度jvmこのコンテナの-4-vcpu負荷はほぼなし)）。実機は未計測） |
 | ストレージ | 8h/日で 1 日 ≈ 120MB 以下（音声）|
 
 ## 9. 常時録音（装着中）の設計
@@ -619,7 +660,7 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 | 同上 + Opus 16kbps（形式を変えた場合） | 6.7MB | 約 54MB | 約 20GB |
 | 参考: 同上 + AAC-LC 32kbps（#52 以前の見積もりの前提） | 14.8MB | 約 118MB | 約 43GB |
 | 文字起こし + 検索索引（SQLite、下記） | - | 約 1.7MB | 約 0.65GB |
-| 埋め込みベクトル（int8 256 次元、発話 1 行ごとに作る場合。P2） | - | 約 2.2MB | 約 0.8GB |
+| 意味検索のベクトル（#24。int8 256 次元、約 3.2 セグメントを 1 passage に結合、DB と検索用キャッシュの 2 か所） | - | 約 1.6MB | 約 0.57GB |
 
 - 「音声 8h 相当」は仮定（無音を捨てるのは 5 分チャンク全体が確実に無音のときだけ、§6.1）。実際の比率は実機の 1 日分の録音で確かめる。
 - AAC はほぼ固定ビットレート（公称の約 1.03 倍）。Opus は可変ビットレートで、無音を含めて連続で符号化すると 16kbps で約 6.0MB/時になる。
@@ -633,7 +674,7 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 - 内訳（30 万行、チェックポイント後のファイル 50 MB = 1 行 約 167 B。`-Pbenchmark.keepDb` で残した DB を SQLite の `dbstat` で集計）: `transcript_segment` の表 39%（約 66 B/行）・trigram 索引 32%（約 54 B/行）・`start_at` の索引 10%（約 17 B/行）・チャンクの表（マニフェストの JSON を含む）9%・`chunk_id` の索引 7.5%（約 12 B/行）。残りの大半は本文と FTS で、これ以上減らすには索引の持ち方を変える必要がある。
 - 検索は 1 年分で 300ms 以内を保つ（#94 の後、手元で最悪のクエリの p95 は 136 ms。[04 §5](../dev/04-dev-environment.md#5-検索の性能ベンチマーク23-72)）。
 - マイグレーション 6 は既存のチャンク・印・セグメントを新しい表へ写す（セグメント ID はそのままなので FTS の作り直しは要らない）。100 万行の DB で約 3.5 秒（手元の JVM）、1 年分なら 10 秒強の見込み（スマホではその数倍かかりうる。アプリの起動時に `LocalStore.open` の中で 1 回だけ走る）。写している間は古い表と新しい表が両方あるので、一時的にその分の空き容量が要る。古い表の分の空きページはファイルに残り、以後の書き込みで再利用される（縮めるには「すべて削除」と同じ `compact()`）。
-- 埋め込みは発話 1 行ごとではなく、数十秒の窓ごとに作る方がよい。
+- 意味検索の埋め込み（#24）は発話 1 行ごとではなく、連続する短い発話を 24 トークン以上になるまでつないだ passage ごとに作る（約 3.2 セグメントで 1 つ、1 日 約 2,700・1 年 約 100 万件、§6.3）。1 件あたり DB に約 300 B（256 B のベクトル + 行と索引）、検索用キャッシュに 268 B。キャッシュを持たずに済ませる案（M0-6 §5 の (b)）にすれば約半分になるが、DB との整合が難しくなるので見送った。
 
 → 文字起こしは無期限に保存しても問題ない。音声は「無音を捨てる + 低ビットレート」と、保持期間・バックアップ先へのオフロードで管理する。
 

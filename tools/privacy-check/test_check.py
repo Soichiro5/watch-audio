@@ -128,6 +128,8 @@ class FixtureRepo:
             const val HF = "https://huggingface.co/csukuangfj/reazonspeech-k2-v2/resolve/abc"
             const val RELEASES = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models"
             const val SENSE_VOICE = "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/abc"
+            const val RURI_ONNX_HF = "https://huggingface.co/onnx-community/ruri-v3-30m-ONNX/resolve/abc"
+            const val RURI_HF = "https://huggingface.co/cl-nagoya/ruri-v3-30m/resolve/abc"
             """)
         self.write(NOTICES, 'val url = "https://github.com/k2-fsa/sherpa-onnx"\n')
         self.write(LICENSE_TEXTS, 'const val APACHE = """http://www.apache.org/licenses/"""\n')

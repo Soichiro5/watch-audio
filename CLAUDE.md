@@ -21,6 +21,7 @@ A smartwatch records continuously while worn → chunks go to the paired phone o
 | Path | What |
 | --- | --- |
 | `shared/*` | KMP logic: `protocol` (manifest/ACK), `db` (bundled SQLite + FTS5), `pipeline` (Ingestor, TranscriptionPipeline, VAD settings), `platform` (expect/actual) |
+| `shared/ort` | JVM/Android: ONNX Runtime's C API through JNA for the embedding model of semantic search (reuses sherpa-onnx's `libonnxruntime.so`) |
 | `shared/testing` | Test-only helpers shared by the shared modules' tests (`TempDir`, `testManifest`, `testAudio`) |
 | `shared/ui` | Shared phone UI (Compose MP) + `AppServices` contract; `iosMain` has the iOS graph/bridge (framework `ComposeApp`) |
 | `apps/android` / `apps/wear` | Android phone (receiver, sherpa-onnx ASR, WorkManager) / Wear OS recorder |
@@ -35,6 +36,7 @@ A smartwatch records continuously while worn → chunks go to the paired phone o
 
 ```bash
 ./gradlew --max-workers=2 jvmTest testAndroidHostTest          # shared + UI logic tests
+./gradlew --max-workers=2 :shared:ort:test                      # ONNX Runtime via JNA (embedding)
 ./gradlew :apps:android:assembleDebug :apps:wear:assembleDebug      # apps
 ./gradlew :apps:android:lintDebug :apps:wear:lintDebug
 tools/harness/download-models.sh && ./gradlew :tools:harness:test   # real Japanese ASR E2E

@@ -32,6 +32,7 @@ import app.watchaudio.core.pipeline.PauseReason
 import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StatusNotice
 import app.watchaudio.core.pipeline.StorageManager
+import app.watchaudio.core.search.SemanticSearch
 import app.watchaudio.core.settings.loadSettings
 import java.io.File
 import java.io.FileNotFoundException
@@ -42,6 +43,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -72,6 +74,9 @@ class AndroidAppServices(
     private val scope: CoroutineScope,
     override val diagnostics: DiagnosticsLog,
     private val onGapAlertSettingsChanged: () -> Unit,
+    override val semanticSearch: SemanticSearch? = null,
+    /** A run is embedding for semantic search (#24), not transcribing. */
+    embeddingRunning: StateFlow<Boolean> = MutableStateFlow(false),
 ) : AppServices {
     override val audioRoot: String = audioRootDir.absolutePath
 
@@ -98,6 +103,9 @@ class AndroidAppServices(
         )
     }.combine(english) { status, (englishModel, englishWaiting) ->
         status.copy(englishModel = englishModel, englishModelWaitingForWifi = englishWaiting)
+    }.combine(embeddingRunning) { status, embedding ->
+        // The worker is running, but for the embedding step only: no 「文字起こし中」.
+        if (embedding) status.copy(transcribing = false) else status
     }.stateIn(scope, SharingStarted.Eagerly, ProcessingStatus())
 
     /** English needs the extra SenseVoice model ([ModelManager.englishFiles]). */

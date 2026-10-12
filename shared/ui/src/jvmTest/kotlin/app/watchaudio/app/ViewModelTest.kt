@@ -19,6 +19,9 @@ import app.watchaudio.core.db.AudioUsage
 import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.db.NewSegment
+import app.watchaudio.core.search.VectorHit
+import app.watchaudio.core.search.SemanticStatus
+import app.watchaudio.core.db.NewPassage
 import app.watchaudio.core.pipeline.AudioRetention
 import app.watchaudio.core.pipeline.ModelState
 import app.watchaudio.core.pipeline.OffloadAge
@@ -269,6 +272,50 @@ class ViewModelTest {
         search.setQuery("")
         advanceTimeBy(1)
         assertNull(search.results.value)
+    }
+
+    @Test
+    fun searchShowsKeywordHitsFirstThenAddsHitsByMeaning() = runVmTest {
+        addChunk("trip", at(9))
+        transcribe(
+            "trip",
+            NewSegment(at(9) + 1_000, at(9) + 3_000, "来月の沖縄だけどさ", "ja"),
+            NewSegment(at(9) + 4_000, at(9) + 6_000, "飛行機は朝の便でいいかな", "ja"),
+        )
+        addChunk("work", at(10))
+        transcribe("work", NewSegment(at(10) + 1_000, at(10) + 3_000, "旅行の精算は月末までに", "ja"))
+        val segments = store.read { chunkSegments("trip") }
+        store.transaction {
+            savePassages("trip", "fake-model", segments.map { it.id }, listOf(NewPassage(0, 2, segments[0].startAt, 0.01f, ByteArray(4))))
+        }
+        val passage = store.read { passageVectors("fake-model", 0, 10) }.single().id
+        val semantic = FakeSemanticSearch(SemanticStatus.Indexing(0.426f), listOf(VectorHit(passage, 0.9f)))
+        val search = SearchViewModel(FakeAppServices(store, audioDir.path, storage = storage, semanticSearch = semantic), tokyo, scope = backgroundScope)
+        backgroundScope.launch { search.results.collect {} }
+        backgroundScope.launch { search.semanticStatus.collect {} }
+        runCurrent()
+        assertEquals(SemanticStatus.Indexing(0.426f), search.semanticStatus.value)
+        assertEquals("意味で探す準備中 42%（準備できた会話から探します。古い会話は充電中に準備します）", Strings.semanticStatus(search.semanticStatus.value!!))
+
+        search.setQuery("旅行")
+        advanceTimeBy(300)
+        runCurrent()
+        val results = assertNotNull(search.results.value)
+        assertTrue(!results.meaningPending)
+        assertEquals(listOf("旅行"), semantic.queries)
+        // The keyword hit (rank 1) and the passage found by meaning (rank 1) share the top: keyword first.
+        assertEquals(listOf("work", "trip"), results.results.map { it.chunkId })
+        assertEquals(listOf(true to false, false to true), results.results.map { it.byKeyword to it.byMeaning })
+        assertEquals("来月の沖縄だけどさ 飛行機は朝の便でいいかな", results.results[1].parts.single().text)
+        assertEquals(segments[0].id, results.results[1].segmentId)
+    }
+
+    @Test
+    fun withoutSemanticSearchThereIsNoStatus() = runVmTest {
+        val search = SearchViewModel(services, tokyo, scope = backgroundScope)
+        backgroundScope.launch { search.semanticStatus.collect {} }
+        runCurrent()
+        assertNull(search.semanticStatus.value)
     }
 
     @Test

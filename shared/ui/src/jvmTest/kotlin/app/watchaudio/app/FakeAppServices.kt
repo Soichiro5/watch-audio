@@ -8,6 +8,9 @@ import app.watchaudio.core.export.DataExporter
 import app.watchaudio.core.pipeline.Diagnostics
 import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageManager
+import app.watchaudio.core.search.SemanticSearch
+import app.watchaudio.core.search.SemanticStatus
+import app.watchaudio.core.search.VectorHit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,6 +38,7 @@ class FakeAppServices(
     override val backupWriter: BackupWriter = BackupWriter(store, Path(audioRoot), iterations = 1_000),
     override val backupRestorer: BackupRestorer = BackupRestorer(store, Path(audioRoot)),
     override val noticeApps: Set<NoticeApp> = NoticeApp.entries.toSet(),
+    override val semanticSearch: SemanticSearch? = null,
 ) : AppServices {
     val mutableStatus = MutableStateFlow(initialStatus)
     override val status: StateFlow<ProcessingStatus> = mutableStatus.asStateFlow()
@@ -154,5 +158,21 @@ class FakeAppServices(
         override fun log(event: String, detail: String) {
             diagnosticsLines += "$event $detail"
         }
+    }
+}
+
+/** A [SemanticSearch] that answers every query with [hits] (passage ids stored by the test) and reports [status]. */
+class FakeSemanticSearch(
+    var status: SemanticStatus = SemanticStatus.Ready,
+    var hits: List<VectorHit> = emptyList(),
+) : SemanticSearch {
+    override val modelId = "fake-model"
+    val queries = mutableListOf<String>()
+
+    override suspend fun status(): SemanticStatus = status
+
+    override suspend fun search(query: String, limit: Int): List<VectorHit> {
+        queries += query
+        return hits.take(limit)
     }
 }

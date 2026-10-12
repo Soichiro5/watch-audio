@@ -270,6 +270,8 @@ Play Console で権限の用途を聞かれたとき（アプリのコンテン�
 | --- | --- | --- |
 | ReazonSpeech k2 v2（日本語の文字起こしモデル、ダウンロード） | Apache-2.0 | Android |
 | Silero VAD（発話区間の検出モデル、ダウンロード） | MIT | Android |
+| Ruri v3 30m（意味検索の埋め込みモデル、検索タブを開いたときに Wi-Fi でダウンロード、#24） | Apache-2.0 | Android |
+| JNA（Java Native Access。意味検索のモデルを動かすために ONNX Runtime の C API を呼ぶ、#24） | Apache-2.0（LGPL-2.1 とのデュアル。Apache-2.0 を選ぶ） | Android |
 | SenseVoice Small（英語の文字起こしモデル、「英語も文字起こしする」をオンにしたときだけダウンロード） | FunASR Model Open Source License Agreement v1.1（出典と作者の表示、モデル名の保持が条件。英語のカードにも帰属表示を出す） | Android |
 | sherpa-onnx と、そのネイティブライブラリに含まれる ONNX Runtime・JSON for Modern C++（MIT）・kaldi-native-fbank・kaldi-decoder・kaldifst・OpenFst・simple-sentencepiece（Apache-2.0） | Apache-2.0 ほか | Android |
 | AndroidX・Kotlin・kotlinx（coroutines・serialization・io・datetime・atomicfu）・Compose Multiplatform・Guava ListenableFuture・JSpecify・JetBrains Java Annotations | Apache-2.0 | Android・Wear OS・iOS（それぞれ使う分） |
