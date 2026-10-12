@@ -171,7 +171,7 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
 | --- | --- |
 | 一覧 | 「文字起こしのモデル」と「ライブラリ」に分けて、名前・作者・ライセンス名・著作権表示（MIT / BSD）・どのコンポーネントに含まれるか（例: ONNX Runtime は sherpa-onnx に含まれる）・URL。モデルはダウンロード元の URL も出す。スマホと Wear OS の両方を出す Android では「使っているアプリ」も出す |
 | SenseVoice Small | 作者「FunASR / Alibaba Group」、FunASR Model License の要点（日本語、`Strings.FUNASR_TERMS_SUMMARY`）と原文の URL。英語のカード（§1.5、「英語も文字起こしする」を出すプラットフォームだけ）にも「英語のモデル: SenseVoice Small — FunASR / Alibaba Group（出典: URL）」を出す |
-| ライセンスの本文 | 使っているライセンスを 1 回ずつ。Apache-2.0・MIT・BSD-2-Clause・BSD-3-Clause は「本文を表示」で全文（英語の原文、段落の改行だけ詰めた。`licenses/LicenseTexts.kt`）、それ以外は名前と URL |
+| ライセンスの本文 | 使っているライセンスを 1 回ずつ。Apache-2.0・MIT・BSD-3-Clause は「本文を表示」で全文（英語の原文、段落の改行だけ詰めた。`licenses/LicenseTexts.kt`）、それ以外は名前と URL |
 | 選択 | リンクは開かない（開けない環境もある）ので、画面全体を `SelectionContainer` にして URL を長押しで選択・コピーできる |
 
 - 一覧は共通の純粋なデータ `licenses/OpenSourceNotices.kt`（`OpenSourceNotice`: 名前・作者・`License`・URL・種類・`NoticeApp` の集合）。どのアプリの分を出すかは `AppServices.noticeApps`（Android: スマホ + Wear OS、iOS: iPhone。watchOS アプリは Apple のフレームワークだけ）。
