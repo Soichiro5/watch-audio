@@ -41,6 +41,11 @@ class SettingsViewModel(
         it.copy(transcribeOnlyWhileCharging = enabled)
     }
 
+    /** 「英語も文字起こしする」 (#81); the platform fetches or removes the English model. */
+    fun setTranscribeEnglish(enabled: Boolean) = update(transcriptionSettings = true) {
+        it.copy(transcribeEnglish = enabled)
+    }
+
     private fun update(
         alertSettings: Boolean = false,
         transcriptionSettings: Boolean = false,

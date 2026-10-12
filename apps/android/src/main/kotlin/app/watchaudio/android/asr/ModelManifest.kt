@@ -18,7 +18,10 @@ data class ModelSource(val url: String, val path: String, val size: Long, val sh
  * hashes are the Git LFS SHA-256 of that commit and match the files in the release archive
  * (and the official `reazon-research/reazonspeech-k2-v2` repository).
  *
- * `tools/harness/download-models.sh` must download the same files (checked by a unit test).
+ * [englishFiles] are fetched the same way, only while 「英語も文字起こしする」 is on (#81).
+ *
+ * `tools/harness/download-models.sh` must download the same files, [englishFiles] included
+ * (checked by a unit test).
  */
 object ModelManifest {
     /** The ASR model the app downloads; the sizes and hashes below are of its files. */
@@ -48,4 +51,29 @@ object ModelManifest {
     /** The [role] file of [spec], from the pinned Hugging Face commit. */
     private fun asrFile(role: AsrModelFile, size: Long, sha256: String) =
         ModelSource(url = "$HF/${spec.fileName(role)}", path = spec.path(role), size = size, sha256 = sha256)
+
+    /**
+     * The extra model for 「英語も文字起こしする」 (#81), downloaded only while it is on: SenseVoice
+     * Small int8 (~240 MB), routed in front of [spec] ([app.watchaudio.core.pipeline.LanguageRouting]).
+     */
+    val englishSpec: AsrModelSpec = AsrModelSpec.SENSE_VOICE
+
+    /**
+     * The sherpa-onnx maintainer's Hugging Face repository the `sherpa-onnx-sense-voice-…` release
+     * archive was made from, pinned to a commit; the hashes are its Git LFS SHA-256 (the model) and
+     * the SHA-256 of the file (tokens), equal to the files in the release archive.
+     */
+    private const val SENSE_VOICE_HF =
+        "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/2365baeacb507f821a0c8120fcee3d484dba7a07"
+
+    val englishFiles: List<ModelSource> = listOf(
+        englishFile(AsrModelFile.TOKENS, size = 315_894, sha256 = "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc"),
+        englishFile(AsrModelFile.MODEL, size = 239_233_841, sha256 = "c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51"),
+    )
+
+    /** Bytes of the English model download (~240 MB). */
+    val englishBytes: Long get() = englishFiles.sumOf { it.size }
+
+    private fun englishFile(role: AsrModelFile, size: Long, sha256: String) =
+        ModelSource(url = "$SENSE_VOICE_HF/${englishSpec.fileName(role)}", path = englishSpec.path(role), size = size, sha256 = sha256)
 }

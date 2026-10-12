@@ -175,6 +175,8 @@ private fun MainTabs(
                     onQuietHoursChange = settingsViewModel::setQuietHours,
                     onTranscribeOnlyWhileChargingChange = settingsViewModel::setTranscribeOnlyWhileCharging,
                     onShowOnboarding = onShowOnboarding,
+                    onTranscribeEnglishChange = settingsViewModel::setTranscribeEnglish,
+                    onDownloadEnglishModel = { statusViewModel.downloadEnglishModel(allowMetered = true) },
                     storageCallbacks = StorageCallbacks(
                         onSelectRetention = statusViewModel::selectRetention,
                         onConfirmRetention = statusViewModel::confirmRetention,

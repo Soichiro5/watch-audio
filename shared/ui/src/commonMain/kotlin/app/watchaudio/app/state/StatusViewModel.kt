@@ -38,6 +38,8 @@ data class StatusUiState(
     val arrival: ArrivalState = ArrivalState.NoData,
     val now: Long = 0,
     val modelSetup: ModelSetup = ModelSetup.DOWNLOAD,
+    /** The platform offers 「英語も文字起こしする」 ([AppServices.supportsEnglish]). */
+    val supportsEnglish: Boolean = false,
     /** null until loaded. */
     val storage: StorageUiState? = null,
     val storageActions: StorageActions = StorageActions(),
@@ -105,6 +107,7 @@ class StatusViewModel(
             arrival = arrivalState(snapshot.lastChunk, lastReceived, snapshot.now),
             now = snapshot.now,
             modelSetup = services.modelSetup,
+            supportsEnglish = services.supportsEnglish,
             storage = snapshot.storage,
             storageActions = actions,
             diagnosticsExport = diagnosticsExport,
@@ -112,12 +115,14 @@ class StatusViewModel(
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
-        StatusUiState(services.status.value, modelSetup = services.modelSetup),
+        StatusUiState(services.status.value, modelSetup = services.modelSetup, supportsEnglish = services.supportsEnglish),
     )
 
     fun downloadModels(allowMetered: Boolean) = services.downloadModels(allowMetered)
 
     fun requestTranscription() = services.requestTranscription()
+
+    fun downloadEnglishModel(allowMetered: Boolean) = services.downloadEnglishModel(allowMetered)
 
     /** Exports the diagnostics log through the platform's share sheet; only on the user's tap. */
     fun exportDiagnostics() {

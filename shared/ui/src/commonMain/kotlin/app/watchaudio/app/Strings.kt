@@ -1,6 +1,7 @@
 package app.watchaudio.app
 
 import app.watchaudio.core.pipeline.AudioRetention
+import app.watchaudio.core.pipeline.ModelState
 import app.watchaudio.core.pipeline.PauseReason
 import app.watchaudio.core.pipeline.StatusNotice
 import app.watchaudio.core.protocol.ChunkEndReason
@@ -118,6 +119,7 @@ object Strings {
     // Model download notification (Android foreground work)
     const val MODEL_DOWNLOAD_CHANNEL = "文字起こしモデルのダウンロード"
     const val MODEL_DOWNLOAD_NOTIFICATION_TITLE = "文字起こしモデルをダウンロード中"
+    const val ENGLISH_MODEL_DOWNLOAD_NOTIFICATION_TITLE = "英語の文字起こしモデルをダウンロード中"
 
     const val STORAGE = "保存データ"
     const val STAT_CHUNKS = "チャンク"
@@ -189,6 +191,24 @@ object Strings {
         "充電していないときは、電池残量が${minBatteryPercent}%以上で省電力モードでない間だけ、" +
             "1 時間あたり録音${audioMinutesPerHour}分ぶんまで文字起こしします。残りは充電中に処理します。" +
             "スマホが熱いときは充電中でも休みます。"
+
+    // Status screen: languages (#81)
+    const val LANGUAGE_SETTINGS_TITLE = "文字起こしの言語"
+    const val ENGLISH_SWITCH = "英語も文字起こしする"
+    fun englishDetail(megabytes: Int) =
+        "日本語に加えて、英語の発話を英語として文字起こしします。追加のモデル（約 $megabytes MB）を Wi-Fi でダウンロードし、" +
+            "文字起こしにかかる時間と電池が増えます。1 つの発話の中で日本語と英語が混ざると、どちらか一方の言語として認識されます。" +
+            "オンにした後に届いた録音から英語を認識します。オフにするとモデルを削除します。"
+
+    /** The extra English model's state under the switch (#81). */
+    fun englishModelState(model: ModelState, waitingForWifi: Boolean): String = when (model) {
+        ModelState.Unknown -> "英語モデル: 確認中…"
+        ModelState.Missing -> if (waitingForWifi) "英語モデル: Wi-Fi に接続するとダウンロードします" else "英語モデル: 未ダウンロード"
+        is ModelState.Downloading -> "英語モデルをダウンロード中… ${(model.progress * 100).toInt().coerceIn(0, 100)}%"
+        ModelState.Ready -> "英語モデル: 準備完了（英語も端末内で文字起こしします）"
+        is ModelState.Failed -> "英語モデルのダウンロードに失敗しました。しばらくしてから自動で再試行します"
+    }
+    const val ENGLISH_DOWNLOAD_NOW = "モバイルデータ通信でもダウンロード"
 
     /** Why transcription is waiting, for the status card (#75). */
     fun transcriptionPaused(reason: PauseReason, minBatteryPercent: Int): String = when (reason) {

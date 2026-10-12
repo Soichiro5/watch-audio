@@ -3,17 +3,20 @@ package app.watchaudio.android.asr
 import app.watchaudio.core.pipeline.AsrModelFile
 import app.watchaudio.core.pipeline.AsrSettings
 import app.watchaudio.core.pipeline.AudioPart
+import app.watchaudio.core.pipeline.LanguageRouting
 import app.watchaudio.core.pipeline.Recognition
 import app.watchaudio.core.pipeline.RecognizerKind
 import app.watchaudio.core.pipeline.TimedText
 import app.watchaudio.core.pipeline.Transcriber
 import app.watchaudio.core.pipeline.VadSettings
 import app.watchaudio.core.pipeline.concatenateParts
+import app.watchaudio.core.pipeline.senseVoiceLanguage
 import app.watchaudio.core.pipeline.speechProbabilities
 import app.watchaudio.core.pipeline.transcribeSpeech
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
+import com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
 import com.k2fsa.sherpa.onnx.SileroVadModelConfig
 import com.k2fsa.sherpa.onnx.Vad
@@ -35,56 +38,97 @@ class ModelNotReadyException : IllegalStateException("speech model is not downlo
  * input (a chunk joined with its neighbours' boundary audio) is decoded file by file and
  * concatenated. Everything after the VAD probabilities is the shared [transcribeSpeech], also used
  * by the JVM harness's `SherpaTranscriber` (same models and [VadSettings]), so harness results
- * predict this one; only creating the VAD and the recognizer is Android specific.
+ * predict this one; only creating the VAD and the recognizers is Android specific.
  *
- * The recognizer is loaded on first use and reused across chunks until [release].
+ * While [englishEnabled] (「英語も文字起こしする」, #81) and the [english] model is present, each
+ * utterance is first recognized by it and routed with [routing]: English text is kept, everything
+ * else goes to the Japanese model. [engineId] then names both models.
+ *
+ * Recognizers are loaded on first use and reused across chunks until [release]; the English one
+ * is released as soon as a run no longer uses it.
  */
 class AndroidSherpaTranscriber(
     private val models: ModelFiles,
+    private val english: ModelFiles? = null,
+    private val englishEnabled: suspend () -> Boolean = { false },
     private val numThreads: Int = 2,
     private val vadSettings: VadSettings = VadSettings.DEFAULT,
+    private val routing: LanguageRouting = LanguageRouting.DEFAULT,
 ) : Transcriber {
-    override val engineId = models.spec.engineId
+    /** The models of the latest [transcribe] (Japanese alone, or with English routed in front). */
+    @Volatile
+    override var engineId = models.spec.engineId
+        private set
 
     private val mutex = Mutex()
     private var recognizer: OfflineRecognizer? = null
+    private var englishRecognizer: OfflineRecognizer? = null
 
     override suspend fun transcribe(parts: List<AudioPart>): List<TimedText> = mutex.withLock {
         withContext(Dispatchers.Default) {
             if (!models.isComplete()) throw ModelNotReadyException()
+            val withEnglish = english?.takeIf { it.hasAsr() && englishEnabled() }
+            if (withEnglish == null) {
+                englishRecognizer?.release()
+                englishRecognizer = null
+            }
             val context = coroutineContext
             val samples = concatenateParts(parts) { AudioDecoder.decode(File(it.file.toString())) { context.ensureActive() } }
-            val recognizer = recognizer ?: createRecognizer().also { recognizer = it }
-            transcribeSpeech(samples, vadProbabilities(samples), vadSettings, models.spec.language) { recognize(recognizer, it) }
+            val recognizer = recognizer ?: createRecognizer(models).also { recognizer = it }
+            val detector = withEnglish?.let { englishRecognizer ?: createRecognizer(it).also { r -> englishRecognizer = r } }
+            engineId = withEnglish?.let { LanguageRouting.engineId(models.spec, it.spec) } ?: models.spec.engineId
+            transcribeSpeech(samples, vadProbabilities(samples), vadSettings, models.spec.language) { span ->
+                if (detector == null || withEnglish == null) {
+                    recognize(recognizer, models, span)
+                } else {
+                    routing.route(recognize(detector, withEnglish, span)) { recognize(recognizer, models, span) }
+                }
+            }
         }
     }
 
-    /** Frees the native recognizer (the int8 encoder alone is ~150 MB); the next [transcribe] reloads it. */
+    /** Frees the native recognizers (the int8 encoder alone is ~150 MB); the next [transcribe] reloads them. */
     suspend fun release() = mutex.withLock {
         recognizer?.release()
         recognizer = null
+        englishRecognizer?.release()
+        englishRecognizer = null
     }
 
-    private fun recognize(recognizer: OfflineRecognizer, samples: FloatArray): Recognition {
+    private fun recognize(recognizer: OfflineRecognizer, files: ModelFiles, samples: FloatArray): Recognition {
         val stream = recognizer.createStream()
         try {
             stream.acceptWaveform(samples, AsrSettings.SAMPLE_RATE)
             recognizer.decode(stream)
-            return Recognition(recognizer.getResult(stream).text)
+            val result = recognizer.getResult(stream)
+            return when (files.spec.kind) {
+                RecognizerKind.TRANSDUCER -> Recognition(result.text)
+                RecognizerKind.SENSE_VOICE -> Recognition(result.text, lang = senseVoiceLanguage(result.lang))
+            }
         } finally {
             stream.release()
         }
     }
 
-    private fun createRecognizer(): OfflineRecognizer {
-        val modelConfig = when (models.spec.kind) {
+    private fun createRecognizer(files: ModelFiles): OfflineRecognizer {
+        val modelConfig = when (files.spec.kind) {
             RecognizerKind.TRANSDUCER -> OfflineModelConfig(
                 transducer = OfflineTransducerModelConfig(
-                    encoder = models.asr(AsrModelFile.ENCODER).path,
-                    decoder = models.asr(AsrModelFile.DECODER).path,
-                    joiner = models.asr(AsrModelFile.JOINER).path,
+                    encoder = files.asr(AsrModelFile.ENCODER).path,
+                    decoder = files.asr(AsrModelFile.DECODER).path,
+                    joiner = files.asr(AsrModelFile.JOINER).path,
                 ),
-                tokens = models.asr(AsrModelFile.TOKENS).path,
+                tokens = files.asr(AsrModelFile.TOKENS).path,
+                numThreads = numThreads,
+            )
+            // Empty language: detect it; inverse text normalization: punctuation and casing.
+            RecognizerKind.SENSE_VOICE -> OfflineModelConfig(
+                senseVoice = OfflineSenseVoiceModelConfig(
+                    model = files.asr(AsrModelFile.MODEL).path,
+                    language = "",
+                    useInverseTextNormalization = true,
+                ),
+                tokens = files.asr(AsrModelFile.TOKENS).path,
                 numThreads = numThreads,
             )
         }

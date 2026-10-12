@@ -37,6 +37,19 @@ interface AppServices {
      */
     fun downloadModels(allowMetered: Boolean) {}
 
+    /**
+     * Whether the platform can also transcribe English (`AppSettings.transcribeEnglish`, #81); the
+     * setting is only offered where it is true. The model's state is
+     * [app.watchaudio.core.pipeline.ProcessingStatus.englishModel].
+     */
+    val supportsEnglish: Boolean get() = false
+
+    /**
+     * Download the English model now, also over mobile data when [allowMetered] (it otherwise waits
+     * for Wi-Fi). Only meaningful while `AppSettings.transcribeEnglish` is on.
+     */
+    fun downloadEnglishModel(allowMetered: Boolean) {}
+
     /** How the platform obtains its speech model (decides what the onboarding offers). */
     val modelSetup: ModelSetup get() = ModelSetup.DOWNLOAD
 
@@ -61,8 +74,9 @@ interface AppServices {
     fun gapAlertSettingsChanged() {}
 
     /**
-     * The transcription preferences (`AppSettings.transcribeOnlyWhileCharging`, #75) were changed in
-     * the UI; re-plan the scheduled transcription work.
+     * The transcription preferences (`AppSettings.transcribeOnlyWhileCharging`, #75, or
+     * `AppSettings.transcribeEnglish`, #81) were changed in the UI; re-plan the scheduled
+     * transcription work and fetch or remove the English model.
      */
     fun transcriptionSettingsChanged() {}
 

@@ -9,6 +9,7 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import androidx.work.workDataOf
 import app.watchaudio.core.pipeline.DiagnosticEvents
 import app.watchaudio.core.pipeline.Diagnostics
 import app.watchaudio.core.pipeline.DiagnosticsLog
@@ -20,6 +21,7 @@ import java.nio.file.StandardCopyOption
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -36,6 +38,9 @@ import kotlinx.coroutines.withContext
  * downloads the files of [ModelManifest] through [ModelDownloadWorker]. This is a download
  * only; nothing about the user is sent.
  *
+ * The English model ([englishFiles], #81) is an extra download while 「英語も文字起こしする」 is on
+ * ([syncEnglish]); turning it off cancels the download and deletes the model.
+ *
  * New files are written next to the target and renamed into place only when complete (and,
  * for downloads, verified), so a crash never leaves a half-written model that looks complete.
  */
@@ -47,8 +52,16 @@ class ModelManager(
 ) {
     val files = ModelFiles(File(context.filesDir, "models"), ModelManifest.spec)
 
+    /** The extra English model (#81), next to [files] under the same root. */
+    val englishFiles = ModelFiles(files.root, ModelManifest.englishSpec)
+
     private val _state = MutableStateFlow<ModelState>(ModelState.Unknown)
     val state: StateFlow<ModelState> = _state.asStateFlow()
+
+    private val _englishState = MutableStateFlow<ModelState>(ModelState.Unknown)
+
+    /** The English model's state; [ModelState.Missing] while the setting is off. */
+    val englishState: StateFlow<ModelState> = _englishState.asStateFlow()
 
     private val workManager: WorkManager get() = WorkManager.getInstance(context)
 
@@ -68,7 +81,14 @@ class ModelManager(
     val downloadWaiting: Flow<Boolean> = workManager.getWorkInfosForUniqueWorkFlow(WORK_NAME)
         .map { infos -> infos.any { it.state == WorkInfo.State.ENQUEUED } }
 
+    /** True while the English model's download is queued, waiting for Wi-Fi. */
+    val englishDownloadWaiting: Flow<Boolean> = workManager.getWorkInfosForUniqueWorkFlow(ENGLISH_WORK_NAME)
+        .map { infos -> infos.any { it.state == WorkInfo.State.ENQUEUED } }
+
     fun isReady(): Boolean = files.isComplete()
+
+    /** Whether the English model's files are all present (the VAD comes with [files]). */
+    fun isEnglishReady(): Boolean = englishFiles.hasAsr()
 
     /**
      * Publishes whether the files are (still) complete, e.g. after chunks failed to transcribe
@@ -90,24 +110,52 @@ class ModelManager(
         } catch (e: IOException) {
             Log.w(TAG, "sideloaded models could not be imported", e)
         }
-        if (isReady()) partialDir.deleteRecursively()
+        if (isReady()) ModelManifest.files.forEach { partFile(it).delete() }
         publishPresence()
     }
+
+    /**
+     * Brings the English model in line with the setting [wanted]: queues its download (only on an
+     * unmetered network unless [allowMetered]) while it is missing, or cancels the download and
+     * deletes the model and its partial files when it is not wanted.
+     */
+    suspend fun syncEnglish(wanted: Boolean, allowMetered: Boolean = false) = withContext(Dispatchers.IO) {
+        if (wanted) {
+            if (isEnglishReady()) {
+                ModelManifest.englishFiles.forEach { partFile(it).delete() }
+                _englishState.value = ModelState.Ready
+            } else {
+                if (_englishState.value !is ModelState.Downloading && _englishState.value !is ModelState.Failed) {
+                    _englishState.value = ModelState.Missing
+                }
+                enqueue(ENGLISH_WORK_NAME, allowMetered, if (allowMetered) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP, english = true)
+            }
+        } else {
+            workManager.cancelUniqueWork(ENGLISH_WORK_NAME)
+            val existed = englishFiles.asrFiles.any { it.exists() }
+            englishFiles.asrDir.deleteRecursively()
+            ModelManifest.englishFiles.forEach { partFile(it).delete() }
+            if (existed) diagnostics.log(DiagnosticEvents.MODEL_READY, "model=en ready=false")
+            _englishState.value = ModelState.Missing
+        }
+    }
+
 
     /**
      * Downloads missing models. Without [allowMetered] the download waits for an unmetered
      * network (about 160 MB); the user can opt in to mobile data.
      * A download that is already running is left alone.
      */
-    fun download(allowMetered: Boolean) = enqueue(allowMetered, ExistingWorkPolicy.REPLACE)
+    fun download(allowMetered: Boolean) = enqueue(WORK_NAME, allowMetered, ExistingWorkPolicy.REPLACE)
 
     /** Automatic start-up download: only on unmetered networks and never replaces a user's request. */
     fun downloadIfMissing() {
-        if (!isReady()) enqueue(allowMetered = false, ExistingWorkPolicy.KEEP)
+        if (!isReady()) enqueue(WORK_NAME, allowMetered = false, ExistingWorkPolicy.KEEP)
     }
 
-    private fun enqueue(allowMetered: Boolean, policy: ExistingWorkPolicy) {
+    private fun enqueue(name: String, allowMetered: Boolean, policy: ExistingWorkPolicy, english: Boolean = false) {
         val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
+            .setInputData(workDataOf(ModelDownloadWorker.KEY_ENGLISH to english))
             .setConstraints(
                 Constraints.Builder()
                     .setRequiredNetworkType(if (allowMetered) NetworkType.CONNECTED else NetworkType.UNMETERED)
@@ -117,8 +165,8 @@ class ModelManager(
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
             .build()
         scope.launch(Dispatchers.IO) {
-            val running = workManager.getWorkInfosForUniqueWork(WORK_NAME).get().any { it.state == WorkInfo.State.RUNNING }
-            if (!running) workManager.enqueueUniqueWork(WORK_NAME, policy, request)
+            val running = workManager.getWorkInfosForUniqueWork(name).get().any { it.state == WorkInfo.State.RUNNING }
+            if (!running) workManager.enqueueUniqueWork(name, policy, request)
         }
     }
 
@@ -129,48 +177,74 @@ class ModelManager(
      */
     internal suspend fun performDownload() = withContext(Dispatchers.IO) {
         if (isReady()) return@withContext publishPresence()
-        val downloadContext = coroutineContext
+        try {
+            downloadMissing(ModelManifest.files, _state, detail = "")
+            publishPresence()
+        } catch (e: CancellationException) {
+            _state.value = if (isReady()) ModelState.Ready else ModelState.Missing
+            throw e
+        }
+    }
+
+    /** Called by [ModelDownloadWorker] for the English model ([englishFiles]), like [performDownload]. */
+    internal suspend fun performEnglishDownload() = withContext(Dispatchers.IO) {
+        if (!isEnglishReady()) {
+            try {
+                downloadMissing(ModelManifest.englishFiles, _englishState, detail = "model=en ")
+            } catch (e: CancellationException) {
+                _englishState.value = if (isEnglishReady()) ModelState.Ready else ModelState.Missing
+                throw e
+            }
+        }
+        _englishState.value = if (isEnglishReady()) ModelState.Ready else ModelState.Missing
+        if (isEnglishReady()) diagnostics.log(DiagnosticEvents.MODEL_READY, "model=en ready=true")
+    }
+
+    /**
+     * Downloads the files of [sources] that are not present yet, publishing the progress to
+     * [state] and to the diagnostics log (with [detail] in front of each entry's values).
+     */
+    private suspend fun downloadMissing(sources: List<ModelSource>, state: MutableStateFlow<ModelState>, detail: String) {
+        val downloadContext = currentCoroutineContext()
         val checkActive = { downloadContext.ensureActive() }
-        val missing = ModelManifest.files.filterNot { files.isPresent(files.fileFor(it)) }
+        val missing = sources.filterNot { files.isPresent(files.fileFor(it)) }
         val total = missing.sumOf { it.size }.coerceAtLeast(1)
         var done = 0L
         var published = -1f
         loggedDecile = 0
         try {
-            diagnostics.log(DiagnosticEvents.MODEL_DOWNLOAD_START, "files=${missing.size} bytes=$total")
-            _state.value = ModelState.Downloading(0f)
+            diagnostics.log(DiagnosticEvents.MODEL_DOWNLOAD_START, "${detail}files=${missing.size} bytes=$total")
+            state.value = ModelState.Downloading(0f)
             for (source in missing) {
                 retrying {
                     downloader.download(source, files.fileFor(source), partFile(source), checkActive) { bytes ->
                         val value = ((done + bytes).toFloat() / total).coerceIn(0f, 1f)
                         if (value - published >= 0.005f) {
                             published = value
-                            _state.value = ModelState.Downloading(value)
+                            state.value = ModelState.Downloading(value)
                         }
                         val decile = (value * 10).toInt()
                         if (decile > loggedDecile) {
                             loggedDecile = decile
-                            diagnostics.log(DiagnosticEvents.MODEL_DOWNLOAD_PROGRESS, "pct=${decile * 10} bytes=${done + bytes}")
+                            diagnostics.log(DiagnosticEvents.MODEL_DOWNLOAD_PROGRESS, "${detail}pct=${decile * 10} bytes=${done + bytes}")
                         }
                     }
                 }
                 done += source.size
             }
-            diagnostics.log(DiagnosticEvents.MODEL_DOWNLOAD_DONE)
-            partialDir.deleteRecursively()
-            publishPresence()
+            diagnostics.log(DiagnosticEvents.MODEL_DOWNLOAD_DONE, detail.trim())
+            sources.forEach { partFile(it).delete() }
         } catch (e: CancellationException) {
-            diagnostics.log(DiagnosticEvents.MODEL_DOWNLOAD_FAILED, "cancelled=true")
-            _state.value = if (isReady()) ModelState.Ready else ModelState.Missing
+            diagnostics.log(DiagnosticEvents.MODEL_DOWNLOAD_FAILED, "${detail}cancelled=true")
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "model download failed", e)
             // Network errors only (HTTP status, timeouts); nothing about the user is in them.
             diagnostics.log(
                 DiagnosticEvents.MODEL_DOWNLOAD_FAILED,
-                "error=${DiagnosticsLog.typeName(e)} message=${e.message.orEmpty().take(200)}",
+                "${detail}error=${DiagnosticsLog.typeName(e)} message=${e.message.orEmpty().take(200)}",
             )
-            _state.value = ModelState.Failed(e.message ?: e.javaClass.simpleName)
+            state.value = ModelState.Failed(e.message ?: e.javaClass.simpleName)
             throw e
         }
     }
@@ -222,6 +296,7 @@ class ModelManager(
 
     companion object {
         const val WORK_NAME = "model-download"
+        const val ENGLISH_WORK_NAME = "english-model-download"
         private const val TAG = "ModelManager"
         private const val TEMP_PREFIX = ".tmp-"
         private const val ATTEMPTS = 3

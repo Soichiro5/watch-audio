@@ -61,6 +61,8 @@ internal fun StatusScreen(
     onQuietHoursChange: (QuietHours) -> Unit,
     onTranscribeOnlyWhileChargingChange: (Boolean) -> Unit,
     onShowOnboarding: () -> Unit,
+    onTranscribeEnglishChange: (Boolean) -> Unit = {},
+    onDownloadEnglishModel: () -> Unit = {},
     storageCallbacks: StorageCallbacks,
     onExportDiagnostics: () -> Unit,
     modifier: Modifier = Modifier,
@@ -72,6 +74,9 @@ internal fun StatusScreen(
         ArrivalCard(state, timeZone)
         ModelCard(state, onDownloadModel, onTranscribeNow)
         settings?.let { TranscriptionSettingsCard(it.transcribeOnlyWhileCharging, onTranscribeOnlyWhileChargingChange) }
+        if (state.supportsEnglish) {
+            settings?.let { LanguageSettingsCard(it.transcribeEnglish, state, onTranscribeEnglishChange, onDownloadEnglishModel) }
+        }
         settings?.let { AlertSettingsCard(it.gapAlert, onGapAlertsEnabledChange, onQuietHoursChange) }
         state.stats?.let { StatsCard(it) }
         state.storage?.let { StorageCard(it, state.storageActions, storageCallbacks) }
@@ -141,6 +146,32 @@ private fun AlertSettingsCard(
         }
     }
 }
+
+/**
+ * Which languages are transcribed (#81): Japanese always, English with the opt-in switch and its
+ * extra model, whose download state shows below the switch.
+ */
+@Composable
+private fun LanguageSettingsCard(english: Boolean, state: StatusUiState, onChange: (Boolean) -> Unit, onDownloadNow: () -> Unit) {
+    Section(Strings.LANGUAGE_SETTINGS_TITLE) {
+        SwitchRow(Strings.ENGLISH_SWITCH, Strings.englishDetail(ENGLISH_MODEL_MEGABYTES), english, onChange)
+        val model = state.status.englishModel
+        if (english && model != null) {
+            Text(
+                Strings.englishModelState(model, state.status.englishModelWaitingForWifi),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (model is ModelState.Downloading) LinearProgressIndicator(progress = { model.progress }, modifier = Modifier.fillMaxWidth())
+            if (model == ModelState.Missing || model is ModelState.Failed) {
+                OutlinedButton(onClick = onDownloadNow) { Text(Strings.ENGLISH_DOWNLOAD_NOW) }
+            }
+        }
+    }
+}
+
+/** Size of the English model download shown in the switch's description (SenseVoice Small int8). */
+private const val ENGLISH_MODEL_MEGABYTES = 240
 
 @Composable
 private fun SwitchRow(title: String, detail: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
