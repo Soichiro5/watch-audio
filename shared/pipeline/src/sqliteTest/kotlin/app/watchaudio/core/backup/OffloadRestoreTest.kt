@@ -5,7 +5,6 @@ import app.watchaudio.core.backup.BackupTestData.createdAt
 import app.watchaudio.core.backup.BackupTestData.tokyo
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.db.NewSegment
-import app.watchaudio.core.export.ExportPlan
 import app.watchaudio.core.pipeline.OffloadAge
 import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.testing.TempDir
@@ -49,7 +48,7 @@ class OffloadRestoreTest {
     }
 
     private suspend fun backup(includeAudio: Boolean, saved: Boolean = true): ByteArray {
-        val plan: ExportPlan = assertNotNull(writer.plan(includeAudio, tokyo, createdAt))
+        val plan: BackupPlan = assertNotNull(writer.plan(includeAudio, tokyo, createdAt))
         val out = Buffer()
         val summary = writer.write(plan, PASSPHRASE, out, chunkSize = 1024)
         if (saved) writer.recordSaved(plan, summary)

@@ -42,7 +42,10 @@ data class RestoreSummary(
     val chunksAdded: Int,
     /** Chunks in the backup that were already on this device (kept, see [BackupRestorer]). */
     val chunksAlreadyPresent: Int,
-    /** Transcript segments added (of new chunks, and of stored chunks that had no transcript yet). */
+    /**
+     * Transcript segments added (of new chunks, of stored chunks that had no transcript yet, and
+     * of stored chunks whose transcript the backup has in a newer version).
+     */
     val segmentsAdded: Int,
     val marksAdded: Int,
     val audioFilesRestored: Int,
@@ -53,6 +56,10 @@ data class RestoreSummary(
      * (offloaded, #156, or deleted by retention).
      */
     val audioFilesReturned: Int = 0,
+    /** Stored chunks whose transcript was replaced by the backup's newer one (#164). */
+    val transcriptsUpdated: Int = 0,
+    /** Whether the file was a full backup or a diff (#164). */
+    val kind: BackupKind = BackupKind.FULL,
 )
 
 /** Where [BackupRestorer.restore] is. */
@@ -72,12 +79,17 @@ sealed interface RestoreProgress {
  * file from a newer app version fails here with a [BackupException] and the device is untouched.
  * The second pass adds the data day by day, each day in one transaction.
  *
- * Merging is idempotent by chunk UUID, like receiving a chunk again from the watch:
- * - a chunk that is not stored is added with its transcript, marks and (if included) audio;
+ * Full backups and diffs (#164) restore the same way. Merging is idempotent by chunk UUID, like
+ * receiving a chunk again from the watch, and does not depend on the order files are restored in:
+ * - a chunk that is not stored is added with its transcript, marks, (if included) audio and the
+ *   version time of its record ([BackupChunk.updatedAt]);
  * - a stored chunk is kept as it is, so newer local data is never overwritten. It only gains the
- *   backup's marks it lacks, the backup's transcript if it has none yet (not transcribed), and
- *   the backup's audio file if its own is no longer on the device (offloaded, #156, or deleted by
- *   retention) and the backup's copy is the same file (size and SHA-256).
+ *   backup's marks it lacks, the backup's transcript if it has none yet (not transcribed) or if
+ *   the backup's version of the record is newer than the stored one (a diff after a chunk was
+ *   transcribed again at a boundary, #45), and the backup's audio file if its own is no longer on
+ *   the device (offloaded, #156, deleted by retention, or not in the file it came from) and the
+ *   backup's copy is the same file (size and SHA-256).
+ * - nothing is deleted: a diff does not carry deletions (after one the next backup is full).
  *
  * Audio the backup holds counts as backed up at the backup's creation time
  * ([app.watchaudio.core.db.ChunkRecord.audioBackedUpAt]): the user has that file.
@@ -126,7 +138,7 @@ class BackupRestorer(
                     } finally {
                         withContext(NonCancellable) { deleteTree(stagingDir) }
                     }
-                    applier.summary(verified.days)
+                    applier.summary(verified.days, verified.kind)
                 }
             } finally {
                 keys?.wipe()
@@ -134,7 +146,7 @@ class BackupRestorer(
         }
 
     /** Counts of a verified backup, and when it was created ([BackupIndex.createdAt]). */
-    private class Walked(val days: Int, val createdAt: Long)
+    private class Walked(val days: Int, val createdAt: Long, val kind: BackupKind)
 
     /** An audio entry of the current day: its staged copy (second pass only). */
     private class Staged(val path: Path?, val size: Long, val sha256: String?)
@@ -205,7 +217,7 @@ class BackupRestorer(
         if (pendingDay != null) throw ZipFormatException("day without backup data")
         if (index == null || !sawExportIndex) throw ZipFormatException("no index")
         if (index.days != days) throw ZipFormatException("index lists ${index.days} days, found $days")
-        return Walked(days, index.createdAt)
+        return Walked(days, index.createdAt, index.kind)
     }
 
     /** Fails if [extras] does not belong to [day] or the day refers to chunks it does not hold. */
@@ -228,12 +240,16 @@ class BackupRestorer(
         private var audioFiles = 0
         private var withoutAudio = 0
         private var returned = 0
+        private var updated = 0
 
         suspend fun apply(day: ExportDay, extras: BackupDay, staged: Map<String, Staged>) {
             val extraById = extras.chunks.associateBy { it.id }
-            val (stored, storedFiles) = store.read {
-                day.chunks.mapNotNull { chunk(it.id) }.associateBy { it.id } to
-                    audioFilesOfChunksStartedBetween(day.dayStart, day.dayEnd)
+            val (stored, storedFiles, storedInfo) = store.read {
+                Triple(
+                    day.chunks.mapNotNull { chunk(it.id) }.associateBy { it.id },
+                    audioFilesOfChunksStartedBetween(day.dayStart, day.dayEnd),
+                    backupInfoOfChunksStartedBetween(day.dayStart, day.dayEnd),
+                )
             }
             val segmentsByChunk = day.segments.groupBy { it.chunkId }
             val marksByChunk = day.marks.groupBy({ it.chunkId }, { it.at })
@@ -282,18 +298,33 @@ class BackupRestorer(
                         addSegments(chunk.id, restored)
                         segments += restored.size
                         marks += addMarks(chunk.id, marksByChunk[chunk.id].orEmpty())
+                        // The triggers stamped the additions with this device's time; the record is the backup's version.
+                        setChunkVersion(chunk.id, chunk.updatedAt)
                     }
                     if (inBackup.isNotEmpty()) markAudioBackedUp(inBackup, backupCreatedAt)
-                    returnedIds.forEach { id -> if (markAudioRestored(id, backupCreatedAt)) returned++ }
+                    returnedIds.forEach { id ->
+                        if (!markAudioRestored(id, backupCreatedAt)) return@forEach
+                        returned++
+                        // Added from a diff without its audio (it was in an earlier backup): transcribe it now.
+                        val local = stored.getValue(id)
+                        if (local.state == ChunkState.FAILED && local.lastError == ERROR_AUDIO_NOT_RESTORED) requeueFailed(listOf(id))
+                    }
                     stored.values.forEach { local ->
                         present++
                         marks += addMarks(local.id, marksByChunk[local.id].orEmpty())
                         val backup = day.chunks.first { it.id == local.id }
-                        if (local.state.hasNoTranscript && backup.transcription == ExportTranscription.DONE) {
+                        val storedVersion = storedInfo[local.id]?.updatedAt
+                        val backupVersion = extraById[local.id]?.updatedAt
+                        val newer = backupVersion != null && (storedVersion == null || backupVersion > storedVersion)
+                        val takeTranscript = backup.transcription == ExportTranscription.DONE && (local.state.hasNoTranscript || newer)
+                        if (takeTranscript) {
                             val restored = segmentsByChunk[local.id].orEmpty().map { it.toRestored() }
                             replaceTranscript(local.id, restored)
                             segments += restored.size
+                            if (!local.state.hasNoTranscript) updated++
                         }
+                        // Keep the version the record's transcript belongs to, whatever was added around it.
+                        setChunkVersion(local.id, if (takeTranscript) backupVersion else storedVersion)
                     }
                 }
             } catch (e: Throwable) {
@@ -304,7 +335,7 @@ class BackupRestorer(
             onDay(++days)
         }
 
-        fun summary(totalDays: Int) = RestoreSummary(
+        fun summary(totalDays: Int, kind: BackupKind) = RestoreSummary(
             days = totalDays,
             chunksAdded = added,
             chunksAlreadyPresent = present,
@@ -313,6 +344,8 @@ class BackupRestorer(
             audioFilesRestored = audioFiles,
             chunksWithoutAudio = withoutAudio,
             audioFilesReturned = returned,
+            transcriptsUpdated = updated,
+            kind = kind,
         )
 
         private fun restoredChunk(chunk: ExportChunk, audioPath: String?, audioRestored: Boolean, extra: BackupChunk?): RestoredChunk {
@@ -356,6 +389,7 @@ class BackupRestorer(
                     audioRestored -> maxOf(backupCreatedAt, audio.backedUpAt ?: backupCreatedAt)
                     else -> audio.backedUpAt
                 },
+                updatedAt = extra?.updatedAt,
             )
         }
     }

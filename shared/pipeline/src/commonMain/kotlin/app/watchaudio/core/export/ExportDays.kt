@@ -44,6 +44,18 @@ fun StoreTransaction.readDayRecords(window: DayWindow, forBackup: Boolean = fals
 )
 
 /**
+ * These records narrowed to the chunks [ids] (a diff backup, #164) with their segments, marks and
+ * files. The chunks around them stay, so the day's gaps are those of the whole day.
+ */
+fun DayRecords.only(ids: Set<String>): DayRecords = copy(
+    chunks = chunks.filter { it.id in ids },
+    segments = segments.filter { it.chunkId in ids },
+    marks = marks.filter { it.chunkId in ids },
+    audioFiles = audioFiles.filterKeys { it in ids },
+    backupInfo = backupInfo.filterKeys { it in ids },
+)
+
+/**
  * The [ExportDay] of [date] in [timeZone].
  *
  * @param now the export time: gaps end there, and recent ones count as still arriving, exactly as

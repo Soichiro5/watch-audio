@@ -31,9 +31,20 @@ internal object BackupTestData {
     val oct9 = LocalDate(2026, 10, 9)
     val oct10 = LocalDate(2026, 10, 10)
     val oct12 = LocalDate(2026, 10, 12)
+    val oct13 = LocalDate(2026, 10, 13)
 
     /** When the backup is made. */
     val createdAt = at(oct12, 20)
+
+    /** When the diff after it is made (#164). */
+    val diffCreatedAt = at(oct13, 21)
+
+    /** Chunks of [seed]. */
+    val seeded = listOf("a0", "b0", "b1", "b2", "b3", "b4", "c0")
+
+    /** Version times (#164) the fixtures give the chunks of [seed] and those [changeAfterBackup] changes. */
+    val seedVersion = at(oct12, 10)
+    val changeVersion = at(oct13, 20)
 
     const val PASSPHRASE = "とけいの記録 2026 backup"
 
@@ -65,9 +76,32 @@ internal object BackupTestData {
         SystemFileSystem.delete(Path(audioRoot, archivePathOf("c0", at(oct12, 8))))
     }
 
+    /**
+     * What happens after the first backup (#164): the pending b3 is transcribed, the end of b1 is
+     * transcribed again together with the next chunk (a boundary, #45), and on Oct 13 a chunk
+     * with a mark (d0) and one still waiting for transcription (d1) arrive.
+     * @return the chunks that changed or were added.
+     */
+    suspend fun changeAfterBackup(store: LocalStore, audioRoot: Path): List<String> {
+        val b1 = at(oct10, 7, 5)
+        store.transaction {
+            markTranscribing("b3")
+            saveTranscript("b3", listOf(NewSegment(at(oct10, 12) + 30_000, at(oct10, 12) + 32_000, "午後の打ち合わせ", "ja")), "test-engine")
+            replaceSegments("b1", b1, Long.MAX_VALUE, listOf(NewSegment(b1 + 60_000, b1 + 62_000, "了解です。では後ほど", "ja")), "test-engine")
+        }
+        add(store, audioRoot, "d0", at(oct13, 8), marks = listOf(90_000), segments = listOf(15_000L to "四日目の朝"))
+        add(store, audioRoot, "d1", at(oct13, 8, 5))
+        return listOf("b1", "b3", "d0", "d1")
+    }
+
+    /** Gives [ids] the version time [version]: the triggers use the clock, the fixtures must not (#164). */
+    suspend fun fixVersions(store: LocalStore, ids: List<String>, version: Long) = store.transaction {
+        ids.forEach { setChunkVersion(it, version) }
+    }
+
     fun archivePathOf(id: String, startedAt: Long) = app.watchaudio.core.pipeline.Ingestor.archivePath(id, startedAt, "m4a")
 
-    private suspend fun add(
+    suspend fun add(
         store: LocalStore,
         audioRoot: Path,
         id: String,
@@ -96,9 +130,9 @@ internal object BackupTestData {
     }
 
     /** The export JSON day files of [store] (no audio), by archive path: what a user would get back. */
-    suspend fun exportedDays(store: LocalStore, audioRoot: Path): Map<String, String> {
+    suspend fun exportedDays(store: LocalStore, audioRoot: Path, exportedAt: Long = createdAt): Map<String, String> {
         val exporter = DataExporter(store, audioRoot)
-        val plan = exporter.plan(ExportRequest(ExportRange.ALL, includeAudio = false, timeZone = tokyo, exportedAt = createdAt)) ?: return emptyMap()
+        val plan = exporter.plan(ExportRequest(ExportRange.ALL, includeAudio = false, timeZone = tokyo, exportedAt = exportedAt)) ?: return emptyMap()
         val buffer = Buffer()
         exporter.write(plan, buffer)
         return readStoredZip(buffer.readByteArray())
