@@ -221,11 +221,16 @@ enum SpeechTranscription {
         module: any SpeechModule,
         collect: @escaping @Sendable () async throws -> [Segment]
     ) async throws -> [Segment] {
+        let input = try await analyzerInput(url, modules: [module])
+        defer {
+            if let temporary = input.temporary { try? FileManager.default.removeItem(at: temporary) }
+        }
+        let file = input.file
         let analyzer = SpeechAnalyzer(modules: [module])
         let collector = Task { try await collect() }
         return try await withTaskCancellationHandler {
             do {
-                if let lastSample = try await analyzer.analyzeSequence(from: try AVAudioFile(forReading: url)) {
+                if let lastSample = try await analyzer.analyzeSequence(from: file) {
                     try await analyzer.finalizeAndFinish(through: lastSample)
                 } else {
                     await analyzer.cancelAndFinishNow() // empty file
@@ -239,6 +244,81 @@ enum SpeechTranscription {
         } onCancel: {
             collector.cancel()
             Task { await analyzer.cancelAndFinishNow() }
+        }
+    }
+
+    /// The file as the modules take it: the file itself if its processing format is the modules'
+    /// best available format, otherwise a temporary PCM copy converted to that format (which the
+    /// caller deletes). DictationTranscriber rejects the watch's 16 kHz AAC read as Float32
+    /// ("Audio format is not supported"), so the format is never assumed.
+    static func analyzerInput(_ url: URL, modules: [any SpeechModule]) async throws -> (file: AVAudioFile, temporary: URL?) {
+        let file = try AVAudioFile(forReading: url)
+        guard let target = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: modules),
+              file.processingFormat != target
+        else { return (file, nil) }
+        let converted = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("caf")
+        do {
+            try convert(file, to: target, at: converted)
+            return (try AVAudioFile(forReading: converted, commonFormat: target.commonFormat, interleaved: target.isInterleaved), converted)
+        } catch {
+            try? FileManager.default.removeItem(at: converted)
+            throw error
+        }
+    }
+
+    /// Writes the whole of `input` converted to `target` (sample format, rate, channels) to a CAF file.
+    private static func convert(_ input: AVAudioFile, to target: AVAudioFormat, at url: URL) throws {
+        let source = input.processingFormat
+        guard let converter = AVAudioConverter(from: source, to: target) else { throw TranscriberError.mismatchedFormats }
+        let capacity: AVAudioFrameCount = 16_384
+        let outputCapacity = AVAudioFrameCount((Double(capacity) * target.sampleRate / source.sampleRate).rounded(.up)) + 1_024
+        guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: source, frameCapacity: capacity),
+              let outputBuffer = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: outputCapacity)
+        else { throw TranscriberError.bufferAllocation }
+        let writer = try AVAudioFile(forWriting: url, settings: target.settings, commonFormat: target.commonFormat, interleaved: target.isInterleaved)
+        let reader = ConverterSource(file: input, buffer: inputBuffer)
+        while true {
+            var error: NSError?
+            let status = converter.convert(to: outputBuffer, error: &error) { _, inputStatus in
+                reader.next(inputStatus)
+            }
+            if status == .error { throw error ?? TranscriberError.mismatchedFormats }
+            if outputBuffer.frameLength > 0 { try writer.write(from: outputBuffer) }
+            if status == .endOfStream || status == .inputRanDry { break }
+        }
+        writer.close()
+    }
+
+    /// Feeds an `AVAudioConverter` from a file, one buffer at a time (only used synchronously
+    /// inside `convert`).
+    private final class ConverterSource: @unchecked Sendable {
+        private let file: AVAudioFile
+        private let buffer: AVAudioPCMBuffer
+        private var finished = false
+
+        init(file: AVAudioFile, buffer: AVAudioPCMBuffer) {
+            self.file = file
+            self.buffer = buffer
+        }
+
+        func next(_ status: UnsafeMutablePointer<AVAudioConverterInputStatus>) -> AVAudioBuffer? {
+            if !finished {
+                buffer.frameLength = 0
+                do {
+                    try file.read(into: buffer)
+                } catch {
+                    buffer.frameLength = 0
+                }
+                if buffer.frameLength > 0 {
+                    status.pointee = .haveData
+                    return buffer
+                }
+                finished = true
+            }
+            status.pointee = .endOfStream
+            return nil
         }
     }
 
