@@ -158,6 +158,11 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks"
 
+      # #173: the shipped JNI library of sherpa-onnx is the build without text-to-speech; the AAR's
+      # statically links eSpeak NG (GPL-3.0). Fails on eSpeak NG / TTS / diarization markers in any ABI.
+      - name: sherpa-onnx JNI without TTS (release APK)
+        run: tools/sherpa-onnx-android/check-no-tts.sh apps/android/build/outputs/apk/release/*.apk
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.release.outputs.signed == 'true'
         with:
