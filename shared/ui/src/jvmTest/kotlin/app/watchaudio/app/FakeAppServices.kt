@@ -1,13 +1,17 @@
 package app.watchaudio.app
 
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.export.DataExporter
 import app.watchaudio.core.pipeline.Diagnostics
 import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.io.Buffer
+import kotlinx.io.RawSink
 import kotlinx.io.files.Path
+import kotlinx.io.readByteArray
 
 /**
  * [AppServices] over a real [LocalStore] with no platform behind it: playback, transcription
@@ -21,6 +25,7 @@ class FakeAppServices(
     override val permissions: List<AppPermission> = emptyList(),
     override val modelSetup: ModelSetup = ModelSetup.DOWNLOAD,
     override val storage: StorageManager = StorageManager(store, Path(audioRoot)),
+    override val exporter: DataExporter = DataExporter(store, Path(audioRoot)),
 ) : AppServices {
     val mutableStatus = MutableStateFlow(initialStatus)
     override val status: StateFlow<ProcessingStatus> = mutableStatus.asStateFlow()
@@ -91,6 +96,26 @@ class FakeAppServices(
         diagnosticsExports++
         diagnosticsExportFailure?.let { throw it }
         return diagnosticsExportResult
+    }
+
+    /** File names [saveExport] was asked for; the user cancels if [exportCancelled]. */
+    val exportRequests = mutableListOf<String>()
+    var exportCancelled = false
+
+    /** Makes the destination fail after the user picked it (e.g. it is full). */
+    var exportDestinationFailure: Exception? = null
+
+    /** What was "saved": file name to the bytes the shared code wrote. */
+    val savedExports = mutableListOf<Pair<String, ByteArray>>()
+
+    override suspend fun saveExport(fileName: String, mimeType: String, write: suspend (RawSink) -> Unit): Boolean {
+        exportRequests += fileName
+        if (exportCancelled) return false
+        exportDestinationFailure?.let { throw it }
+        val buffer = Buffer()
+        write(buffer)
+        savedExports += fileName to buffer.readByteArray()
+        return true
     }
 
     /** What the shared UI wrote to [diagnostics], as `event detail` lines. */

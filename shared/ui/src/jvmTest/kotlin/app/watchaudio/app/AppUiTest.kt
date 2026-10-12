@@ -258,6 +258,39 @@ class AppUiTest {
         screenshot("status-model-failed")
     }
 
+    /** #155: the export card; the archive only goes where the platform's save dialog says. */
+    @Test
+    fun exportCardWritesTheChosenRange() = runDesktopComposeUiTest(width = 412, height = 915) {
+        runBlocking {
+            DemoData.seed(store, day, tokyo, until = now - 20 * 60_000L)
+            store.updateSettings { it.copy(onboardingCompleted = true) }
+            val window = dayWindow(day, tokyo)
+            store.read { chunksBetween(window.start, window.end) }.mapNotNull { it.audioPath }.forEach {
+                File(audioDir, it).writeBytes(ByteArray(1_000))
+            }
+        }
+        showApp(services)
+        waitForText(Strings.TAB_STATUS)
+        onNodeWithText(Strings.TAB_STATUS).performClick()
+        onNodeWithText(Strings.EXPORT_RANGE_DATES).performScrollTo().performClick()
+        waitForText(Strings.exportFrom("2026年10月4日(日)"))
+        waitForText(Strings.exportTo("2026年10月10日(土)"))
+        onNodeWithText(Strings.EXPORT_INCLUDE_AUDIO).performScrollTo().performClick()
+        onNodeWithText(Strings.EXPORT_BUTTON).performScrollTo()
+        assertNoEnglish()
+        screenshot("export")
+        assertTrue(services.exportRequests.isEmpty()) // nothing leaves before the tap
+
+        onNodeWithText(Strings.EXPORT_BUTTON).performClick()
+        waitForText("1日分を書き出しました", substring = true)
+        val (name, bytes) = services.savedExports.single()
+        assertEquals("watch-audio-2026-10-10.zip", name)
+        assertTrue(bytes.size > 1_000)
+        onNode(hasText("1日分を書き出しました", substring = true)).performScrollTo()
+        assertNoEnglish()
+        screenshot("export-done")
+    }
+
     /** #144: a failed chunk shows a fixed Japanese note, never the exception message stored in the DB. */
     @Test
     fun timelineFailureShowsNoExceptionMessage() = runDesktopComposeUiTest(width = 412, height = 915) {

@@ -1,10 +1,13 @@
 package app.watchaudio.app
 
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.export.DataExporter
 import app.watchaudio.core.pipeline.Diagnostics
 import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageManager
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.io.RawSink
+import kotlinx.io.files.Path
 
 /**
  * What the shared UI needs from each phone platform. Implemented by apps/android
@@ -73,6 +76,23 @@ interface AppServices {
      * @return false if there is nothing to export (or the platform keeps no log).
      */
     suspend fun exportDiagnostics(): Boolean = false
+
+    /** Writes the user's data export (#155) from [store] and the audio under [audioRoot]. */
+    val exporter: DataExporter get() = DataExporter(store, Path(audioRoot))
+
+    /**
+     * Asks the user where to save the data export (#155) named [fileName] and writes it there with
+     * [write]. Only ever called from the user's tap; the app never sends the file anywhere itself:
+     * - Android: the system's save dialog (SAF `ACTION_CREATE_DOCUMENT`); [write] streams straight
+     *   into the document the user created.
+     * - iOS: [write] fills a file in the app's temporary directory, then the share sheet opens
+     *   (「ファイルに保存」 and the other destinations the user may pick); the file is deleted when
+     *   the sheet closes.
+     *
+     * @return false if the user cancelled before anything was written (or the platform cannot save).
+     * @throws Exception from [write] or the destination; a partly written document is removed.
+     */
+    suspend fun saveExport(fileName: String, mimeType: String, write: suspend (RawSink) -> Unit): Boolean = false
 
     /**
      * The on-device diagnostics log, for failures the UI itself sees (error types only, never
