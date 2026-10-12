@@ -141,7 +141,7 @@ sequenceDiagram
 - **タイル**: 状態・送信待ち件数・ボタン（録音開始 / 再開 / 開く）。タップでアプリを開き（`from_tile` extra）、未録音なら開始・再開する。**タイルから直接前景サービスは開始できない**（Android 14+ の制約）ため、必ずアプリを経由する。
 - **コンプリケーション**（SHORT_TEXT）: 録音中 / 未装着 / 充電中 / 電池少 / 容量満 / 中断 / 要再開（録音 ON なのに停止中）/ 停止（`status_short_*`、3 文字以内）。タイトルはブランド名、長い説明（`contentDescription`）はアプリ画面と同じ状態の文言。タップでアプリ。状態変化時に更新を要求する（定期更新なし）。
 - **Ongoing Activity**: 録音中はストップウォッチ、一時停止中は理由を表示。
-- **エミュレータでの確認（#41）**: CI `emulator.yml` の wear ジョブが `.github/scripts/wear-surfaces.sh` で、Wear OS のデバッグ用ブロードキャスト（`com.google.android.wearable.app.DEBUG_SURFACE` の `add-tile` / `set-complication`、`DEBUG_SYSUI` の `show-tile`）を使って Tile を表示し、現在の文字盤（`dumpsys wallpaper`）のスロットにコンプリケーションを設定する。停止中 → Tile のボタンをタップ（`uiautomator dump` でボタンの文言「録音開始」「再開」「開く」を探し、見つからなければ画面下寄りの中央。文言を変えたらスクリプトも直す）→ アプリが開いて録音開始 → 録音中、の順にスクリーンショットを撮る（成果物 `screenshots-wear`: `wear-tile-stopped.png` / `wear-tile-tap-opens-app.png` / `wear-tile-recording.png` / `wear-complication-*.png`）。エミュレータは AC 給電扱いで録音が「充電中」で止まるため、`dumpsys battery unplug` してから行う。マイク・通知の権限は `pm grant` で事前に付与（許可ダイアログを挟まないため）。音声入力はエミュレータの既定（ホストに入力がなければ無音）で、仮想マイクは使わない。
+- **エミュレータでの確認（#41）**: CI `emulator.yml` の wear ジョブが `.github/scripts/wear-surfaces.sh` で、Wear OS のデバッグ用ブロードキャスト（`com.google.android.wearable.app.DEBUG_SURFACE` の `add-tile` / `set-complication`、`DEBUG_SYSUI` の `show-tile`）を使って Tile を表示し、現在の文字盤（`dumpsys wallpaper`）のスロットにコンプリケーションを設定する。停止中 → Tile のボタンをタップ（`uiautomator dump` でボタンの文言「録音開始」「再開」「開く」を探し、見つからなければ画面下寄りの中央。文言を変えたらスクリプトも直す）→ アプリが開いて録音開始 → 録音中、の順にスクリーンショットを撮る（成果物 `screenshots-wear`: その前に身体センサーの説明と拒否の確認 `wear-body-sensors-*.png`（§6）、`wear-tile-stopped.png` / `wear-tile-tap-opens-app.png` / `wear-tile-recording.png` / `wear-complication-*.png`）。エミュレータは AC 給電扱いで録音が「充電中」で止まるため、`dumpsys battery unplug` してから行う。マイク・通知の権限は `pm grant` で事前に付与（許可ダイアログを挟まないため）。音声入力はエミュレータの既定（ホストに入力がなければ無音）で、仮想マイクは使わない。
   - システム UI のブロードキャストはイメージによって動かないことがあるため、このスクリプトは失敗してもジョブを落とさず、`WEAR_SURFACE_CHECK step=… ok=false` としてジョブサマリーに出す。特に `set-complication` は公式ドキュメントに記載がなく（Android Studio の実行構成が使う形式）、文字盤のスロット番号も文字盤ごとに違うため、0–7・100–103 を順に試す。
   - 最初の CI 実行（run 38047480914）でわかったこと: 起動完了（`sys.boot_completed`）の後もしばらくシステム UI が「Starting…」画面のままで、その間のスクリーンショットはすべてこの画面だった → スクリプトは `uiautomator dump` で `starting_screen` が消えるまで最大 5 分待つ。既定の文字盤（Orbita）はスロット 0–2 が無効（`Complication slot is not enabled`）→ インストール済みの文字盤（`cmd package query-services -a android.service.wallpaper.WallpaperService`）を `set-watchface` で順に切り替えて試す。最後に adb が切断されスクリーンショットを回収できなかった → 撮るたびにその場で `adb pull` する。
 
@@ -152,9 +152,20 @@ sequenceDiagram
 | `RECORD_AUDIO` | 録音 | 必須（開始時に要求） |
 | `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_MICROPHONE` | 前景サービス | 必須（インストール時） |
 | `POST_NOTIFICATIONS` | 停止アラート・前景通知 | 任意（開始時に一度だけ要求。拒否してもハプティクスは出る） |
-| `BODY_SENSORS`（`maxSdkVersion=35`） | Wear OS 4/5 での装着検出 | 任意。Wear OS 6（API 36）以降は要求しない。無くても登録を試み、イベントが来なければ「装着中」扱い |
+| `BODY_SENSORS`（`maxSdkVersion=35`） | Wear OS 4/5 での装着検出 | 任意。求める前にアプリ内で 1 画面の説明を出す（下の「身体センサーの説明」）。Wear OS 6（API 36）以降は宣言も要求もしない。無くても登録を試み、イベントが来なければ「装着中」扱い |
 | `VIBRATE` | ハプティクス | インストール時 |
 | `RECEIVE_BOOT_COMPLETED` | 再起動後に「タップで再開」通知 | インストール時 |
+
+### 身体センサーの説明（#161）
+
+Google Play の健康データのポリシーは `BODY_SENSORS` を健康関連の機密データに当たる権限の例に挙げ、目立つ説明と同意を求める（[store-data-declarations.md](../legal/store-data-declarations.md) §3.3.1）。そのため、OS の許可ダイアログの前にアプリ自身が用途を説明する。
+
+- **流れ**: 「録音開始」→ マイク（未許可なら通知も一緒に）の許可 → 許可されたらすぐ録音を始める → 説明画面「身体センサーの許可」（「ウォッチを外したら録音を一時停止するために使います。心拍などは読み取らず、インターネットにも送りません。」「許可しなくても録音できます。外しても自動では止まりません。」）→「次へ」で OS のダイアログ、「使わない」（戻る操作も同じ）なら求めない → 通知が未許可なら最後に求める。順番は純粋関数 `nextPermissionStep`（`PermissionPlan.kt`、単体テスト `PermissionPlanTest`）が決め、`MainActivity` はその通りに画面とダイアログを出す。
+- **説明は 1 回だけ**: 「次へ」か「使わない」を選ぶと `WearPrefs.bodySensorsAnswered` に記録し、以後は出さない（あとから許可するには OS の設定 → アプリ → watch-audio → 権限）。
+- **拒否したとき**: 録音は止まらない。`OffBodyMonitor.start()` が登録に失敗して `off_body_unavailable` を記録し、イベントが来ないので `RecorderPolicy` は「装着中」とみなして録音を続ける（`RecorderPolicyTest`）。外しても自動で一時停止しないことを、アプリの状態の下に小さく「外しても録音は止まりません（身体センサー未許可）」と出す。充電中・電池不足などの一時停止は変わらない。
+- **録音中に許可したとき**: 録音はダイアログより先に始まっているので、許可の結果を受けて `RecordingService.refreshMonitors` で装着検出を登録し直す（サービスを再起動しない）。OS の設定で後から許可した場合も、次にアプリを開いたとき（`onResume`）に同じく登録し直し、注記が消える。
+- **Wear OS 6（API 36）以降**: `BODY_SENSORS` は細かい健康の権限（`android.permission.health.READ_HEART_RATE` など）に置き換わった。置き換えの対象として公式に挙がっているのは心拍（`Sensor.TYPE_HEART_RATE`・Health Services の `HEART_RATE_BPM`・ProtoLayout の心拍）・SpO2・皮膚温と `FOREGROUND_SERVICE_TYPE_HEALTH` で、装着検出（`TYPE_LOW_LATENCY_OFFBODY_DETECT`）は挙がっていない（[Android 16 の動作変更](https://developer.android.com/about/versions/16/behavior-changes-16)）。そのため API 36 以降は `BODY_SENSORS` を宣言せず（`maxSdkVersion=35`）、健康の権限も求めず、説明画面も出さない。許可なしで登録できるかは機種次第で、実機で確認する（§8 の表）。登録できなければ拒否したときと同じく「装着中」とみなす（このときは注記を出さない）。
+- **CI の証拠**: `emulator.yml` の wear ジョブ（API 34）が `.github/scripts/wear-surfaces.sh` の最初の手順で、新規インストール（`pm clear`、マイク・通知だけ付与）→ アプリで「録音開始」→ 説明画面 → 「次へ」→ OS のダイアログで拒否 → 録音が続き注記が出る、を確かめ、スクリーンショット（`wear-body-sensors-explanation.png` / `wear-body-sensors-system-dialog.png` / `wear-body-sensors-declined.png`）と `WEAR_SURFACE_CHECK step=body-sensors-*` を残す。
 
 バックアップ: `allowBackup=false` + `dataExtractionRules` ですべて除外（録音を OS バックアップ・端末移行に載せない）。
 
@@ -162,7 +173,7 @@ sequenceDiagram
 
 - `/sdcard/Android/data/app.watchaudio/files/diagnostics/events.csv`（音声・内容は含まない）。512 KB を超えると `events.csv.1` に回して 1 世代だけ残す（最大 約 1 MB）。
 - 列: `timestamp,battery_pct,charging,mode,pending_uploads,event,detail`
-- 主なイベント: `armed` / `user_stop` / `mode`（状態遷移）/ `recording_started` / `chunk_closed`（理由・長さ・サイズ・silent・dropped・Mark 数）/ `chunk_recovered` / `mark` / `power_connected` / `on_body` / `off_body` / `interrupted` / `recovered` / `probe_discarded` / `alert` / `chunk_sent` / `send_failed` / `ack` / `phone_reachable` / `battery`（5 分ごと）/ `terminated` / `sticky_restart` / `boot_completed`。
+- 主なイベント: `armed` / `user_stop` / `mode`（状態遷移）/ `recording_started` / `chunk_closed`（理由・長さ・サイズ・silent・dropped・Mark 数）/ `chunk_recovered` / `mark` / `power_connected` / `on_body` / `off_body` / `interrupted` / `recovered` / `probe_discarded` / `alert` / `chunk_sent` / `send_failed` / `ack` / `phone_reachable` / `body_sensors_granted` / `body_sensors_declined`（説明画面か OS のダイアログか）/ `battery`（5 分ごと）/ `terminated` / `sticky_restart` / `boot_completed`。
 - 取り出し: `adb -s <watch> pull /sdcard/Android/data/app.watchaudio/files/diagnostics`
 
 ## 8. 実機なしで検証できること / できないこと
@@ -193,7 +204,7 @@ sequenceDiagram
 
 準備: Watch とスマホに同じ署名の debug ビルドを入れる（`./gradlew :apps:wear:installDebug :apps:android:installDebug`）。スマホ側でモデルを用意しておく。
 
-1. **開始**: アプリで「録音開始」→ マイク・通知（Wear OS 4/5 は身体センサーも）を許可 → 「録音中」と経過時間が表示され、ウォッチフェイスに Ongoing Activity のアイコンが出る。
+1. **開始**: アプリで「録音開始」→ マイク・通知を許可 → 「録音中」と経過時間が表示され、ウォッチフェイスに Ongoing Activity のアイコンが出る。Wear OS 4/5 では続けて身体センサーの説明画面が出る →「次へ」で OS のダイアログ（拒否しても録音は続き、「外しても録音は止まりません」と出る。§6）。
 2. **ローテーション**: 12 分以上録音 → 診断ログに `chunk_closed ... rotation` が約 5 分ごと。スマホ側に届いたチャンクの境目を聞いて音が欠けていない。連続するチャンクの `startedAtEpochMs + durationMs` が次の `startedAtEpochMs` と一致。
 3. **Mark**: 録音中に「マーク」を数回 → スマホ側のチャンクに Mark が正しい位置で付く。
 4. **無音**: 静かな部屋に 6 分置く → そのチャンクが `silent=true`、スマホ側で音声なし・時間範囲あり。小声の会話でも `silent=false` になること（しきい値の確認）。
