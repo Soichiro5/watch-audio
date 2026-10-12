@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -19,15 +20,19 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import app.watchaudio.app.licenses.NoticeApp
 import app.watchaudio.app.logic.formatClock
 import app.watchaudio.app.state.DayViewModel
 import app.watchaudio.app.state.BackupViewModel
@@ -42,6 +47,7 @@ import app.watchaudio.app.ui.AppIcons
 import app.watchaudio.app.ui.DayScreen
 import app.watchaudio.app.ui.BackupCallbacks
 import app.watchaudio.app.ui.ExportCallbacks
+import app.watchaudio.app.ui.LicensesScreen
 import app.watchaudio.app.ui.OnboardingScreen
 import app.watchaudio.app.ui.SearchScreen
 import app.watchaudio.app.ui.StatusScreen
@@ -78,7 +84,9 @@ fun App(
             // Loading: show an empty surface rather than flashing the wrong screen.
             null -> Surface(Modifier.fillMaxSize()) {}
             false -> Onboarding(onboardingViewModel, onFinish = settingsViewModel::completeOnboarding)
-            true -> MainTabs(timeZone, dayViewModel, searchViewModel, statusViewModel, exportViewModel, backupViewModel, settingsViewModel) {
+            true -> MainTabs(
+                timeZone, services.noticeApps, dayViewModel, searchViewModel, statusViewModel, exportViewModel, backupViewModel, settingsViewModel,
+            ) {
                 onboardingViewModel.restart()
                 settingsViewModel.showOnboardingAgain()
             }
@@ -106,9 +114,12 @@ private fun Onboarding(viewModel: OnboardingViewModel, onFinish: () -> Unit) {
     )
 }
 
+// BackHandler is experimental in Compose Multiplatform.
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun MainTabs(
     timeZone: TimeZone,
+    noticeApps: Set<NoticeApp>,
     dayViewModel: DayViewModel,
     searchViewModel: SearchViewModel,
     statusViewModel: StatusViewModel,
@@ -120,6 +131,14 @@ private fun MainTabs(
     var tabIndex by rememberSaveable { mutableIntStateOf(Tab.TIMELINE.ordinal) }
     val tab = Tab.entries[tabIndex]
     val dayState by dayViewModel.state.collectAsStateWithLifecycle()
+    // The licenses screen (#167) opens over the tabs from the status tab; its scroll position is kept.
+    var showLicenses by rememberSaveable { mutableStateOf(false) }
+    val statusScroll = rememberScrollState()
+    if (showLicenses) {
+        BackHandler { showLicenses = false }
+        LicensesScreen(noticeApps, onBack = { showLicenses = false })
+        return
+    }
 
     Scaffold(
         bottomBar = {
@@ -222,6 +241,8 @@ private fun MainTabs(
                         onRestorePassphrase = backupViewModel::setRestorePassphrase,
                         onRestore = backupViewModel::restore,
                     ),
+                    onShowLicenses = { showLicenses = true },
+                    scrollState = statusScroll,
                     modifier = modifier,
                 )
             }

@@ -98,6 +98,15 @@ ALLOWED_URL_PREFIXES = {
         "English (SenseVoice) model files, pinned commit, opt-in download only (ModelManifest.englishFiles, #81)",
 }
 
+# Files whose URL literals are only shown as text and never opened or fetched: any URL is allowed
+# there (the guarded network APIs above still are not). Unused entries are reported.
+DISPLAY_ONLY_URL_FILES = {
+    "shared/ui/src/commonMain/kotlin/app/watchaudio/app/licenses/OpenSourceNotices.kt":
+        "licenses screen (#167): project, license and model source URLs shown as selectable text",
+    "shared/ui/src/commonMain/kotlin/app/watchaudio/app/licenses/LicenseTexts.kt":
+        "licenses screen (#167): URLs inside the license texts",
+}
+
 # Declared dependencies (gradle/libs.versions.toml, *.gradle.kts) must not match these.
 DENIED_DEPENDENCIES = (
     ("analytics / ads", r"firebase|crashlytics|google-services|analytics|telemetry|"

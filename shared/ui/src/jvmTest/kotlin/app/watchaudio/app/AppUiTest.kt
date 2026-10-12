@@ -27,6 +27,8 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import app.watchaudio.app.licenses.NoticeApp
+import app.watchaudio.app.licenses.OpenSourceNotices
 import app.watchaudio.app.state.NowProvider
 import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
@@ -271,6 +273,8 @@ class AppUiTest {
         showApp(services)
         waitForText(Strings.TAB_STATUS)
         onNodeWithText(Strings.TAB_STATUS).performClick()
+        // #167: the FunASR model license asks for the model name, author and source next to it.
+        waitForText(ENGLISH_ATTRIBUTION)
         onNodeWithText(Strings.ENGLISH_SWITCH).performScrollTo().performClick()
         waitUntil(timeoutMillis = 10_000) { services.transcriptionSettingsChanges == 1 }
         assertEquals(true, runBlocking { store.loadSettings() }.transcribeEnglish)
@@ -298,6 +302,44 @@ class AppUiTest {
         onNodeWithText(Strings.TAB_STATUS).performClick()
         waitForText(Strings.CHARGING_ONLY_SWITCH)
         assertTrue(onAllNodes(hasText(Strings.ENGLISH_SWITCH)).fetchSemanticsNodes().isEmpty())
+        assertTrue(onAllNodes(hasText(ENGLISH_ATTRIBUTION)).fetchSemanticsNodes().isEmpty())
+    }
+
+    /**
+     * #167: 「ライセンス」 opens from the bottom of the status tab and lists the models and libraries
+     * (the Android set: the phone app and the Wear OS recorder) with author, license and URL; a
+     * license's full text opens on demand, and 「戻る」 returns to the status tab.
+     */
+    @Test
+    fun licensesOpenFromTheStatusTab() = runDesktopComposeUiTest(width = 412, height = 915) {
+        runBlocking { store.updateSettings { it.copy(onboardingCompleted = true) } }
+        val apps = setOf(NoticeApp.ANDROID, NoticeApp.WEAR_OS)
+        showApp(FakeAppServices(store, audioRoot = audioDir.path, initialStatus = ProcessingStatus(asrModel = ModelState.Ready), noticeApps = apps))
+        waitForText(Strings.TAB_STATUS)
+        onNodeWithText(Strings.TAB_STATUS).performClick()
+        onNodeWithText(Strings.SHOW_LICENSES).performScrollTo().performClick()
+
+        waitForText(Strings.LICENSES_INTRO)
+        for (notice in OpenSourceNotices.forApps(apps)) {
+            onNode(hasText(notice.name)).performScrollTo()
+            onAllNodes(hasText(Strings.licenseUrl(notice.url)))[0].performScrollTo()
+        }
+        onNode(hasText(Strings.licenseAuthor(OpenSourceNotices.SENSE_VOICE.author))).performScrollTo()
+        onNode(hasText(Strings.FUNASR_TERMS_SUMMARY)).performScrollTo()
+        assertTrue(onAllNodes(hasText("Skia")).fetchSemanticsNodes().isEmpty(), "iOS-only components are not listed on Android")
+        onNodeWithText(Strings.LICENSES_INTRO).performScrollTo()
+        screenshot("licenses")
+
+        // Full texts are collapsed until asked for.
+        assertTrue(onAllNodes(hasText("TERMS AND CONDITIONS", substring = true)).fetchSemanticsNodes().isEmpty())
+        onAllNodes(hasText(Strings.SHOW_LICENSE_TEXT))[0].performScrollTo().performClick()
+        waitForText("TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION", substring = true)
+        onNode(hasText("TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION", substring = true)).performScrollTo()
+        screenshot("licenses-text")
+
+        onNodeWithText(Strings.LICENSES_BACK).performClick()
+        waitForText(Strings.SHOW_LICENSES)
+        assertTrue(onAllNodes(hasText(Strings.LICENSES_INTRO)).fetchSemanticsNodes().isEmpty())
     }
 
     /** #155: the export card; the archive only goes where the platform's save dialog says. */
@@ -534,5 +576,7 @@ class AppUiTest {
     private companion object {
         /** Three or more ASCII letters: a word, not a unit such as MB. */
         val ENGLISH_WORD = Regex("[A-Za-z]{3,}")
+
+        val ENGLISH_ATTRIBUTION = OpenSourceNotices.SENSE_VOICE.let { Strings.englishModelAttribution(it.name, it.author, it.url) }
     }
 }

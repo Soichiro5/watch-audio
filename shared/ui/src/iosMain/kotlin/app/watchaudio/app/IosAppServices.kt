@@ -1,5 +1,6 @@
 package app.watchaudio.app
 
+import app.watchaudio.app.licenses.NoticeApp
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.DiagnosticsLog
 import app.watchaudio.core.pipeline.ProcessingStatus
@@ -75,6 +76,9 @@ class IosAppServices internal constructor(
     private var lastPlay = "not called"
 
     override fun requestTranscription() = onRequestTranscription()
+
+    /** The licenses screen (#167): the watchOS recorder is Swift without third-party code. */
+    override val noticeApps: Set<NoticeApp> get() = setOf(NoticeApp.IOS)
 
     /** The Speech framework's model is installed by the OS (AssetInventory). */
     override val modelSetup: ModelSetup get() = ModelSetup.OS_MANAGED

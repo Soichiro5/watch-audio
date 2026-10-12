@@ -1,5 +1,6 @@
 package app.watchaudio.app.ui
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -34,6 +36,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.watchaudio.app.ModelSetup
 import app.watchaudio.app.Strings
+import app.watchaudio.app.licenses.OpenSourceNotices
 import app.watchaudio.app.logic.ArrivalState
 import app.watchaudio.app.logic.formatAgo
 import app.watchaudio.app.logic.formatClock
@@ -71,10 +74,12 @@ internal fun StatusScreen(
     exportCallbacks: ExportCallbacks,
     backup: BackupUiState,
     backupCallbacks: BackupCallbacks,
+    onShowLicenses: () -> Unit = {},
+    scrollState: ScrollState = rememberScrollState(),
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        modifier.fillMaxSize().verticalScroll(scrollState).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         ArrivalCard(state, timeZone)
@@ -94,6 +99,10 @@ internal fun StatusScreen(
         DiagnosticsCard(state.diagnosticsExport, onExportDiagnostics)
         Section(Strings.GUIDE_TITLE) {
             OutlinedButton(onClick = onShowOnboarding) { Text(Strings.SHOW_ONBOARDING_AGAIN) }
+        }
+        Section(Strings.LICENSES_TITLE) {
+            Text(Strings.LICENSES_NOTE, style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(onClick = onShowLicenses) { Text(Strings.SHOW_LICENSES) }
         }
     }
 }
@@ -163,6 +172,15 @@ private fun AlertSettingsCard(
 private fun LanguageSettingsCard(english: Boolean, state: StatusUiState, onChange: (Boolean) -> Unit, onDownloadNow: () -> Unit) {
     Section(Strings.LANGUAGE_SETTINGS_TITLE) {
         SwitchRow(Strings.ENGLISH_SWITCH, Strings.englishDetail(ENGLISH_MODEL_MEGABYTES), english, onChange)
+        // The FunASR model license asks to name the model, its author and the source (#167).
+        val source = OpenSourceNotices.SENSE_VOICE
+        SelectionContainer {
+            Text(
+                Strings.englishModelAttribution(source.name, source.author, source.url),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         val model = state.status.englishModel
         if (english && model != null) {
             Text(

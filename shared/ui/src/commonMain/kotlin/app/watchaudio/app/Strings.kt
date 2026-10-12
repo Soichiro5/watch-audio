@@ -1,5 +1,6 @@
 package app.watchaudio.app
 
+import app.watchaudio.app.licenses.NoticeApp
 import app.watchaudio.core.pipeline.AudioRetention
 import app.watchaudio.core.pipeline.ModelState
 import app.watchaudio.core.pipeline.OffloadAge
@@ -337,6 +338,42 @@ object Strings {
         is ModelState.Failed -> "英語モデルのダウンロードに失敗しました。しばらくしてから自動で再試行します"
     }
     const val ENGLISH_DOWNLOAD_NOW = "モバイルデータ通信でもダウンロード"
+
+    /** Attribution of the English model under its switch (#167; the FunASR model license asks for it). */
+    fun englishModelAttribution(name: String, author: String, url: String) = "英語のモデル: $name — $author（出典: $url）"
+
+    // Licenses (#167). License texts stay in their original English.
+    const val LICENSES_TITLE = "ライセンス"
+    const val LICENSES_NOTE = "このアプリが使っているオープンソースのライブラリと、文字起こしのモデルの作者とライセンスです。"
+    const val SHOW_LICENSES = "ライセンスを表示"
+    const val LICENSES_BACK = "戻る"
+    const val LICENSES_INTRO =
+        "このアプリが使っているライブラリと、ダウンロードして使う文字起こしのモデルです。" +
+            "ライセンスの本文は原文（英語）のまま載せています。URL は長押しで選択してコピーできます。"
+    const val LICENSES_MODELS = "文字起こしのモデル"
+    const val LICENSES_LIBRARIES = "ライブラリ"
+    const val LICENSES_TEXTS = "ライセンスの本文"
+    fun licenseAuthor(author: String) = "作者: $author"
+    fun licenseName(license: String) = "ライセンス: $license"
+    fun licenseUrl(url: String) = "URL: $url"
+    fun licenseIncludedIn(component: String) = "$component に含まれています"
+    fun licenseDownloadedFrom(url: String) = "ダウンロード元: $url"
+    fun licenseApps(apps: String) = "使っているアプリ: $apps"
+    fun licenseApp(app: NoticeApp) = when (app) {
+        NoticeApp.ANDROID -> "スマホ（Android）"
+        NoticeApp.WEAR_OS -> "腕時計（Wear OS）"
+        NoticeApp.IOS -> "iPhone"
+    }
+    const val SHOW_LICENSE_TEXT = "本文を表示"
+    const val HIDE_LICENSE_TEXT = "本文を閉じる"
+    fun licenseTextAt(url: String) = "本文: $url"
+
+    /** What the FunASR Model License (SenseVoice Small) asks, in short (#167); the original is at its URL. */
+    const val FUNASR_TERMS_SUMMARY =
+        "使用・複製・改変・共有が許可されています。条件は、出典と作者を示し、モデル名を残すことです。" +
+            "提供者は「参考・学習目的」で提供しており、使用による損害の責任を負いません。" +
+            "条項に違反するとライセンスは終了します。改訂版は公式リポジトリで公開された時点で効力を持ちます。" +
+            "このモデルは「英語も文字起こしする」をオンにしたときだけダウンロードします。"
 
     /** Why transcription is waiting, for the status card (#75). */
     fun transcriptionPaused(reason: PauseReason, minBatteryPercent: Int): String = when (reason) {

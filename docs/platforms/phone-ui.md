@@ -11,7 +11,7 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
 | --- | --- |
 | **タイムライン** | 日付の前後移動（未来日へは進めない・「今日」に戻るボタン）、録音カバー率、24 時間バー、録音できていない時間の一覧、その日の文字起こし（時刻 + テキスト）。発話をタップすると、その位置から音声を再生（再生できる発話には ▶ を表示）。リスト末尾に「この日のデータを削除」（§1.4） |
 | **検索** | 文字起こし全体を部分一致検索（FTS5 trigram。2 文字以下は LIKE）。一致箇所を太字 + 背景色で強調。結果をタップするとその日のタイムラインへ移動し、該当発話までスクロール・ハイライトして再生 |
-| **状態** | Watch からの受信状況（最終受信時刻、10 分以上途絶えたら警告）、文字起こしモデルの状態（未取得 / ダウンロード中 / 準備完了 / エラー）とダウンロード操作、通知設定（途絶アラートのオン/オフ、おやすみ時間）、保存データの統計、**ストレージ**（容量の内訳・空き容量の警告・音声の保持期間・すべてのデータを削除。§1.4）、プライバシー表記「データはこの端末内にのみ保存され、外部に送信されません」、「初回の説明をもう一度見る」 |
+| **状態** | Watch からの受信状況（最終受信時刻、10 分以上途絶えたら警告）、文字起こしモデルの状態（未取得 / ダウンロード中 / 準備完了 / エラー）とダウンロード操作、通知設定（途絶アラートのオン/オフ、おやすみ時間）、保存データの統計、**ストレージ**（容量の内訳・空き容量の警告・音声の保持期間・すべてのデータを削除。§1.4）、プライバシー表記「データはこの端末内にのみ保存され、外部に送信されません」、「初回の説明をもう一度見る」、一番下に「ライセンス」（§1.11） |
 
 再生中は下部ナビの上に「HH:mm から再生中 [停止]」のバーを出す（再生終了はプラットフォームから通知されないので、停止するまで表示）。
 
@@ -87,7 +87,7 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
 - `GapAlertEvaluator`: `LocalStore` から最新チャンクの `endReason`・最終受信・設定を読んで上を適用。判定（`GapAlert.kt`）とあわせて、バックグラウンド処理からも使うので UI ではない `shared/pipeline` の `app.watchaudio.core.alert` にある（#134）。通知文「録音が届いていません（最後の受信: HH:mm）。Watch を確認してください」は UI の文字列なので `shared/ui` の `alert/GapAlertText` が作る。
 - 設定は状態タブの「通知」カードで変更（時刻は 1 時間単位のメニュー）。変更すると `AppServices.gapAlertSettingsChanged()` で各プラットフォームに再評価させる。
 - 状態タブの「文字起こしのタイミング」カード（#75）: スイッチ「充電中のみ文字起こしする」（既定オフ。`SettingsViewModel.setTranscribeOnlyWhileCharging` → `AppServices.transcriptionSettingsChanged()` で各プラットフォームが予約を見直す）と、オフのときの電池駆動での処理の説明（残量 50% 以上・省電力でない間・1 時間に録音 10 分ぶんまで・熱いときは休む）。方針は [02 §6.3](../architecture/02-architecture.md#充電していないときの処理方針75)。文字起こしが方針で止まっていて未処理のチャンクがあると、「文字起こしモデル」カードに理由（`ProcessingStatus.paused` → `Strings.transcriptionPaused`）を出す。バックグラウンド処理からのお知らせ（Wi-Fi 待ち・取り込み失敗・途絶通知の予約失敗・文字起こし失敗の件数・古い音声の削除失敗）も同じカードに出す。各プラットフォームは文言ではなく型付きの `ProcessingStatus.notice`（`StatusNotice`、`shared/pipeline`）を渡し、日本語の文言は `Strings.statusNotice` だけが持つ（#135）。失敗のお知らせには例外のメッセージを入れない（英語になりうるため。エラーの種類は診断ログにある）。モデルの準備に失敗した場合（`ModelState.Failed`）も `reason` は表示せず、`Strings.modelFailed(ModelSetup)` の決まった文言（Android: 通信状況を確認してもう一度ダウンロード、iOS: 「モデルを準備」でもう一度）をボタンと一緒に出す（オンボーディングも同じ）。`reason` は開発者向けで、診断ログには `model_download_failed` が残る。「今すぐ文字起こし」は電池の条件を外して実行する（発熱の条件は外さない）。
-- 状態タブの「文字起こしの言語」カード（#81、`AppServices.supportsEnglish` が true のプラットフォームだけ。現在は Android）: スイッチ「英語も文字起こしする」（既定オフ。`SettingsViewModel.setTranscribeEnglish` → `AppServices.transcriptionSettingsChanged()` で Android が英語モデルを取得・削除する）と、説明（追加のモデル約 240 MB を Wi-Fi でダウンロード、文字起こしの時間と電池が増える、1 つの発話の中の日英混在はどちらか一方の言語になる、オンにした後に届いた録音から、オフでモデルを削除）。オンの間はその下に英語モデルの状態（`ProcessingStatus.englishModel` → `Strings.englishModelState`: 確認中 / Wi-Fi 待ち / 未ダウンロード / ダウンロード中 N%（進捗バー）/ 準備完了 / 失敗（自動で再試行））を出し、未取得か失敗のときは「モバイルデータ通信でもダウンロード」（`AppServices.downloadEnglishModel(allowMetered = true)`）を出す。iOS は SpeechAnalyzer の日本語ロケールだけで、このカードは出さない（[research/english-asr.md](../research/english-asr.md)）。
+- 状態タブの「文字起こしの言語」カード（#81、`AppServices.supportsEnglish` が true のプラットフォームだけ。現在は Android）: スイッチ「英語も文字起こしする」（既定オフ。`SettingsViewModel.setTranscribeEnglish` → `AppServices.transcriptionSettingsChanged()` で Android が英語モデルを取得・削除する）と、説明（追加のモデル約 240 MB を Wi-Fi でダウンロード、文字起こしの時間と電池が増える、1 つの発話の中の日英混在はどちらか一方の言語になる、オンにした後に届いた録音から、オフでモデルを削除）、その下にモデルの帰属表示（「英語のモデル: SenseVoice Small — FunASR / Alibaba Group（出典: URL）」。FunASR Model License の条件、#167、§1.11）。オンの間はその下に英語モデルの状態（`ProcessingStatus.englishModel` → `Strings.englishModelState`: 確認中 / Wi-Fi 待ち / 未ダウンロード / ダウンロード中 N%（進捗バー）/ 準備完了 / 失敗（自動で再試行））を出し、未取得か失敗のときは「モバイルデータ通信でもダウンロード」（`AppServices.downloadEnglishModel(allowMetered = true)`）を出す。iOS は SpeechAnalyzer の日本語ロケールだけで、このカードは出さない（[research/english-asr.md](../research/english-asr.md)）。
 
 ### 1.6 オンボーディング（#32）
 
@@ -163,6 +163,21 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
 - パスフレーズは画面の状態（メモリ）にだけあり、保存・記録・送信しない。どちらも**ボタンを押したときだけ**動き、アプリが自動でどこかへ送ることはない。
 - 戻した直後は、DB の変更（`LocalStore.changes`）でタイムライン・検索・状態が読み直される。音声つきで戻した文字起こし待ちのチャンクは、通常の文字起こしの予定で処理される。
 
+### 1.11 ライセンス（#167）
+
+状態タブの一番下の「ライセンス」カードの「ライセンスを表示」で、タブの代わりに `LicensesScreen` を出す。左上の「戻る」と、Android のシステムの戻る操作（`BackHandler`）で状態タブに戻る（状態タブのスクロール位置は保つ）。
+
+| 項目 | 内容 |
+| --- | --- |
+| 一覧 | 「文字起こしのモデル」と「ライブラリ」に分けて、名前・作者・ライセンス名・著作権表示（MIT / BSD）・どのコンポーネントに含まれるか（例: ONNX Runtime は sherpa-onnx に含まれる）・URL。モデルはダウンロード元の URL も出す。スマホと Wear OS の両方を出す Android では「使っているアプリ」も出す |
+| SenseVoice Small | 作者「FunASR / Alibaba Group」、FunASR Model License の要点（日本語、`Strings.FUNASR_TERMS_SUMMARY`）と原文の URL。英語のカード（§1.5、「英語も文字起こしする」を出すプラットフォームだけ）にも「英語のモデル: SenseVoice Small — FunASR / Alibaba Group（出典: URL）」を出す |
+| ライセンスの本文 | 使っているライセンスを 1 回ずつ。Apache-2.0・MIT・BSD-2-Clause・BSD-3-Clause は「本文を表示」で全文（英語の原文、段落の改行だけ詰めた。`licenses/LicenseTexts.kt`）、それ以外は名前と URL |
+| 選択 | リンクは開かない（開けない環境もある）ので、画面全体を `SelectionContainer` にして URL を長押しで選択・コピーできる |
+
+- 一覧は共通の純粋なデータ `licenses/OpenSourceNotices.kt`（`OpenSourceNotice`: 名前・作者・`License`・URL・種類・`NoticeApp` の集合）。どのアプリの分を出すかは `AppServices.noticeApps`（Android: スマホ + Wear OS、iOS: iPhone。watchOS アプリは Apple のフレームワークだけ）。
+- URL は表示するだけで開かないので、`tools/privacy-check/policy.py` の `DISPLAY_ONLY_URL_FILES` に入れている（通信 API の禁止はそのまま）。
+- 依存やモデルを足したら一覧も更新する。集め方とライセンス一覧は [store-data-declarations.md §8](../legal/store-data-declarations.md#8-使っているライブラリとモデルのライセンス167)。
+
 ## 2. データの流れ
 
 ```mermaid
@@ -178,7 +193,7 @@ flowchart LR
   end
 ```
 
-- プラットフォームとの契約は `AppServices`（`store`, `audioRoot`, `storage`, `status`, `requestTranscription()`, `play()`, `stopPlayback()`, `downloadModels(allowMetered)`, `modelSetup`, `permissions` / `permissionStatus()` / `requestPermission()` / `openAppSettings()`, `gapAlertSettingsChanged()`, `transcriptionSettingsChanged()`, `exportDiagnostics()`, `diagnostics`, `exporter`, `saveExport()`）。追加分はすべてデフォルト実装あり（権限なし・`DOWNLOAD`・no-op・保存先なし）。iOS は `downloadModels` で OS にモデルのインストールを依頼する。
+- プラットフォームとの契約は `AppServices`（`store`, `audioRoot`, `storage`, `status`, `requestTranscription()`, `play()`, `stopPlayback()`, `downloadModels(allowMetered)`, `modelSetup`, `permissions` / `permissionStatus()` / `requestPermission()` / `openAppSettings()`, `gapAlertSettingsChanged()`, `transcriptionSettingsChanged()`, `exportDiagnostics()`, `diagnostics`, `exporter`, `saveExport()`, `noticeApps`）。追加分はすべてデフォルト実装あり（権限なし・`DOWNLOAD`・no-op・保存先なし）。iOS は `downloadModels` で OS にモデルのインストールを依頼する。
 - `status` の型 `ProcessingStatus` / `ModelState`、設定 `AppSettings`、途絶アラートの判定はバックグラウンド処理（文字起こしの実行・通知）も使うので、UI ではない `shared/pipeline` にある（`app.watchaudio.core.pipeline` / `.settings` / `.alert`、#134）。UI はそれを import して使う。
 - 計算はすべて UI から独立した純粋関数（`logic/`）で、`commonTest` でテストしている。日のタイムライン（`buildDayTimeline`・`DayWindow`・`GapCause`）は書き出し（#155）も同じギャップを使うので `shared/pipeline` の `app.watchaudio.core.timeline` にある（テストは UI の `DayTimelineTest`）。
 - 時刻表示は端末のタイムゾーン（`TimeZone.currentSystemDefault()`、kotlinx-datetime）。チャンクの `timeZone` も DB に保存されているが、表示には使っていない。
@@ -213,6 +228,8 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 | `commonTest/…/GapAlertTextTest` | 途絶アラートの通知文 |
 | `commonTest/…/StatusNoticeTextTest` | すべての `StatusNotice`、状態タブの失敗の文言（モデル・削除・診断ログの書き出し）、通知の文言（途絶アラート・モデルのダウンロード）が空でなく、文ごとに日本語であること（#135） |
 | `jvmTest/…/ViewModelTest` | 一時ファイルの実 `LocalStore` + 一時ディレクトリの音声 + テストディスパッチャで、日付移動・変更時の再読み込み・周期更新・再試行・検索→該当日へ移動・受信途絶の警告、容量表示と保持期間の確認・適用・空き容量警告、「削除」入力による全削除、確認付きの日単位削除、削除済み音声の発話が再生されないこと、設定の保存、オンボーディングのステップ・同意必須・権限要求・拒否時に設定画面を開き戻ったら読み直す（`refusedPermissionLeadsToTheSystemSettingsAndIsReReadOnReturn`）、診断ログの書き出しはボタンでのみ依頼し結果（空・失敗）を表示する（`exportingDiagnosticsAsksThePlatformOnlyOnTapAndReportsTheOutcome`）、削除や書き出しの失敗は決まった文言を出し診断ログにはエラーの種類だけを書く（`aFailedDeletionShowsAFixedTextAndLogsOnlyTheErrorType`、#135） |
+| `commonTest/…/licenses/OpenSourceNoticesTest` | ライセンス一覧（#167）: 空でなく、すべてに名前・作者・ライセンス・https の URL がある、MIT / BSD は著作権表示つき、SenseVoice の帰属（FunASR / Alibaba Group・FunASR Model License）、Android と iOS それぞれに出るもの（iOS にモデルと sherpa-onnx がない）、ライセンスは 1 回ずつ |
+| `apps/android` の `ModelNoticesTest` | `ModelManifest` がダウンロードするすべてのファイル（`englishFiles` を含む）に、ライセンス画面のモデルの項目がある。逆に一覧のモデルはすべて `ModelManifest` にある |
 | `jvmTest/…/ExportViewModelTest` | データの書き出し（#155）: 既定の選択（すべて・直近 7 日）と範囲の補正、ボタンを押すまで保存先を聞かないこと、書き出した ZIP の中身（JSON・Markdown・音声）と結果の文言、範囲に記録がなければ保存先を聞かない、キャンセルでは何も出さない、失敗は決まった文言で診断ログには型だけ |
 | `commonTest/…/ExportTextTest` | 書き出す Markdown のギャップの理由・曜日がタイムラインの文言と同じ |
 | `shared/pipeline` の `ExportGoldenTest`・`ExportFormatTest`・`ZipWriterTest`（`commonTest`）、`ZipWriterJvmTest`（`jvmTest`）、`DataExporterTest`（`sqliteTest`） | 書き出しの形式（[02 §6.6](../architecture/02-architecture.md#66-データの書き出し155)）: 固定データの JSON・Markdown の全文照合、JSON の読み戻し、ZIP（ZIP64 を含む）の読み戻し、実 DB からの書き出し |
@@ -220,7 +237,7 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 | `jvmTest/…/ViewModelTest`（#156 の分） | オフロード: 確認を開くまで何も消さない・古さで対象が変わる・確定でバックアップ済みの文字起こし済みの音声だけが消え、バックアップしていない音声と文字起こし前の音声は残り、検索は変わらない（`offloadRemovesOnlyBackedUpAudioAfterConfirmation`）、失敗の決まった文言（`aFailedOffloadShowsAFixedText`）、外したチャンクの発話は「バックアップにあり」で再生しない（`offloadedAudioShowsInBackupInsteadOfPlayback`） |
 | `shared/pipeline` の `BackupCipherTest`（`commonTest`）、`BackupRestorerTest`・`BackupDiffTest`・`BackupFixtureTest`（`sqliteTest`）、`shared/db` の `BackupQueriesTest`、`shared/platform` の `CryptoTest` | バックアップの形式と復元（[02 §6.7](../architecture/02-architecture.md#67-暗号化バックアップ40)）。`BackupFixtureTest` は JVM・iOS シミュレータ・Android エミュレータで同じファイル（全体と差分）を書けて戻せること、#164 より前の v1 のファイルも戻せることを確かめる（OS 間の互換）。`BackupDiffTest` は全体 + 差分 2 つをどの順でも何度戻しても今の全体と同じになること、差分の大きさが変わった分に比例すること |
 | `shared/pipeline` の `sqliteTest/…/GapAlertEvaluatorTest` | 実 DB 上で途絶アラートの判定・設定の反映 |
-| `jvmTest/…/AppUiTest` | Skia でヘッドレス描画し、(1) タイムライン→再生→検索→結果を開く→状態→おやすみ時間の切り替え→ストレージ（「削除」を入力して全削除）→「診断ログを書き出す」、(2) オンボーディング（同意しないと次へ進めない→通知許可→モデルのダウンロード選択→はじめる→タブ画面→説明をもう一度）、(3) 通知を拒否したときの「設定を開く」（`onboarding-permission-denied.png`）を操作。(4) 状態タブのお知らせ（Wi-Fi 待ち・文字起こし失敗）とモデルのダウンロード失敗（英語の `reason` を渡しても表示されない）を表示し、画面上に英語だけのテキストがないことを確認（`status-waiting-for-wifi.png`、`status-notice.png`、`status-model-failed.png`、#135）。(5) DB に英語の例外メッセージを持つ失敗チャンクのあるタイムラインで、失敗の行に決まった文言だけが出て例外のメッセージが表示されず、英語だけのテキストもないことを確認（`timeline-failed.png`、#144）。(6) 「データの書き出し」で「期間を指定」と「音声ファイルを含める」を選び、押すまで保存先を聞かないこと、押すと ZIP が渡され結果が出ること（`export.png`、`export-done.png`、#155）。(7) 「暗号化バックアップ」でパスフレーズと確認を入れ（不一致の表示を経て）、押すまで保存先を聞かないこと、作成したファイルを同じ端末に戻すと「すでにこの端末にあった」件数が出ること（`backup.png`、`backup-done.png`、`restore-done.png`、#40）。全体のバックアップを保存した後は前回の日時と差分（件数と大きさ）が出て、作ると `-diff` のファイルが渡り、前回の表示が差分に変わること（`backup-diff.png`、`backup-diff-done.png`、#164）。(8) 音声入りのバックアップを作ってから「バックアップ済みの音声を端末から外す」→ 確認（バックアップの作成日が出る）→ 外すと、タイムラインの発話に「バックアップにあり」と説明が出て、タップしても再生せず、検索は同じ結果を返すこと（`offload-confirm.png`、`offload-done.png`、`timeline-offloaded.png`、`search-offloaded.png`、#156）。(9) 「英語も文字起こしする」（#81）: 英語に対応するプラットフォームではスイッチが出て、押すと設定が保存されプラットフォームに伝わり、英語モデルの Wi-Fi 待ち・ダウンロード中の表示と「モバイルデータ通信でもダウンロード」が働くこと（`status-english-downloading.png`）、対応しないプラットフォームでは出ないこと。スクリーンショットを `shared/ui/build/screenshots/` に出力（CI の成果物 `ui-screenshots`） |
+| `jvmTest/…/AppUiTest` | Skia でヘッドレス描画し、(1) タイムライン→再生→検索→結果を開く→状態→おやすみ時間の切り替え→ストレージ（「削除」を入力して全削除）→「診断ログを書き出す」、(2) オンボーディング（同意しないと次へ進めない→通知許可→モデルのダウンロード選択→はじめる→タブ画面→説明をもう一度）、(3) 通知を拒否したときの「設定を開く」（`onboarding-permission-denied.png`）を操作。(4) 状態タブのお知らせ（Wi-Fi 待ち・文字起こし失敗）とモデルのダウンロード失敗（英語の `reason` を渡しても表示されない）を表示し、画面上に英語だけのテキストがないことを確認（`status-waiting-for-wifi.png`、`status-notice.png`、`status-model-failed.png`、#135）。(5) DB に英語の例外メッセージを持つ失敗チャンクのあるタイムラインで、失敗の行に決まった文言だけが出て例外のメッセージが表示されず、英語だけのテキストもないことを確認（`timeline-failed.png`、#144）。(6) 「データの書き出し」で「期間を指定」と「音声ファイルを含める」を選び、押すまで保存先を聞かないこと、押すと ZIP が渡され結果が出ること（`export.png`、`export-done.png`、#155）。(7) 「暗号化バックアップ」でパスフレーズと確認を入れ（不一致の表示を経て）、押すまで保存先を聞かないこと、作成したファイルを同じ端末に戻すと「すでにこの端末にあった」件数が出ること（`backup.png`、`backup-done.png`、`restore-done.png`、#40）。全体のバックアップを保存した後は前回の日時と差分（件数と大きさ）が出て、作ると `-diff` のファイルが渡り、前回の表示が差分に変わること（`backup-diff.png`、`backup-diff-done.png`、#164）。(8) 音声入りのバックアップを作ってから「バックアップ済みの音声を端末から外す」→ 確認（バックアップの作成日が出る）→ 外すと、タイムラインの発話に「バックアップにあり」と説明が出て、タップしても再生せず、検索は同じ結果を返すこと（`offload-confirm.png`、`offload-done.png`、`timeline-offloaded.png`、`search-offloaded.png`、#156）。(9) 「英語も文字起こしする」（#81）: 英語に対応するプラットフォームではスイッチが出て、押すと設定が保存されプラットフォームに伝わり、英語モデルの Wi-Fi 待ち・ダウンロード中の表示と「モバイルデータ通信でもダウンロード」が働くこと（`status-english-downloading.png`）、対応しないプラットフォームでは出ないこと。英語のカードに SenseVoice の帰属表示が出ること（#167）。(10) 状態タブの「ライセンスを表示」でライセンス画面が開き、Android の一覧のすべての名前と URL・SenseVoice の作者と FunASR の要点があり、iOS だけのもの（Skia）がないこと、本文は押すまで閉じていて「本文を表示」で Apache-2.0 の全文が出ること、「戻る」で状態タブに戻ること（`licenses.png`、`licenses-text.png`、#167）。スクリーンショットを `shared/ui/build/screenshots/` に出力（CI の成果物 `ui-screenshots`） |
 | `apps/android/src/androidTest/…/PlaybackTest` | エミュレータ上の実アプリで、実際の AAC を MediaPlayer が指定位置から再生すること、検索 → 結果を 1 タップ → 発話の位置から再生されることを確認（CI `emulator.yml`、[android-phone.md §6.1](android-phone.md#61-実機なしlinux--ci)） |
 | `apps/android/src/androidTest/…/PermissionDeniedTest` | エミュレータでオンボーディングから通知の許可を求め、システムのダイアログで拒否 → 理由と「設定を開く」が表示され、押すとアプリの設定画面が開く（インストール直後に `phone-scenarios.sh` から実行。スクリーンショット `onboarding-permission-denied.png` ほか） |
 | `apps/android/src/androidTest/…/ModelWaitTest` | モデルなしの状態タブ（「モデルが未ダウンロードです」・文字起こし待ち）と、モデルを置いた後の「準備完了」のスクリーンショット（`status-model-*.png`） |

@@ -45,6 +45,8 @@ WEAR_RULES = (f"<data-extraction-rules><cloud-backup>{ALL_DOMAINS}</cloud-backup
 
 MODEL_DOWNLOADER = "apps/android/src/main/kotlin/app/watchaudio/android/asr/ModelDownloader.kt"
 MODEL_MANIFEST = "apps/android/src/main/kotlin/app/watchaudio/android/asr/ModelManifest.kt"
+NOTICES = "shared/ui/src/commonMain/kotlin/app/watchaudio/app/licenses/OpenSourceNotices.kt"
+LICENSE_TEXTS = "shared/ui/src/commonMain/kotlin/app/watchaudio/app/licenses/LicenseTexts.kt"
 
 PRIVACY_MANIFEST = """\
 <?xml version="1.0" encoding="UTF-8"?>
@@ -127,6 +129,8 @@ class FixtureRepo:
             const val RELEASES = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models"
             const val SENSE_VOICE = "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/abc"
             """)
+        self.write(NOTICES, 'val url = "https://github.com/k2-fsa/sherpa-onnx"\n')
+        self.write(LICENSE_TEXTS, 'const val APACHE = """http://www.apache.org/licenses/"""\n')
         # Test code is not shipped: a local fake server is fine there.
         self.write("apps/android/src/test/kotlin/DownloaderTest.kt", """\
             val server = java.net.ServerSocket(0)
@@ -305,6 +309,17 @@ class SourceTest(FixtureTestCase):
     def test_unknown_url_fails(self):
         self.repo.write("shared/ui/src/commonMain/kotlin/Help.kt", 'const val HELP = "https://example.com/upload"\n')
         self.assertViolation(self.repo.run(), "network", "URL https://example.com/upload")
+
+    def test_display_only_file_allows_urls_but_not_network_apis(self):
+        # License notices (#167) show any URL as text; they still must not open a connection.
+        self.repo.write(NOTICES, 'val url = "https://example.com/project"\nval c = URL(url).openConnection()\n')
+        report = self.repo.run()
+        self.assertFalse(any("example.com" in str(v) for v in report.violations), [str(v) for v in report.violations])
+        self.assertViolation(report, "network", "OpenSourceNotices.kt:2: .openConnection(")
+
+    def test_display_only_file_without_urls_is_stale(self):
+        self.repo.write(LICENSE_TEXTS, "const val MIT = \"Permission is hereby granted\"\n")
+        self.assertViolation(self.repo.run(), "network", "LicenseTexts.kt has no URL")
 
     def test_allowed_api_in_another_file_fails(self):
         self.repo.write("apps/android/src/main/kotlin/Other.kt", "import java.net.HttpURLConnection\n")
