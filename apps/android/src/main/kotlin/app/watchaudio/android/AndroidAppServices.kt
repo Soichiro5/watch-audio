@@ -24,6 +24,7 @@ import app.watchaudio.app.AppServices
 import app.watchaudio.app.BACKUP_MIME_TYPE
 import app.watchaudio.app.PermissionStatus
 import app.watchaudio.app.Strings
+import app.watchaudio.app.licenses.NoticeApp
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.DiagnosticsLog
 import app.watchaudio.core.pipeline.ModelState
@@ -101,6 +102,8 @@ class AndroidAppServices(
 
     /** English needs the extra SenseVoice model ([ModelManager.englishFiles]). */
     override val supportsEnglish: Boolean get() = true
+
+    override val noticeApps: Set<NoticeApp> get() = NOTICE_APPS
 
     private var player: MediaPlayer? = null
 
@@ -355,5 +358,8 @@ class AndroidAppServices(
 
         /** Must match the diagnostics FileProvider in the manifest. */
         const val DIAGNOSTICS_AUTHORITY_SUFFIX = ".diagnostics"
+
+        /** The licenses screen (#167) covers this app and the Wear OS recorder (it has no screen of its own). */
+        val NOTICE_APPS: Set<NoticeApp> = setOf(NoticeApp.ANDROID, NoticeApp.WEAR_OS)
     }
 }
