@@ -233,8 +233,9 @@ object Strings {
     // Encrypted backup (#40)
     const val BACKUP_TITLE = "暗号化バックアップ"
     const val BACKUP_NOTE =
-        "機種変更や故障に備えて、すべての記録をパスフレーズで暗号化した 1 つのファイルにします。保存先（PC・外部ストレージなど）は" +
-            "あなたが選びます。アプリが自動でクラウドなどへ送ることはありません。このファイルから別の端末（iPhone と Android の間も）へ戻せます。"
+        "機種変更や故障に備えて、記録をパスフレーズで暗号化したファイルにします。最初はすべてを、その後は前回からの差分だけを書き出せます。" +
+            "保存先（PC・外部ストレージなど）はあなたが選びます。アプリが自動でクラウドなどへ送ることはありません。" +
+            "このファイルから別の端末（iPhone と Android の間も）へ戻せます。"
     const val BACKUP_PASSPHRASE = "パスフレーズ"
     const val BACKUP_PASSPHRASE_CONFIRM = "パスフレーズ（確認）"
     const val BACKUP_PASSPHRASE_MISMATCH = "確認のパスフレーズが一致しません"
@@ -248,6 +249,28 @@ object Strings {
     const val BACKUP_INCLUDE_AUDIO = "音声もバックアップする"
     fun backupIncludeAudioDetail(size: String) =
         "端末にある音声は全部で $size です。含めないと、戻した端末では文字起こしだけになり、音声は再生できません。"
+    // Diff backups (#164)
+    const val BACKUP_NONE_SAVED = "まだバックアップを保存していません"
+    fun lastBackupFull(date: String) = "前回のバックアップ: $date（全体）"
+    fun lastBackupDiff(date: String, fullDate: String, diffs: Int) =
+        "前回のバックアップ: $date（差分。$fullDate の全体のバックアップの後の ${diffs}個目）"
+    const val BACKUP_KIND_FULL = "全体"
+    const val BACKUP_KIND_DIFF = "差分"
+    fun backupFullDetail(chunks: Int, size: String) = "すべての記録（チャンク ${chunks}件、約 $size）を 1 つのファイルにします。"
+    fun backupDiffDetail(chunks: Int, audioFiles: Int, size: String) =
+        "前回のバックアップの後に増えた・変わった記録だけ（チャンク ${chunks}件" + (if (audioFiles > 0) "、音声 ${audioFiles}件" else "") +
+            "、約 $size）を書き出します。"
+    const val BACKUP_DIFF_KEEP_FILES =
+        "戻すときは、全体のバックアップとその後の差分のファイルをすべて戻してください（順番は問いません）。" +
+            "差分には、保存済みのバックアップに入っている音声は入らないので、前のファイルも消さずに残してください。"
+    const val BACKUP_DIFF_NOT_YET = "差分は、全体のバックアップを保存した後に作れます。"
+    const val BACKUP_DIFF_AFTER_DELETE =
+        "前回の全体のバックアップの後に記録を削除したので、次は全体のバックアップを作ってください" +
+            "（差分では削除を伝えられず、前のファイルから戻すと消した記録も戻るため）。"
+    const val BACKUP_NOTHING_CHANGED = "前回のバックアップの後に増えた・変わった記録はありません"
+    fun backedUpDiff(days: Int, chunks: Int, audioFiles: Int) =
+        "差分（${days}日分、チャンク ${chunks}件" + (if (audioFiles > 0) "、音声 ${audioFiles}件" else "") +
+            "）をバックアップしました。全体のバックアップと前の差分のファイルも残してください。"
     const val BACKUP_CREATE_BUTTON = "バックアップを作成"
     const val BACKUP_CREATING = "暗号化して書き出し中…"
     const val BACKUP_NOTHING = "バックアップする記録がありません"
@@ -259,15 +282,16 @@ object Strings {
     fun backupMissingAudio(count: Int) = "音声ファイルが見つからなかった ${count}件は、文字起こしだけをバックアップしました"
     const val RESTORE_TITLE = "バックアップから戻す"
     const val RESTORE_NOTE =
-        "バックアップファイルを選び、作ったときのパスフレーズを入力します。この端末の記録は消えず、ない分だけが加わります" +
-            "（同じファイルを何度戻しても重複しません）。"
+        "バックアップファイル（全体・差分のどちらも）を選び、作ったときのパスフレーズを入力します。この端末の記録は消えず、" +
+            "ない分と新しい文字起こしだけが加わります（同じファイルを何度戻しても重複しません）。"
     const val RESTORE_PASSPHRASE = "バックアップのパスフレーズ"
     const val RESTORE_BUTTON = "ファイルを選んで戻す"
     const val RESTORE_VERIFYING = "パスフレーズとファイル全体を確認中…（この間は何も変更しません）"
     fun restoring(doneDays: Int, totalDays: Int) = "戻しています…（$doneDays / ${totalDays}日）"
-    fun restored(added: Int, segments: Int, audioFiles: Int, alreadyPresent: Int, returnedAudio: Int = 0) =
+    fun restored(added: Int, segments: Int, audioFiles: Int, alreadyPresent: Int, returnedAudio: Int = 0, updatedTranscripts: Int = 0) =
         "チャンク ${added}件を戻しました（発話 ${segments}件" + (if (audioFiles > 0) "、音声 ${audioFiles}件" else "") + "）。" +
             (if (alreadyPresent > 0) "すでにこの端末にあった ${alreadyPresent}件はそのままです。" else "") +
+            (if (updatedTranscripts > 0) "そのうち ${updatedTranscripts}件は新しい文字起こしにしました。" else "") +
             (if (returnedAudio > 0) "端末から外していた音声 ${returnedAudio}件を戻しました。" else "")
     const val RESTORE_WRONG_PASSPHRASE = "パスフレーズが違います（またはファイルが壊れています）。何も変更していません。"
     const val RESTORE_CORRUPTED = "ファイルが壊れているか、途中までしかありません。何も変更していません。"

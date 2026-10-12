@@ -29,6 +29,8 @@ data class RestoredChunk(
     val audioPurgedAt: Long?,
     /** When the audio was last in a backup the user has ([ChunkRecord.audioBackedUpAt]), or null. */
     val audioBackedUpAt: Long? = null,
+    /** When the record last changed on the device that wrote the backup (#164), or null if unknown. */
+    val updatedAt: Long? = null,
 )
 
 /** A transcript segment read from a backup, with the transcriber that produced it. */
@@ -78,8 +80,9 @@ internal class RestoreSql(private val db: SQLiteConnection) : RestoreQueries {
         """
         INSERT OR IGNORE INTO audio_chunk (
             uuid, session_id, device_id, source, started_at, ended_at, time_zone, audio_path, codec, size_bytes,
-            sha256, end_reason, state, attempts, last_error, received_at, manifest_json, audio_purged_at, audio_backed_up_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            sha256, end_reason, state, attempts, last_error, received_at, manifest_json, audio_purged_at, audio_backed_up_at,
+            updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """.trimIndent(),
         chunk.id,
         chunk.sessionId,
@@ -100,6 +103,7 @@ internal class RestoreSql(private val db: SQLiteConnection) : RestoreQueries {
         chunk.manifestJson,
         chunk.audioPurgedAt,
         chunk.audioBackedUpAt,
+        chunk.updatedAt,
     ) > 0
 
     override fun markAudioRestored(chunkId: String, backupCreatedAt: Long): Boolean = db.update(

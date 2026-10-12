@@ -1,7 +1,9 @@
 package app.watchaudio.core.export
 
 import app.watchaudio.core.backup.BACKUP_INDEX_ENTRY
+import app.watchaudio.core.backup.BackupBase
 import app.watchaudio.core.backup.BackupIndex
+import app.watchaudio.core.backup.BackupKind
 import app.watchaudio.core.backup.backupDay
 import app.watchaudio.core.backup.backupDayEntry
 import app.watchaudio.core.backup.toJson
@@ -50,10 +52,33 @@ data class ExportRequest(
     val forBackup: Boolean = false,
 )
 
-/** An export with something in it: the days from the first to the last chunk in the range. */
-data class ExportPlan(val request: ExportRequest, val firstDay: LocalDate, val lastDay: LocalDate) {
-    /** Calendar days from [firstDay] to [lastDay] (days without chunks are skipped when writing). */
-    val dayCount: Int get() = firstDay.daysUntil(lastDay) + 1
+/**
+ * Part of the chunks, for a diff backup (#164): only these days and chunks are written, and only
+ * the audio files of [audio].
+ */
+data class ExportSelection(
+    /** Days with selected chunks, oldest first. */
+    val days: List<LocalDate>,
+    /** UUIDs of the chunks to write (with their segments and marks). */
+    val chunks: Set<String>,
+    /** UUIDs of the chunks whose audio file to write (a subset of [chunks]). */
+    val audio: Set<String>,
+    /** What the diff builds on, for its `backup.json`. */
+    val base: BackupBase,
+)
+
+/**
+ * An export with something in it: the days from the first to the last chunk in the range, or
+ * only the chunks of [selection].
+ */
+data class ExportPlan(
+    val request: ExportRequest,
+    val firstDay: LocalDate,
+    val lastDay: LocalDate,
+    val selection: ExportSelection? = null,
+) {
+    /** Calendar days from [firstDay] to [lastDay] (days without chunks are skipped when writing), or the selected days. */
+    val dayCount: Int get() = selection?.days?.size ?: (firstDay.daysUntil(lastDay) + 1)
 
     /** `watch-audio-2026-10-04_2026-10-10`, or one date for a single day; also the archive's root folder. */
     val baseName: String get() = if (firstDay == lastDay) "watch-audio-$firstDay" else "watch-audio-${firstDay}_$lastDay"
@@ -92,6 +117,9 @@ data class ExportProgress(val doneDays: Int, val totalDays: Int)
  * - for [ExportRequest.forBackup], `backup/<date>.json` after each day's JSON and `backup.json`
  *   after `export.json` (`core/backup/BackupFormat.kt`)
  *
+ * With an [ExportPlan.selection] (a diff backup, #164) only the selected days, chunks and audio
+ * files are written; each day's gaps are still those of the whole day.
+ *
  * Days are read one at a time and audio files are streamed, so memory does not grow with the
  * size of the export. The database is only locked while a day is read.
  */
@@ -124,16 +152,18 @@ class DataExporter(
         val days = mutableListOf<ExportIndexDay>()
         val audioChunkIds = mutableListOf<String>()
         var missingAudio = 0
+        val selection = plan.selection
 
-        var date = plan.firstDay
+        var date = selection?.days?.firstOrNull() ?: plan.firstDay
+        var selectedDone = 0
         while (date <= plan.lastDay) {
             currentCoroutineContext().ensureActive()
             val window = dayWindow(date, zone)
-            val records = store.read { readDayRecords(window, request.forBackup) }
+            val records = store.read { readDayRecords(window, request.forBackup) }.let { all -> selection?.let { all.only(it.chunks) } ?: all }
             if (records.chunks.isNotEmpty()) {
                 val included = mutableMapOf<String, String>()
                 if (request.includeAudio) {
-                    records.chunks.filter { it.hasAudioFile }.forEach { chunk ->
+                    records.chunks.filter { it.hasAudioFile && (selection == null || it.id in selection.audio) }.forEach { chunk ->
                         val path = Path(audioRoot, chunk.audioPath!!)
                         val name = audioEntryName(date, chunk, zone, records.audioFiles[chunk.id])
                         val written = withContext(dispatcher) {
@@ -167,6 +197,11 @@ class DataExporter(
                     audioFiles = included.size,
                 )
             }
+            if (selection != null) {
+                onProgress(ExportProgress(++selectedDone, plan.dayCount))
+                date = selection.days.getOrNull(selectedDone) ?: break
+                continue
+            }
             onProgress(ExportProgress(plan.firstDay.daysUntil(date) + 1, plan.dayCount))
             // Days without chunks are skipped in one step (a watch clock far off can stretch the range).
             val next = store.read { firstChunkStartAtOrAfter(window.end) } ?: break
@@ -193,18 +228,22 @@ class DataExporter(
         withContext(dispatcher) {
             zip.addFile("$root/export.json", index.toJson().encodeToByteArray())
             if (request.forBackup) {
+                val kind = if (selection != null) BackupKind.DIFF else BackupKind.FULL
                 val backupIndex = BackupIndex(
+                    formatVersion = kind.formatVersion,
                     createdAt = request.exportedAt,
+                    kind = kind,
                     includesAudio = request.includeAudio,
                     days = summary.days,
                     chunks = summary.chunks,
                     segments = summary.segments,
                     marks = summary.marks,
                     audioFiles = summary.audioFiles,
+                    base = selection?.base,
                 )
                 zip.addFile("$root/$BACKUP_INDEX_ENTRY", backupIndex.toJson().encodeToByteArray())
             }
-            zip.addFile("$root/README.md", MarkdownText.readme(request.includeAudio).encodeToByteArray())
+            zip.addFile("$root/README.md", MarkdownText.readme(request.includeAudio, diff = selection != null).encodeToByteArray())
             zip.finish()
         }
         return summary

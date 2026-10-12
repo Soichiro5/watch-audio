@@ -14,6 +14,13 @@ fun formatBytes(bytes: Long): String {
     return "${tenths / 10}.${tenths % 10} GB"
 }
 
+/**
+ * Size of a backup file (#164): like [formatBytes], but a small diff reads `12 KB` instead of
+ * `0.0 MB`.
+ */
+fun formatBackupSize(bytes: Long): String =
+    if (bytes >= 100L shl 10) formatBytes(bytes) else "${((bytes + 1023) shr 10).coerceAtLeast(1)} KB"
+
 /** Switching retention from [current] to [target] deletes audio sooner, so it needs a confirmation. */
 fun retentionChangeNeedsConfirmation(current: AudioRetention, target: AudioRetention): Boolean =
     target.isShorterThan(current)

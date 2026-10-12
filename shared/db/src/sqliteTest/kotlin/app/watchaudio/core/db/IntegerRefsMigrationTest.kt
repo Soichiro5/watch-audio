@@ -129,7 +129,8 @@ class IntegerRefsMigrationTest {
                 db.texts("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_%' ORDER BY name"),
             )
             assertEquals(
-                listOf("segment_ad", "segment_ai"),
+                // segment_change_*: change tracking for diff backups (migration 8, #164).
+                listOf("segment_ad", "segment_ai", "segment_change_ad", "segment_change_ai"),
                 db.texts("SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'transcript_segment' ORDER BY name"),
             )
             // The chunk key is an INTEGER PRIMARY KEY (a rowid alias), so VACUUM cannot renumber it.

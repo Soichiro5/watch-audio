@@ -5,7 +5,7 @@ import androidx.sqlite.SQLiteConnection
 /**
  * Queries available inside [LocalStore.transaction] / [LocalStore.read], one interface per
  * concern: [ChunkQueries], [TranscriptQueries], [SearchQueries], [StorageQueries],
- * [SettingQueries], [ExportQueries] and [RestoreQueries]. Column lists and row mappers are shared in `Rows.kt`.
+ * [SettingQueries], [ExportQueries], [RestoreQueries] and [BackupQueries]. Column lists and row mappers are shared in `Rows.kt`.
  */
 class StoreTransaction private constructor(db: SQLiteConnection, private val searchSql: SearchSql) :
     ChunkQueries by ChunkSql(db),
@@ -14,7 +14,8 @@ class StoreTransaction private constructor(db: SQLiteConnection, private val sea
     StorageQueries by StorageSql(db),
     SettingQueries by SettingSql(db),
     ExportQueries by ExportSql(db),
-    RestoreQueries by RestoreSql(db) {
+    RestoreQueries by RestoreSql(db),
+    BackupQueries by BackupSql(db) {
 
     internal constructor(db: SQLiteConnection) : this(db, SearchSql(db))
 

@@ -227,4 +227,81 @@ internal val MIGRATIONS: List<List<String>> = listOf(
     listOf(
         "ALTER TABLE audio_chunk ADD COLUMN audio_backed_up_at INTEGER",
     ),
+    // 8: diff backups (#164). Two things are tracked per chunk, both maintained by triggers so that
+    // no write path can forget them:
+    // - change_epoch: the backup epoch (backup_state.epoch) in which the chunk's record last
+    //   changed (inserted, state changed, segments added or removed, mark added). Planning a
+    //   backup ends the current epoch (BackupQueries.beginBackup), so a diff holds the chunks
+    //   whose change_epoch is after the epoch its base backup covered.
+    // - updated_at: when the record last changed (epoch ms, strictly increasing per chunk), carried
+    //   in backups so that a restore keeps the newer transcript of a chunk whatever the order the
+    //   files are restored in. A restore sets it to the backup's value.
+    // Changes to whether the audio file is on the phone (retention, offload, audio_backed_up_at)
+    // are not record changes. Deleting a chunk records its epoch in backup_state.deleted_epoch: a
+    // diff cannot carry deletions, so after one the next backup must be full (a new chain).
+    // Adding the columns only rewrites the schema (instant); existing chunks start in epoch 0,
+    // before any backup that could be the base of a diff.
+    listOf(
+        "ALTER TABLE audio_chunk ADD COLUMN updated_at INTEGER",
+        "ALTER TABLE audio_chunk ADD COLUMN change_epoch INTEGER NOT NULL DEFAULT 0",
+        """
+        CREATE TABLE backup_state (
+            id               INTEGER PRIMARY KEY CHECK (id = 1),
+            epoch            INTEGER NOT NULL,
+            deleted_epoch    INTEGER NOT NULL,
+            saved_at         INTEGER,
+            saved_diff       INTEGER NOT NULL DEFAULT 0,
+            saved_epoch      INTEGER,
+            full_saved_at    INTEGER,
+            full_epoch       INTEGER,
+            diffs_since_full INTEGER NOT NULL DEFAULT 0
+        )
+        """,
+        "INSERT INTO backup_state (id, epoch, deleted_epoch) VALUES (1, 1, 0)",
+        """
+        CREATE TRIGGER chunk_change_ai AFTER INSERT ON audio_chunk BEGIN
+            UPDATE audio_chunk SET
+                change_epoch = (SELECT epoch FROM backup_state),
+                updated_at = COALESCE(new.updated_at, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))
+            WHERE id = new.id;
+        END
+        """,
+        """
+        CREATE TRIGGER chunk_change_au AFTER UPDATE OF state ON audio_chunk WHEN new.state IS NOT old.state BEGIN
+            UPDATE audio_chunk SET
+                change_epoch = (SELECT epoch FROM backup_state),
+                updated_at = MAX(CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), COALESCE(old.updated_at, 0) + 1)
+            WHERE id = new.id;
+        END
+        """,
+        """
+        CREATE TRIGGER chunk_change_ad AFTER DELETE ON audio_chunk BEGIN
+            UPDATE backup_state SET deleted_epoch = epoch;
+        END
+        """,
+        """
+        CREATE TRIGGER segment_change_ai AFTER INSERT ON transcript_segment BEGIN
+            UPDATE audio_chunk SET
+                change_epoch = (SELECT epoch FROM backup_state),
+                updated_at = MAX(CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), COALESCE(updated_at, 0) + 1)
+            WHERE id = new.chunk_id;
+        END
+        """,
+        """
+        CREATE TRIGGER segment_change_ad AFTER DELETE ON transcript_segment BEGIN
+            UPDATE audio_chunk SET
+                change_epoch = (SELECT epoch FROM backup_state),
+                updated_at = MAX(CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), COALESCE(updated_at, 0) + 1)
+            WHERE id = old.chunk_id;
+        END
+        """,
+        """
+        CREATE TRIGGER mark_change_ai AFTER INSERT ON mark BEGIN
+            UPDATE audio_chunk SET
+                change_epoch = (SELECT epoch FROM backup_state),
+                updated_at = MAX(CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), COALESCE(updated_at, 0) + 1)
+            WHERE id = new.chunk_id;
+        END
+        """,
+    ),
 )

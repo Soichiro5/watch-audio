@@ -77,6 +77,9 @@ object DiagnosticEvents {
     /** A saved backup could not be recorded as holding its audio (#156): the error type only. */
     const val BACKUP_RECORD_FAILED = "backup_record_failed"
 
+    /** What a full backup and a diff would hold (#164) could not be read: the error type only. */
+    const val BACKUP_PREVIEW_FAILED = "backup_preview_failed"
+
     /** The user offloaded backed-up audio (#156): counts only (chunks, bytes). */
     const val AUDIO_OFFLOADED = "audio_offloaded"
 }

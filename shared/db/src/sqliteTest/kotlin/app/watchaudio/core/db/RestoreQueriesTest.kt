@@ -41,6 +41,7 @@ class RestoreQueriesTest {
         receivedAt = startedAt + 400_000,
         manifestJson = "{\"chunkId\":\"$id\"}",
         audioPurgedAt = purgedAt,
+        updatedAt = startedAt + 500_000,
     )
 
     @Test
@@ -57,7 +58,7 @@ class RestoreQueriesTest {
             ),
             stored,
         )
-        assertEquals(ChunkBackupInfo(1_400_000, "{\"chunkId\":\"r1\"}"), store.read { backupInfoOfChunksStartedBetween(0, 2_000_000) }["r1"])
+        assertEquals(ChunkBackupInfo(1_400_000, "{\"chunkId\":\"r1\"}", updatedAt = 1_500_000), store.read { backupInfoOfChunksStartedBetween(0, 2_000_000) }["r1"])
         assertEquals(AudioFileInfo(AudioCodec.AAC, "ab"), store.read { audioFilesOfChunksStartedBetween(0, 2_000_000) }["r1"])
     }
 
