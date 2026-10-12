@@ -363,6 +363,7 @@ class AppUiTest {
         onNodeWithText(Strings.OFFLOAD_BUTTON).performScrollTo().performClick()
         waitForText("2026年10月10日(土) 作成", substring = true)
         onNodeWithText(Strings.OFFLOAD_CONFIRM).performScrollTo()
+        onNodeWithText(Strings.OFFLOAD_TITLE).performScrollTo()
         assertNoEnglish()
         screenshot("offload-confirm")
         onNodeWithText(Strings.OFFLOAD_CONFIRM).performClick()

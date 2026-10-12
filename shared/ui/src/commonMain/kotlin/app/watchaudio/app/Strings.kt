@@ -148,7 +148,7 @@ object Strings {
     const val OFFLOAD_TITLE = "バックアップ済みの音声"
     const val OFFLOAD_NO_BACKUP =
         "「暗号化バックアップ」で音声も含めてバックアップすると、バックアップに入れた音声をこの端末から外して空き容量を増やせます。"
-    const val OFFLOADABLE_AUDIO = "バックアップ済みで端末にある音声"
+    const val OFFLOADABLE_AUDIO = "端末から外せる音声"
     fun offloadableAudio(count: Int, size: String) = "$size（${count}件）"
     fun lastAudioBackup(date: String) = "音声を含む最後のバックアップ: $date"
     fun audioInBackupChunks(count: Int) = "端末から外し、バックアップにだけある音声 ${count}件（文字起こしは残っています）"
