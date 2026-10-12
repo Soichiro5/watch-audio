@@ -8,7 +8,11 @@
 
 ## TL;DR
 
-<!-- TLDR -->
+1. **採用: 方式 D「必要な区間だけ SenseVoice」を、設定「英語も文字起こしする」（既定オフ）として Android に実装**。オンにすると SenseVoice Small int8（約 240 MB）を Wi-Fi で追加ダウンロードし、区間ごとに日本語モデル（Zipformer）→ 出力が少ない / カタカナばかりの区間だけ SenseVoice → 英語なら SenseVoice の文、の順で振り分ける。
+2. **日本語は悪化しない**: 日本語 8 条件の CER は変更前の main と比べてオフで完全一致（保存セグメントまで同一）、オンでも最大 +0.1 ポイント（基準 ±1 ポイント以内）。日本語の発話が英語として保存されたのは、日本語 8 条件で 3,484 発話中 2、日英混在で 228 発話中 0。
+3. **英語が文字起こしされる**: 英語の会話の WER はオフ 100%（英語として何も残らない）→ オン 10.2%（近接）/ 11.7%（腕の位置）。日英が発話ごとに入れ替わる会話でも、日本語の CER はオフと同じまま英語 WER 11.0% / 14.1%、言語の取り違えは 174 発話中 0〜1。
+4. **計算量**: 日本語の録音では SenseVoice が動くのは区間の 3〜17% で、ASR の計算時間は約 2 割増（全区間で SenseVoice を動かす方式 C は約 3 倍）。英語の録音では両方のモデルが動く。
+5. **既知の限界**: 1 つの発話の中で日英が混ざる場合（「このPRをmergeして」）はどちらか一方の言語になる。iOS は対象外（SpeechAnalyzer の日本語ロケールのまま）。
 
 ## 1. 背景
 
@@ -65,4 +69,85 @@ SenseVoice の判定は認識と同時に出るので、英語の文を得るの
 
 （英語 400 区間・日本語 4,426 区間。対象から漏れる英語の区間は、英語の発話が細かく分かれた断片に Zipformer が「はい」「え」などを出したもので、短い。）
 
-<!-- RESULTS -->
+## 4. 結果（検証用音声セット、ハーネス）
+
+`./gradlew :tools:harness:run --args="evaluate <manifest> <dir> --english …"` で、アプリと同じ区間の切り方・誤認識の除去（`FalsePositiveFilter.DEFAULT`）・Watch と同じ AAC 24 kbps のチャンクで評価した。A は変更前の main（`5681119`）と `--english off` の両方（結果は保存セグメントまで一致）。C・B は `LanguageRouting` の値を変えて再現した（C: `maxPrimaryCharsPerSecond=Infinity`、B: さらに `languages=en+ja+zh+ko+yue,minLatinShare=0,minWords=1` で SenseVoice の文をすべて採用。B でも Zipformer は動くので B の計算量は別に見積もる）。
+
+### 4.1 方式の比較
+
+| 方式 | 日本語 clean CER | 日本語 wrist CER | 英語 WER（近接 / 腕） | 日英混在: 日本語 CER / 英語 WER（近接） | 日本語の録音での ASR 計算量 | 追加ダウンロード |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| A. 日本語のみ（現在、オフ） | 14.7% | 19.4% | 100% / 100% | 9.9% / 100% | 1 | 0 |
+| B. SenseVoice に置き換え | <!-- B_CLEAN --> | <!-- B_WRIST --> | 9.7% / 11.1%（C と同等） | <!-- B_MIXED --> | 約 2.1 | 240 MB |
+| C. 全区間で SenseVoice を併用 | 14.7% | 19.5% | 9.7% / 11.1% | 9.9% / 9.8% | 約 3.1 | 240 MB |
+| **D. 必要な区間だけ SenseVoice（採用）** | **14.7%** | **19.5%** | **10.2% / 11.7%** | **9.9% / 11.0%** | **約 1.2** | **240 MB** |
+| E. Whisper の言語識別 + SenseVoice | （§3.1 で不採用） | | | | 1 + 識別 + 英語区間 | 400 MB |
+
+- 計算量は Zipformer だけの ASR 時間を 1 としたときの比（ハーネスが数えたモデルごとの認識時間。SenseVoice は同じ区間で Zipformer の約 2.1 倍かかった）。並行して他の評価を動かしたため絶対値は参考値で、比だけを使う。
+- C と D の差は英語の WER で 0.5〜1.2 ポイント（D では英語の区間の一部が Zipformer の出力のまま残る、§3.2 の 93%）。日本語の CER は同じ。計算量は C が日本語の録音でも約 3 倍になる。バッテリーを日本語の録音のために使わない D を採る。
+
+### 4.2 日本語への影響（採用方式 D、CER 全体）
+
+| 条件 | main | オフ | オン | 差 | 英語として保存された日本語の発話 | SenseVoice が動いた区間 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| clean | 14.7% | 14.7% | 14.7% | 0.0 | 0/505 | 28/902 |
+| wrist | 19.4% | 19.4% | 19.5% | +0.1 | 1/505 | 62/821 |
+| office | 24.9% | 24.9% | 24.9% | 0.0 | 0/504 | 79/975 |
+| cafe | 40.9% | 40.9% | 40.9% | 0.0 | 1/494 | 60/804 |
+| outdoor | 38.7% | 38.7% | 38.7% | 0.0 | 0/500 | 66/713 |
+| rub | 26.7% | 26.7% | 26.7% | 0.0 | 0/505 | 86/772 |
+| day | 28.0% | 28.0% | 28.1% | +0.1 | 0/321 | 89/595 |
+| reazon_clean | 9.7% | 9.7% | 9.7% | 0.0 | 0/150 | 39/225 |
+
+正解区間で切った場合の CER も outdoor の +0.2（27.7% → 27.9%）以外は同じ（clean 12.5%、wrist 15.7% …）。
+
+### 4.3 英語・日英混在（採用方式 D）
+
+| 条件 | 英語 WER（正解区間で切った場合） | 日本語 CER（オフ） | 言語の誤り |
+| --- | ---: | ---: | ---: |
+| english_clean | 10.2% (9.0%) | - | en 0/60 |
+| english_wrist | 11.7% (11.4%) | - | en 1/60 |
+| mixed_clean | 11.0% (7.9%) | 9.9%（9.9%） | ja 0/114, en 1/60 |
+| mixed_wrist | 14.1% (10.0%) | 11.8%（11.8%） | ja 0/114, en 0/60 |
+
+- 正解区間で切った WER（SenseVoice の英語の実力。M0-5 の FLEURS en 9.0% と一致）との差は、VAD による区間の切り方（英文が途中で分かれる、分かれた断片が Zipformer の出力のまま残る）による。
+- オフでは英語の発話はすべて日本語として保存され、WER は 100%（Zipformer は英文に「はい」「そう」やカタカナの別の語しか出さない）。
+
+### 4.4 調整の経緯（日本語の誤振り分けを減らす）
+
+最初の版（1.5 文字/秒未満の区間だけ SenseVoice、英語と判定されラテン文字が半分以上なら採用）では、日本語条件で 14 区間が英語として保存された（day 28.0% → 28.4%）。中身は短い相づち・雑音が 1〜3 語の英語になったもの（「はーい」→「How are you.」、「うん」→「The.」）と、かなとラテン文字が混ざった出力（「どもお願 guys.」）だった。英語の条件で英語として保存された文はすべてラテン文字だけで、1〜2 語の文は英文の断片（「On August.」）か日英混在の相づち（「Yeah.」）だったので、**英語として採用するのは 3 語以上・ラテン文字 9 割以上**に絞った（`LanguageRouting.minWords`、`minLatinShare`）。また Zipformer が英語を密なカタカナで書く場合（「スピーザコニー・ロステリス」）を拾うため、**カタカナ・ラテン文字が 8 割以上の区間も SenseVoice で確認**する（`minForeignScriptShare`）ようにした。
+
+## 5. 採用した方式（実装）
+
+- 共通コード（`shared/pipeline`）: `AsrModelSpec.SENSE_VOICE`（`RecognizerKind.SENSE_VOICE`）、`LanguageRouting`（振り分けの規則、純粋関数・単体テストつき）、`senseVoiceLanguage`（`<|en|>` → `en`）。区間ごとの処理は Android（`AndroidSherpaTranscriber`）とハーネス（`SherpaTranscriber`）で同じ `LanguageRouting.route` を使う。保存するセグメントの `lang` が `en` / `ja` になり（DB は変更なし）、エンジン ID は `sherpa-zipformer-ja-reazonspeech-int8+sherpa-sensevoice-small-int8`。
+- 誤認識の除去（`FalsePositiveFilter`、#105）は言語によらず全セグメントにかかる。英語の評価で除去により消えた英語の発話はなかった（検出漏れ 0）。
+- 設定とダウンロード: 状態タブ「文字起こしの言語」の「英語も文字起こしする」（既定オフ）。オンで Hugging Face の固定コミットから 2 ファイル（239,233,841 + 315,894 バイト、SHA-256 検証、途中再開）を Wi-Fi 待ちでダウンロード（モバイル通信はボタンで明示的に）、オフで削除。詳細は [platforms/android-phone.md §3.3](../platforms/android-phone.md#33-英語設定英語も文字起こしする81)、画面は [platforms/phone-ui.md](../platforms/phone-ui.md)。
+- CI: `tools/harness/download-models.sh` が SenseVoice とその `test_wavs/en.wav` も取得し、`EndToEndTest.englishIsTranscribedAsEnglishNextToJapanese` が日本語 → 英語 → 日本語の録音で言語の並び（`ja, en, ja`）と英文の内容を確かめる。モデルのキャッシュのキーはスクリプトのハッシュなので、この変更で一度だけ取り直す（追加 約 240 MB）。
+
+## 6. 限界
+
+- **1 つの発話の中の日英混在**（「このPRをmergeして」「Zoomで共有します」）は区間ごとの振り分けでは解けない。どちらか一方の言語として認識される（多くは日本語として、英単語はカタカナか別の語になる）。話者交代や 0.2 秒以上の間で区間が分かれていれば、区間ごとに言語を選べる。
+- 英語の短い返事（「Yeah.」「Thank you.」など 1〜2 語）は英語として採用しない（日本語の相づちの誤認識を防ぐため）。日本語モデルの出力のまま残る。
+- 評価の英語は FLEURS（読み上げ）で、日本語は合成音声。実際の英語の会話（くだけた話し方・訛り）での精度、実機での速度・電池・メモリ（2 つのモデルで合計約 400 MB）は #61 で確かめる。
+- SenseVoice は中国語・韓国語・広東語も判定できるが、英語以外は日本語モデルの文を使う（`LanguageRouting.languages` で広げられる）。
+
+## 7. iOS の状況
+
+iOS は OS の SpeechAnalyzer / SpeechTranscriber を日本語ロケールで使っており、本件では変更していない（「英語も文字起こしする」の設定は `AppServices.supportsEnglish` が false なので表示されない）。SpeechTranscriber は英語のロケールもあるが、1 つの解析で使えるロケールは 1 つで、言語の自動判定はない。英語に対応するには、区間ごとの言語判定（例: 英語ロケールでも認識して信頼度で選ぶ）が要り、別の Issue で検討する。
+
+## 8. 再現手順
+
+```bash
+# 評価データ（日本語 8 条件 + 英語・日英混在 4 条件）
+tools/test-audio/download-models.sh
+tools/test-audio/.venv/bin/python tools/test-audio/generate.py --reazon-manifest research/asr-benchmark/data/manifest.jsonl
+tools/test-audio/.venv/bin/python tools/test-audio/generate.py --out tools/test-audio/cache/out-en \
+  --fleurs-manifest research/asr-benchmark/data/manifest.jsonl --only english_clean,english_wrist,mixed_clean,mixed_wrist --no-day
+# モデル（SenseVoice を含む）
+tools/harness/download-models.sh
+# 評価（off = A、on = D、C・B は §4 の値）
+./gradlew --max-workers=2 :tools:harness:run --args="evaluate tools/test-audio/cache/out/manifest.json build/eval-on --english on"
+./gradlew --max-workers=2 :tools:harness:run --args="evaluate tools/test-audio/cache/out-en/manifest.json build/eval-en-on --english on"
+```
+
+発話単位の言語判定（§3.1）と Zipformer の出力密度（§3.2）は `research/asr-benchmark` の venv（`sherpa_onnx` 1.13.8）で、M0-5 の `data/manifest.jsonl` の AAC 24 kbps 条件に対して測った。
