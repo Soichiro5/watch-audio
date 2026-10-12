@@ -40,6 +40,14 @@ enum SpeechTranscription {
         }
     }
 
+    /// The Speech framework module that transcribes. The app uses `.speech` (SpeechTranscriber).
+    /// `.dictation` (DictationTranscriber, the older on-device dictation models) is what the
+    /// simulator checks fall back to where SpeechTranscriber is unavailable (GitHub's runners).
+    enum Engine: String, Sendable {
+        case speech
+        case dictation
+    }
+
     /// Creates a transcriber for the locale, downloading the on-device model through the OS if
     /// it is not installed yet.
     static func makeTranscriber(locale requested: Locale) async throws -> SpeechTranscriber {
@@ -64,15 +72,38 @@ enum SpeechTranscription {
         return transcriber
     }
 
+    /// A DictationTranscriber for the locale (see `Engine.dictation`), installing its model like
+    /// `makeTranscriber`.
+    static func makeDictationTranscriber(locale requested: Locale) async throws -> DictationTranscriber {
+        guard let locale = await DictationTranscriber.supportedLocale(equivalentTo: requested) else {
+            throw TranscriberError.unsupportedLocale(requested.identifier)
+        }
+        let transcriber = DictationTranscriber(
+            locale: locale,
+            contentHints: [],
+            transcriptionOptions: [],
+            reportingOptions: [],
+            attributeOptions: [.audioTimeRange, .transcriptionConfidence]
+        )
+        let installed = await DictationTranscriber.installedLocales
+        if !installed.contains(where: { $0.identifier == locale.identifier }) {
+            _ = try? await AssetInventory.reserve(locale: locale)
+            if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+                try await request.downloadAndInstall()
+            }
+        }
+        return transcriber
+    }
+
     /// Transcribes the ranges as one recording. A single range from the start of its file is
     /// analysed in place; otherwise the ranges are first copied into one temporary PCM file.
-    static func transcribe(_ ranges: [AudioRange], locale: Locale) async throws -> [Segment] {
+    static func transcribe(_ ranges: [AudioRange], locale: Locale, engine: Engine = .speech) async throws -> [Segment] {
         if ranges.count == 1, let only = ranges.first, only.fromMs == 0 {
-            return try await transcribeFile(at: only.url, locale: locale)
+            return try await transcribeFile(at: only.url, locale: locale, engine: engine)
         }
         let joined = try concatenate(ranges)
         defer { try? FileManager.default.removeItem(at: joined) }
-        return try await transcribeFile(at: joined, locale: locale)
+        return try await transcribeFile(at: joined, locale: locale, engine: engine)
     }
 
     /// Copies each range into one temporary 32-bit float CAF file; a range running past the end
@@ -149,23 +180,49 @@ enum SpeechTranscription {
     }
 
     /// Transcribes a whole file; each final result becomes one segment with its audio time range.
-    static func transcribeFile(at url: URL, locale: Locale) async throws -> [Segment] {
-        let transcriber = try await makeTranscriber(locale: locale)
-        let analyzer = SpeechAnalyzer(modules: [transcriber])
-        let collector = Task { () throws -> [Segment] in
-            var segments: [Segment] = []
-            for try await result in transcriber.results where result.isFinal {
-                let text = String(result.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !text.isEmpty else { continue }
-                segments.append(Segment(
-                    startMs: SpeechTranscription.milliseconds(result.range.start),
-                    endMs: SpeechTranscription.milliseconds(CMTimeRangeGetEnd(result.range)),
-                    text: text,
-                    confidence: SpeechTranscription.confidence(of: result.text)
-                ))
+    static func transcribeFile(at url: URL, locale: Locale, engine: Engine = .speech) async throws -> [Segment] {
+        switch engine {
+        case .speech:
+            let transcriber = try await makeTranscriber(locale: locale)
+            return try await analyze(url, module: transcriber) {
+                var segments: [Segment] = []
+                for try await result in transcriber.results where result.isFinal {
+                    if let segment = SpeechTranscription.segment(result.text, range: result.range) { segments.append(segment) }
+                }
+                return segments
             }
-            return segments
+        case .dictation:
+            let transcriber = try await makeDictationTranscriber(locale: locale)
+            return try await analyze(url, module: transcriber) {
+                var segments: [Segment] = []
+                for try await result in transcriber.results where result.isFinal {
+                    if let segment = SpeechTranscription.segment(result.text, range: result.range) { segments.append(segment) }
+                }
+                return segments
+            }
         }
+    }
+
+    /// One final result as a segment, or nil if its text is blank.
+    static func segment(_ text: AttributedString, range: CMTimeRange) -> Segment? {
+        let plain = String(text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !plain.isEmpty else { return nil }
+        return Segment(
+            startMs: milliseconds(range.start),
+            endMs: milliseconds(CMTimeRangeGetEnd(range)),
+            text: plain,
+            confidence: confidence(of: text)
+        )
+    }
+
+    /// Runs the file through an analyzer with `module` while `collect` gathers the module's results.
+    private static func analyze(
+        _ url: URL,
+        module: any SpeechModule,
+        collect: @escaping @Sendable () async throws -> [Segment]
+    ) async throws -> [Segment] {
+        let analyzer = SpeechAnalyzer(modules: [module])
+        let collector = Task { try await collect() }
         return try await withTaskCancellationHandler {
             do {
                 if let lastSample = try await analyzer.analyzeSequence(from: try AVAudioFile(forReading: url)) {

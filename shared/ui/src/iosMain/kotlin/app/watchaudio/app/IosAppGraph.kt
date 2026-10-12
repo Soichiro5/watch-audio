@@ -18,6 +18,7 @@ import app.watchaudio.core.pipeline.TranscriptionPipeline
 import app.watchaudio.core.pipeline.TranscriptionRun
 import app.watchaudio.core.pipeline.TranscriptionRun.FollowUp
 import app.watchaudio.core.platform.platformName
+import app.watchaudio.core.settings.loadSettings
 import app.watchaudio.core.protocol.toJson
 import kotlin.concurrent.Volatile
 import kotlin.coroutines.cancellation.CancellationException
@@ -81,6 +82,12 @@ object IosAppGraph {
 
     /** One model installation at a time (a run and the user's request may both ask). */
     private val modelLock = Mutex()
+
+    /** One English model installation or release at a time (#170). */
+    private val englishLock = Mutex()
+
+    /** The English model's reservation was given up in this process (setting off). */
+    private var englishReleased = false
 
     private var started = false
     private var appActive = false
@@ -146,9 +153,16 @@ object IosAppGraph {
         val audioRoot = audioDirectory
         cleanInbox()
         store = LocalStore.open("$rootDirectory/${LocalStore.FILE_NAME}")
+        // English (#170): while 「英語も文字起こしする」 is on and its model is ready, the stretches the
+        // Japanese model may have got wrong are heard by the English model too.
+        val adapter = IosTranscriberAdapter(
+            transcriber,
+            english = { store.loadSettings().transcribeEnglish && status.value.englishModel == ModelState.Ready },
+            onEnglishFailed = ::englishPassFailed,
+        )
         // SpeechAnalyzer reports neither a speech probability nor a noise level, so the filter keeps
         // everything for now; it applies as soon as the Swift side supplies them (#105).
-        val pipeline = TranscriptionPipeline(store, Path(audioRoot), IosTranscriberAdapter(transcriber), segmentFilter = FalsePositiveFilter.DEFAULT)
+        val pipeline = TranscriptionPipeline(store, Path(audioRoot), adapter, segmentFilter = FalsePositiveFilter.DEFAULT)
         storage = StorageManager(store, Path(audioRoot), IosStorageEnvironment(rootDirectory), diagnostics = diagnostics)
         gapAlerts = IosGapAlerts(GapAlertEvaluator(store), diagnostics)
         intake = ChunkIntake(Ingestor(store, Path(audioRoot)), diagnostics, onStored = { chunkStored() })
@@ -179,8 +193,13 @@ object IosAppGraph {
             onPrepareModel = ::prepareModel,
             onGapAlertSettingsChanged = { scope.launch { runCatching { gapAlerts.reschedule(chunkArrived = false) } } },
             diagnostics = diagnostics,
-            onTranscriptionSettingsChanged = { requestTranscription() },
+            onTranscriptionSettingsChanged = {
+                requestTranscription()
+                scope.launch { syncEnglish() }
+            },
+            onPrepareEnglishModel = { scope.launch { if (syncEnglish()) requestTranscription() } },
         )
+        scope.launch { syncEnglish() }
         BGTaskScheduler.sharedScheduler.registerForTaskWithIdentifier(PROCESSING_TASK_ID, null) { task ->
             if (task != null) scope.launch { runBackgroundTask(task) }
         }
@@ -355,7 +374,8 @@ object IosAppGraph {
     /** The Speech model as [TranscriptionRun] sees it: installed by the OS on first use. */
     private val speechModel = object : SpeechModel {
         override suspend fun ensureReady(): ModelState {
-            ensureModel()
+            // With English on, its model is installed (or retried) before the run, so the run uses it.
+            if (ensureModel()) syncEnglish()
             return status.value.asrModel
         }
 
@@ -368,7 +388,7 @@ object IosAppGraph {
         if (status.value.asrModel == ModelState.Ready) return@withLock true
         status.update { it.copy(asrModel = ModelState.Downloading(progress = 0f)) }
         diagnostics.log(DiagnosticEvents.MODEL_DOWNLOAD_START, "os_managed=true")
-        val error = suspendCancellableCoroutine { cont -> transcriber.prepareModel { cont.resume(it) } }
+        val error = suspendCancellableCoroutine { cont -> transcriber.prepareModel(transcriber.language) { cont.resume(it) } }
         if (error == null) {
             diagnostics.log(DiagnosticEvents.MODEL_READY, "ready=true")
         } else {
@@ -377,6 +397,47 @@ object IosAppGraph {
         }
         status.update { it.copy(asrModel = if (error == null) ModelState.Ready else ModelState.Failed(error)) }
         error == null
+    }
+
+    /**
+     * Matches the English model to 「英語も文字起こしする」 (#170): with the setting on, makes sure it is
+     * installed and reserved for this app (the OS downloads it on first use; a failure is retried at
+     * the next run or the user's tap); with it off, gives up the reservation so the OS may remove it.
+     * @return whether English is on and its model ready.
+     */
+    private suspend fun syncEnglish(): Boolean = englishLock.withLock {
+        if (!store.loadSettings().transcribeEnglish) {
+            val wasOn = status.value.englishModel != null
+            status.update { it.copy(englishModel = null) }
+            if (wasOn || !englishReleased) {
+                englishReleased = true
+                suspendCancellableCoroutine { cont -> transcriber.releaseModel(IosTranscriberAdapter.ENGLISH) { cont.resume(Unit) } }
+            }
+            return@withLock false
+        }
+        englishReleased = false
+        if (status.value.englishModel == ModelState.Ready) return@withLock true
+        status.update { it.copy(englishModel = ModelState.Downloading(progress = 0f)) }
+        diagnostics.log(DiagnosticEvents.MODEL_DOWNLOAD_START, "model=en os_managed=true")
+        val error = suspendCancellableCoroutine { cont -> transcriber.prepareModel(IosTranscriberAdapter.ENGLISH) { cont.resume(it) } }
+        if (error == null) {
+            diagnostics.log(DiagnosticEvents.MODEL_READY, "model=en ready=true")
+        } else {
+            // The OS's description of the asset failure; it holds nothing about the user.
+            diagnostics.log(DiagnosticEvents.MODEL_DOWNLOAD_FAILED, "model=en message=${error.take(200)}")
+        }
+        // The setting may have been turned off meanwhile; the next sync releases the model then.
+        status.update { it.copy(englishModel = if (error == null) ModelState.Ready else ModelState.Failed(error)) }
+        error == null
+    }
+
+    /**
+     * The English pass failed (e.g. the OS removed the model): the chunk keeps its Japanese text and
+     * the English model is checked again before the next run.
+     */
+    private fun englishPassFailed(error: Exception) {
+        diagnostics.log(DiagnosticEvents.TRANSCRIPTION_FAILED, "pass=en fallback=ja error=${DiagnosticsLog.typeName(error)}")
+        status.update { if (it.englishModel == null) it else it.copy(englishModel = ModelState.Unknown) }
     }
 
     /** @param earliestAfterMs not before this delay (a thermal pause, #75). */

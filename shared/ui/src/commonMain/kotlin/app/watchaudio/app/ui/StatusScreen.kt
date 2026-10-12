@@ -166,31 +166,49 @@ private fun AlertSettingsCard(
 
 /**
  * Which languages are transcribed (#81): Japanese always, English with the opt-in switch and its
- * extra model, whose download state shows below the switch.
+ * extra model, whose download state shows below the switch. Where the app downloads the model
+ * (Android: SenseVoice) the switch states its size and the model's attribution, and a waiting
+ * download can be started over mobile data; where the OS installs it (iOS: the system's English
+ * speech model, #170) there is no size or attribution, and a failed installation can be retried.
  */
 @Composable
 private fun LanguageSettingsCard(english: Boolean, state: StatusUiState, onChange: (Boolean) -> Unit, onDownloadNow: () -> Unit) {
+    val osManaged = state.modelSetup == ModelSetup.OS_MANAGED
     Section(Strings.LANGUAGE_SETTINGS_TITLE) {
-        SwitchRow(Strings.ENGLISH_SWITCH, Strings.englishDetail(ENGLISH_MODEL_MEGABYTES), english, onChange)
-        // The FunASR model license asks to name the model, its author and the source (#167).
-        val source = OpenSourceNotices.SENSE_VOICE
-        SelectionContainer {
-            Text(
-                Strings.englishModelAttribution(source.name, source.author, source.url),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        SwitchRow(
+            Strings.ENGLISH_SWITCH,
+            if (osManaged) Strings.ENGLISH_DETAIL_OS_MANAGED else Strings.englishDetail(ENGLISH_MODEL_MEGABYTES),
+            english,
+            onChange,
+        )
+        if (!osManaged) {
+            // The FunASR model license asks to name the model, its author and the source (#167).
+            val source = OpenSourceNotices.SENSE_VOICE
+            SelectionContainer {
+                Text(
+                    Strings.englishModelAttribution(source.name, source.author, source.url),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         val model = state.status.englishModel
         if (english && model != null) {
             Text(
-                Strings.englishModelState(model, state.status.englishModelWaitingForWifi),
+                Strings.englishModelState(model, state.status.englishModelWaitingForWifi, state.modelSetup),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (model is ModelState.Downloading) LinearProgressIndicator(progress = { model.progress }, modifier = Modifier.fillMaxWidth())
+            if (model is ModelState.Downloading) {
+                // The OS reports no progress for its own models.
+                if (osManaged) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                } else {
+                    LinearProgressIndicator(progress = { model.progress }, modifier = Modifier.fillMaxWidth())
+                }
+            }
             if (model == ModelState.Missing || model is ModelState.Failed) {
-                OutlinedButton(onClick = onDownloadNow) { Text(Strings.ENGLISH_DOWNLOAD_NOW) }
+                OutlinedButton(onClick = onDownloadNow) { Text(if (osManaged) Strings.ENGLISH_PREPARE_AGAIN else Strings.ENGLISH_DOWNLOAD_NOW) }
             }
         }
     }
