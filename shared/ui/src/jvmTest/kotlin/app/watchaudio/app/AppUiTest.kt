@@ -330,6 +330,68 @@ class AppUiTest {
         screenshot("restore-done")
     }
 
+    /**
+     * #156: audio in a saved backup leaves the phone after a confirmation; the timeline says the
+     * audio is in the backup instead of offering playback, and search still finds the transcript.
+     */
+    @Test
+    fun offloadedAudioKeepsTranscriptsAndSearch() = runDesktopComposeUiTest(width = 412, height = 915) {
+        runBlocking {
+            DemoData.seed(store, day, tokyo, until = now - 20 * 60_000L)
+            store.updateSettings { it.copy(onboardingCompleted = true) }
+            val window = dayWindow(day, tokyo)
+            store.read { chunksBetween(window.start, window.end) }.mapNotNull { it.audioPath }.forEach {
+                File(audioDir, it).apply { parentFile.mkdirs() }.writeBytes(ByteArray(1_000))
+            }
+        }
+        showApp(services)
+        waitForText(Strings.TAB_STATUS)
+        onNodeWithText(Strings.TAB_STATUS).performClick()
+        waitForText(Strings.OFFLOAD_NO_BACKUP)
+
+        // A backup with audio, saved where the platform's dialog says.
+        onNode(hasSetTextAction() and hasText(Strings.BACKUP_PASSPHRASE)).performScrollTo().performTextInput("とけいの記録 2026 秋")
+        onNode(hasSetTextAction() and hasText(Strings.BACKUP_PASSPHRASE_CONFIRM)).performScrollTo().performTextInput("とけいの記録 2026 秋")
+        onNodeWithText(Strings.BACKUP_INCLUDE_AUDIO).performScrollTo().performClick()
+        onNodeWithText(Strings.BACKUP_CREATE_BUTTON).performScrollTo().performClick()
+        waitForText("バックアップしました", substring = true)
+        waitForText(Strings.OFFLOAD_BUTTON)
+        val transcribed = runBlocking { store.read { stats() }.offloadableAudio.chunks }
+        assertTrue(transcribed > 0)
+
+        // Offloading: a confirmation names the backup and what goes, then the audio leaves the phone.
+        onNodeWithText(Strings.OFFLOAD_BUTTON).performScrollTo().performClick()
+        waitForText("2026年10月10日(土) 作成", substring = true)
+        onNodeWithText(Strings.OFFLOAD_CONFIRM).performScrollTo()
+        assertNoEnglish()
+        screenshot("offload-confirm")
+        onNodeWithText(Strings.OFFLOAD_CONFIRM).performClick()
+        waitForText("端末から外しました", substring = true)
+        onNode(hasText("端末から外しました", substring = true)).performScrollTo()
+        assertNoEnglish()
+        screenshot("offload-done")
+        val stats = runBlocking { store.read { stats() } }
+        assertEquals(transcribed, stats.audioInBackupChunks)
+        assertEquals(0, stats.offloadableAudio.chunks)
+
+        // Timeline: the transcript stays, marked as in the backup, and tapping it plays nothing.
+        onNodeWithText(Strings.TAB_TIMELINE).performClick()
+        waitForText("おはようございます、今日もよろしくお願いします")
+        waitForText(Strings.AUDIO_IN_BACKUP)
+        waitForText("「バックアップにあり」の音声は", substring = true)
+        assertNoEnglish()
+        screenshot("timeline-offloaded")
+        onAllNodes(hasText("おはようございます、今日もよろしくお願いします"))[0].performClick()
+        waitForIdle()
+        assertTrue(services.played.isEmpty())
+
+        // Search still finds the offloaded transcript.
+        onNodeWithText(Strings.TAB_SEARCH).performClick()
+        onNode(hasSetTextAction()).performTextInput("会議は")
+        waitForText("明日の", substring = true)
+        screenshot("search-offloaded")
+    }
+
     /** #144: a failed chunk shows a fixed Japanese note, never the exception message stored in the DB. */
     @Test
     fun timelineFailureShowsNoExceptionMessage() = runDesktopComposeUiTest(width = 412, height = 915) {

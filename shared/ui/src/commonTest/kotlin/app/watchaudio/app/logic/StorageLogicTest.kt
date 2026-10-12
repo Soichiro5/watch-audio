@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.datetime.TimeZone
 
 class StorageLogicTest {
     @Test
@@ -13,6 +14,14 @@ class StorageLogicTest {
         assertEquals("1023.0 MB", formatBytes(1023L shl 20))
         assertEquals("1.0 GB", formatBytes(1L shl 30))
         assertEquals("12.5 GB", formatBytes((25L shl 30) / 2))
+    }
+
+    @Test
+    fun backupDatesAreLocalDays() {
+        val tokyo = TimeZone.of("Asia/Tokyo")
+        val oct12 = 1_791_730_800_000L // 2026-10-12T00:00+09:00
+        assertEquals("2026年10月12日(月)", formatBackupDates(oct12, oct12 + 3_600_000, tokyo))
+        assertEquals("2026年10月11日(日)〜2026年10月12日(月)", formatBackupDates(oct12 - 1, oct12, tokyo))
     }
 
     @Test
