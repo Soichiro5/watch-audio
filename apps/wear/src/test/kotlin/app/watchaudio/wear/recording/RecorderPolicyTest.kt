@@ -1,6 +1,7 @@
 package app.watchaudio.wear.recording
 
 import app.watchaudio.core.protocol.ChunkEndReason
+import app.watchaudio.core.protocol.RecorderRules
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import org.junit.Test
@@ -49,15 +50,27 @@ class RecorderPolicyTest {
     }
 
     @Test
-    fun `low battery pauses with hysteresis and alerts`() {
+    fun `low battery pauses below 10 percent with hysteresis and alerts`() {
         val policy = RecorderPolicy()
-        val low = decide(armed.copy(batteryPercent = 5), policy)
+        // At the stop threshold itself recording continues; it stops only below it.
+        assertEquals(RecorderMode.Recording, decide(armed.copy(batteryPercent = 10), policy).mode)
+        val low = decide(armed.copy(batteryPercent = 9), policy)
         assertEquals(RecorderMode.Paused(PauseReason.LOW_BATTERY), low.mode)
         assertEquals(RecorderAlert.LOW_BATTERY, low.alert)
-        // Hovering just above the threshold stays paused.
-        assertEquals(RecorderMode.Paused(PauseReason.LOW_BATTERY), decide(armed.copy(batteryPercent = 7), policy).mode)
-        assertEquals(RecorderMode.Recording, decide(armed.copy(batteryPercent = 10), policy).mode)
-        assertEquals(RecorderMode.Recording, decide(armed.copy(batteryPercent = 7), policy).mode)
+        // Hovering above the stop threshold but below the resume threshold stays paused.
+        assertEquals(RecorderMode.Paused(PauseReason.LOW_BATTERY), decide(armed.copy(batteryPercent = 10), policy).mode)
+        assertEquals(RecorderMode.Paused(PauseReason.LOW_BATTERY), decide(armed.copy(batteryPercent = 14), policy).mode)
+        assertEquals(RecorderMode.Recording, decide(armed.copy(batteryPercent = 15), policy).mode)
+        assertEquals(RecorderMode.Recording, decide(armed.copy(batteryPercent = 12), policy).mode)
+    }
+
+    @Test
+    fun `battery thresholds are the shared recorder rules`() {
+        // Same values as the watchOS RecorderPolicy (shared/protocol RecorderRules, #137).
+        assertEquals(10, RecorderPolicy.LOW_BATTERY_PERCENT)
+        assertEquals(15, RecorderPolicy.LOW_BATTERY_RESUME_PERCENT)
+        assertEquals(RecorderRules.CURRENT.lowBatteryStopPercent, RecorderPolicy.LOW_BATTERY_PERCENT)
+        assertEquals(RecorderRules.CURRENT.lowBatteryResumePercent, RecorderPolicy.LOW_BATTERY_RESUME_PERCENT)
     }
 
     @Test
@@ -65,8 +78,8 @@ class RecorderPolicyTest {
         val policy = RecorderPolicy()
         decide(armed.copy(batteryPercent = 3), policy)
         assertEquals(RecorderMode.Paused(PauseReason.CHARGING), decide(armed.copy(batteryPercent = 3, charging = true), policy).mode)
-        // Unplugged at 6%: below the resume threshold but above the stop threshold.
-        assertEquals(RecorderMode.Recording, decide(armed.copy(batteryPercent = 6), policy).mode)
+        // Unplugged at 12%: below the resume threshold but above the stop threshold.
+        assertEquals(RecorderMode.Recording, decide(armed.copy(batteryPercent = 12), policy).mode)
     }
 
     @Test

@@ -1,6 +1,7 @@
 package app.watchaudio.wear.recording
 
 import app.watchaudio.core.protocol.ChunkEndReason
+import app.watchaudio.core.protocol.RecorderRules
 
 /** What the recorder is doing (or should be doing) right now. */
 sealed interface RecorderMode {
@@ -116,7 +117,7 @@ class RecorderPolicy {
         lowBattery = when {
             conditions.charging || battery == null -> false
             lowBattery -> battery < LOW_BATTERY_RESUME_PERCENT
-            else -> battery <= LOW_BATTERY_PERCENT
+            else -> battery < LOW_BATTERY_PERCENT
         }
         val free = conditions.freeStorageBytes
         lowStorage = when {
@@ -127,9 +128,14 @@ class RecorderPolicy {
     }
 
     companion object {
-        /** Stop below this so the last chunk can still be finalized before the watch shuts down. */
-        const val LOW_BATTERY_PERCENT = 5
-        const val LOW_BATTERY_RESUME_PERCENT = 10
+        /**
+         * Stop below this (not charging) so the last chunk can still be finalized and sent before
+         * the watch shuts down. Shared with watchOS through [RecorderRules] (#137).
+         */
+        val LOW_BATTERY_PERCENT = RecorderRules.CURRENT.lowBatteryStopPercent
+
+        /** A low-battery pause ends at or above this level (or when charging). */
+        val LOW_BATTERY_RESUME_PERCENT = RecorderRules.CURRENT.lowBatteryResumePercent
         const val LOW_STORAGE_BYTES = 100L * 1024 * 1024
         const val LOW_STORAGE_RESUME_BYTES = 150L * 1024 * 1024
 
