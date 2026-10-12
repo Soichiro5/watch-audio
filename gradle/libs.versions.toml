@@ -28,6 +28,8 @@ wear-complications = "1.3.0"
 androidx-concurrent = "1.3.0"
 androidx-fragment = "1.8.9"
 sherpa-onnx = "v1.13.8"
+# JNA: calls ONNX Runtime's C API for the embedding model (#24, shared/ort)
+jna = "5.19.1"
 play-services-wearable = "20.0.1"
 wear-compose = "1.7.1"
 wear-ongoing = "1.1.0"
@@ -58,6 +60,8 @@ androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.r
 sherpa-onnx-android = { module = "com.github.k2-fsa.sherpa-onnx:sherpa-onnx", version.ref = "sherpa-onnx" }
 sherpa-onnx-jvm = { module = "com.github.k2-fsa.sherpa-onnx:sherpa-onnx-jvm", version.ref = "sherpa-onnx" }
 sherpa-onnx-native-linux-x64 = { module = "com.github.k2-fsa.sherpa-onnx:sherpa-onnx-native-lib-linux-x64", version.ref = "sherpa-onnx" }
+# JNA for the JVM (jar) and for Android (AAR with libjnidispatch.so per ABI).
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 
 # Compose Multiplatform
 compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose-multiplatform" }

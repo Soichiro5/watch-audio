@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pushes the speech models and reference recordings (tools/harness/models, from
+# Pushes the speech models, the embedding model and reference recordings (tools/harness/models, from
 # tools/harness/download-models.sh) to /data/local/tmp/watchaudio-test/models on the emulator, where
 # the instrumented tests copy them into the app (SpeechFixtures). Used by release-asr.sh and
 # phone-scenarios.sh; the files survive uninstalling the app, so the second call skips the push.
@@ -24,6 +24,12 @@ for f in encoder-epoch-99-avg-1.int8.onnx decoder-epoch-99-avg-1.int8.onnx joine
   adb push "$MODELS/$ASR/$f" "$DEVICE_MODELS/$ASR/"
 done
 adb push "$MODELS/$ASR/test_wavs/." "$DEVICE_MODELS/$ASR/test_wavs/"
+# The embedding model of semantic search (#24), for EmbeddingDeviceTest.
+RURI=ruri-v3-30m
+if [ -f "$MODELS/$RURI/model_quantized.onnx" ] && [ -f "$MODELS/$RURI/tokenizer.json" ]; then
+  adb shell mkdir -p "$DEVICE_MODELS/$RURI"
+  adb push "$MODELS/$RURI/model_quantized.onnx" "$MODELS/$RURI/tokenizer.json" "$DEVICE_MODELS/$RURI/"
+fi
 adb shell chmod -R a+rX /data/local/tmp/watchaudio-test
 adb shell touch "$DEVICE_MODELS/.pushed"
 echo "MODELS pushed to $DEVICE_MODELS"

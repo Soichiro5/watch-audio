@@ -9,6 +9,7 @@ import app.watchaudio.core.export.DataExporter
 import app.watchaudio.core.pipeline.Diagnostics
 import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageManager
+import app.watchaudio.core.search.SemanticSearch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.io.RawSink
 import kotlinx.io.RawSource
@@ -63,6 +64,12 @@ interface AppServices {
      * they ship or download ([OpenSourceNotices.forApps]). Defaults to every app.
      */
     val noticeApps: Set<NoticeApp> get() = NoticeApp.entries.toSet()
+
+    /**
+     * Search by meaning (#24): the on-device embedding index, or null where the platform has none
+     * (iOS for now), which leaves the search screen a keyword search exactly as before.
+     */
+    val semanticSearch: SemanticSearch? get() = null
 
     /** How the platform obtains its speech model (decides what the onboarding offers). */
     val modelSetup: ModelSetup get() = ModelSetup.DOWNLOAD

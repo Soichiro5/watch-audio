@@ -10,6 +10,9 @@ kotlin {
 
 dependencies {
     implementation(projects.shared.pipeline)
+    // The embedding model of semantic search (#24) through ONNX Runtime's C API, like the app.
+    implementation(projects.shared.ort)
+    implementation(libs.jna)
     implementation(libs.sherpa.onnx.jvm)
     runtimeOnly(libs.sherpa.onnx.native.linux.x64)
     implementation(libs.kotlinx.coroutines.core)

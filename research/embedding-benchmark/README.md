@@ -24,6 +24,8 @@ raw datasets are re-downloaded.
 | `scripts/check_tokenizer.py` | How far simplified tokenizers (NFKC / no normalizer / sentencepiece lib) drift from tokenizer.json |
 | `scripts/bench_sqlite.py` | Full read of 500k int8 BLOBs from SQLite vs mmap'd flat file |
 | `scripts/make_report.py` | Renders `results/summary.md` from the JSON results |
+| `scripts/make_tokenizer_fixture.py` | #24: golden token ids for the Kotlin `UnigramTokenizer` (`shared/pipeline/testdata/embedding/`) |
+| `scripts/make_embedding_reference.py` | #24: reference ruri-v3 vectors for the Kotlin embedder (`tools/harness/testdata/ruri-reference.json`) |
 | `results/` | Raw JSON results + `summary.md` |
 
 ## Reproduce

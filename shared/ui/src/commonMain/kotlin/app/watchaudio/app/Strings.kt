@@ -7,6 +7,7 @@ import app.watchaudio.core.pipeline.OffloadAge
 import app.watchaudio.core.pipeline.PauseReason
 import app.watchaudio.core.pipeline.StatusNotice
 import app.watchaudio.core.protocol.ChunkEndReason
+import app.watchaudio.core.search.SemanticStatus
 
 /**
  * Every user-visible string of the phone UI, in one place so it can be moved to
@@ -84,6 +85,20 @@ object Strings {
     const val CLEAR = "クリア"
     fun searchResultCount(count: Int, limited: Boolean) = if (limited) "${count}件以上" else "${count}件"
 
+    // Search by meaning (#24)
+    const val SEARCH_PLACEHOLDER_SEMANTIC = "言葉や内容で検索（例: 先週話した旅行の件）"
+    const val SEARCH_HINT_SEMANTIC = "文字起こし全体から、言葉が一致する発話と、意味が近い会話を探します"
+    const val MATCH_BY_MEANING = "意味が近い"
+
+    /** What the search screen says about searching by meaning; null once it covers everything. */
+    fun semanticStatus(status: SemanticStatus): String? = when (status) {
+        SemanticStatus.Ready -> null
+        is SemanticStatus.Indexing ->
+            "意味で探す準備中 ${(status.fraction * 100).toInt().coerceIn(0, 99)}%（準備できた会話から探します。古い会話は充電中に準備します）"
+        is SemanticStatus.WaitingForModel -> status.downloading?.let { "意味で探すためのモデルをダウンロード中 ${(it * 100).toInt()}%（今は言葉の一致だけで探します）" }
+            ?: "意味で探すためのモデルは Wi-Fi に接続したときにダウンロードします（今は言葉の一致だけで探します）"
+    }
+
     // Status screen
     const val ARRIVAL = "Watch からの受信"
     const val NO_CHUNKS_YET = "まだ録音データを受信していません"
@@ -127,6 +142,7 @@ object Strings {
     const val MODEL_DOWNLOAD_CHANNEL = "文字起こしモデルのダウンロード"
     const val MODEL_DOWNLOAD_NOTIFICATION_TITLE = "文字起こしモデルをダウンロード中"
     const val ENGLISH_MODEL_DOWNLOAD_NOTIFICATION_TITLE = "英語の文字起こしモデルをダウンロード中"
+    const val EMBEDDING_MODEL_DOWNLOAD_NOTIFICATION_TITLE = "意味で探すためのモデルをダウンロード中"
 
     const val STORAGE = "保存データ"
     const val STAT_CHUNKS = "チャンク"
@@ -344,13 +360,13 @@ object Strings {
 
     // Licenses (#167). License texts stay in their original English.
     const val LICENSES_TITLE = "ライセンス"
-    const val LICENSES_NOTE = "このアプリが使っているオープンソースのライブラリと、文字起こしのモデルの作者とライセンスです。"
+    const val LICENSES_NOTE = "このアプリが使っているオープンソースのライブラリと、文字起こし・意味検索のモデルの作者とライセンスです。"
     const val SHOW_LICENSES = "ライセンスを表示"
     const val LICENSES_BACK = "戻る"
     const val LICENSES_INTRO =
-        "このアプリが使っているライブラリと、ダウンロードして使う文字起こしのモデルです。" +
+        "このアプリが使っているライブラリと、ダウンロードして使う文字起こし・意味検索のモデルです。" +
             "ライセンスの本文は原文（英語）のまま載せています。URL は長押しで選択してコピーできます。"
-    const val LICENSES_MODELS = "文字起こしのモデル"
+    const val LICENSES_MODELS = "モデル（文字起こし・意味検索）"
     const val LICENSES_LIBRARIES = "ライブラリ"
     const val LICENSES_TEXTS = "ライセンスの本文"
     fun licenseAuthor(author: String) = "作者: $author"

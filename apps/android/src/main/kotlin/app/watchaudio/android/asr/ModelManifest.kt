@@ -1,5 +1,6 @@
 package app.watchaudio.android.asr
 
+import app.watchaudio.core.embedding.RuriV3
 import app.watchaudio.core.pipeline.AsrModelFile
 import app.watchaudio.core.pipeline.AsrModelSpec
 
@@ -18,7 +19,8 @@ data class ModelSource(val url: String, val path: String, val size: Long, val sh
  * hashes are the Git LFS SHA-256 of that commit and match the files in the release archive
  * (and the official `reazon-research/reazonspeech-k2-v2` repository).
  *
- * [englishFiles] are fetched the same way, only while 「英語も文字起こしする」 is on (#81).
+ * [englishFiles] are fetched the same way, only while 「英語も文字起こしする」 is on (#81), and
+ * [embeddingFiles] (semantic search, #24) automatically on an unmetered network.
  *
  * `tools/harness/download-models.sh` must download the same files, [englishFiles] included
  * (checked by a unit test).
@@ -76,4 +78,31 @@ object ModelManifest {
 
     private fun englishFile(role: AsrModelFile, size: Long, sha256: String) =
         ModelSource(url = "$SENSE_VOICE_HF/${englishSpec.fileName(role)}", path = englishSpec.path(role), size = size, sha256 = sha256)
+
+    /**
+     * The embedding model of semantic search (#24, [RuriV3]): the int8 ONNX export of
+     * `onnx-community/ruri-v3-30m-ONNX` and the tokenizer of the original `cl-nagoya/ruri-v3-30m`,
+     * each pinned to a commit (the model's hash is its Git LFS SHA-256, the tokenizer's the SHA-256
+     * of the file). ~44 MB, downloaded automatically, Wi-Fi only.
+     */
+    private const val RURI_ONNX_HF = "https://huggingface.co/onnx-community/ruri-v3-30m-ONNX/resolve/1b41a27f31213fc55a9c4653c067770e39406408"
+    private const val RURI_HF = "https://huggingface.co/cl-nagoya/ruri-v3-30m/resolve/24899e5de370b56d179604a007c0d727bf144504"
+
+    val embeddingFiles: List<ModelSource> = listOf(
+        ModelSource(
+            url = "$RURI_ONNX_HF/onnx/${RuriV3.MODEL_FILE}",
+            path = "${RuriV3.DIRECTORY}/${RuriV3.MODEL_FILE}",
+            size = 37_048_575,
+            sha256 = "bd07545fa4eb8e7765939536944da1138a7e61441d81633adfa1faf218df6bb1",
+        ),
+        ModelSource(
+            url = "$RURI_HF/${RuriV3.TOKENIZER_FILE}",
+            path = "${RuriV3.DIRECTORY}/${RuriV3.TOKENIZER_FILE}",
+            size = 6_724_873,
+            sha256 = "0a94ac9a0a02c067bdef25b72ae9f4ee33f48f552e55988d444f6d25eeb1d062",
+        ),
+    )
+
+    /** Bytes of the embedding model download (~44 MB). */
+    val embeddingBytes: Long get() = embeddingFiles.sumOf { it.size }
 }

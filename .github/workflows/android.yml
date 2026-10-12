@@ -69,8 +69,8 @@ jobs:
       - name: sherpa-onnx JNI without TTS
         uses: ./.github/actions/sherpa-onnx-jni
 
-      - name: "Unit tests (shared: JVM + Android host; phone and Wear OS app JVM tests)"
-        run: ./gradlew jvmTest testAndroidHostTest :apps:android:testDebugUnitTest :apps:wear:testDebugUnitTest
+      - name: "Unit tests (shared: JVM + Android host; ONNX Runtime binding; phone and Wear OS app JVM tests)"
+        run: ./gradlew jvmTest testAndroidHostTest :shared:ort:test :apps:android:testDebugUnitTest :apps:wear:testDebugUnitTest
 
       # #23, #72: a year of generated Japanese utterances as the pipeline cuts them since #68
       # (~3.2 million segments, ~650 MB since #94); fails if any query's p95 exceeds 300 ms. The numbers land

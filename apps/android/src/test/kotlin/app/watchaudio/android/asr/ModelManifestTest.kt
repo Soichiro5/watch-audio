@@ -1,5 +1,6 @@
 package app.watchaudio.android.asr
 
+import app.watchaudio.core.embedding.RuriV3
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -30,8 +31,19 @@ class ModelManifestTest {
     }
 
     @Test
+    fun embeddingModelIsRuriV3InItsOwnDirectory() {
+        assertEquals(
+            listOf("${RuriV3.DIRECTORY}/${RuriV3.MODEL_FILE}", "${RuriV3.DIRECTORY}/${RuriV3.TOKENIZER_FILE}"),
+            ModelManifest.embeddingFiles.map { it.path },
+        )
+        assertTrue(ModelManifest.embeddingBytes in 40_000_000..50_000_000, "embedding model is ${ModelManifest.embeddingBytes} bytes")
+        // The model id stored with every vector names the ONNX export's commit.
+        assertTrue(ModelManifest.embeddingFiles[0].url.contains("/resolve/${RuriV3.SPEC.id.substringAfter('@')}"))
+    }
+
+    @Test
     fun entriesArePinnedAndVerifiable() {
-        for (source in ModelManifest.files + ModelManifest.englishFiles) {
+        for (source in ModelManifest.files + ModelManifest.englishFiles + ModelManifest.embeddingFiles) {
             assertTrue(source.url.startsWith("https://"), source.url)
             assertTrue(!source.url.contains("/resolve/main/"), "pin a commit, not a branch: ${source.url}")
             assertTrue(Regex("[0-9a-f]{64}").matches(source.sha256), source.sha256)
@@ -52,7 +64,7 @@ class ModelManifestTest {
             ASSIGNMENT.matchEntire(line)?.let { variables[it.groupValues[1]] = it.groupValues[2] }
             FETCH.matchEntire(line)?.let { fetched += ModelSource(it.groupValues[3], it.groupValues[1], 0, it.groupValues[2]) }
         }
-        for (source in ModelManifest.files + ModelManifest.englishFiles) {
+        for (source in ModelManifest.files + ModelManifest.englishFiles + ModelManifest.embeddingFiles) {
             assertTrue(source.copy(size = 0) in fetched, "download-models.sh must fetch ${source.path} from ${source.url}")
         }
     }

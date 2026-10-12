@@ -14,7 +14,7 @@ class ModelNoticesTest {
 
     @Test
     fun everyDownloadedFileHasALicenseNotice() {
-        for (source in ModelManifest.files + ModelManifest.englishFiles) {
+        for (source in ModelManifest.files + ModelManifest.englishFiles + ModelManifest.embeddingFiles) {
             assertTrue(
                 models.any { notice -> notice.downloads.any { source.url.startsWith(it) } },
                 "no notice on the licenses screen for ${source.url}",
@@ -24,11 +24,18 @@ class ModelNoticesTest {
 
     @Test
     fun everyModelNoticeIsDownloaded() {
-        val urls = (ModelManifest.files + ModelManifest.englishFiles).map { it.url }
+        val urls = (ModelManifest.files + ModelManifest.englishFiles + ModelManifest.embeddingFiles).map { it.url }
         for (notice in models) {
             assertTrue(notice.downloads.isNotEmpty(), notice.name)
             notice.downloads.forEach { prefix -> assertTrue(urls.any { it.startsWith(prefix) }, "${notice.name}: $prefix is not in ModelManifest") }
         }
+    }
+
+    @Test
+    fun theEmbeddingModelIsRuriV3UnderApache() {
+        val notice = OpenSourceNotices.RURI_V3
+        assertEquals(License.APACHE_2_0, notice.license)
+        assertTrue(ModelManifest.embeddingFiles.all { file -> notice.downloads.any { file.url.startsWith(it) } })
     }
 
     @Test

@@ -83,6 +83,8 @@ data class OffloadPreview(
  * themselves: the UI must ask the user first.
  *
  * @param diagnostics the phone's diagnostics log, which [deleteAll] clears as well (#159).
+ * @param onDeleted runs after [deleteRange] and [deleteAll], for data derived from the deleted
+ *   transcripts outside the database (the semantic search's vector cache, #24, wipes their vectors).
  */
 class StorageManager(
     private val store: LocalStore,
@@ -91,6 +93,7 @@ class StorageManager(
     private val clock: Clock = Clock.System,
     private val dispatcher: CoroutineDispatcher = IoDispatcher,
     private val diagnostics: DiagnosticsLog? = null,
+    private val onDeleted: suspend () -> Unit = {},
 ) {
     /** Serializes deletions within the process (background run vs. UI). */
     private val lock = Mutex()
@@ -209,6 +212,7 @@ class StorageManager(
         withContext(dispatcher) { chunks.forEach { deleteAudioFile(it) } }
         val deleted = store.transaction { deleteChunks(chunks.map { it.id }) }
         withContext(dispatcher) { chunks.mapNotNull { it.audioPath }.distinct().forEach { removeEmptyParents(it) } }
+        onDeleted()
         deleted
     }
 
@@ -222,6 +226,7 @@ class StorageManager(
     suspend fun deleteAll(): Unit = lock.withLock {
         store.transaction { deleteAllChunks() }
         withContext(dispatcher) { sweepUnreferencedAudio(keep = store.read { audioPaths() }) }
+        onDeleted()
         store.compact()
         val cleared = withContext(dispatcher) { diagnostics?.clear() ?: true }
         if (!cleared) throw IOException("diagnostics log not cleared")

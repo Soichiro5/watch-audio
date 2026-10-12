@@ -304,4 +304,58 @@ internal val MIGRATIONS: List<List<String>> = listOf(
         END
         """,
     ),
+    // 9: semantic search (#24). A passage is a run of consecutive segments of one chunk (short
+    // utterances are joined, EmbeddingPassages) with its embedding: int8 values and the scale that
+    // turns them back into the unit vector, per embedding model (embedding_model, so a new model
+    // re-embeds chunk by chunk while the old vectors still serve). The segments are the chunk's
+    // segments in (start_at, id) order from first_index on. Embeddings are derived data: any change
+    // to a chunk's segments deletes its passages (triggers), so the embedding step finds the chunk
+    // again; backups and exports leave them out and a restore rebuilds them.
+    // passage_deletion logs deleted passage ids (also through the chunk's cascade) so that the
+    // search's vector cache (VectorCache) can drop them without reading every id; it is pruned once
+    // the cache has applied it. Passage ids are never reused (AUTOINCREMENT), so the cache appends
+    // rows with larger ids. embedding_state (one row) holds a random token naming this database, so
+    // a cache built from another database is never trusted, and the highest pruned deletion: a
+    // cache that has not seen that far must be rebuilt.
+    listOf(
+        "CREATE TABLE embedding_model (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE)",
+        """
+        CREATE TABLE embedding_state (
+            id             INTEGER PRIMARY KEY CHECK (id = 1),
+            token          TEXT    NOT NULL,
+            deletion_floor INTEGER NOT NULL
+        )
+        """,
+        "INSERT INTO embedding_state (id, token, deletion_floor) VALUES (1, lower(hex(randomblob(16))), 0)",
+        """
+        CREATE TABLE passage_embedding (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            chunk_id      INTEGER NOT NULL REFERENCES audio_chunk(id) ON DELETE CASCADE,
+            model_id      INTEGER NOT NULL REFERENCES embedding_model(id),
+            first_index   INTEGER NOT NULL,
+            segment_count INTEGER NOT NULL,
+            start_at      INTEGER NOT NULL,
+            scale         REAL    NOT NULL,
+            vector        BLOB    NOT NULL
+        )
+        """,
+        "CREATE INDEX idx_passage_chunk ON passage_embedding(chunk_id, model_id)",
+        "CREATE INDEX idx_passage_model ON passage_embedding(model_id, id)",
+        "CREATE TABLE passage_deletion (seq INTEGER PRIMARY KEY AUTOINCREMENT, passage_id INTEGER NOT NULL)",
+        """
+        CREATE TRIGGER passage_ad AFTER DELETE ON passage_embedding BEGIN
+            INSERT INTO passage_deletion (passage_id) VALUES (old.id);
+        END
+        """,
+        """
+        CREATE TRIGGER segment_passage_ai AFTER INSERT ON transcript_segment BEGIN
+            DELETE FROM passage_embedding WHERE chunk_id = new.chunk_id;
+        END
+        """,
+        """
+        CREATE TRIGGER segment_passage_ad AFTER DELETE ON transcript_segment BEGIN
+            DELETE FROM passage_embedding WHERE chunk_id = old.chunk_id;
+        END
+        """,
+    ),
 )

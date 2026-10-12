@@ -1,6 +1,7 @@
 package app.watchaudio.core.pipeline
 
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.embedding.EmbeddingStep
 import app.watchaudio.core.settings.loadSettings
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.NonCancellable
@@ -35,9 +36,11 @@ interface SpeechModel {
  *    use up its attempts, so the run transcribes nothing,
  * 3. transcribe under the battery/thermal policy ([PolicyGatedTranscription], #75) with the
  *    user's 「充電中のみ」 setting; failures make the model be checked again,
- * 4. apply the audio retention setting ([StorageManager.applyRetention], #33), also when nothing
+ * 4. once no chunk waits for transcription, the embedding step of semantic search ([embedding],
+ *    #24) under the same policy, stopped between chunks when audio arrives,
+ * 5. apply the audio retention setting ([StorageManager.applyRetention], #33), also when nothing
  *    was transcribed,
- * 5. decide what to schedule next ([FollowUp]).
+ * 6. decide what to schedule next ([FollowUp]; the embedding step's own in [Report.embedding]).
  *
  * Runs are serialized: overlapping callers (a one-off and the periodic worker, a foreground run
  * and a BGTask) wait for each other. Progress goes to [diagnostics] (`worker_start`/`worker_stop`,
@@ -47,6 +50,7 @@ interface SpeechModel {
  *   device state, the policy and the clock take effect on the next run.
  * @param releaseTranscriber frees the engine after a run that transcribed (Android's recognizer
  *   holds a few hundred MB).
+ * @param embedding the embedding step (#24), or null where the platform has no embedding model.
  */
 class TranscriptionRun(
     private val pipeline: TranscriptionPipeline,
@@ -56,6 +60,7 @@ class TranscriptionRun(
     private val diagnostics: Diagnostics,
     private val gate: () -> PolicyGatedTranscription,
     private val releaseTranscriber: suspend () -> Unit = {},
+    private val embedding: EmbeddingStep? = null,
 ) {
     private val lock = Mutex()
 
@@ -105,6 +110,7 @@ class TranscriptionRun(
         } else {
             null
         }
+        val embedded = embedding?.let { embed(it, shouldContinue) }
         val retention = applyRetention(shouldContinue)
         val followUp = followUp(
             modelState = modelState,
@@ -112,7 +118,31 @@ class TranscriptionRun(
             stopped = !shouldContinue(),
             pending = transcription != null && pipeline.hasPending(),
         )
-        return Report(modelState, transcription, recovered, retention, followUp)
+        return Report(modelState, transcription, recovered, retention, followUp, embedded)
+    }
+
+    /**
+     * Runs the embedding step if nothing waits for transcription and the policy allows background
+     * work now; it stops between chunks once that changes. Failures are logged and leave the
+     * transcription results alone. @return null when the step did not run.
+     */
+    private suspend fun embed(step: EmbeddingStep, shouldContinue: () -> Boolean): EmbeddingStep.Outcome? {
+        if (!shouldContinue() || pipeline.hasPending()) return null
+        return try {
+            val chargingOnly = store.loadSettings().transcribeOnlyWhileCharging
+            val gate = gate()
+            val decision = gate.decideOtherWork(chargingOnly) as? ProcessingDecision.Run ?: return null
+            step.run(onBattery = decision.onBattery, nowMs = gate.now()) {
+                shouldContinue() && !pipeline.hasPending() && gate.decideOtherWork(chargingOnly) is ProcessingDecision.Run
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            // Also errors (a native library that cannot load): semantic search is optional,
+            // transcription is not.
+            diagnostics.log(DiagnosticEvents.EMBEDDING_FAILED, "error=${DiagnosticsLog.typeName(e)}")
+            null
+        }
     }
 
     private suspend fun transcribe(
@@ -156,6 +186,8 @@ class TranscriptionRun(
         val recovered: Int,
         val retention: Retention,
         val followUp: FollowUp,
+        /** What the embedding step did (#24); null when it did not run. */
+        val embedding: EmbeddingStep.Outcome? = null,
     ) {
         /** The outcome for the `worker_stop` line, e.g. ` transcribed=2 failed=0 paused=thermal`. */
         fun summary(): String {

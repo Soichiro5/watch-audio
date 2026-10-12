@@ -79,6 +79,15 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 
 正解テキスト付きの日本語会話（オフライン TTS）を Watch 録音を模して加工した検証用音声セットと、それをハーネスに流して条件ごとの CER・検出漏れ・処理時間を出す `evaluate` コマンドがある（#56）。生成手順・条件・ライセンス・結果は [docs/dev/test-audio.md](test-audio.md)。
 
+意味検索（#24）も同じハーネスで確かめる（埋め込みモデル ruri-v3-30m は `download-models.sh` が取得する）。`:tools:harness:test` の `EmbedderParityTest`（Kotlin の埋め込みが Python と一致）と `SemanticSearchEvalTest`（言い換えのクエリの上位 5 件のヒット率、キーワードのみ と ハイブリッド。表は `tools/harness/build/reports/semantic-eval.md`）に加えて:
+
+```bash
+./gradlew :tools:harness:run --args="semantic-eval /tmp/wa-eval --min-tokens 24"                       # 結合の条件を変えて評価
+./gradlew :tools:harness:run --args="semantic-bench /tmp/wa-bench 100000,500000,1100000"             # 総当たり検索の時間（ダミーのベクトル）
+```
+
+結果は [research/m0-6 §9](../research/m0-6-embedding-desktop.md#9-追記-実装後の-jvm-での確認242026-10-12)。
+
 ## 5. 検索の性能ベンチマーク（#23, #72）
 
 1 年分相当の日本語の文字起こしを決定的に生成し、`StoreTransaction.search` の応答時間を測る。通常の `jvmTest` には含めない（1 年分の投入に数分かかるため）。
