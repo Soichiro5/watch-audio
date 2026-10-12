@@ -10,7 +10,7 @@ package app.watchaudio.core.pipeline
  * Japanese conversation. So with English on, each speech span is recognized by the primary
  * (Japanese) model first; only when its text is suspiciously short for the span
  * ([suspectsOtherLanguage]) does the multilingual model hear it too, and its text is kept when
- * [keeps] it (it detected one of [languages] and wrote mostly Latin letters). Japanese speech thus
+ * [keeps] it (it detected one of [languages] and wrote at least a few words in (almost) only Latin letters). Japanese speech thus
  * costs the multilingual model only on short or sparse spans. A span that mixes both languages is
  * recognized as one of them (a known limitation).
  */
@@ -19,9 +19,16 @@ data class LanguageRouting(
     val languages: Set<String> = setOf("en"),
     /**
      * Least share of Latin letters among the letters of the multilingual model's text for it to be
-     * kept; guards against a Japanese span tagged as English but written in kana or kanji.
+     * kept; guards against a Japanese span tagged as English but written partly in kana or kanji
+     * (「どもお願 guys.」). Real English output is all Latin.
      */
-    val minLatinShare: Float = 0.5f,
+    val minLatinShare: Float = 0.9f,
+    /**
+     * Least words in the multilingual model's text for it to be kept: one- and two-word results
+     * (「The.」「Yeah.」) are mostly Japanese backchannels or noise heard as English, and the loss of
+     * a real short English reply is small.
+     */
+    val minWords: Int = 3,
     /**
      * The multilingual model hears a span only when the primary model wrote fewer letters and
      * digits than this per second of the span (padding included); infinity runs it on every span.
@@ -55,9 +62,13 @@ data class LanguageRouting(
         return letters.isNotEmpty() && letters.count(::isForeignScript) >= minForeignScriptShare * letters.length
     }
 
-    /** True if [detected] is in one of [languages] and written mostly in Latin letters. */
+    /**
+     * True if [detected] is in one of [languages], has at least [minWords] words and is written
+     * (almost) only in Latin letters.
+     */
     fun keeps(detected: Recognition): Boolean {
         if (detected.lang !in languages) return false
+        if (detected.text.split(' ').count { word -> word.any { it.isLetterOrDigit() } } < minWords) return false
         val letters = detected.text.filter { it.isLetter() }
         if (letters.isEmpty()) return false
         return letters.count { it in 'a'..'z' || it in 'A'..'Z' } >= minLatinShare * letters.length

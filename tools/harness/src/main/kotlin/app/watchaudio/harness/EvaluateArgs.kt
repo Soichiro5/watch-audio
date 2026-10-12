@@ -165,6 +165,7 @@ fun LanguageRouting.withOverrides(overrides: String): LanguageRouting = applyOve
 val ROUTING_OPTIONS: Map<String, (LanguageRouting, String) -> LanguageRouting> = mapOf(
     "languages" to { r, v -> r.copy(languages = v.split('+').map(String::trim).filter(String::isNotEmpty).toSet()) },
     "minLatinShare" to { r, v -> r.copy(minLatinShare = v.toFloat()) },
+    "minWords" to { r, v -> r.copy(minWords = v.toInt()) },
     // `Infinity` runs the multilingual model on every span.
     "maxPrimaryCharsPerSecond" to { r, v -> r.copy(maxPrimaryCharsPerSecond = v.toFloat()) },
     "minForeignScriptShare" to { r, v -> r.copy(minForeignScriptShare = v.toFloat()) },

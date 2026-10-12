@@ -61,9 +61,14 @@ class LanguageRoutingTest {
         assertFalse(routing.keeps(Recognition("", lang = "en")))
         assertFalse(routing.keeps(Recognition("123。", lang = "en")))
         assertTrue(routing.keeps(Recognition("OK, 3 o'clock.", lang = "en")))
-        // Half Latin letters is enough at the default share.
-        assertTrue(routing.keeps(Recognition("Zoomで", lang = "en")))
-        assertFalse(LanguageRouting(minLatinShare = 0.9f).keeps(Recognition("Zoomで", lang = "en")))
+        // One- and two-word English is mostly a Japanese backchannel heard as English.
+        assertFalse(routing.keeps(Recognition("Yeah.", lang = "en")))
+        assertFalse(routing.keeps(Recognition("Thank you.", lang = "en")))
+        assertTrue(LanguageRouting(minWords = 1).keeps(Recognition("Yeah.", lang = "en")))
+        // Garbled mixed-script output is not trusted at the default share.
+        assertFalse(routing.keeps(Recognition("どもお願 guys.", lang = "en")))
+        assertFalse(routing.keeps(Recognition("Zoomで", lang = "en")))
+        assertTrue(LanguageRouting(minLatinShare = 0.5f, minWords = 1).keeps(Recognition("Zoomで", lang = "en")))
     }
 
     @Test
@@ -71,7 +76,7 @@ class LanguageRoutingTest {
         val chinese = Recognition("你好", lang = "zh")
         assertFalse(routing.keeps(chinese))
         assertFalse(LanguageRouting(languages = setOf("en", "zh")).keeps(chinese)) // not Latin
-        assertTrue(LanguageRouting(languages = setOf("en", "zh"), minLatinShare = 0f).keeps(chinese))
+        assertTrue(LanguageRouting(languages = setOf("en", "zh"), minLatinShare = 0f, minWords = 1).keeps(chinese))
     }
 
     @Test

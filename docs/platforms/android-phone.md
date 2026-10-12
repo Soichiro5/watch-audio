@@ -115,8 +115,8 @@ files/models/
 - **いつ取得・削除するか**（`ModelManager.syncEnglish`）: 設定をオンにしたとき（`AppServices.transcriptionSettingsChanged()`）と起動時に、未取得なら **Wi-Fi（`UNMETERED`）待ち**で予約する。状態タブの「モバイルデータ通信でもダウンロード」（`downloadEnglishModel(allowMetered = true)`）を押せばモバイル通信でも始める。オフにすると予約を取り消し、モデルと途中データを削除する（約 240 MB を空ける）。状態は `ProcessingStatus.englishModel`（設定オフのときは null）と `englishModelWaitingForWifi` で状態タブに出る。
 - **文字起こし**（`AndroidSherpaTranscriber`、共通の `LanguageRouting`）: 設定がオンで英語モデルがそろっているときだけ、区間ごとに次の順で処理する。英語モデルが未取得の間は日本語だけで文字起こしする（待たない）。
   1. 日本語モデルで認識する（従来どおり）。
-  2. 結果の文字数が区間の長さに対して少ない（`LanguageRouting.maxPrimaryCharsPerSecond` = 1.5 文字/秒未満、余白を含む区間の長さで割る）ときだけ、SenseVoice でも認識する。日本語の発話はふつう 2〜6 文字/秒あるので、SenseVoice が動くのは短い相づちや英語の区間だけで、日本語中心の録音では計算量がほとんど増えない。
-  3. SenseVoice が英語（`<|en|>`）と判定し、文字の半分以上がラテン文字なら SenseVoice の文（句読点・大文字小文字つき）を `lang = "en"` で保存する。それ以外は日本語モデルの文を `lang = "ja"` で保存する。
+  2. 結果の文字数が区間の長さに対して少ない（`LanguageRouting.maxPrimaryCharsPerSecond` = 1.5 文字/秒未満、余白を含む区間の長さで割る）か、文字の 8 割以上がカタカナとラテン文字（`minForeignScriptShare`、日本語モデルは英語をカタカナの別の語にすることがある）のときだけ、SenseVoice でも認識する。日本語の発話はふつう 2〜6 文字/秒あるので、SenseVoice が動くのは短い相づちや英語の区間だけで、日本語中心の録音では計算量がほとんど増えない（日本語の条件で区間の 3〜8%）。
+  3. SenseVoice が英語（`<|en|>`）と判定し、文字の 9 割以上がラテン文字（`minLatinShare`）なら SenseVoice の文（句読点・大文字小文字つき）を `lang = "en"` で保存する。それ以外は日本語モデルの文を `lang = "ja"` で保存する。
 - エンジン ID は英語オンの実行では `sherpa-zipformer-ja-reazonspeech-int8+sherpa-sensevoice-small-int8`（どちらのモデルの文かはセグメントの `lang` でわかる）。DB のスキーマは変えていない（`lang` 列は以前からある）。
 - 設定をオンにする前に文字起こし済みの録音はやり直さない（オンにした後に文字起こしする分から英語を認識する）。
 - メモリ: 英語オンの実行では 2 つの認識器（int8 で約 155 MB + 約 240 MB）を読み込む。英語を使わない実行では英語の認識器を解放する。実機での速度・電池・メモリは #61 で確認する。
