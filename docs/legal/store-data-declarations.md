@@ -9,7 +9,7 @@
 - アプリは録音・文字起こし・その他のユーザーデータを**端末の外へ送らない**。運営者のサーバーはない。解析・広告・クラッシュ送信の SDK はない。アカウントもない。
 - 端末外への通信は、Android スマホの文字起こしモデルのダウンロード（Hugging Face・GitHub の公開ファイル）と、iOS が行う音声認識モデルのダウンロード（OS 管理）だけ。ユーザーデータは送らない。
 - Watch → スマホの転送は、ユーザー自身の端末間の直接通信（Wear OS: 近くで直接つながったノードだけ、Apple: WatchConnectivity）。開発者には届かない。
-- ユーザーが自分で端末外に出せるのは、診断ログの書き出し（OS の共有シートで送り先をユーザーが選ぶ）と、データの書き出し（#155。文字起こし・マーク・ギャップと任意で音声を ZIP にして、Android は SAF の保存ダイアログ、iOS は共有シートでユーザーが選んだ保存先にだけ書く）だけ。暗号化バックアップ（#40）・課金（#34）・AI 機能（P2）は未公開。公開時にこの文書とポリシーを更新する。
+- ユーザーが自分で端末外に出せるのは、診断ログの書き出し（OS の共有シートで送り先をユーザーが選ぶ）、データの書き出し（#155。文字起こし・マーク・ギャップと任意で音声を ZIP にして、Android は SAF の保存ダイアログ、iOS は共有シートでユーザーが選んだ保存先にだけ書く）と、暗号化バックアップ（#40。同じ保存先の選び方で、ユーザーのパスフレーズで暗号化したファイルを書く。復元はユーザーが選んだファイルを読むだけ）だけ。パスフレーズと鍵は端末の外に出さない。課金（#34）・AI 機能（P2）は未公開。公開時にこの文書とポリシーを更新する。
 
 ## 2. App Store
 
@@ -27,6 +27,8 @@
 - **Watch → iPhone の転送**: 同じユーザーの端末間で、OS の WatchConnectivity が行う。開発者に届かないので「収集」に当たらない、と整理している。
 - **診断ログの書き出し**: ユーザーが共有シートで送り先を選んだときだけ端末外に出る。ユーザーが問い合わせで運営者にメール送付した場合も、メールアプリからユーザーが送るもので、アプリが送信するのではない。そのため「収集なし」のままでよいと考えているが、問い合わせ窓口で診断ログを受け付ける運用にするなら、Apple の「任意の開示（optional disclosure）」の条件に当たるかを確認する。
 - **データの書き出し（#155）**: 診断ログと同じく、ユーザーが自分で選んだ保存先（共有シート）に、ユーザーの操作でだけ書き出す。開発者には届かないので「収集なし」のままと整理している。
+- **暗号化バックアップ（#40）**: データの書き出しと同じく、ユーザーが選んだ保存先にユーザーの操作でだけ書き出す（中身は暗号化済み）。開発者には届かないので「収集なし」のままと整理している。
+- **暗号化の輸出コンプライアンス（App Store Connect の「暗号化の書類」、Info.plist の `ITSAppUsesNonExemptEncryption`）**: 暗号化バックアップは、標準の暗号（AES-256・HMAC-SHA-256・PBKDF2）を OS の API（iOS は CommonCrypto と Security、Android は `javax.crypto`）で使い、ユーザーのデータの保護（パスフレーズによるファイルの暗号化）にだけ使う。独自の暗号アルゴリズムはない。通信の暗号化（HTTPS）は OS のものだけ。米国の輸出規則では「標準の暗号を OS 経由で使う」アプリは多くの場合免除（Apple の質問では「免除の対象となる暗号のみ」）に当たるが、**データの暗号化（通信以外）が目的の場合の扱いは運営者の確認が必要**（Apple の「輸出コンプライアンス」の質問に答える、必要なら年次の自己分類報告）。決まったら `apps/ios/project.yml` の Info.plist に `ITSAppUsesNonExemptEncryption` を設定する（未設定だと申請のたびに質問される）。Google Play には同様の申告はないが、配信国の規制は運営者が確認する。
 - **OS のクラッシュ・解析共有**: ユーザーが「App デベロッパと共有」を許可した場合に Apple 経由で届くクラッシュ情報は、Apple が集めるもので、アプリの申告対象ではないと理解している（要確認）。
 
 ### 2.2 審査メモ（App Review への説明文）
@@ -55,7 +57,7 @@
 
 1. iPhone アプリを起動し、オンボーディング（同意・通知・音声認識の許可・モデルの準備）を進める
 2. Apple Watch アプリで録音を開始し、手首を下ろして画面を消したまま 5〜10 分話す（録音は 5 分ごとに区切って iPhone に送られる）
-3. iPhone の「タイムライン」で文字起こしと再生、「検索」でキーワード検索、「状態」タブで受信状況・保持期間・すべてのデータの削除・データの書き出し・診断ログの書き出しを確認する
+3. iPhone の「タイムライン」で文字起こしと再生、「検索」でキーワード検索、「状態」タブで受信状況・保持期間・すべてのデータの削除・データの書き出し・暗号化バックアップ・診断ログの書き出しを確認する
 
 iPhone アプリの `NSMicrophoneUsageDescription` は削除した（#159）。iPhone アプリはマイクを使わない（録音は Watch のみ）: `apps/ios/App` と `shared/ui/src/iosMain` に `AVAudioRecorder`・`AVAudioEngine` の入力・録音の許可の要求はなく、`AVAudioSession` は再生用の `AVAudioSessionCategoryPlayback`（`IosAppServices.kt`）だけ、文字起こしは受け取ったファイルを `AVAudioFile` で読む（`SpeechTranscription.swift`）。iPhone が要求する許可は通知と音声認識だけ（`IosPermissions.kt`）。Watch アプリの `NSMicrophoneUsageDescription` は録音に必要なので残す。ios.yml の Release ジョブが、iPhone アプリの Info.plist にこのキーがないことを `IPHONE_MICROPHONE_CHECK` で確かめる。
 
@@ -199,6 +201,7 @@ iPhone アプリの `NSMicrophoneUsageDescription` は削除した（#159）。i
 | iOS・watchOS のファイル保護 | `CompleteUntilFirstUserAuthentication` を `LocalDataDirectory`（shared/ui iosMain）と `LocalDataProtection`（watchOS）で明示。`policy.py` が保護なしの指定を禁止 |
 | 診断ログに本文・音声・例外メッセージを含まない、ユーザーの書き出しでだけ外に出る | `shared/pipeline/src/commonMain/kotlin/app/watchaudio/core/pipeline/Diagnostics.kt`（ID・件数・時間・エラーの型だけ、`exportTo`）、`apps/android/.../diag/CrashRecorder.kt`（型と上位フレームだけ）、`apps/android/src/main/AndroidManifest.xml` の `FileProvider`（共有シート用）。Android の `app_start` は `version`・`sdk`・`device=Build.MODEL`、iOS は `version`・`os`。Watch の診断ログ（`apps/wear/.../diag/DiagnosticsLog.kt`、`apps/ios/Watch/Recording/DiagnosticsLog.swift`）は電池残量・充電状態も持つが、アプリからの書き出し機能はない |
 | データの書き出しはユーザーが選んだ保存先にだけ書き、通信しない（#155） | 共通処理 `shared/pipeline/src/commonMain/kotlin/app/watchaudio/core/export/DataExporter.kt`（渡された出力先に ZIP を書くだけ）、保存先は `apps/android/.../AndroidAppServices.kt` の `saveExport`（SAF の `CreateDocument` で作った文書だけ）と `shared/ui/src/iosMain/.../IosAppServices.kt` の `saveExport`（`tmp/data-export/` → 共有シート、閉じたら削除）。ボタンを押したときだけ（`ExportViewModel`）。`tools/privacy-check` は通信 API の追加がないことを確認 |
+| 暗号化バックアップはユーザーが選んだ保存先にだけ書き、パスフレーズと鍵は端末の外に出さない（#40） | 共通処理 `shared/pipeline/src/commonMain/kotlin/app/watchaudio/core/backup/`（`BackupWriter` は渡された出力先に暗号化したファイルを書くだけ、`BackupCipher` が鍵を導出してメモリ上でだけ使い、使い終えたら配列をゼロで消す、`BackupRestorer` はユーザーが選んだファイルを読むだけ）、暗号の基本操作は `shared/platform/src/*/kotlin/app/watchaudio/core/platform/Crypto*.kt`（OS の API だけ）。保存先は `saveExport`（上と同じ）、読み込みは `AndroidAppServices.openBackup`（SAF の `OpenDocument`）と `IosAppServices.openBackup`（ドキュメントピッカーのコピー、読んだら削除）。パスフレーズは画面の状態（`BackupViewModel`）にだけあり、診断ログには件数とエラーの型だけ（`BackupViewModelTest` がログにパスフレーズ・本文がないことを確認）。`tools/privacy-check` は通信 API の追加がないことを確認 |
 | 識別子はランダム | `deviceId` は Wear OS がインストールごとの `UUID.randomUUID()`（`apps/wear/.../WearPrefs.kt`）、watchOS も `UUID`（`RecorderController.swift`）。チャンク・セッションも UUID |
 | 保持期間（7/30/90 日・無期限、既定は無期限、文字起こし済みの音声だけ削除） | `shared/pipeline/.../AudioRetention.kt`、文言は `shared/ui/.../Strings.kt` |
 | 日ごとの削除・すべてのデータの削除 | `shared/pipeline/.../StorageManager.kt`（`deleteAll` は全チャンク・音声を消し DB を `VACUUM` し、スマホの診断ログも `DiagnosticsLog.clear` で消す。ローテーション分と共有用の書き出しのコピーも含む。#159）。テストは `StorageManagerTest.deleteAllAlsoClearsTheDiagnosticsLogAndItsExports`・`DiagnosticsLogTest.clearRemovesTheLogTheRotatedPartAndExportsOnly`。UI は `shared/ui/.../ui/StorageCard.kt`（確認の文言 `Strings.DELETE_ALL_NOTE` に「診断ログ」を明記）。**設定は残す**（オンボーディングをやり直さないため）。**Watch の診断ログは Watch 側にあり対象外**（大きさの上限で古い記録から消え、アンインストールで消える） |
@@ -239,4 +242,6 @@ iPhone アプリの `NSMicrophoneUsageDescription` は削除した（#159）。i
 - [ ] シミュレータ・エミュレータでのスクリーンショット作成（§4）
 - [ ] Wear OS の品質ガイドラインとの照合
 - [x] データの書き出し（#155）をポリシー（第 7 条）とこの申告に追記した
-- [ ] 暗号化バックアップ（#40）・課金（#34）を公開するときに、ポリシーとこの申告を更新する
+- [x] 暗号化バックアップ（#40）をポリシー（第 7 条）とこの申告に追記した
+- [ ] 暗号化の輸出コンプライアンスの回答を運営者が決め、`ITSAppUsesNonExemptEncryption` を設定する（§2.1）
+- [ ] 課金（#34）を公開するときに、ポリシーとこの申告を更新する

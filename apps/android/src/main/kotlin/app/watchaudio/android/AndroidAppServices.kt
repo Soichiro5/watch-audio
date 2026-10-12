@@ -21,6 +21,7 @@ import app.watchaudio.android.asr.ModelManager
 import app.watchaudio.android.work.TranscriptionScheduler
 import app.watchaudio.app.AppPermission
 import app.watchaudio.app.AppServices
+import app.watchaudio.app.BACKUP_MIME_TYPE
 import app.watchaudio.app.PermissionStatus
 import app.watchaudio.app.Strings
 import app.watchaudio.core.db.LocalStore
@@ -45,7 +46,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
 import kotlinx.io.RawSink
+import kotlinx.io.RawSource
 import kotlinx.io.asSink
+import kotlinx.io.asSource
 import kotlinx.io.files.Path
 
 /**
@@ -90,9 +93,12 @@ class AndroidAppServices(
     private var pendingPermission: CompletableDeferred<Boolean>? = null
     private var notificationsRefused = false
 
-    // The save dialog of the data export (#155) goes through the visible activity; main thread only.
-    private var exportLauncher: ActivityResultLauncher<String>? = null
+    // The save dialogs of the data export (#155) and the backup (#40), by MIME type, and the
+    // backup's open dialog go through the visible activity; main thread only.
+    private val saveLaunchers = mutableMapOf<String, ActivityResultLauncher<String>>()
     private var pendingExport: CompletableDeferred<Uri?>? = null
+    private var openBackupLauncher: ActivityResultLauncher<Array<String>>? = null
+    private var pendingBackup: CompletableDeferred<Uri?>? = null
 
     /** POST_NOTIFICATIONS is a runtime permission from Android 13 (API 33). */
     override val permissions: List<AppPermission> =
@@ -177,12 +183,13 @@ class AndroidAppServices(
         return true
     }
 
-    fun attachExportLauncher(launcher: ActivityResultLauncher<String>) {
-        exportLauncher = launcher
+    /** The save dialog for documents of [mimeType] ([EXPORT_MIME_TYPE] or [BACKUP_MIME_TYPE]). */
+    fun attachSaveLauncher(mimeType: String, launcher: ActivityResultLauncher<String>) {
+        saveLaunchers[mimeType] = launcher
     }
 
-    fun detachExportLauncher(launcher: ActivityResultLauncher<String>) {
-        if (exportLauncher === launcher) exportLauncher = null
+    fun detachSaveLauncher(mimeType: String, launcher: ActivityResultLauncher<String>) {
+        if (saveLaunchers[mimeType] === launcher) saveLaunchers.remove(mimeType)
     }
 
     /** The document the user created in the save dialog started by [saveExport], or null if they cancelled. */
@@ -192,15 +199,14 @@ class AndroidAppServices(
     }
 
     /**
-     * Opens the system's save dialog (SAF `ACTION_CREATE_DOCUMENT`, [EXPORT_MIME_TYPE] only) and
-     * streams the export straight into the document the user created there: no copy in the app's
-     * storage, and the only place it is written is the one they chose. A failed or cancelled write
-     * deletes the partial document.
+     * Opens the system's save dialog (SAF `ACTION_CREATE_DOCUMENT` for [mimeType]: the data export
+     * or an encrypted backup) and streams the file straight into the document the user created
+     * there: no copy in the app's storage, and the only place it is written is the one they
+     * chose. A failed or cancelled write deletes the partial document.
      */
     override suspend fun saveExport(fileName: String, mimeType: String, write: suspend (RawSink) -> Unit): Boolean {
-        require(mimeType == EXPORT_MIME_TYPE) { "The save dialog is registered for $EXPORT_MIME_TYPE only" }
         val uri = withContext(Dispatchers.Main) {
-            val launcher = exportLauncher ?: error("no visible activity to show the save dialog from")
+            val launcher = saveLaunchers[mimeType] ?: error("no save dialog for $mimeType (no visible activity, or an unknown type)")
             val result = CompletableDeferred<Uri?>()
             pendingExport?.complete(null)
             pendingExport = result
@@ -217,6 +223,43 @@ class AndroidAppServices(
                 runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
             }
             throw e
+        }
+        return true
+    }
+
+    fun attachOpenBackupLauncher(launcher: ActivityResultLauncher<Array<String>>) {
+        openBackupLauncher = launcher
+    }
+
+    fun detachOpenBackupLauncher(launcher: ActivityResultLauncher<Array<String>>) {
+        if (openBackupLauncher === launcher) openBackupLauncher = null
+    }
+
+    /** The document the user picked in the dialog started by [openBackup], or null if they cancelled. */
+    fun onBackupPicked(uri: Uri?) {
+        pendingBackup?.complete(uri)
+        pendingBackup = null
+    }
+
+    /**
+     * Opens the system's file picker (SAF `ACTION_OPEN_DOCUMENT`; any type, since backups have no
+     * registered one) and lets the restore read the picked document directly, as often as it
+     * needs. Nothing is copied into the app's storage, and the document is only read.
+     */
+    override suspend fun openBackup(read: suspend (open: () -> RawSource) -> Unit): Boolean {
+        val uri = withContext(Dispatchers.Main) {
+            val launcher = openBackupLauncher ?: error("no visible activity to show the file picker from")
+            val result = CompletableDeferred<Uri?>()
+            pendingBackup?.complete(null)
+            pendingBackup = result
+            launcher.launch(arrayOf("*/*"))
+            result
+        }.await() ?: return false
+        withContext(Dispatchers.IO) {
+            read {
+                val stream = context.contentResolver.openInputStream(uri) ?: throw FileNotFoundException("no stream for the picked document")
+                stream.asSource()
+            }
         }
         return true
     }

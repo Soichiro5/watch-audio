@@ -138,6 +138,24 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
 - 書き出しの処理（ZIP・Markdown・JSON）は共通コード（`shared/pipeline` の `core/export`）で、プラットフォームは保存先を開くだけ。`AppServices.exporter` は既定で `DataExporter(store, audioRoot)`。
 - Markdown のギャップの理由の言葉（`MarkdownText`）はタイムラインの `Strings.endReason` などと同じ（`ExportTextTest` で確認）。
 
+### 1.10 暗号化バックアップ（#40）
+
+状態タブの「データの書き出し」の下に「暗号化バックアップ」カード。すべての記録をパスフレーズで暗号化した 1 つのファイル（`watch-audio-backup-<日付>.wabackup`）にし、そのファイルから戻す。形式と復元の規則は [02 §6.7](../architecture/02-architecture.md#67-暗号化バックアップ40)。
+
+| 項目 | 内容 |
+| --- | --- |
+| パスフレーズ・確認 | 伏せ字の入力欄（`PasswordVisualTransformation`、パスワード用キーボード）。8 文字以上が必須で、強さの目安（「8文字以上にしてください」/「強さ: 弱い…」/「ふつう」/「強い」。`logic/Passphrase.kt` の `passphraseStrength`: 長さと文字の種類。日本語は 1 文字ずつ数える）を出す。確認が違えば「確認のパスフレーズが一致しません」 |
+| 忘れたときの警告 | 赤字で常に表示:「パスフレーズを忘れると、このバックアップは誰にも（開発者にも）戻せません。パスフレーズはどこにも保存されないので、紙やパスワード管理アプリなど別の場所に控えてください。」 |
+| 音声もバックアップする | スイッチ（既定オフ）。端末にある音声の合計を添え、含めないと戻した端末では文字起こしだけで再生できないことを示す |
+| バックアップを作成 | `BackupViewModel.create()`: ① `BackupWriter.plan` で記録があるか確かめ、なければ「バックアップする記録がありません」、② `AppServices.saveExport(ファイル名, "application/octet-stream")` でプラットフォームが保存先を聞き、③ `BackupWriter.write` が暗号化して流し込む。作成中は「暗号化して書き出し中…」と進捗（日数の割合）。成功したら「N日分（チャンク N件、音声 N件）をバックアップしました。パスフレーズを忘れないようにしてください。」と出し、入力したパスフレーズを消す。失敗は決まった文言（診断ログに `backup_failed error=<型>`、成功時は `backup_created` に件数だけ） |
+| バックアップから戻す | パスフレーズを入れて「ファイルを選んで戻す」→ `AppServices.openBackup` でプラットフォームがファイルを選ばせ、`BackupRestorer.restore` が「パスフレーズとファイル全体を確認中…（この間は何も変更しません）」→「戻しています…（N / N日）」と進む。結果は「チャンク N件を戻しました（発話 N件、音声 N件）。すでにこの端末にあった N件はそのままです。」 |
+| 復元の失敗 | 原因ごとの決まった文言（例外のメッセージは出さない、#135）: パスフレーズ違い・壊れた / 途中までのファイル・このアプリのバックアップでない・新しいバージョンの形式・読めない（いずれも「何も変更していません」）。追加の途中で失敗したら（容量不足など）「同じファイルでもう一度戻してください（戻した分は重複せず、残りが加わります）」。診断ログには `backup_restore_failed phase=verify|apply error=<型>`、成功時は `backup_restored` に件数だけ |
+
+- 保存先: データの書き出し（§1.9）と同じ `saveExport`。Android は `CreateDocument("application/octet-stream")` の SAF 保存ダイアログで、ユーザーが作った文書に直接書く。iOS は `tmp/data-export/` に書いてから共有シートを開き、閉じたら消す。
+- 読み込み元: Android は `OpenDocument`（SAF。種類は限定しない）で選ばれた文書を `ContentResolver.openInputStream` で直接 2 回読む（コピーを作らない）。iOS は `UIDocumentPickerViewController`（`asCopy`。iCloud Drive などのファイルは OS が先に取得する）が `tmp/` に作ったコピーを読み、終わったら（失敗でも）消す。
+- パスフレーズは画面の状態（メモリ）にだけあり、保存・記録・送信しない。どちらも**ボタンを押したときだけ**動き、アプリが自動でどこかへ送ることはない。
+- 戻した直後は、DB の変更（`LocalStore.changes`）でタイムライン・検索・状態が読み直される。音声つきで戻した文字起こし待ちのチャンクは、通常の文字起こしの予定で処理される。
+
 ## 2. データの流れ
 
 ```mermaid
@@ -170,7 +188,7 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 
 ## 3. ホストへの組み込み
 
-- Android: `MainActivity` で `App((application as WatchAudioApp).services)`。権限要求と、データの書き出しの保存ダイアログ（`CreateDocument`）の launcher も `MainActivity` が登録して `AndroidAppServices` に渡す。
+- Android: `MainActivity` で `App((application as WatchAudioApp).services)`。権限要求と、データの書き出し・暗号化バックアップの保存ダイアログ（MIME タイプごとの `CreateDocument`）、バックアップを選ぶ `OpenDocument` の launcher も `MainActivity` が登録して `AndroidAppServices` に渡す。
 - iOS: Swift から `MainViewControllerKt.MainViewController()`（`IosAppGraph.services` を使う）。
 - `FakeAppServices`（`jvmTest`）は呼び出しを記録するだけのテスト用の実装。アプリ（iOS の framework を含む）には入らない。
 
@@ -191,8 +209,10 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 | `jvmTest/…/ExportViewModelTest` | データの書き出し（#155）: 既定の選択（すべて・直近 7 日）と範囲の補正、ボタンを押すまで保存先を聞かないこと、書き出した ZIP の中身（JSON・Markdown・音声）と結果の文言、範囲に記録がなければ保存先を聞かない、キャンセルでは何も出さない、失敗は決まった文言で診断ログには型だけ |
 | `commonTest/…/ExportTextTest` | 書き出す Markdown のギャップの理由・曜日がタイムラインの文言と同じ |
 | `shared/pipeline` の `ExportGoldenTest`・`ExportFormatTest`・`ZipWriterTest`（`commonTest`）、`ZipWriterJvmTest`（`jvmTest`）、`DataExporterTest`（`sqliteTest`） | 書き出しの形式（[02 §6.6](../architecture/02-architecture.md#66-データの書き出し155)）: 固定データの JSON・Markdown の全文照合、JSON の読み戻し、ZIP（ZIP64 を含む）の読み戻し、実 DB からの書き出し |
+| `jvmTest/…/BackupViewModelTest`、`commonTest/…/PassphraseTest` | 暗号化バックアップ（#40）: パスフレーズの長さ・確認・強さの目安、押すまで保存先を聞かない、1 台目で作ったファイルを 2 台目で戻すと文字起こしと音声が戻り、診断ログに件数だけ（パスフレーズや本文を含まない）、パスフレーズ違い・壊れたファイルは決まった文言で何も変えない、ピッカーのキャンセル、保存の失敗、記録がないとき |
+| `shared/pipeline` の `BackupCipherTest`（`commonTest`）、`BackupRestorerTest`・`BackupFixtureTest`（`sqliteTest`）、`shared/platform` の `CryptoTest` | バックアップの形式と復元（[02 §6.7](../architecture/02-architecture.md#67-暗号化バックアップ40)）。`BackupFixtureTest` は JVM・iOS シミュレータ・Android エミュレータで同じファイルを書けて戻せることを確かめる（OS 間の互換） |
 | `shared/pipeline` の `sqliteTest/…/GapAlertEvaluatorTest` | 実 DB 上で途絶アラートの判定・設定の反映 |
-| `jvmTest/…/AppUiTest` | Skia でヘッドレス描画し、(1) タイムライン→再生→検索→結果を開く→状態→おやすみ時間の切り替え→ストレージ（「削除」を入力して全削除）→「診断ログを書き出す」、(2) オンボーディング（同意しないと次へ進めない→通知許可→モデルのダウンロード選択→はじめる→タブ画面→説明をもう一度）、(3) 通知を拒否したときの「設定を開く」（`onboarding-permission-denied.png`）を操作。(4) 状態タブのお知らせ（Wi-Fi 待ち・文字起こし失敗）とモデルのダウンロード失敗（英語の `reason` を渡しても表示されない）を表示し、画面上に英語だけのテキストがないことを確認（`status-waiting-for-wifi.png`、`status-notice.png`、`status-model-failed.png`、#135）。(5) DB に英語の例外メッセージを持つ失敗チャンクのあるタイムラインで、失敗の行に決まった文言だけが出て例外のメッセージが表示されず、英語だけのテキストもないことを確認（`timeline-failed.png`、#144）。(6) 「データの書き出し」で「期間を指定」と「音声ファイルを含める」を選び、押すまで保存先を聞かないこと、押すと ZIP が渡され結果が出ること（`export.png`、`export-done.png`、#155）。スクリーンショットを `shared/ui/build/screenshots/` に出力（CI の成果物 `ui-screenshots`） |
+| `jvmTest/…/AppUiTest` | Skia でヘッドレス描画し、(1) タイムライン→再生→検索→結果を開く→状態→おやすみ時間の切り替え→ストレージ（「削除」を入力して全削除）→「診断ログを書き出す」、(2) オンボーディング（同意しないと次へ進めない→通知許可→モデルのダウンロード選択→はじめる→タブ画面→説明をもう一度）、(3) 通知を拒否したときの「設定を開く」（`onboarding-permission-denied.png`）を操作。(4) 状態タブのお知らせ（Wi-Fi 待ち・文字起こし失敗）とモデルのダウンロード失敗（英語の `reason` を渡しても表示されない）を表示し、画面上に英語だけのテキストがないことを確認（`status-waiting-for-wifi.png`、`status-notice.png`、`status-model-failed.png`、#135）。(5) DB に英語の例外メッセージを持つ失敗チャンクのあるタイムラインで、失敗の行に決まった文言だけが出て例外のメッセージが表示されず、英語だけのテキストもないことを確認（`timeline-failed.png`、#144）。(6) 「データの書き出し」で「期間を指定」と「音声ファイルを含める」を選び、押すまで保存先を聞かないこと、押すと ZIP が渡され結果が出ること（`export.png`、`export-done.png`、#155）。(7) 「暗号化バックアップ」でパスフレーズと確認を入れ（不一致の表示を経て）、押すまで保存先を聞かないこと、作成したファイルを同じ端末に戻すと「すでにこの端末にあった」件数が出ること（`backup.png`、`backup-done.png`、`restore-done.png`、#40）。スクリーンショットを `shared/ui/build/screenshots/` に出力（CI の成果物 `ui-screenshots`） |
 | `apps/android/src/androidTest/…/PlaybackTest` | エミュレータ上の実アプリで、実際の AAC を MediaPlayer が指定位置から再生すること、検索 → 結果を 1 タップ → 発話の位置から再生されることを確認（CI `emulator.yml`、[android-phone.md §6.1](android-phone.md#61-実機なしlinux--ci)） |
 | `apps/android/src/androidTest/…/PermissionDeniedTest` | エミュレータでオンボーディングから通知の許可を求め、システムのダイアログで拒否 → 理由と「設定を開く」が表示され、押すとアプリの設定画面が開く（インストール直後に `phone-scenarios.sh` から実行。スクリーンショット `onboarding-permission-denied.png` ほか） |
 | `apps/android/src/androidTest/…/ModelWaitTest` | モデルなしの状態タブ（「モデルが未ダウンロードです」・文字起こし待ち）と、モデルを置いた後の「準備完了」のスクリーンショット（`status-model-*.png`） |
@@ -211,4 +231,5 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 - 再生状態（再生位置・終了）をプラットフォームから受け取る
 - チャンク境界をまたぐ発話を次のチャンクへ続けて再生する
 - 長いギャップ一覧の折りたたみ、Mark の表示
-- ストレージ: バックアップ済み（#40）の古い音声だけを端末から消す「オフロード」、AI 設定・API キー（未実装）の全削除への追加、音声コーデック比較による容量見積もりの更新（#33 の残り）
+- 暗号化バックアップ（#40）: 差分バックアップ（今は毎回全体。設計は [02 §6.7](../architecture/02-architecture.md#67-暗号化バックアップ40)）、圧縮
+- ストレージ: バックアップ済み（#40）の古い音声だけを端末から消す「オフロード」（#156）、AI 設定・API キー（未実装）の全削除への追加、音声コーデック比較による容量見積もりの更新（#33 の残り）
