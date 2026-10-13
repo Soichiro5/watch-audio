@@ -14,6 +14,8 @@ on:
       - "gradle.properties"
       - ".github/workflows/ios.yml"
       - ".github/scripts/**"
+      # #185: the agent access check runs the bridge CLI's host driver (e2e/emulator-host.ts).
+      - "tools/agent-bridge/**"
       - "!**/*.md"
       - "!docs/**"
       - "!**/src/androidMain/**"
@@ -26,6 +28,7 @@ on:
       - "!.github/scripts/launch-smoke.sh"
       - "!.github/scripts/release-asr.sh"
       - "!.github/scripts/push-models.sh"
+      - "!.github/scripts/agent-access.sh"
   pull_request:
     branches: [main]
     paths:
@@ -37,6 +40,8 @@ on:
       - "gradle.properties"
       - ".github/workflows/ios.yml"
       - ".github/scripts/**"
+      # #185: the agent access check runs the bridge CLI's host driver (e2e/emulator-host.ts).
+      - "tools/agent-bridge/**"
       - "!**/*.md"
       - "!docs/**"
       - "!**/src/androidMain/**"
@@ -49,6 +54,7 @@ on:
       - "!.github/scripts/launch-smoke.sh"
       - "!.github/scripts/release-asr.sh"
       - "!.github/scripts/push-models.sh"
+      - "!.github/scripts/agent-access.sh"
   workflow_dispatch:
 
 permissions:
@@ -247,6 +253,27 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit $status
 
+      # #185: agent access in the app process against the real bridge CLI on this host (127.0.0.1):
+      # pairing with the 6-digit code, tool calls answered only while on and on screen, then off,
+      # background, revoke (.github/scripts/ios-agent-access.sh, AgentAccessTests).
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: (success() || failure()) && steps.build-ios.outcome == 'success'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/agent-bridge/package-lock.json
+
+      - name: Build the agent bridge CLI
+        id: build-bridge
+        if: (success() || failure()) && steps.build-ios.outcome == 'success'
+        working-directory: tools/agent-bridge
+        run: npm ci --ignore-scripts --no-audit --no-fund && npm run build
+
+      - name: Agent access on the iOS simulator (bridge CLI on the host)
+        if: (success() || failure()) && steps.build-bridge.outcome == 'success'
+        timeout-minutes: 20
+        run: .github/scripts/ios-agent-access.sh OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES
+
       # Booted simulators otherwise slow down the runner's orphan-process cleanup at the end.
       - name: Shut down simulators
         if: always()
@@ -260,6 +287,7 @@ jobs:
           path: |
             xcodebuild-*.log
             build/xcresults/
+            agent-access-logs/
           retention-days: 7
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -282,6 +310,7 @@ jobs:
             build/ja-speech/
             build/mixed-speech/
             audio-devices.txt
+            agent-access-logs/
           if-no-files-found: ignore
           retention-days: 7
 

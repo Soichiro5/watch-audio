@@ -81,6 +81,7 @@ GUARDED_APIS = (
     ("Network.framework", r"\bNW(?:Connection|Listener|Browser|Endpoint)\b|^\s*import\s+Network\b|\bplatform\.Network\b",
      "Apple Network.framework"),
     ("MultipeerConnectivity", r"\bMultipeerConnectivity\b|\bMCSession\b", "Apple peer-to-peer networking"),
+    ("NWListener", r"\bNWListener\b", "accepting incoming connections (the phone never listens, #185)"),
     ("SpeechServerRecognition", r"\bSF\w*RecognitionRequest\b",
      "SFSpeechRecognizer requests may use Apple's servers; use SpeechAnalyzer (on-device)"),
     ("NSD", r"\b(?:NsdManager|NsdServiceInfo|MulticastLock|createMulticastLock)\b",
@@ -107,6 +108,12 @@ ALLOWED_API_USES = {
     "apps/android/src/main/kotlin/app/watchaudio/android/agent/NsdBridgeDiscovery.kt": {
         "NSD": "agent access (#184): browses mDNS (_watchaudio-mcp._tcp) for the paired PC's bridge while on; announces nothing",
     },
+    # The iPhone's side (#185): the same connection with Network.framework, only while on and on screen.
+    "apps/ios/App/Agent/AgentNetwork.swift": {
+        "Network.framework": "agent access (#185): mutual TLS 1.3 from the iPhone to the paired PC's bridge on the LAN "
+                             "(IP literals only, the bridge key pinned) and mDNS browsing of _watchaudio-mcp._tcp, only "
+                             "while the user has it on and the app is on screen; announces nothing, never listens",
+    },
 }
 
 # What an allowed network site must keep doing (code with comments removed must match each
@@ -117,6 +124,20 @@ ALLOWED_API_REQUIREMENTS = {
         ("parses the address without DNS (InetAddresses.parseNumericAddress)", r"\bInetAddresses\.parseNumericAddress\s*\("),
         ("pins the bridge key (PinningTrustManager)", r"\bPinningTrustManager\s*\("),
         ("TLS 1.3 only", r'enabledProtocols\s*=\s*arrayOf\(\s*TLS_1_3\s*\)'),
+    ),
+    # #185: the Kotlin side decides where the iPhone may connect; Swift only opens what it is given.
+    "shared/ui/src/iosMain/kotlin/app/watchaudio/app/IosAgentTransport.kt": (
+        ("connects only to LAN addresses (isLanHost)", r"\bisLanHost\s*\("),
+    ),
+    "apps/ios/App/Agent/AgentNetwork.swift": (
+        ("parses the host as an IP literal (IPv4Address / IPv6Address, no DNS)",
+         r"\bIPv4Address\(\s*host\s*\)[\s\S]*\bIPv6Address\(\s*host\s*\)"),
+        ("TLS 1.3 only (minimum and maximum)",
+         r"set_min_tls_protocol_version\([^)]*\.TLSv13\)[\s\S]*set_max_tls_protocol_version\([^)]*\.TLSv13\)"),
+        ("presents the Keychain identity (mutual TLS)", r"\bsec_protocol_options_set_local_identity\s*\("),
+        ("pins the bridge key in the verify block",
+         r"\bsec_protocol_options_set_verify_block\s*\([\s\S]*AgentKeychain\.fingerprint\(of:[\s\S]*==\s*fingerprint"),
+        ("browses only _watchaudio-mcp._tcp", r'serviceType\s*=\s*"_watchaudio-mcp\._tcp"'),
     ),
 }
 
@@ -180,6 +201,9 @@ IOS_TARGETS = {
             "UILaunchScreen": "launch screen",
             "CADisableMinimumFrameDurationOnPhone": "ProMotion",
             "NSSpeechRecognitionUsageDescription": "on-device transcription permission",
+            "NSCameraUsageDescription": "agent access (#185): reads the PC's pairing QR code on the device, asked only when scanning",
+            "NSLocalNetworkUsageDescription": "agent access (#185): the connection to the user's own paired PC on the LAN while on",
+            "NSBonjourServices": "see IOS_BONJOUR_SERVICES",
             "UIBackgroundModes": "see background_modes",
             "BGTaskSchedulerPermittedIdentifiers": "transcription BGProcessingTask",
         },
@@ -205,6 +229,12 @@ IOS_TARGETS = {
         },
         "background_modes": {},
     },
+}
+
+# Bonjour service types an app may browse (NSBonjourServices). Agent access (#185) browses for the
+# paired PC's bridge; nothing is advertised.
+IOS_BONJOUR_SERVICES = {
+    "_watchaudio-mcp._tcp": "agent access (#185): finds the paired PC's bridge on the LAN while on",
 }
 
 # Privacy manifests (PrivacyInfo.xcprivacy, #159). Every application / app-extension target must

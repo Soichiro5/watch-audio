@@ -4,8 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.watchaudio.app.AgentAccessState
 import app.watchaudio.app.AppServices
+import app.watchaudio.app.LocalNetworkSetting
 import app.watchaudio.app.PairAttempt
 import app.watchaudio.app.QrScan
+import app.watchaudio.app.QrScanner
 import app.watchaudio.app.Strings
 import app.watchaudio.app.TurnOnResult
 import app.watchaudio.core.agent.AgentErrorCode
@@ -58,6 +60,12 @@ data class AccessLogRow(val entry: AgentAccessEntry, val pcName: String)
 /** The 「エージェント連携」 screen (#184). */
 data class AgentUiState(
     val canScanQr: Boolean = false,
+    /** How the platform scans ([app.watchaudio.app.AgentAccess.qrScanner]), for the wording. */
+    val qrScanner: QrScanner = QrScanner.CAMERA_APP_PHOTO,
+    /** Access ends when the app leaves the screen (iOS); the screen says so. */
+    val foregroundOnly: Boolean = false,
+    /** Where the local network is allowed, for [Strings.agentPermissionDenied]. */
+    val localNetworkSetting: LocalNetworkSetting = LocalNetworkSetting.NEARBY_DEVICES,
     val access: AgentAccessState = AgentAccessState(),
     /** Minutes until auto-off chosen for the next time it is turned on. */
     val onMinutes: Int = AgentLimits.DEFAULT_ON_MINUTES,
@@ -84,7 +92,14 @@ class AgentViewModel(
     scope: CoroutineScope = defaultViewModelScope(),
 ) : ViewModel(scope) {
     private val access = services.agentAccess
-    private val local = MutableStateFlow(AgentUiState(canScanQr = access?.canScanQr == true))
+    private val local = MutableStateFlow(
+        AgentUiState(
+            canScanQr = access?.canScanQr == true,
+            qrScanner = access?.qrScanner ?: QrScanner.CAMERA_APP_PHOTO,
+            foregroundOnly = access?.foregroundOnly == true,
+            localNetworkSetting = access?.localNetworkSetting ?: LocalNetworkSetting.NEARBY_DEVICES,
+        ),
+    )
     private val data = refreshSignal(services).map { load() }
     private var pairJob: Job? = null
     private var pendingConfirm: CompletableDeferred<Boolean>? = null
@@ -115,8 +130,9 @@ class AgentViewModel(
         viewModelScope.launch {
             val message = when (agent.turnOn(local.value.onMinutes)) {
                 TurnOnResult.ON -> null
-                TurnOnResult.PERMISSION_DENIED -> Strings.AGENT_PERMISSION_DENIED
+                TurnOnResult.PERMISSION_DENIED -> Strings.agentPermissionDenied(local.value.localNetworkSetting)
                 TurnOnResult.NO_PAIRINGS -> Strings.AGENT_NO_PAIRINGS
+                TurnOnResult.FAILED -> Strings.AGENT_TURN_ON_FAILED
             }
             local.update { it.copy(message = message) }
         }
@@ -142,7 +158,7 @@ class AgentViewModel(
                 is QrScan.Found -> pair(scan.text)
                 QrScan.Cancelled -> local.update { it.copy(pairing = PairingStep.Idle) }
                 QrScan.NotFound -> fail(Strings.AGENT_SCAN_NOT_FOUND)
-                QrScan.Unavailable -> fail(Strings.AGENT_SCAN_UNAVAILABLE)
+                QrScan.Unavailable -> fail(Strings.agentScanUnavailable(local.value.qrScanner))
             }
         }
     }
@@ -214,7 +230,7 @@ class AgentViewModel(
         }
         val step = when (attempt) {
             PairAttempt.Unreachable -> PairingStep.Failed(Strings.AGENT_UNREACHABLE)
-            PairAttempt.PermissionDenied -> PairingStep.Failed(Strings.AGENT_PERMISSION_DENIED)
+            PairAttempt.PermissionDenied -> PairingStep.Failed(Strings.agentPermissionDenied(local.value.localNetworkSetting))
             is PairAttempt.Done -> when (val outcome = attempt.outcome) {
                 is PairOutcome.Paired -> PairingStep.Paired(outcome.pairing.name)
                 PairOutcome.Declined -> PairingStep.Failed(Strings.AGENT_PAIR_DECLINED)

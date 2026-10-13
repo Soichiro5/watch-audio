@@ -115,6 +115,7 @@ private fun SwitchCard(state: AgentUiState, timeZone: TimeZone, callbacks: Agent
             }
             Switch(checked = offAt != null, onCheckedChange = null, enabled = enabled)
         }
+        if (state.foregroundOnly) Note(Strings.AGENT_FOREGROUND_ONLY)
         if (state.pairings.isEmpty()) Note(Strings.AGENT_NO_PAIRINGS)
         if (offAt == null && state.pairings.isNotEmpty()) {
             Text(Strings.AGENT_DURATION, style = MaterialTheme.typography.bodySmall)
@@ -138,6 +139,9 @@ private fun SwitchCard(state: AgentUiState, timeZone: TimeZone, callbacks: Agent
                 )
             }
         }
+        if (offAt != null && state.access.localNetworkDenied) {
+            Text(Strings.agentPermissionDenied(state.localNetworkSetting), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        }
         state.message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
     }
 }
@@ -149,10 +153,10 @@ private fun PairingCard(state: AgentUiState, callbacks: AgentCallbacks) {
             PairingStep.Idle -> {
                 Note(Strings.AGENT_PAIR_HOWTO)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (state.canScanQr) Button(onClick = callbacks.onScan) { Text(Strings.AGENT_SCAN) }
+                    if (state.canScanQr) Button(onClick = callbacks.onScan) { Text(Strings.agentScan(state.qrScanner)) }
                     OutlinedButton(onClick = callbacks.onOpenEntry) { Text(Strings.AGENT_ENTER) }
                 }
-                if (state.canScanQr) Note(Strings.AGENT_SCAN_NOTE)
+                if (state.canScanQr) Note(Strings.agentScanNote(state.qrScanner))
             }
             is PairingStep.Entering -> {
                 Note(Strings.AGENT_PAIR_HOWTO)

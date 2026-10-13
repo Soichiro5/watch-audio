@@ -48,6 +48,11 @@ targets:
         UILaunchScreen: {}
         CADisableMinimumFrameDurationOnPhone: true
         NSSpeechRecognitionUsageDescription: 録音した会話を iPhone 上（オンデバイス）で文字起こしするために使用します。音声が端末の外に送られることはありません。
+        # Agent access (#185): the QR code of the PC's pairing, read on the device; asked only when scanning.
+        NSCameraUsageDescription: PC とのペアリング用の QR コードを読み取るために使用します。映像は端末内で QR コードを探すことにだけ使い、保存も送信もしません。
+        # Agent access (#185): the connection to the user's own paired PC on the same network, only while it is on.
+        NSLocalNetworkUsageDescription: エージェント連携を ON にしている間だけ、同じネットワーク内のペアリングした PC につなぐために使用します。
+        NSBonjourServices: [_watchaudio-mcp._tcp]
         # Transcription of received chunks while charging (BGProcessingTask, see IosAppGraph.kt).
         UIBackgroundModes: [processing]
         BGTaskSchedulerPermittedIdentifiers: [app.watchaudio.transcribe]
@@ -219,6 +224,31 @@ targets:
         CLANG_MODULES_AUTOLINK: NO
         EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
 
+  # Agent access end to end (#185) in the app process: the app's own IosAgentAccess (Keychain,
+  # Network.framework) pairs with the real bridge CLI on the CI host (127.0.0.1, the simulator shares
+  # the host's network) and answers its agent's tool calls while on, then stops when turned off, when
+  # the app leaves the screen and when the pairing is revoked. Driven by
+  # .github/scripts/ios-agent-access.sh; linked like PlaybackTests.
+  AgentAccessTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests/AgentAccessTests
+      - Tests/TestSupport
+    dependencies:
+      - target: iosApp
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).agentaccesstests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/WatchAudio.app/WatchAudio
+        BUNDLE_LOADER: $(TEST_HOST)
+        FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../../shared/ui/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
+        OTHER_SWIFT_FLAGS: [$(inherited), -Xfrontend, -disable-autolink-framework, -Xfrontend, ComposeApp]
+        CLANG_MODULES_AUTOLINK: NO
+        EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
+
 schemes:
   # The watch app is built and embedded through iosApp's target dependency; listing it
   # here as well would restrict the scheme to watchOS destinations.
@@ -250,3 +280,9 @@ schemes:
         PlaybackTests: [test]
     test:
       targets: [PlaybackTests]
+  AgentAccessTests:
+    build:
+      targets:
+        AgentAccessTests: [test]
+    test:
+      targets: [AgentAccessTests]

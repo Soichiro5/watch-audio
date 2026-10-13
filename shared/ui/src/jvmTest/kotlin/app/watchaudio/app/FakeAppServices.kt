@@ -191,6 +191,9 @@ class FakeAgentAccess(
     private val now: () -> Long,
     override val canScanQr: Boolean = true,
     var code: String = "123456",
+    override val qrScanner: QrScanner = QrScanner.CAMERA_APP_PHOTO,
+    override val foregroundOnly: Boolean = false,
+    override val localNetworkSetting: LocalNetworkSetting = LocalNetworkSetting.NEARBY_DEVICES,
 ) : AgentAccess {
     val mutableState = MutableStateFlow(AgentAccessState())
     override val state: StateFlow<AgentAccessState> = mutableState.asStateFlow()

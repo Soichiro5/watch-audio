@@ -2,7 +2,7 @@
 
 Apple Watch で装着中ずっと録音 → WatchConnectivity で iPhone へ（ローカルのみ）→ iPhone 上の Speech フレームワーク（SpeechAnalyzer / SpeechTranscriber, iOS 26, 日本語）でオンデバイス文字起こし → Kotlin 共有コードのローカル SQLite に保存、までの Apple 側の実装。充電中・睡眠中などの欠損は許容する。
 
-関連 Issue: #15（watchOS 録音）、#17（転送 + ACK）、#21（iOS 文字起こし）、#41（コンプリケーション、§14）
+関連 Issue: #15（watchOS 録音）、#17（転送 + ACK）、#21（iOS 文字起こし）、#41（コンプリケーション、§14）、#185（エージェント連携、§16）
 
 ## 1. コンポーネント
 
@@ -30,6 +30,8 @@ Apple Watch で装着中ずっと録音 → WatchConnectivity で iPhone へ（�
 | 〃 | `IosSpeechTranscriber.kt` | Swift 実装を受けるコールバック型インターフェースと共通 `Transcriber` へのアダプタ（英語オンのときは共通の `SegmentRouting` で英語のパスを足す、#170） |
 | 〃 | `IosTranscriptionCheck.kt` | シミュレータ検査用: 音声ファイルを一時 DB にチャンクとして取り込み、本番と同じアダプタと `TranscriptionPipeline` で文字起こしして保存されたセグメントを返す（`EnglishTranscriptionTests` が使う。アプリの DB には触れない） |
 | 〃 | `MainViewController.kt` | Compose UI のエントリ（Swift から引数なしで呼ぶ） |
+| iOS（エージェント連携） | `apps/ios/App/Agent/*.swift`、`shared/ui/src/iosMain/.../IosAgent*.kt` | PC のエージェントへの LAN 内の受け渡し（#185）。一覧は §16 |
+| テスト | `apps/ios/Tests/AgentAccessTests/AgentAccessTests.swift` | アプリをホストにした XCTest。CI のホストの本物の橋渡し CLI と 127.0.0.1 でペアリング → ON の間だけ答える → OFF・画面から外れる・取り消しで止まる（§16） |
 | テスト | `apps/ios/Tests/ProtocolTests/ChunkProtocolTests.swift` | Swift プロトコル実装と録音形式（`RecordingFormat.current`）を Kotlin のテストベクタ（`shared/protocol/testdata/*.json`）で検証 |
 | 〃 | `apps/ios/Tests/WatchLogicTests/RecorderPolicyTests.swift` | 停止理由（充電・低電池・ストレージ不足・割り込み・ユーザー停止・レコーダー停止）の判定、ヒステリシス（10% 未満で停止・15% 以上で再開）、自動再開、通知、無音判定（ピーク −40 dBFS）、停止理由がマニフェストの `endReason` に書かれること（#15）、しきい値が共通の `RecorderRules` と一致すること、Mark でチャンクを閉じずオフセットが manifest に入ること（#137） |
 | 〃 | `apps/ios/Tests/WatchLogicTests/ChunkOutboxTests.swift` | 送信キュー: 最終 ACK で削除、CORRUPT で再送（上限つき）、REJECTED は保持、ACK が無ければ 15 分後に再送、送信中は二重送信しない、再起動後も残り再送される、強制終了からの復旧（#17） |
@@ -124,7 +126,7 @@ sequenceDiagram
 Swift から見える Kotlin API（`ComposeApp` フレームワーク、静的）:
 
 ```swift
-IosAppGraph.shared.start(transcriber: SpeechAnalyzerTranscriber())   // App.init で 1 回（BGTask 登録を含む）
+IosAppGraph.shared.start(transcriber: SpeechAnalyzerTranscriber(), agent: AgentPlatform())   // App.init で 1 回（BGTask 登録を含む。agent はエージェント連携 §16）
 IosAppGraph.shared.inboxDirectoryPath()                               // 受信ファイルの退避先
 IosAppGraph.shared.ingest(manifestJson: json, filePath: path) { ackJson in … }  // ackJson: String?（nil = ACK しない）
 IosAppGraph.shared.setAppActive(active: true / false)                 // scenePhase .active / .background
@@ -203,6 +205,8 @@ Android と同じ共通の `DiagnosticsLog`（`shared/pipeline`、形式・上�
 | ターゲット | キー | 値・目的 |
 | --- | --- | --- |
 | iosApp | `NSSpeechRecognitionUsageDescription` | 音声認識の用途説明。オンボーディングで `SFSpeechRecognizer.requestAuthorization` を念のため要求する（SpeechTranscriber に必要かは未確認。`SpeechTests` は許可状態をログに出す） |
+| 〃 | `NSCameraUsageDescription` | エージェント連携（§16）の PC の QR コードを端末内で読む。「カメラで QR コードを読み取る」を押したときだけ求める |
+| 〃 | `NSLocalNetworkUsageDescription`、`NSBonjourServices: [_watchaudio-mcp._tcp]` | エージェント連携（§16）: ON の間だけ、同じネットワーク内のペアリングした PC へつなぐ・探す |
 | 〃 | `UIBackgroundModes: [processing]` | BGProcessingTask |
 | 〃 | `BGTaskSchedulerPermittedIdentifiers: [app.watchaudio.transcribe]` | `IosAppGraph.PROCESSING_TASK_ID` と一致させること |
 | WatchApp | `NSMicrophoneUsageDescription` | 録音 |
@@ -255,6 +259,7 @@ iPhone アプリはマイクを使わない（録音は Watch だけ。再生は
 17. オフロード（#156）: 16 の音声入りバックアップを「ファイルに保存」で保存した後、状態タブの「バックアップ済みの音声」に件数と最後のバックアップの日付が出る → 「バックアップ済みの音声を端末から外す」→ 確認で「端末から外す」→ タイムラインの発話に ▶ の代わりに「バックアップにあり」、検索は今までどおり。同じバックアップを「バックアップから戻す」で戻すと再生できる。共有シートを保存先を選ばずに閉じたバックアップでは、外せる音声が増えない。
 18. 差分バックアップ（#164）: 16 の全体のバックアップを保存した後、カードに「前回のバックアップ: <日時>（全体）」が出て「差分」が選ばれ、録音が増えると差分の件数と大きさが増える → 差分を作成して「ファイルに保存」（ファイル名が `…-diff.wabackup`）→ 前回の表示が「差分。… の後の 1個目」になる。共有シートを保存先なしで閉じた差分では前回の表示が変わらない。別の端末（Android を含む）で全体と差分を（逆順でも）戻すと、元の端末と同じチャンク・文字起こし・音声になる。タイムラインで 1 日を削除すると「差分」が選べなくなり、理由が出る。
 19. 英語（#170、§7.5）: 状態タブ「英語も文字起こしする」をオン → 「英語モデルを準備中…」→「準備完了」（初回は OS がダウンロード。Wi-Fi・モバイル通信での挙動と所要時間を記録）。英語だけの会話と、日本語と英語が交互の会話を録音 → タイムラインで英語の発話が英語（`lang = en`）で、日本語はオフのときと同じに保存される。日本語だけの会話（相づち・小声・雑音を含む）でオンにしても英語に化けないこと。英語オンで文字起こし時間（診断ログの RTF）と電池がどれだけ増えるかを、日本語だけの録音（無音の多い 1 時間）と英語の録音で測る。確信度の閾値 0.5 が合っているかを、誤って英語になった・英語が残らなかった発話の数で確かめる。オフにすると英語のパスが止まり、`AssetInventory.reservedLocales` から `en_US` が消える（モデルの削除は OS 次第）。機内モードで初回にオン → 失敗の表示と「英語モデルをもう一度準備」、通信を戻すと準備できる。
+20. エージェント連携（#185、§16）: PC で `npx watch-audio-mcp pair` → iPhone の状態タブ「エージェント連携を開く」→「カメラで QR コードを読み取る」→ カメラの許可（初回だけ）→ ターミナルの QR（明るいテーマ・暗いテーマ）が読める → ローカルネットワークの許可（初回だけ）→ 両方に同じ 6 桁 → ペアリングできる。家の Wi-Fi とテザリングで、ON にしてから PC のエージェントが読めるまでの時間（mDNS で見つかるか、前回のアドレスでつながるか）。ON のままホーム画面に戻る・画面を消すと OFF になり、PC 側の呼び出しが答えなくなる（戻っても OFF）。ローカルネットワークを設定アプリで OFF にしてから ON → 「ローカルネットワークへのアクセスが許可されていない」の表示。カメラを拒否してから読み取り → 文字列の入力の案内。アプリを削除して入れ直したときに鍵が作り直され、ペアリングのやり直しになること。AP アイソレーションの Wi-Fi での表示。ON の 30 分間の電池消費。
 
 ## 12. 既知のリスク・制約
 
@@ -267,6 +272,7 @@ iPhone アプリはマイクを使わない（録音は Watch だけ。再生は
 - **割り込み後の再開**: watchOS が中断後にバックグラウンドでの録音再開を許すかは M0-3 の検証課題。失敗時は通知でユーザーに促す。
 - **無音判定の閾値**（ピーク −40 dBFS、Wear OS と共通）は仮の値。実機で誤判定（会話を捨てる）が無いことを最優先で確認する。`peakPower` は `updateMeters()` を呼んだ時点のメーターの値で、Wear OS の `getMaxAmplitude()`（1 秒間の最大値）とは集計の仕方が違うので、短い音を取りこぼさないかもあわせて確かめる。
 - **BGProcessingTask の実行頻度**は OS 任せ（充電中・アイドル時）。前面で開いている間が最も確実。
+- **エージェント連携（§16）は画面に出している間だけ**: iOS の制約。PC のエージェントに長く使わせるには iPhone の画面を出しておく必要がある（自動ロックで画面が消えると OFF）。mDNS で見つけたサービスを UDP の `NWConnection` でアドレスに解決する方法と、ローカルネットワークの許可を拒否したときの `NWConnection` の状態（`waiting` の理由）は、シミュレータではローカルネットワークの許可がないため実機でのみ確かめられる（#60）。
 - 共有パイプラインの `TranscriptionPipeline` はキャンセル時の `resetInterrupted()` が（キャンセル済みのため）実行されない場合があるが、iOS では毎回の実行前に `recoverInterrupted()` を呼んで補っている。
 
 ## 13. 音声ファイル入力（開発用）
@@ -368,7 +374,7 @@ cat "$DATA/Library/Application Support/WatchAudio/diagnostics.csv"
 共通コード（`shared/pipeline` の `UnigramTokenizer`・`EmbeddingPassages`・`Int8Vectors`・`VectorCache`・`SemanticIndex`・`HybridSearch`・`EmbeddingStep`、`shared/platform` の `PositionalFile`（iOS は POSIX の `pread` / `pwrite`））は iOS 向けにもコンパイルされる（`compileKotlinIosSimulatorArm64`）。iOS に足りないのは次の 3 つ:
 
 1. **埋め込みモデルを動かす `EncoderRuntime`**（`input_ids` と `attention_mask` → `last_hidden_state`）。
-2. **モデルのダウンロード**: iOS アプリは今どこにも通信しない（音声認識のモデルは OS が管理）。ruri-v3-30m（約 44 MB、Android と同じ URL・SHA-256、`ModelManifest.embeddingFiles` 相当）を取るには、`URLSession`（バックグラウンドの構成）での取得・`Sha256` での検証・原子的な配置が要る。`tools/privacy-check` は `URLSession` を検査対象にしているので、許可リスト（`ALLOWED_API_USES` / `ALLOWED_URL_PREFIXES`）と 02 §7.2 を更新する（iOS で初めての通信箇所になる）。
+2. **モデルのダウンロード**: iOS アプリはインターネットへは通信しない（音声認識のモデルは OS が管理。通信はエージェント連携の LAN 内の接続だけ、§16）。ruri-v3-30m（約 44 MB、Android と同じ URL・SHA-256、`ModelManifest.embeddingFiles` 相当）を取るには、`URLSession`（バックグラウンドの構成）での取得・`Sha256` での検証・原子的な配置が要る。`tools/privacy-check` は `URLSession` を検査対象にしているので、許可リスト（`ALLOWED_API_USES` / `ALLOWED_URL_PREFIXES`）と 02 §7.2 を更新する（iOS で初めてのインターネットへの通信箇所になる）。
 3. **組み込み**: `IosAppGraph` で `SemanticIndex`（`Application Support/WatchAudio/search/`。ディレクトリの保護クラスとバックアップ除外を引き継ぐ）と `EmbeddingStep` を作り、`TranscriptionRun(embedding = …)` と `IosAppServices.semanticSearch` に渡す。BGProcessingTask（充電中）でバックフィルが進む。
 
 `EncoderRuntime` の候補:
@@ -381,3 +387,36 @@ cat "$DATA/Library/Application Support/WatchAudio/diagnostics.csv"
 | D. `NLContextualEmbedding`（Apple） | OS のトークン単位の埋め込みを平均して文ベクトルにする | ダウンロードもライブラリも不要（OS 管理のアセット） | 別のモデル（検索用に学習されていない、512 次元程度）で品質が未知（M0-6 §6.3）。Mac で m0-6 §9.2 と同じ評価をしてから判断する |
 
 **推奨**: A。Android と同じモデルなので、品質・速度の根拠（m0-6 §9）と `tools/harness` の評価がそのまま使え、トークナイザ・passage・キャッシュ・統合は共通コードのまま。B は A のサイズや保守に問題が出たときの代替、D はアプリサイズを最優先にする場合の候補（評価が先）。後続の Issue で、(1) Swift の `EncoderRuntime` と注入、(2) iOS のモデルダウンロード（privacy-check の更新を含む）、(3) シミュレータでの一致テスト（`testdata/ruri-reference.json` と同じ値になるか）と CI、(4) 実機の速度・メモリ・アプリサイズ、を扱う。
+
+## 16. エージェント連携（#185）
+
+PC の AI エージェントが、本人が ON にしている間だけ、ペアリングした PC の橋渡し CLI（`tools/agent-bridge`）を通してこの iPhone の文字起こしを読む（方針は [research/agent-access.md](../research/agent-access.md)、共通の仕組みは [02 §6.9](../architecture/02-architecture.md#69-エージェント連携uc11182183184185)、画面は [phone-ui.md §1.13](phone-ui.md#113-エージェント連携184)、Android は [android-phone.md §4.6](android-phone.md#46-エージェント連携184)）。画面（`AgentScreen`）・道具・範囲・量の上限・アクセス履歴・接続の段取り（`AgentConnector`・`pairOver`）は Android と共通で、iOS はつなぎ方と鍵とカメラだけを持つ。
+
+**Android との違い: アプリを画面に出している間だけ答える。** iOS には前景サービスがなく、裏に回ったアプリは数秒で止められて接続を保てない。そこで `IosAppGraph.setAppActive(false)`（`scenePhase` が `.background`: ホーム画面に戻る・別のアプリに切り替える・画面を消す）で **OFF にする**（各 PC に `bye(access_off)` を送って閉じる。送り終えるまでの数秒はバックグラウンドタスクで保つ）。戻っても OFF のまま（本人がもう一度 ON にする）。止まったまま「ON」と表示し続けないため、一時停止ではなく OFF にした。画面には「iPhone では、このアプリを画面に出している間だけ PC に答えます…」（`Strings.AGENT_FOREGROUND_ONLY`、`AgentAccess.foregroundOnly`）を出す。コントロールセンターを引き出したなどの `.inactive` では止めない。自動 OFF（既定 30 分、15 分〜2 時間）は Android と同じで、タイマーで OFF にし、タイマーが遅れても期限後の呼び出しには答えない（`AgentConnector` の `allowed`）。
+
+| 部分 | ファイル | 内容 |
+| --- | --- | --- |
+| 状態と段取り（Kotlin） | `shared/ui/src/iosMain/.../IosAgentAccess.kt` | `AgentAccess` の実装。ON の間 `AgentConnector` を `Dispatchers.Default` で動かす（道具の実行をメインスレッドに載せない）、期限のタイマー、画面から外れたら OFF、ローカルネットワークの拒否の表示（`AgentAccessState.localNetworkDenied`）。音声の切り出し `IosAudioClipSource` も同じファイル |
+| 接続の規則（Kotlin） | `IosAgentTransport.kt` | `AgentTransport` の実装。宛先は LAN の IP リテラルだけ（`isLanHost`）、フレーム（4 バイトの長さ + JSON）の読み書き、鍵と証明書の用意（`SelfSignedCertificate` で作り Keychain の鍵で署名） |
+| Swift へのつなぎ（Kotlin） | `IosAgentPlatform.kt` | Swift が実装するコールバック型のインターフェース（`IosSpeechTranscriber` と同じ形）と結果のクラス |
+| 鍵（Swift） | `apps/ios/App/Agent/AgentKeychain.swift` | Keychain の EC P-256 の秘密鍵（`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`、iCloud キーチェーンにも端末のバックアップにも乗らない、取り出さない）と自己署名の証明書、両者を組にした `SecIdentity`。鍵の指紋（SPKI の SHA-256、base64url）の計算 |
+| 通信（Swift） | `AgentNetwork.swift` | Network.framework。`NWConnection` の相互 TLS 1.3（最小・最大とも 1.3、`sec_protocol_options_set_local_identity` で自分の鍵、`sec_protocol_options_set_verify_block` で PC の鍵の指紋だけを通す。認証局もホスト名も使わない）。宛先は `IPv4Address(host)` / `IPv6Address(host)` で解釈できる IP リテラルだけで、DNS を引かない。mDNS は `NWBrowser`（`_watchaudio-mcp._tcp` を探すだけで告知しない）。スマホは待ち受けない（`NWListener` は `tools/privacy-check` が禁止） |
+| QR（Swift） | `QrScannerViewController.swift` | カメラの映像から AVFoundation の QR 検出（`AVCaptureMetadataOutput`、`.qr` だけ）で読む。読めたらすぐ止める |
+| 音声（Swift） | `AgentAudioClip.swift` | `get_audio_clip`: チャンクの AAC を `AVAudioFile` + `AVAudioConverter` で 16 kHz モノラルに戻して切り出す（最長 30 秒、WAV にするのは `shared/agent`）。音声を許可したペアリングだけ |
+| まとめ（Swift） | `AgentPlatform.swift` | 上の 4 つを Kotlin の `IosAgentPlatform` として公開し、`IosAppGraph.start(transcriber:agent:)` に渡す |
+
+- **鍵を Secure Enclave に置かない理由**: シミュレータに Secure Enclave がなく、CI（`ios.yml`）でアプリと同じ経路を確かめられないため。Network.framework に渡すのはどちらにしても Keychain の `SecIdentity`。鍵が守る文字起こしそのものは同じ保護クラス（初回ロック解除後に読める）のファイルにあるので、Keychain の `ThisDeviceOnly` で守りの水準は揃う。鍵が消えれば（アプリの削除後の再インストールで Keychain が残らない場合など）作り直し、ペアリングもやり直しになる。
+- **QR を VisionKit の `DataScannerViewController` で読まない理由**: Apple のドキュメントは DataScanner の処理が端末内で完結するかを明記していない（VisionKit は Live Text や「画像を調べる」も含む枠組み）。AVFoundation の QR 検出はカメラの取り込みの仕組みに入っている端末内の機能で、映像はどこにも保存・送信しない。A12 以降という DataScanner の条件も要らない。カメラの許可（`NSCameraUsageDescription`）は「カメラで QR コードを読み取る」を押したときにだけ求める。拒否されていれば「カメラを使えません…」と出し、ターミナルの文字列の入力（共通の画面にある）を案内する。シミュレータにはカメラがないので、CI は文字列の入力の経路で確かめる。
+- **ローカルネットワークの許可**: 最初に LAN の PC へつなぐとき（ペアリング、または ON のとき）と mDNS の探索で iOS が尋ねる（`NSLocalNetworkUsageDescription`、`NSBonjourServices: [_watchaudio-mcp._tcp]`）。iOS には許可の状態を前もって調べる API がないので、接続が拒否された（`NWPath.UnsatisfiedReason.localNetworkDenied`、または `kDNSServiceErr_PolicyDenied`）ときに、ペアリング中なら「ローカルネットワークへのアクセスが許可されていないため…設定アプリの「プライバシーとセキュリティ」→「ローカルネットワーク」で watch-audio を許可してください」、ON の間なら同じ文をスイッチの下に出す。
+- **mDNS で見つけた PC のアドレス**: `NWBrowser` の結果（サービスの名前と TXT の `n`・`h`）を、UDP の `NWConnection` で名前の解決だけさせて IPv4 のアドレスとポートにする（UDP は接続の準備で何も送らないので、PC には何も届かない）。TCP で解決すると PC の CLI が「ペアリングしていない相手の接続を拒否しました」と記録するため使わない。見つからなければ前回のアドレス（ペアリング時は QR のアドレス）へつなぐ。どちらでも最後に鍵の指紋で本物か確かめる。
+- **端末名**: ペアリングのとき PC に `UIDevice.model`（「iPhone」）を名乗る。利用者が付けた端末名は送らない。
+- **アクセス履歴の保持**: 90 日より前を消す（起動時の `IosAppGraph.start` と画面を開いたとき）。
+- **意味検索**: iOS には埋め込みモデルがまだない（§15）ので、`search_transcripts` はキーワード検索だけ（道具の答えにもそう書かれる）。
+
+**検証**:
+
+- 画面の文言（iOS の表示: 前面にある間だけの注意・カメラのボタン・ローカルネットワークの案内）: `AppUiTest.agentAccessOnIos`、`AgentViewModelTest.iosWording`（`jvmTest`）。
+- Kotlin の iosMain: Linux の klib クロスコンパイル。
+- 実際の接続（CI `ios.yml` の「Agent access on the iOS simulator」、`.github/scripts/ios-agent-access.sh`）: CI のホストで本物の CLI（`tools/agent-bridge/e2e/emulator-host.ts`）を動かし、アプリをホストにした XCTest（`apps/ios/Tests/AgentAccessTests`）がアプリの `IosAgentAccess`（Keychain の鍵、Network.framework、共通の接続と道具）を画面と同じ呼び方で動かす。シミュレータはホストのネットワークを共有するので、CLI には `127.0.0.1` でつなぐ。他のステップは未署名（`CODE_SIGNING_ALLOWED=NO`）でビルドするが、シミュレータは未署名のアプリに Keychain を使わせない（`errSecMissingEntitlement`、-34018）ので、このステップだけ ad hoc 署名し、スクリプトがその場で書く Keychain のアクセスグループ（`keychain-access-groups`）を付ける（CI だけ。リポジトリに entitlements は置かない。署名した実機のアプリは自分のアプリ ID がアクセスグループになるので追加の entitlement は要らない）。(1) `testPair`: 文字起こしを入れ、CLI が出した文字列でペアリング、6 桁の確認コードが CLI と一致（スクリプトが比べる）、範囲の既定はテキストのみ。(2) `testServe`: ON → PC のエージェントの `search_transcripts` に答える → OFF で答えない → ON → **アプリが画面から外れると OFF**（戻っても OFF）→ ON → 取り消しで答えない。CLI 側は「答える / 答えない」の 6 回の切り替わりを順に確かめ、外向きの接続がないこと（no-egress のガード）も確かめる。`get_audio_clip` は音声を許可したペアリングの写しで WAV が返ることを確かめる（本物のペアリングの既定はテキストのみなので、CLI からの呼び出しは拒否される）。mDNS は CLI に告知させ、シミュレータの `NWBrowser` で見えたか（`AGENT_CHECK phase=mdns`）を記録する（合否には使わない。GitHub の macOS ランナーのシミュレータでは 10 秒で何も見えなかった（`seen=0`）ので、接続は前回のアドレス（ペアリング時の 127.0.0.1 + CLI のポート）の経路で確かめている。mDNS の経路は実機で確かめる）。
+- Kotlin 側の規則: `IosAgentTransportTest`（`shared/ui` の iosTest、CI の「Shared tests (iOS simulator)」）が、偽の Swift 側で、証明書を Keychain の鍵に 1 回だけ作ること・LAN の IP リテラル以外を Swift に渡さないこと（`8.8.8.8`・ホスト名は拒否、`[fe80::1]` は括弧を外して渡す）・ローカルネットワークの拒否を知らせること・フレームの往復を確かめる。
+- 実機でのみ確かめること（#60）: 下の「実機チェックリスト」20。

@@ -466,6 +466,10 @@ def _check_info_keys(target: str, info: dict, rel: str, report: Report) -> None:
     for mode in modes if isinstance(modes, list) else [modes]:
         if mode not in rules["background_modes"]:
             report.add("ios", rel, 0, f"UIBackgroundModes '{mode}' of {target} is not in policy.IOS_TARGETS")
+    services = info.get("NSBonjourServices") or []
+    for service in services if isinstance(services, list) else [services]:
+        if service not in policy.IOS_BONJOUR_SERVICES:
+            report.add("ios", rel, 0, f"NSBonjourServices '{service}' of {target} is not in policy.IOS_BONJOUR_SERVICES")
 
 
 def _check_entitlements(keys, where: str, rel: str, report: Report) -> None:

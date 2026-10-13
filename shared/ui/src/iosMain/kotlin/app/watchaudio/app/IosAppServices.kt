@@ -64,6 +64,8 @@ class IosAppServices internal constructor(
     override val diagnostics: DiagnosticsLog,
     private val onTranscriptionSettingsChanged: () -> Unit = {},
     private val onPrepareEnglishModel: () -> Unit = {},
+    /** Agent access (#185): only while the app is on screen. */
+    override val agentAccess: AgentAccess? = null,
 ) : AppServices {
     private var player: AVAudioPlayer? = null
 

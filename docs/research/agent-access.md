@@ -74,7 +74,7 @@ PC のエージェント（Claude Desktop / Code、ローカル LLM など）
 ### 4.3 ペアリングと通信
 
 - PC で `npx watch-audio-mcp pair` を実行すると、ターミナルに QR コードが出る。QR には PC の公開鍵の指紋、待ち受けのアドレス、使い捨てのペアリング用の値（有効 5 分）を入れる。スマホのアプリの「エージェント連携」→「PC をペアリング」で読み取り（カメラの代わりに短いコードの入力もできる）、スマホの公開鍵を PC に渡す。両方の画面に同じ確認コード（6 桁）を出し、本人が照合して確定する。**パスワードや固定のトークンは使わない**。
-- QR の読み取りは、カメラの常時の許可を増やさない方法を優先する（iOS は `DataScannerViewController`。iOS はカメラの許可が要るので、読み取るときだけ求める）。Android は当初 Google のコードスキャナを予定していたが、その依存（ML Kit の共通ライブラリ）が API の利用状況のログを Google に送る送信部（`transport-backend-cct`）を含むため採らず、**システムのカメラのアプリで撮った写真を端末上の ZXing で読む**ことにした（カメラの許可は不要、写真はすぐ消す。#184、[platforms/android-phone.md §4.6](../platforms/android-phone.md#46-エージェント連携184)）。
+- QR の読み取りは、カメラの常時の許可を増やさない方法を優先する（iOS はカメラの許可が要るので、読み取るときだけ求める。当初は VisionKit の `DataScannerViewController` を予定していたが、Apple のドキュメントがその処理が端末内で完結するかを明記していないため、**AVFoundation の QR 検出（`AVCaptureMetadataOutput`）をアプリのカメラの画面で使う**ことにした。#185、[platforms/ios-watchos.md §16](../platforms/ios-watchos.md#16-エージェント連携185)）。Android は当初 Google のコードスキャナを予定していたが、その依存（ML Kit の共通ライブラリ）が API の利用状況のログを Google に送る送信部（`transport-backend-cct`）を含むため採らず、**システムのカメラのアプリで撮った写真を端末上の ZXing で読む**ことにした（カメラの許可は不要、写真はすぐ消す。#184、[platforms/android-phone.md §4.6](../platforms/android-phone.md#46-エージェント連携184)）。
 - **通信は相互 TLS 1.3**（決定 §6）。どちらも自己署名の証明書を使い、ペアリング時に交換した鍵の指紋で固定して照合する（認証局は使わない）。OS 標準の TLS（Android は `SSLSocket`、iOS は Network.framework、CLI は Node の `tls`）を使い、暗号のライブラリは足さない。
 - 秘密鍵は Android Keystore / iOS Keychain（`ThisDeviceOnly`）、CLI 側は OS の鍵保管庫（macOS キーチェーン、Windows 資格情報マネージャー、Linux Secret Service）に置き、使えない環境では権限 600 のファイルに置く。
 - ペアリングの取り消しはスマホ側の登録を消すだけで即座に効く。
@@ -142,7 +142,7 @@ UC11（#130）の sub-issue として次の順に進める。
 1. [#182](https://github.com/Soichiro5/watch-audio/issues/182) 共通部分（`shared/*`）: 道具のロジック（検索・日ごとのタイムライン・前後の文脈）、範囲と量の制限、ペアリングとアクセス履歴の DB（追記のみのマイグレーション）、やり取りの形式。JVM のテストで確かめる
 2. [#183](https://github.com/Soichiro5/watch-audio/issues/183) 橋渡し CLI（`tools/agent-bridge`、TypeScript）: stdio の MCP サーバー、TLS の待ち受け、ペアリング、鍵の保管、mDNS。テスト用の偽スマホ（JVM）との E2E を CI で回す
 3. [#184](https://github.com/Soichiro5/watch-audio/issues/184) Android: エージェント連携の画面（ペアリング・ON/OFF・範囲・履歴・取り消し）、前景サービスでの接続、`tools/privacy-check` の許可リストの更新 — **実装済み**（画面は `shared/ui` で iOS と共通、接続の維持は `shared/agent` の `AgentConnector`。前景サービスの種類は `connectedDevice`、鍵は Keystore の EC P-256、QR はカメラのアプリの写真 + ZXing。エミュレータでホストの CLI とペアリング → 応答 → OFF・取り消しで停止を確認。実機の確認は #61）
-4. [#185](https://github.com/Soichiro5/watch-audio/issues/185) iOS: 同じ画面と、前面にある間だけの接続、ローカルネットワークの許可
+4. [#185](https://github.com/Soichiro5/watch-audio/issues/185) iOS: 同じ画面と、前面にある間だけの接続、ローカルネットワークの許可 — **実装済み**（画面は `shared/ui` の共通のもの、接続は共通の `AgentConnector` を Network.framework の相互 TLS 1.3 と `NWBrowser` の上で動かす。アプリが画面から外れると OFF。鍵は Keychain の EC P-256（`ThisDeviceOnly`。Secure Enclave はシミュレータで確かめられないため使わない）、QR はアプリのカメラの画面で AVFoundation の QR 検出（VisionKit の DataScanner は端末内で完結するかが文書化されていないため採らない）。iOS シミュレータでホストの CLI とペアリング → 応答 → OFF・画面から外れる・取り消しで停止を CI で確認。実機の確認は #60、[platforms/ios-watchos.md §16](../platforms/ios-watchos.md#16-エージェント連携185)）
 
 ## 8. 参考
 

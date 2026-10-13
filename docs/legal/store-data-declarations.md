@@ -7,7 +7,7 @@
 ## 1. 申告の前提
 
 - アプリは録音・文字起こし・その他のユーザーデータを**端末の外へ送らない**。運営者のサーバーはない。解析・広告・クラッシュ送信の SDK はない。アカウントもない。
-- 端末外への通信は、Android スマホの文字起こしモデルのダウンロード（Hugging Face・GitHub の公開ファイル）と、iOS が行う音声認識モデルのダウンロード（OS 管理）だけ。ユーザーデータは送らない。例外はエージェント連携（Android、#184）: ユーザーが ON にしている間だけ、ユーザーがペアリングした自分の PC へ、同じネットワーク内で直接（相互 TLS）つなぎ、その PC のエージェントが読んだ分を渡す。開発者のサーバー・中継はない。
+- 端末外への通信は、Android スマホの文字起こしモデルのダウンロード（Hugging Face・GitHub の公開ファイル）と、iOS が行う音声認識モデルのダウンロード（OS 管理）だけ。ユーザーデータは送らない。例外はエージェント連携（Android #184、iPhone #185）: ユーザーが ON にしている間だけ（iPhone はアプリを画面に出している間だけ）、ユーザーがペアリングした自分の PC へ、同じネットワーク内で直接（相互 TLS）つなぎ、その PC のエージェントが読んだ分を渡す。開発者のサーバー・中継はない。
 - Watch → スマホの転送は、ユーザー自身の端末間の直接通信（Wear OS: 近くで直接つながったノードだけ、Apple: WatchConnectivity）。開発者には届かない。
 - ユーザーが自分で端末外に出せるのは、診断ログの書き出し（OS の共有シートで送り先をユーザーが選ぶ）、データの書き出し（#155。文字起こし・マーク・ギャップと任意で音声を ZIP にして、Android は SAF の保存ダイアログ、iOS は共有シートでユーザーが選んだ保存先にだけ書く）と、暗号化バックアップ（#40。同じ保存先の選び方で、ユーザーのパスフレーズで暗号化したファイルを書く。復元はユーザーが選んだファイルを読むだけ）だけ。パスフレーズと鍵は端末の外に出さない。課金（#34）・AI 機能（P2）は未公開。公開時にこの文書とポリシーを更新する。
 
@@ -28,7 +28,8 @@
 - **診断ログの書き出し**: ユーザーが共有シートで送り先を選んだときだけ端末外に出る。ユーザーが問い合わせで運営者にメール送付した場合も、メールアプリからユーザーが送るもので、アプリが送信するのではない。そのため「収集なし」のままでよいと考えているが、問い合わせ窓口で診断ログを受け付ける運用にするなら、Apple の「任意の開示（optional disclosure）」の条件に当たるかを確認する。
 - **データの書き出し（#155）**: 診断ログと同じく、ユーザーが自分で選んだ保存先（共有シート）に、ユーザーの操作でだけ書き出す。開発者には届かないので「収集なし」のままと整理している。
 - **暗号化バックアップ（#40）**: データの書き出しと同じく、ユーザーが選んだ保存先にユーザーの操作でだけ書き出す（中身は暗号化済み）。開発者には届かないので「収集なし」のままと整理している。
-- **暗号化の輸出コンプライアンス（App Store Connect の「暗号化の書類」、Info.plist の `ITSAppUsesNonExemptEncryption`）**: 暗号化バックアップは、標準の暗号（AES-256・HMAC-SHA-256・PBKDF2）を OS の API（iOS は CommonCrypto と Security、Android は `javax.crypto`）で使い、ユーザーのデータの保護（パスフレーズによるファイルの暗号化）にだけ使う。独自の暗号アルゴリズムはない。通信の暗号化（HTTPS）は OS のものだけ。米国の輸出規則では「標準の暗号を OS 経由で使う」アプリは多くの場合免除（Apple の質問では「免除の対象となる暗号のみ」）に当たるが、**データの暗号化（通信以外）が目的の場合の扱いは運営者の確認が必要**（Apple の「輸出コンプライアンス」の質問に答える、必要なら年次の自己分類報告）。決まったら `apps/ios/project.yml` の Info.plist に `ITSAppUsesNonExemptEncryption` を設定する（未設定だと申請のたびに質問される）。Google Play には同様の申告はないが、配信国の規制は運営者が確認する。
+- **エージェント連携（#185）**: ユーザーが自分でペアリングし ON にした、ユーザー自身の PC への LAN 内の直接の接続（相互 TLS 1.3）で、開発者・第三者のサーバーを通らない。Apple の定義の「収集」（開発者や第三者がアクセスできる状態になること）に当たらないので「データの収集なし」のままと整理している（Google Play の §3.1 と同じ整理）。PC のエージェントがクラウドの LLM を使う場合にその提供元へ渡るのは、ユーザーが選んだ PC のソフトウェアの動作で、アプリの送信ではない（ポリシー第 7 条で説明）。**レビューで確認する**。QR コードはアプリのカメラの画面で端末内で読み、映像は保存も送信もしない。
+- **暗号化の輸出コンプライアンス（App Store Connect の「暗号化の書類」、Info.plist の `ITSAppUsesNonExemptEncryption`）**: 暗号化バックアップは、標準の暗号（AES-256・HMAC-SHA-256・PBKDF2）を OS の API（iOS は CommonCrypto と Security、Android は `javax.crypto`）で使い、ユーザーのデータの保護（パスフレーズによるファイルの暗号化）にだけ使う。独自の暗号アルゴリズムはない。通信の暗号化（HTTPS）は OS のものだけ。米国の輸出規則では「標準の暗号を OS 経由で使う」アプリは多くの場合免除（Apple の質問では「免除の対象となる暗号のみ」）に当たるが、**データの暗号化（通信以外）が目的の場合の扱いは運営者の確認が必要**（Apple の「輸出コンプライアンス」の質問に答える、必要なら年次の自己分類報告）。決まったら `apps/ios/project.yml` の Info.plist に `ITSAppUsesNonExemptEncryption` を設定する（未設定だと申請のたびに質問される）。**エージェント連携（#185）で、アプリが通信の暗号化（相互 TLS 1.3）を自分で設定して使うようになった**: 暗号は OS（Network.framework・Security）のもので独自の実装はなく、ユーザー自身の PC との認証と通信の保護にだけ使うが、HTTPS で OS に任せるだけの場合と答えが変わるか（免除の対象のままか）は**運営者が判断する**（この作業では決めない）。Google Play には同様の申告はないが、配信国の規制は運営者が確認する。
 - **OS のクラッシュ・解析共有**: ユーザーが「App デベロッパと共有」を許可した場合に Apple 経由で届くクラッシュ情報は、Apple が集めるもので、アプリの申告対象ではないと理解している（要確認）。
 
 ### 2.2 審査メモ（App Review への説明文）
@@ -58,6 +59,12 @@
 1. iPhone アプリを起動し、オンボーディング（同意・通知・音声認識の許可・モデルの準備）を進める
 2. Apple Watch アプリで録音を開始し、手首を下ろして画面を消したまま 5〜10 分話す（録音は 5 分ごとに区切って iPhone に送られる）
 3. iPhone の「タイムライン」で文字起こしと再生、「検索」でキーワード検索、「状態」タブで受信状況・保持期間・すべてのデータの削除・データの書き出し・暗号化バックアップ・診断ログの書き出しを確認する
+
+**ローカルネットワーク・カメラ（iPhone の `NSLocalNetworkUsageDescription`・`NSBonjourServices`・`NSCameraUsageDescription`、エージェント連携 #185）**
+
+> 「エージェント連携」は、ユーザーが自分の PC（PC 用のコマンドラインのプログラム watch-audio-mcp）をペアリングし、アプリで ON にしている間だけ、同じネットワーク内のその PC に直接つなぎ、PC の AI エージェントが文字起こしを読めるようにする機能です。ローカルネットワークはこの接続と、その PC を見つける Bonjour（`_watchaudio-mcp._tcp` を探すだけ）にだけ使います。運営者のサーバーはなく、インターネットは使いません。アプリを画面から外すと OFF になります。カメラは、ペアリングのときに PC の画面の QR コードを読むためだけに使い（押したときだけ許可を求める）、映像は保存も送信もしません。審査では、QR の代わりに PC が表示する文字列を入力してペアリングすることもできます。
+
+> "Agent access" lets the user pair their own PC (running our command-line companion, watch-audio-mcp) and, only while they turn it on in the app, connects directly to that PC on the same network so that the AI agent on the PC can read the transcripts. Local network access is used only for this connection and for finding that PC with Bonjour (browsing `_watchaudio-mcp._tcp` only). There is no server of ours and no internet use. Access turns off when the app leaves the screen. The camera is used only to read the QR code on the PC's screen when pairing (permission is asked only then); camera images are neither stored nor sent. For review, pairing also works by typing the text the PC shows instead of scanning the QR code.
 
 iPhone アプリの `NSMicrophoneUsageDescription` は削除した（#159）。iPhone アプリはマイクを使わない（録音は Watch のみ）: `apps/ios/App` と `shared/ui/src/iosMain` に `AVAudioRecorder`・`AVAudioEngine` の入力・録音の許可の要求はなく、`AVAudioSession` は再生用の `AVAudioSessionCategoryPlayback`（`IosAppServices.kt`）だけ、文字起こしは受け取ったファイルを `AVAudioFile` で読む（`SpeechTranscription.swift`）。iPhone が要求する許可は通知と音声認識だけ（`IosPermissions.kt`）。Watch アプリの `NSMicrophoneUsageDescription` は録音に必要なので残す。ios.yml の Release ジョブが、iPhone アプリの Info.plist にこのキーがないことを `IPHONE_MICROPHONE_CHECK` で確かめる。
 
@@ -269,7 +276,8 @@ Play Console で権限の用途を聞かれたとき（アプリのコンテン�
 - [ ] Wear OS の品質ガイドラインとの照合
 - [x] データの書き出し（#155）をポリシー（第 7 条）とこの申告に追記した
 - [x] 暗号化バックアップ（#40）をポリシー（第 7 条）とこの申告に追記した
-- [ ] 暗号化の輸出コンプライアンスの回答を運営者が決め、`ITSAppUsesNonExemptEncryption` を設定する（§2.1）
+- [ ] 暗号化の輸出コンプライアンスの回答を運営者が決め、`ITSAppUsesNonExemptEncryption` を設定する（§2.1。エージェント連携の相互 TLS（#185）を含めて判断する）
+- [ ] エージェント連携（#185）の App Privacy の整理（§2.1「データの収集なし」のまま）を運営者・レビューで確認する
 - [ ] 課金（#34）を公開するときに、ポリシーとこの申告を更新する
 
 ## 8. 使っているライブラリとモデルのライセンス（#167）
