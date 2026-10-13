@@ -88,6 +88,12 @@ object DiagnosticEvents {
 
     /** The user offloaded backed-up audio (#156): counts only (chunks, bytes). */
     const val AUDIO_OFFLOADED = "audio_offloaded"
+
+    /** A run of hour summaries (#27): counts, outcome and duration only, never content. */
+    const val SUMMARY_RUN = "summary_run"
+
+    /** An hour could not be summarized (#27): the hour's start time and the error type only. */
+    const val SUMMARY_FAILED = "summary_failed"
 }
 
 /**
