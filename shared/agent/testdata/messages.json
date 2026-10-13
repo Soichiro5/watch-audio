@@ -1,0 +1,84 @@
+{
+  "hello_phone": {
+    "type": "hello",
+    "protocol": 1,
+    "role": "phone",
+    "name": "Pixel 9",
+    "software": "watch-audio-android/0.1.0"
+  },
+  "hello_bridge": {
+    "type": "hello",
+    "protocol": 1,
+    "role": "bridge",
+    "name": "taro-macbook",
+    "software": "watch-audio-mcp/0.1.0"
+  },
+  "pair_request": {
+    "type": "pair_request",
+    "protocol": 1,
+    "token": "AQIDBAUGBwgJCgsMDQ4PEA",
+    "name": "Pixel 9"
+  },
+  "pair_pending": {
+    "type": "pair_pending"
+  },
+  "pair_confirm": {
+    "type": "pair_confirm"
+  },
+  "pair_result": {
+    "type": "pair_result",
+    "name": "taro-macbook",
+    "port": 47823
+  },
+  "rpc_call": {
+    "type": "rpc",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 7,
+      "method": "tools/call",
+      "params": {
+        "name": "search_transcripts",
+        "arguments": {
+          "query": "予算",
+          "limit": 5
+        }
+      }
+    }
+  },
+  "rpc_result": {
+    "type": "rpc",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 7,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Search results for \"予算\": 1 utterance\n\nutterance 42 | 2026-10-12T14:03:05+09:00 | keyword | 来期の予算を確認する"
+          }
+        ],
+        "isError": false
+      }
+    }
+  },
+  "rpc_error": {
+    "type": "rpc",
+    "message": {
+      "jsonrpc": "2.0",
+      "id": 8,
+      "error": {
+        "code": -32601,
+        "message": "Method not found: resources/list"
+      }
+    }
+  },
+  "error": {
+    "type": "error",
+    "code": "pairing_expired",
+    "message": "the pairing value expired"
+  },
+  "bye": {
+    "type": "bye",
+    "reason": "access_off"
+  }
+}

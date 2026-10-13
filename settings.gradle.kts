@@ -28,6 +28,7 @@ include(":shared:protocol")
 include(":shared:platform")
 include(":shared:db")
 include(":shared:pipeline")
+include(":shared:agent") // agent access: MCP tool logic, scope, access log, phone-bridge wire format (#182)
 include(":shared:testing") // test setup shared by the modules' tests
 include(":shared:ort") // ONNX Runtime C API through JNA (JVM + Android) for the embedding model (#24)
 
