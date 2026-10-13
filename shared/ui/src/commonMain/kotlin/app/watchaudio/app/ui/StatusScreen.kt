@@ -75,6 +75,9 @@ internal fun StatusScreen(
     backup: BackupUiState,
     backupCallbacks: BackupCallbacks,
     onShowLicenses: () -> Unit = {},
+    /** Agent access (#184): null where the platform has none; else whether it is on now. */
+    agentAccessOn: Boolean? = null,
+    onShowAgentAccess: () -> Unit = {},
     scrollState: ScrollState = rememberScrollState(),
     modifier: Modifier = Modifier,
 ) {
@@ -93,8 +96,16 @@ internal fun StatusScreen(
         state.storage?.let { StorageCard(it, state.storageActions, storageCallbacks, timeZone) }
         ExportCard(export, state.storage?.breakdown?.audioBytes, exportCallbacks)
         BackupCard(backup, state.storage?.breakdown?.audioBytes, timeZone, backupCallbacks)
+        agentAccessOn?.let { on ->
+            Section(Strings.AGENT_TITLE) {
+                Text(Strings.AGENT_CARD_NOTE, style = MaterialTheme.typography.bodySmall)
+                if (on) Text(Strings.AGENT_NOTIFICATION_TITLE, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                OutlinedButton(onClick = onShowAgentAccess) { Text(Strings.AGENT_OPEN) }
+            }
+        }
         Section(Strings.PRIVACY_TITLE) {
             Text(Strings.PRIVACY_NOTE, style = MaterialTheme.typography.bodyMedium)
+            if (agentAccessOn != null) Text(Strings.PRIVACY_NOTE_AGENT, style = MaterialTheme.typography.bodySmall)
         }
         DiagnosticsCard(state.diagnosticsExport, onExportDiagnostics)
         Section(Strings.GUIDE_TITLE) {

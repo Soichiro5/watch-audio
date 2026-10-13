@@ -155,6 +155,15 @@ interface AppServices {
      * messages or user data). [Diagnostics.NONE] where the platform keeps no log.
      */
     val diagnostics: Diagnostics get() = Diagnostics.NONE
+
+    /**
+     * Agent access (UC11, #184 / #185): the paired PC's agent reads transcripts over the local
+     * network while the user has it on. Null where the platform does not offer it yet; the status
+     * tab then has no 「エージェント連携」 entry.
+     */
+    val agentAccess: AgentAccess? get() = null
+
+    val supportsAgentAccess: Boolean get() = agentAccess != null
 }
 
 /** MIME type of encrypted backup files (#40) for [AppServices.saveExport]: they have no registered type. */

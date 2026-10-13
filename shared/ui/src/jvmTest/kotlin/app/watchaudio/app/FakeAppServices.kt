@@ -1,6 +1,10 @@
 package app.watchaudio.app
 
 import app.watchaudio.app.licenses.NoticeApp
+import app.watchaudio.core.agent.AgentLimits
+import app.watchaudio.core.agent.LinkState
+import app.watchaudio.core.agent.PairOutcome
+import app.watchaudio.core.agent.PairingUri
 import app.watchaudio.core.backup.BackupRestorer
 import app.watchaudio.core.backup.BackupWriter
 import app.watchaudio.core.db.LocalStore
@@ -39,6 +43,7 @@ class FakeAppServices(
     override val backupRestorer: BackupRestorer = BackupRestorer(store, Path(audioRoot)),
     override val noticeApps: Set<NoticeApp> = NoticeApp.entries.toSet(),
     override val semanticSearch: SemanticSearch? = null,
+    override val agentAccess: AgentAccess? = null,
 ) : AppServices {
     val mutableStatus = MutableStateFlow(initialStatus)
     override val status: StateFlow<ProcessingStatus> = mutableStatus.asStateFlow()
@@ -174,5 +179,64 @@ class FakeSemanticSearch(
     override suspend fun search(query: String, limit: Int): List<VectorHit> {
         queries += query
         return hits.take(limit)
+    }
+}
+
+/**
+ * [AgentAccess] without a network: pairing shows [code] and stores the pairing like the real
+ * `AgentLink.pair` once confirmed; turning on marks every active pairing connected.
+ */
+class FakeAgentAccess(
+    private val store: LocalStore,
+    private val now: () -> Long,
+    override val canScanQr: Boolean = true,
+    var code: String = "123456",
+) : AgentAccess {
+    val mutableState = MutableStateFlow(AgentAccessState())
+    override val state: StateFlow<AgentAccessState> = mutableState.asStateFlow()
+
+    /** What [scanQr] answers. */
+    var scan: QrScan = QrScan.Cancelled
+    var scans = 0
+        private set
+
+    /** Set to answer [pair] without the code (e.g. [PairAttempt.Unreachable]). */
+    var pairAnswer: PairAttempt? = null
+    val pairedUris = mutableListOf<PairingUri>()
+    val turnOnRequests = mutableListOf<Int>()
+    var turnOffs = 0
+        private set
+
+    /** Answer of [turnOn] other than the normal one, e.g. [TurnOnResult.PERMISSION_DENIED]. */
+    var turnOnAnswer: TurnOnResult? = null
+
+    override suspend fun scanQr(): QrScan {
+        scans++
+        return scan
+    }
+
+    override suspend fun pair(uri: PairingUri, confirm: suspend (code: String) -> Boolean): PairAttempt {
+        pairedUris += uri
+        pairAnswer?.let { return it }
+        if (!confirm(code)) return PairAttempt.Done(PairOutcome.Declined)
+        val pairing = store.transaction {
+            val id = addAgentPairing(uri.name, uri.fingerprint, uri.addresses.first(), AgentLimits.DEFAULT_SCOPE_DAYS, false, now())
+            agentPairing(id)!!
+        }
+        return PairAttempt.Done(PairOutcome.Paired(pairing))
+    }
+
+    override suspend fun turnOn(minutes: Int): TurnOnResult {
+        turnOnRequests += minutes
+        turnOnAnswer?.let { return it }
+        val active = store.read { agentPairings() }.filter { it.isActive }
+        if (active.isEmpty()) return TurnOnResult.NO_PAIRINGS
+        mutableState.value = AgentAccessState(now() + minutes * 60_000L, active.associate { it.id to LinkState.CONNECTED })
+        return TurnOnResult.ON
+    }
+
+    override fun turnOff() {
+        turnOffs++
+        mutableState.value = AgentAccessState()
     }
 }
