@@ -238,17 +238,34 @@ object Strings {
     fun agentOnUntil(time: String) = "$time に自動で OFF になります"
     const val AGENT_DURATION = "自動で OFF にするまで"
     fun agentMinutes(minutes: Int) = if (minutes % 60 == 0) "${minutes / 60}時間" else "${minutes}分"
+    const val AGENT_TURN_ON_FAILED = "接続の準備（この端末の鍵の用意）ができませんでした。もう一度試してください。"
     const val AGENT_NO_PAIRINGS = "まだ PC をペアリングしていません。下の「PC をペアリング」から始めてください。"
     const val AGENT_LINK_CONNECTED = "接続中"
     const val AGENT_LINK_SEARCHING = "PC を探しています（PC でエージェントが動いていて、同じネットワークにいるか確認してください）"
     const val AGENT_PERMISSION_DENIED =
         "ローカル ネットワークへのアクセスが許可されていないため、PC につなげません。アプリの設定で「付近のデバイス」を許可してください。"
+    /** iOS (#185): the Local Network switch lives in the Settings app's privacy section. */
+    const val AGENT_PERMISSION_DENIED_LOCAL_NETWORK =
+        "ローカルネットワークへのアクセスが許可されていないため、PC につなげません。設定アプリの「プライバシーとセキュリティ」→「ローカルネットワーク」で watch-audio を許可してください。"
+    fun agentPermissionDenied(setting: LocalNetworkSetting) = when (setting) {
+        LocalNetworkSetting.NEARBY_DEVICES -> AGENT_PERMISSION_DENIED
+        LocalNetworkSetting.LOCAL_NETWORK -> AGENT_PERMISSION_DENIED_LOCAL_NETWORK
+    }
+    /** iOS (#185): no foreground service, so access ends when the app leaves the screen. */
+    const val AGENT_FOREGROUND_ONLY =
+        "iPhone では、このアプリを画面に出している間だけ PC に答えます。ホーム画面に戻る・別のアプリに切り替える・画面を消すと、エージェント接続は OFF になります。"
 
     const val AGENT_PAIR_TITLE = "PC をペアリング"
     const val AGENT_PAIR_HOWTO =
         "PC のターミナルで npx watch-audio-mcp pair を実行し、表示された QR コードを読み取ります（有効 5 分・使い捨て）。"
     const val AGENT_SCAN = "QR コードを撮影して読み取る"
     const val AGENT_SCAN_NOTE = "カメラのアプリで QR コードを撮影します。写真は読み取ったらすぐに削除します。"
+    /** iOS (#185): the app's own camera view. */
+    const val AGENT_SCAN_LIVE = "カメラで QR コードを読み取る"
+    const val AGENT_SCAN_LIVE_NOTE =
+        "カメラの許可は読み取るときだけ求めます。映像は端末の中で QR コードを探すことにだけ使い、保存も送信もしません。"
+    fun agentScan(scanner: QrScanner) = if (scanner == QrScanner.LIVE_CAMERA) AGENT_SCAN_LIVE else AGENT_SCAN
+    fun agentScanNote(scanner: QrScanner) = if (scanner == QrScanner.LIVE_CAMERA) AGENT_SCAN_LIVE_NOTE else AGENT_SCAN_NOTE
     const val AGENT_ENTER = "文字列を入力"
     const val AGENT_ENTER_LABEL = "ターミナルに出た文字列（watchaudio-mcp://pair?…）"
     const val AGENT_ENTER_SUBMIT = "つなぐ"
@@ -267,6 +284,10 @@ object Strings {
         "「$pc」とペアリングしました。PC のエージェントの MCP 設定に watch-audio-mcp を追加し、エージェント接続を ON にすると使えます。"
     const val AGENT_SCAN_NOT_FOUND = "写真から QR コードを読み取れませんでした。もう一度撮影するか、文字列を入力してください。"
     const val AGENT_SCAN_UNAVAILABLE = "カメラのアプリが見つかりません。ターミナルに出た文字列を入力してください。"
+    const val AGENT_SCAN_LIVE_UNAVAILABLE =
+        "カメラを使えません（カメラの許可がないか、この端末にカメラがありません）。設定アプリで watch-audio のカメラを許可するか、ターミナルに出た文字列を入力してください。"
+    fun agentScanUnavailable(scanner: QrScanner) =
+        if (scanner == QrScanner.LIVE_CAMERA) AGENT_SCAN_LIVE_UNAVAILABLE else AGENT_SCAN_UNAVAILABLE
     const val AGENT_BAD_CODE = "PC のペアリング用の QR コード（watchaudio-mcp://pair?…）ではありません。"
     const val AGENT_EXPIRED = "ペアリング用の値の有効期限（5 分）が切れています。PC で pair をもう一度実行してください。"
     const val AGENT_UNREACHABLE =

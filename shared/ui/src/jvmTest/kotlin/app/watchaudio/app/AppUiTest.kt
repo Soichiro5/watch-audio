@@ -623,6 +623,7 @@ class AppUiTest {
         waitForText(Strings.AGENT_INTRO)
         waitForText(Strings.AGENT_NO_PAIRINGS)
         waitForText(Strings.AGENT_HISTORY_EMPTY)
+        assertTrue(onAllNodes(hasText(Strings.AGENT_FOREGROUND_ONLY)).fetchSemanticsNodes().isEmpty())
         screenshot("agent-empty")
 
         // Pair by the string the CLI printed.
@@ -681,6 +682,39 @@ class AppUiTest {
 
         onNodeWithText(Strings.AGENT_BACK).performClick()
         waitForText(Strings.AGENT_OPEN)
+    }
+
+    /**
+     * iOS (#185): the screen says access lasts only while the app is on screen, offers the live
+     * camera, and points to Settings when the system refused the local network while on.
+     */
+    @Test
+    fun agentAccessOnIos() = runDesktopComposeUiTest(width = 412, height = 915) {
+        runBlocking { store.updateSettings { it.copy(onboardingCompleted = true) } }
+        val agent = FakeAgentAccess(
+            store,
+            { now },
+            qrScanner = QrScanner.LIVE_CAMERA,
+            foregroundOnly = true,
+            localNetworkSetting = LocalNetworkSetting.LOCAL_NETWORK,
+        )
+        val fingerprint = encodeBase64Url(ByteArray(32) { 9 })
+        runBlocking { store.transaction { addAgentPairing("仕事用ノート", fingerprint, "192.168.1.20:47823", 30, false, now) } }
+        showApp(FakeAppServices(store, audioRoot = audioDir.path, initialStatus = ProcessingStatus(asrModel = ModelState.Ready), agentAccess = agent))
+        waitForText(Strings.TAB_STATUS)
+        onNodeWithText(Strings.TAB_STATUS).performClick()
+        onNodeWithText(Strings.AGENT_OPEN).performScrollTo().performClick()
+        waitForText(Strings.AGENT_FOREGROUND_ONLY)
+        waitForText(Strings.AGENT_SCAN_LIVE)
+        waitForText(Strings.AGENT_SCAN_LIVE_NOTE)
+        assertTrue(onAllNodes(hasText(Strings.AGENT_SCAN)).fetchSemanticsNodes().isEmpty())
+        onNodeWithText(Strings.AGENT_SWITCH_DETAIL_OFF).performClick()
+        waitForText("仕事用ノート: ${Strings.AGENT_LINK_CONNECTED}")
+        agent.mutableState.value = agent.mutableState.value.copy(localNetworkDenied = true)
+        waitForText(Strings.AGENT_PERMISSION_DENIED_LOCAL_NETWORK)
+        onNodeWithText(Strings.AGENT_SWITCH_SECTION).performScrollTo()
+        screenshot("agent-ios")
+        assertNoEnglish()
     }
 
     /** Agent access is offered only where the platform has it. */

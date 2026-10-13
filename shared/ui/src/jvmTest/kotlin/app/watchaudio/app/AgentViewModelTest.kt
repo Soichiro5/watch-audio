@@ -82,6 +82,43 @@ class AgentViewModelTest {
         assertTrue(agent.pairedUris.isEmpty())
     }
 
+    /** iOS (#185): the live camera, the Local Network setting and the foreground-only note. */
+    @Test
+    fun iosWording() = runVmTest {
+        val ios = FakeAgentAccess(
+            store,
+            { now },
+            qrScanner = QrScanner.LIVE_CAMERA,
+            foregroundOnly = true,
+            localNetworkSetting = LocalNetworkSetting.LOCAL_NETWORK,
+        )
+        val vm = AgentViewModel(FakeAppServices(store, agentAccess = ios), NowProvider { now }, scope = backgroundScope)
+        backgroundScope.launch { vm.state.collect {} }
+        runCurrent()
+        assertEquals(QrScanner.LIVE_CAMERA, vm.state.value.qrScanner)
+        assertTrue(vm.state.value.foregroundOnly)
+        ios.scan = QrScan.Unavailable
+        vm.scan()
+        runCurrent()
+        assertEquals(PairingStep.Failed(Strings.AGENT_SCAN_LIVE_UNAVAILABLE), vm.state.value.pairing)
+        vm.dismissPairing()
+        ios.pairAnswer = PairAttempt.PermissionDenied
+        vm.openEntry()
+        vm.setEntryText(uri.toUri())
+        vm.submitEntry()
+        runCurrent()
+        assertEquals(PairingStep.Failed(Strings.AGENT_PERMISSION_DENIED_LOCAL_NETWORK), vm.state.value.pairing)
+        store.transaction { addAgentPairing("laptop", uri.fingerprint, null, 30, false, now) }
+        ios.turnOnAnswer = TurnOnResult.PERMISSION_DENIED
+        vm.setOn(true)
+        runCurrent()
+        assertEquals(Strings.AGENT_PERMISSION_DENIED_LOCAL_NETWORK, vm.state.value.message)
+        ios.turnOnAnswer = TurnOnResult.FAILED
+        vm.setOn(true)
+        runCurrent()
+        assertEquals(Strings.AGENT_TURN_ON_FAILED, vm.state.value.message)
+    }
+
     @Test
     fun typedStringAndItsFailures() = runVmTest {
         val vm = viewModel()
