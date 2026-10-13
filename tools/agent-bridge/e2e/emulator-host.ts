@@ -1,6 +1,8 @@
-// The PC's side of the Android emulator check of agent access (#184, .github/scripts/agent-access.sh):
-// the real bridge CLI on the CI host, which the emulator reaches at 10.0.2.2. Not a test file
-// (`npm run test:e2e` does not run it); the script runs it in two phases:
+// The PC's side of the Android emulator check of agent access (#184, .github/scripts/agent-access.sh)
+// and of the iOS simulator check (#185, .github/scripts/ios-agent-access.sh): the real bridge CLI on
+// the CI host, which the emulator reaches at 10.0.2.2 and the simulator at 127.0.0.1
+// (AGENT_HOST_ADDRESS). Not a test file (`npm run test:e2e` does not run it); the scripts run it in
+// two phases:
 //
 //   node dist/e2e/emulator-host.js pair <home>
 //       runs `watch-audio-mcp pair --address 10.0.2.2`, prints `URI <pairing uri>` for the phone,
@@ -8,8 +10,9 @@
 //   node dist/e2e/emulator-host.js serve <home>
 //       starts the CLI as an MCP server (as an agent would), calls search_transcripts every second
 //       and prints one line per change: `PHASE connected <text>` once the phone answers,
-//       `PHASE disconnected` once it no longer does, four times (on, off, on again, revoked);
-//       exits 0 after the last one, 1 on a timeout.
+//       `PHASE disconnected` once it no longer does, AGENT_HOST_PHASES times (default 4: on, off, on
+//       again, revoked; iOS: 6, with the app leaving the screen in between); exits 0 after the last
+//       one, 1 on a timeout. AGENT_HOST_MDNS=1 also advertises over mDNS (the emulator cannot see it).
 //
 // Both run under the no-egress guard: the CLI must not open any outbound connection.
 
@@ -64,7 +67,7 @@ async function serve(): Promise<number> {
   let stderr = '';
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: ['--import', guard, cli, '--no-mdns'],
+    args: ['--import', guard, cli, ...(process.env.AGENT_HOST_MDNS === '1' ? [] : ['--no-mdns'])],
     env,
     stderr: 'pipe',
   });
@@ -74,8 +77,10 @@ async function serve(): Promise<number> {
   });
   const client = new Client({ name: 'emulator-check', version: '0' });
   await client.connect(transport);
-  // AGENT_HOST_PHASES shortens the sequence for a local run against the JVM fake phone.
-  const expected = ['connected', 'disconnected', 'connected', 'disconnected'].slice(0, Number(process.env.AGENT_HOST_PHASES ?? 4));
+  // AGENT_HOST_PHASES: connected and disconnected alternately, this many times (fewer for a local run
+  // against the JVM fake phone).
+  const phases = Number(process.env.AGENT_HOST_PHASES ?? 4);
+  const expected = Array.from({ length: phases }, (_, i) => (i % 2 === 0 ? 'connected' : 'disconnected'));
   const deadline = Date.now() + 15 * 60_000;
   let step = 0;
   while (step < expected.length && Date.now() < deadline) {
