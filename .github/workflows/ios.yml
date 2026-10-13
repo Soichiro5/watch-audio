@@ -4,7 +4,7 @@ name: iOS & watchOS
 # Apple-side or shared code changes (or on demand).
 on:
   push:
-    branches: [main]
+    branches: [main, feat/178-ios-semantic-search]
     paths:
       - "apps/ios/**"
       - "shared/**"
@@ -249,6 +249,39 @@ jobs:
             echo "Playback check in the app process (PlaybackTests):"
             echo '```'
             cat build/swift-evidence/hosted-playback.txt 2>/dev/null || echo "no evidence written"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      # #178: the embedding model of semantic search for EmbeddingTests, the same pinned files and
+      # SHA-256 as the app downloads; cached by the script's hash (it holds the pinned commits), so
+      # only a change of the model downloads it again.
+      - name: Cache the embedding model
+        if: (success() || failure()) && steps.build-ios.outcome == 'success'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/embedding-model
+          key: embedding-model-${{ hashFiles('.github/scripts/ios-embedding-model.sh') }}
+
+      - name: Embedding model
+        id: embedding-model
+        if: (success() || failure()) && steps.build-ios.outcome == 'success'
+        run: .github/scripts/ios-embedding-model.sh build/embedding-model
+
+      # #178: semantic search in the app process: ONNX Runtime (Swift package) against the JVM's
+      # reference vectors and the Python reference, a paraphrase found by the embedding step and the
+      # hybrid search, and the app's Wi-Fi-only download continuing an interrupted file.
+      - name: Semantic search on the iOS simulator
+        if: (success() || failure()) && steps.embedding-model.outcome == 'success'
+        timeout-minutes: 15
+        run: |
+          status=0
+          UNINSTALL_APP=app.watchaudio .github/scripts/xcode-test.sh EmbeddingTests "Semantic search on the iOS simulator (#178)" \
+            OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES || status=$?
+          {
+            echo "Semantic search checks in the app process (EmbeddingTests):"
+            echo '```'
+            cat build/swift-evidence/embedding-*.txt 2>/dev/null || echo "no evidence written"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit $status
