@@ -202,30 +202,28 @@ CREATE TABLE highlight_citation (
 
 ## 5. 守ること（プライバシー）
 
+**基準（2026-10-13 にオーナーが確認）**: 絶対に端末の外に出さないのは、**音声・文字起こし・要約などの個人的な内容**。内容を含まない診断・利用状況のログ（SDK が送る処理時間・設定・識別子など）は、それだけで不可とはしない。採るときは `tools/privacy-check` の許可リストに理由を書き、プライバシーポリシーとストアの申告に書く。
+
 ### 5.1 端末から出ないことの確認
 
 - **iOS**: `SystemLanguageModel`（端末内のモデル）だけを使う。`PrivateCloudComputeLanguageModel`・他社のモデルの `LanguageModel` 実装・`LanguageModelFeedbackAttachment`（Apple へのフィードバック用の添付）は使わない。PCC に要る entitlement も付けない。モデルのダウンロードは OS（Apple Intelligence）が行い、アプリは URL を持たない（音声認識のモデルと同じ扱い）。
 - **Android（LiteRT-LM）**: 推論は自分のプロセスの計算だけ。通信はモデルのダウンロード（既存の `ModelDownloader`、URL はコミット固定、SHA-256 で検証、Wi-Fi のみ）だけで、既存の「通信はモデルのダウンロードだけ」に収まる。
-- **Android（ML Kit を選んだ場合）**: 推論は AICore の中で端末内に閉じるが、**アプリのプロセスから Google へ利用状況の送信がある**（§2.2）。今の約束（通信はモデルのダウンロードと本人の PC だけ）を変えることになるので、推奨しない。
+- **Android（ML Kit を選んだ場合）**: 推論は AICore の中で端末内に閉じ、文字起こし・要約は送られない。**アプリのプロセスから Google へ利用状況のログ（端末情報・アプリの版・処理時間・API の設定・識別子・言語。内容は含まない）が送られる**（§2.2）。上の基準では内容を含まないので採れる。採るなら、privacy-check の許可リスト、プライバシーポリシー、ストアの申告（Google の SDK による「アプリの情報とパフォーマンス」「端末などの ID」の収集）を更新する。
 
 ### 5.2 `tools/privacy-check` の扱い
 
 - **iOS**: 出荷されるソースで `FoundationModels` を `import` してよいのは 1 つのファイル（例 `apps/ios/App/Llm/OnDeviceLanguageModel.swift`）だけにし、`PrivateCloudComputeLanguageModel`・`LanguageModelFeedbackAttachment` を `GUARDED_APIS` に加えて、どのファイルでも不可にする。entitlements の許可リストは変えない（PCC の entitlement が足されると失敗する）。Swift パッケージ（他社のモデルのパッケージ）は今の `IOS_SWIFT_PACKAGES` の許可リストで止まる。
-- **Android**: `DENIED_DEPENDENCIES` に `com.google.mlkit`・`com.google.android.datatransport`・`firebase-encoders` を加える（ML Kit を採らない場合）。LiteRT-LM を採るなら `ALLOWED_RESOLVED_DEPENDENCIES` に `com.google.ai.edge.litertlm:litertlm-android`（端末内の LLM、通信なし）と `com.google.code.gson:gson` を加え、モデルの URL（コミット固定）を `ALLOWED_URL_PREFIXES` に加える。マージ後のマニフェストに INTERNET 以外の権限が増えないことは今の検査で確かめられる。
+- **Android**: ML Kit を採るなら、`ALLOWED_RESOLVED_DEPENDENCIES` に `com.google.mlkit:genai-*`・`com.google.mlkit:common`・`com.google.android.datatransport`・`firebase-encoders` を「内容を含まない利用状況のログだけを送る」と理由を書いて加え、マージ後のマニフェストに増える権限（INTERNET など）を `library_permissions` に書く。ML Kit を採らない場合は、これらを `DENIED_DEPENDENCIES` に加える。LiteRT-LM を採るなら `ALLOWED_RESOLVED_DEPENDENCIES` に `com.google.ai.edge.litertlm:litertlm-android`（端末内の LLM、通信なし）と `com.google.code.gson:gson` を加え、モデルの URL（コミット固定）を `ALLOWED_URL_PREFIXES` に加える。マージ後のマニフェストに INTERNET 以外の権限が増えないことは今の検査で確かめられる。
 
 ### 5.3 プライバシーポリシーの文言（案）
 
 - 第 4 条（端末の中での処理）に追加: 「要約（その日の会話を 1 時間ごとにまとめる機能）も端末の中で作ります。iPhone では Apple Intelligence の端末内のモデル（Apple の Foundation Models）を使い、Apple のサーバーで処理する仕組み（Private Cloud Compute）は使いません。Android では、ダウンロードした要約のモデル（Google の Gemma）を本アプリの中で動かします。文字起こしや要約を外部に送ることはありません。」
 - 第 5 条（通信）に追加（Android で LiteRT-LM を採る場合）: 「要約を使うと選んだときに限り、要約のモデル（約 2.6 GB）を Hugging Face から Wi-Fi 接続時にダウンロードします。」iPhone は「Apple Intelligence のモデルは iOS が管理し、本アプリはダウンロードしません」。
-- ストアの申告（[store-data-declarations](../legal/store-data-declarations.md)）は「データの収集なし」のまま変わらない（ML Kit を採らない場合）。
+- ストアの申告（[store-data-declarations](../legal/store-data-declarations.md)）: iPhone と、Android で LiteRT-LM を採る場合は「データの収集なし」のまま。Android で ML Kit を採る場合は、Google の SDK が集める「アプリの情報とパフォーマンス（診断）」「端末などの ID」を申告し、ポリシーにも Google の利用状況のログを書く。
 
-### 5.4 CLAUDE.md の文言（案。オーナーの決定を受けて lead が直す）
+### 5.4 CLAUDE.md の文言
 
-今の「AI summaries/chat are out of scope until the core goal is met (`P2` label).」を次に置き換える。
-
-> - AI features (UC9) start **on-device only** (owner decision 2026-10-13, #39; design `docs/research/on-device-llm.md`): hour summaries with Apple Foundation Models' on-device `SystemLanguageModel` (never Private Cloud Compute or third-party `LanguageModel`s) and, on Android, a model the app runs itself (no ML Kit GenAI: it sends usage logs from our process). Cloud LLMs (BYOK, #26) and chat (#31) stay `P2`.
-
-（Android の手段（§8 の 3）が決まってから、括弧の中を決定に合わせる。）
+§5 の基準と §8 の決定を受けて、lead が CLAUDE.md の「Local only」と「AI summaries/chat are out of scope」の行を直した（この文書と同じ PR）。
 
 ## 6. テストのしかた
 
@@ -277,10 +275,10 @@ CREATE TABLE highlight_citation (
 
 | # | 決めること | 選択肢 | 推奨 | 決める人 |
 | --- | --- | --- | --- | --- |
-| 1 | 最初に作るもの | (a) 1 時間ごとの要約（#27）を「この日を要約」ボタンで作る / (b) 充電中に自動で作る / (c) 1 日の振り返り（#29）から | **(a)**。データの形は (b) と同じにして、評価のあとで (b) を足す | オーナー |
-| 2 | 自動で作るか | (a) 押したときだけ / (b) 設定「充電中に自動で要約する」（既定オフ）/ (c) 既定オン | 最初は **(a)**、評価と実機の確認のあと **(b)** を足す。既定オンにするかはその後 | オーナー |
-| 3 | Android の手段 | (A) ML Kit GenAI（Gemini Nano）: アプリのプロセスから Google へ利用状況の送信あり、前面でだけ動く、対応端末は上位機種中心、Prompt API の日本語は未記載 / (B) LiteRT-LM + Gemma 4 E2B を本人が選んだらダウンロード（約 2.6 GB、Wi-Fi）: 送信なし、充電中のバックグラウンドで動く、RAM 8 GB 程度の端末なら機種を問わない / (C) Android は当面なし（iOS だけ先に） | **(B)**。ただし iOS を先に作り、Android は評価（§7）で Gemma 4 E2B の日本語の要約が使える品質と分かってから着手する | オーナー |
-| 4 | 送信のある依存（ML Kit）を受け入れるか | 受け入れる（ポリシーとストアの申告を変える）/ 受け入れない | **受け入れない**（#184 と同じ判断。「通信はモデルのダウンロードだけ」を保つ） | オーナー |
+| 1 | 最初に作るもの | (a) 1 時間ごとの要約（#27）を「この日を要約」ボタンで作る / (b) 充電中に自動で作る / (c) 1 日の振り返り（#29）から | **(a)**。データの形は (b) と同じにして、評価のあとで (b) を足す | オーナー（2026-10-13 に (a) で決定） |
+| 2 | 自動で作るか | (a) 押したときだけ / (b) 設定「充電中に自動で要約する」（既定オフ）/ (c) 既定オン | 最初は **(a)**、評価と実機の確認のあと **(b)** を足す。既定オンにするかはその後 | オーナー（2026-10-13 に (a) で決定） |
+| 3 | Android の手段 | (A) ML Kit GenAI（Gemini Nano）: ダウンロード不要、内容を含まない利用状況のログを Google に送る、前面でだけ動く、対応端末は上位機種中心、Prompt API はベータで日本語は未記載 / (B) LiteRT-LM + Gemma 4 E2B を本人が選んだらダウンロード（約 2.6 GB、Wi-Fi）: 送信なし、充電中のバックグラウンドで動く、RAM 8 GB 程度の端末なら機種を問わない / (C) Android は当面なし（iOS だけ先に） | §5 の基準（内容を出さない）では (A) も採れる。最初の機能は押したときだけ・画面を開いている間に作るので、前面だけの制約は効かない。**対応端末では (A)、非対応端末の (B) は評価のあとで検討**を推奨。iOS を先に作り、Android に着手するときにオーナーと最終確認する | オーナー（確認待ち） |
+| 4 | 内容を含まない利用状況のログを送る依存（ML Kit）を受け入れるか | 受け入れる（許可リスト・ポリシー・ストアの申告を変える）/ 受け入れない | **受け入れてよい**（2026-10-13 にオーナーが基準を確認: 出さないのは音声・文字起こしなどの個人的な内容） | オーナー（決定） |
 | 5 | Apple の Private Cloud Compute | 使わない / 本人が選んだら使う | **使わない**（Apple のサーバーに文字起こしが届く。端末内だけという約束と合わない。BYOK と同じ扱いで将来検討するなら別の Issue） | オーナー |
 | 6 | iPhone の非対応端末での代わり | 出さない（「使えません」と表示）/ 自分でモデルを持つ | **出さない**（非対応の iPhone は RAM が少なく、大きいモデルが載らない。BYOK（#26）が来たらそちらで補う） | オーナー |
 | 7 | 要約の保存先 | バックアップに入れる / 入れない、書き出しに入れる / 入れない | バックアップには**入れない**（作り直せる）、書き出し（#155）には**入れる** | Claude |
