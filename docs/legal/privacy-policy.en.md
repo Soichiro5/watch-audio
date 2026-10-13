@@ -54,7 +54,7 @@ The App records conversations while you wear your smartwatch, transcribes them o
 
 ## 5. Network use
 
-The App uses the internet **only to download the models for transcription and semantic search**. No audio, transcripts or other data of yours are sent in this communication.
+The App uses the internet **only to download the models for transcription and semantic search**. No audio, transcripts or other data of yours are sent in this communication. Apart from this, on an Android phone, only while you have "agent access" (エージェント連携) turned on, the App connects directly to your own PC on the same network (not over the internet; see section 7).
 
 - Android: during setup (and when a model needs to be fetched again), the App downloads a Japanese speech recognition model and a speech detection model (several hundred MB) from files published on Hugging Face (huggingface.co) and GitHub (github.com). You can restrict the download to Wi-Fi. Only if you turn on "Also transcribe English" (英語も文字起こしする), the App also downloads an English-capable speech recognition model (about 240 MB) from Hugging Face over Wi-Fi (or over mobile data if you choose to); turning the setting off deletes it. The first time you open the search screen, the App downloads the model for semantic search (about 44 MB) from Hugging Face over Wi-Fi. Your search words and transcripts are never sent (semantic search is computed on the device too).
 - iPhone: if the iOS Japanese speech recognition model is not on the device, iOS downloads it from Apple.
@@ -84,6 +84,8 @@ The App never sends data off your device without your action. Data goes to a des
 
 - **Encrypted backup and restore**: from "暗号化バックアップ" (Encrypted backup) on the phone app's Status tab, you can put all your records (and, if you choose, the recorded audio) into one file encrypted with a passphrase you set, and save it to a destination you choose (Android: the system's save screen; iPhone: the OS share sheet). You can restore the records from this file on another device, including between iPhone and Android (the App only reads the file you pick). The passphrase and the encryption keys are used only on your device and are never stored or sent anywhere. The App never uploads backups to a cloud service or anywhere else by itself. We do not know your passphrase, so **a backup cannot be restored if you forget its passphrase**. The destination handles the file under its own terms.
 
+- **Agent access (Android phone)**: under "エージェント連携" (Agent access) on the phone app's Status tab, you can pair your PC (one with the watch-audio-mcp program installed). Only while you have "エージェント接続" (agent connection) turned on (it turns itself off after 30 minutes by default), the AI agent on that PC (such as Claude) can search and read your transcripts. Audio only if you allow it for that pairing; you also decide how far back it may read (the last 30 days by default). The phone connects only to that PC on the same network (or your own VPN), directly, encrypted and mutually authenticated; no server or relay of ours is involved. The on-device access history shows when which PC read what (including search words; entries are deleted after 90 days), and you can revoke a pairing at any time. **If the agent on your PC uses a cloud AI (LLM), what the agent reads reaches that AI provider and is handled under its terms.** To keep everything off the internet, use an AI that runs on your PC. The pairing QR code is read on the device from a photo taken with the device's camera app, and the photo is deleted right after reading.
+
 ## 8. Permissions and why they are used
 
 | Permission | Device | Purpose |
@@ -94,7 +96,8 @@ The App never sends data off your device without your action. Data goes to a des
 | Body sensors (optional) | Wear OS watch (some OS versions) | Detecting that the watch has been taken off, to pause recording. Used only to tell whether the watch is worn; heart rate and other values are neither read nor stored |
 | Vibration | Wear OS watch | Feedback when recording starts or stops and when you add a mark |
 | Run at startup | Wear OS watch | After the watch restarts, resuming the processing of data waiting to be sent and prompting you to resume recording |
-| Internet, foreground service (data sync) | Android phone | Only for downloading transcription models. Because the files are large, the download runs with a visible notification |
+| Internet, foreground service (data sync) | Android phone | Downloading transcription models, and, while agent access is on, the connection to your PC on the same network. Because the model files are large, the download runs with a visible notification |
+| Foreground service (connected device), Wi-Fi multicast, local network (Android 17 and later) | Android phone | While agent access is on, staying connected to the paired PC with the screen off (with a visible notification), and finding that PC on the same network |
 
 You can change permissions later in your device settings. If you do not grant a permission, the related feature will not work.
 

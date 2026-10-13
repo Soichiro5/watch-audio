@@ -85,6 +85,9 @@ interface AgentQueries {
 
     /** Access log entries before [before] (exclusive), newest first, at most [limit]. */
     fun agentAccessLog(limit: Int, before: Long = Long.MAX_VALUE): List<AgentAccessEntry>
+
+    /** Deletes access log entries older than [before] (exclusive; retention, #184). @return how many. */
+    fun deleteAgentAccessBefore(before: Long): Int
 }
 
 internal class AgentSql(private val db: SQLiteConnection) : AgentQueries {
@@ -164,6 +167,8 @@ internal class AgentSql(private val db: SQLiteConnection) : AgentQueries {
             query = if (isNull(6)) null else getText(6),
         )
     }
+
+    override fun deleteAgentAccessBefore(before: Long): Int = db.update("DELETE FROM agent_access WHERE at < ?", before)
 
     private companion object {
         const val PAIRING_COLUMNS = "id, name, key_fingerprint, address, scope_days, allow_audio, created_at, revoked_at"

@@ -64,6 +64,11 @@ class AgentQueriesTest {
         assertEquals(AgentAccessOutcome.DENIED, log[0].outcome)
         assertEquals(listOf("search_transcripts"), store.read { agentAccessLog(10, before = 2_000) }.map { it.tool })
 
+        // Retention (#184): only entries strictly older than the cut-off go.
+        assertEquals(0, store.transaction { deleteAgentAccessBefore(1_000) })
+        assertEquals(1, store.transaction { deleteAgentAccessBefore(2_000) })
+        assertEquals(listOf("get_audio_clip"), store.read { agentAccessLog(10) }.map { it.tool })
+
         store.transaction { deleteAllChunks() }
         assertTrue(store.read { agentAccessLog(10) }.isEmpty())
         // Pairings are settings, not recorded data: they stay.

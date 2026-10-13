@@ -57,6 +57,13 @@ dependencies {
     // API (shared/ort); JNA's AAR brings libjnidispatch.so for each ABI.
     implementation(projects.shared.ort)
     implementation(libs.jna) { artifact { type = "aar" } }
+    // Agent access (#184): the tool logic and wire format, and ZXing to read the pairing QR code
+    // from a photo taken by the system camera app. No CAMERA permission, and not the Play services
+    // code scanner: its ML Kit library sends usage logs to Google (docs/platforms/android-phone.md).
+    implementation(projects.shared.agent)
+    implementation(libs.zxing.core)
+    // The phone's time zone for the agent tools' dates and the notification's auto-off time.
+    implementation(libs.kotlinx.datetime)
 
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.junit)

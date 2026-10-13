@@ -21,6 +21,8 @@ kotlin {
             api(projects.shared.db)
             // AppServices exposes StorageManager.
             api(projects.shared.pipeline)
+            // AgentAccess exposes the pairing types of agent access (#184).
+            api(projects.shared.agent)
 
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)

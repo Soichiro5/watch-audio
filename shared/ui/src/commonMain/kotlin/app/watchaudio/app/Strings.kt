@@ -1,6 +1,7 @@
 package app.watchaudio.app
 
 import app.watchaudio.app.licenses.NoticeApp
+import app.watchaudio.core.db.AgentAccessOutcome
 import app.watchaudio.core.pipeline.AudioRetention
 import app.watchaudio.core.pipeline.ModelState
 import app.watchaudio.core.pipeline.OffloadAge
@@ -207,7 +208,8 @@ object Strings {
     const val DELETE_ALL = "すべてのデータを削除"
     const val DELETE_ALL_WORD = "削除"
     const val DELETE_ALL_NOTE =
-        "すべての録音・音声・文字起こしと診断ログをこの端末から削除します（設定は残ります）。元に戻せません。続けるには「削除」と入力してください。"
+        "すべての録音・音声・文字起こし、診断ログとエージェント連携のアクセス履歴をこの端末から削除します（設定と PC のペアリングは残ります）。" +
+            "元に戻せません。続けるには「削除」と入力してください。"
     const val DELETE_ALL_INPUT = "確認のため「削除」と入力"
     const val DELETE_ALL_CONFIRM = "すべて削除する"
     const val DELETED_ALL = "すべてのデータを削除しました"
@@ -215,6 +217,103 @@ object Strings {
 
     const val PRIVACY_TITLE = "プライバシー"
     const val PRIVACY_NOTE = "データはこの端末内にのみ保存され、外部に送信されません"
+    /** Added below [PRIVACY_NOTE] where agent access exists (#184). */
+    const val PRIVACY_NOTE_AGENT =
+        "例外は「エージェント連携」を ON にしている間だけで、ペアリングした PC のエージェントが読んだ分が、同じネットワーク内のその PC に直接渡ります。"
+
+    // Agent access (UC11, #184)
+    const val AGENT_TITLE = "エージェント連携"
+    const val AGENT_CARD_NOTE =
+        "PC の AI エージェント（Claude など）から、ペアリングした PC だけが、ON にしている間だけ記録を読めます。"
+    const val AGENT_OPEN = "エージェント連携を開く"
+    const val AGENT_BACK = "戻る"
+    const val AGENT_INTRO =
+        "PC の AI エージェント（Claude Desktop・Claude Code、ローカル LLM のクライアントなど）が、このスマホの文字起こしを道具として読めるようにします。" +
+            "データはスマホに置いたまま、同じネットワーク内の PC に直接つなぎます（中継サーバーはありません）。PC には watch-audio-mcp を入れておきます。"
+    const val AGENT_CLOUD_NOTE =
+        "クラウドの LLM で動くエージェントに渡した分は、その LLM の提供元に届きます。どこにも出したくない場合はローカル LLM のクライアントを使ってください。"
+    const val AGENT_SWITCH_SECTION = "接続"
+    const val AGENT_SWITCH = "エージェント接続"
+    const val AGENT_SWITCH_DETAIL_OFF = "ON の間だけ、ペアリングした PC から読めます"
+    fun agentOnUntil(time: String) = "$time に自動で OFF になります"
+    const val AGENT_DURATION = "自動で OFF にするまで"
+    fun agentMinutes(minutes: Int) = if (minutes % 60 == 0) "${minutes / 60}時間" else "${minutes}分"
+    const val AGENT_NO_PAIRINGS = "まだ PC をペアリングしていません。下の「PC をペアリング」から始めてください。"
+    const val AGENT_LINK_CONNECTED = "接続中"
+    const val AGENT_LINK_SEARCHING = "PC を探しています（PC でエージェントが動いていて、同じネットワークにいるか確認してください）"
+    const val AGENT_PERMISSION_DENIED =
+        "ローカル ネットワークへのアクセスが許可されていないため、PC につなげません。アプリの設定で「付近のデバイス」を許可してください。"
+
+    const val AGENT_PAIR_TITLE = "PC をペアリング"
+    const val AGENT_PAIR_HOWTO =
+        "PC のターミナルで npx watch-audio-mcp pair を実行し、表示された QR コードを読み取ります（有効 5 分・使い捨て）。"
+    const val AGENT_SCAN = "QR コードを撮影して読み取る"
+    const val AGENT_SCAN_NOTE = "カメラのアプリで QR コードを撮影します。写真は読み取ったらすぐに削除します。"
+    const val AGENT_ENTER = "文字列を入力"
+    const val AGENT_ENTER_LABEL = "ターミナルに出た文字列（watchaudio-mcp://pair?…）"
+    const val AGENT_ENTER_SUBMIT = "つなぐ"
+    const val AGENT_CANCEL = "やめる"
+    const val AGENT_CLOSE = "閉じる"
+    const val AGENT_SCANNING = "QR コードを読み取っています…"
+    fun agentConnecting(pc: String) = "「$pc」につないでいます…"
+    fun agentConfirmTitle(pc: String) = "「$pc」とのペアリングの確認コード"
+    const val AGENT_CONFIRM_NOTE =
+        "PC のターミナルに同じ 6 桁の確認コードが出ていれば「一致する」を押し、PC でも y を入力してください。" +
+            "違う場合は「一致しない」を押してください（同じネットワークの誰かが横取りしようとしている可能性があります）。"
+    const val AGENT_CODE_MATCHES = "一致する"
+    const val AGENT_CODE_DIFFERS = "一致しない"
+    const val AGENT_WAITING_PC = "PC での確定を待っています…"
+    fun agentPaired(pc: String) =
+        "「$pc」とペアリングしました。PC のエージェントの MCP 設定に watch-audio-mcp を追加し、エージェント接続を ON にすると使えます。"
+    const val AGENT_SCAN_NOT_FOUND = "写真から QR コードを読み取れませんでした。もう一度撮影するか、文字列を入力してください。"
+    const val AGENT_SCAN_UNAVAILABLE = "カメラのアプリが見つかりません。ターミナルに出た文字列を入力してください。"
+    const val AGENT_BAD_CODE = "PC のペアリング用の QR コード（watchaudio-mcp://pair?…）ではありません。"
+    const val AGENT_EXPIRED = "ペアリング用の値の有効期限（5 分）が切れています。PC で pair をもう一度実行してください。"
+    const val AGENT_UNREACHABLE =
+        "PC につながりませんでした。PC とスマホが同じ Wi-Fi（またはスマホのテザリング）にいるか、" +
+            "PC のファイアウォールで node の受信を許可しているかを確認してください。"
+    const val AGENT_PAIR_DECLINED = "ペアリングを中止しました。"
+    const val AGENT_PAIR_REJECTED_BY_PC = "PC 側で中止されたため、ペアリングできませんでした。確認コードが一致していたか確かめ、もう一度試してください。"
+    const val AGENT_PAIR_USED = "このペアリング用の値は使用済みか無効です。PC で pair をもう一度実行してください。"
+    const val AGENT_PAIR_FAILED = "ペアリングできませんでした。PC で pair をもう一度実行してから試してください。"
+
+    const val AGENT_PAIRINGS = "ペアリングした PC"
+    fun agentPairedAt(date: String) = "$date にペアリング"
+    const val AGENT_SCOPE_PERIOD = "読める期間"
+    fun agentScopeDays(days: Int) = "直近 ${days} 日"
+    const val AGENT_ALLOW_AUDIO = "音声も読ませる"
+    const val AGENT_ALLOW_AUDIO_DETAIL = "OFF の間は文字起こしのテキストだけ。ON にすると発話の音声（1 回 30 秒まで）も渡します。"
+    const val AGENT_REVOKE = "ペアリングを取り消す"
+    fun agentConfirmRevoke(pc: String) =
+        "「$pc」のペアリングを取り消しますか？ すぐにつながらなくなります。また使うにはペアリングからやり直します。"
+    const val AGENT_REVOKE_CONFIRM = "取り消す"
+
+    const val AGENT_HISTORY = "アクセス履歴"
+    fun agentHistoryNote(days: Int) =
+        "いつ・どの PC が・何を読んだか（検索語を含む）の記録です。端末の外には出さず、${days} 日より前のものは自動で消えます。"
+    const val AGENT_HISTORY_EMPTY = "まだアクセスはありません"
+    fun agentTool(tool: String) = when (tool) {
+        "search_transcripts" -> "検索"
+        "get_day_timeline" -> "日のタイムライン"
+        "get_context" -> "前後の発話"
+        "get_audio_clip" -> "音声"
+        else -> tool
+    }
+    fun agentOutcome(outcome: AgentAccessOutcome): String? = when (outcome) {
+        AgentAccessOutcome.OK -> null
+        AgentAccessOutcome.DENIED -> "範囲外のため拒否"
+        AgentAccessOutcome.RATE_LIMITED -> "回数の上限で拒否"
+        AgentAccessOutcome.REVOKED -> "取り消し済みのため拒否"
+        AgentAccessOutcome.ERROR -> "エラー"
+    }
+    fun agentItems(count: Int) = "${count}件"
+
+    // Agent access notification (Android foreground service)
+    const val AGENT_NOTIFICATION_CHANNEL = "エージェント接続"
+    const val AGENT_NOTIFICATION_TITLE = "エージェント接続: ON"
+    fun agentNotificationText(connected: List<String>, offAt: String) =
+        (if (connected.isEmpty()) "PC を探しています" else "${connected.joinToString("、")} に接続中") + " · $offAt に自動で OFF"
+    const val AGENT_TURN_OFF = "OFF にする"
 
     // Diagnostics log (#77)
     const val DIAGNOSTICS_TITLE = "診断ログ"

@@ -12,11 +12,19 @@ ANDROID_APPS = {
     "apps/android": {
         # <uses-permission> in the module's own manifests (src/*/AndroidManifest.xml).
         "permissions": {
-            "android.permission.INTERNET": "model downloads only: ASR and the semantic search's embedding model (asr/ModelManager.kt)",
+            "android.permission.INTERNET": "model downloads (asr/ModelManager.kt) and, only while the user has agent access on, "
+                                           "the LAN connection to their own paired PC (agent/TlsAgentTransport.kt, #184)",
             "android.permission.ACCESS_NETWORK_STATE": "WorkManager network constraint for the model download",
             "android.permission.FOREGROUND_SERVICE": "model download runs as a foreground worker",
             "android.permission.FOREGROUND_SERVICE_DATA_SYNC": "foreground service type of the model download",
-            "android.permission.POST_NOTIFICATIONS": "gap alert (#43) and download progress",
+            "android.permission.POST_NOTIFICATIONS": "gap alert (#43), download progress and the agent access notification",
+            "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE":
+                "agent access (#184): the connection to the paired PC runs as a connectedDevice foreground service while on",
+            "android.permission.CHANGE_WIFI_MULTICAST_STATE":
+                "agent access (#184): multicast lock while browsing mDNS for the paired PC; also a prerequisite of the "
+                "connectedDevice foreground service type",
+            "android.permission.ACCESS_LOCAL_NETWORK":
+                "agent access (#184): Android 17+ asks the user before the app reaches the paired PC on the local network",
         },
         # Extra permissions libraries add to the merged manifest (checked with --merged-manifest).
         "library_permissions": {
@@ -75,6 +83,8 @@ GUARDED_APIS = (
     ("MultipeerConnectivity", r"\bMultipeerConnectivity\b|\bMCSession\b", "Apple peer-to-peer networking"),
     ("SpeechServerRecognition", r"\bSF\w*RecognitionRequest\b",
      "SFSpeechRecognizer requests may use Apple's servers; use SpeechAnalyzer (on-device)"),
+    ("NSD", r"\b(?:NsdManager|NsdServiceInfo|MulticastLock|createMulticastLock)\b",
+     "local network service discovery (mDNS) and multicast"),
     ("DataClient", r"\b(?:DataClient|PutDataRequest|PutDataMapRequest|getDataClient)\b",
      "Wear Data Layer DataClient (items may sync through the cloud); use MessageClient/ChannelClient"),
     ("WeakFileProtection", r"\bNSFileProtectionNone\b|\.noFileProtection\b|\bFileProtectionType\.none\b|"
@@ -88,6 +98,26 @@ ALLOWED_API_USES = {
         "URLConnection": "downloads the ASR / VAD / embedding model files listed in ModelManifest (resumable, SHA-256)",
         "openConnection": "same download",
     },
+    # Agent access (#184, docs/research/agent-access.md): the only other connection, to the user's
+    # own paired PC on the local network, and only while the user has it on.
+    "apps/android/src/main/kotlin/app/watchaudio/android/agent/TlsAgentTransport.kt": {
+        "Socket": "agent access (#184): mutual TLS 1.3 from the phone to the paired PC's bridge on the LAN while the user "
+                  "has it on; the bridge key is pinned, addresses must be LAN IP literals (no DNS); the phone never listens",
+    },
+    "apps/android/src/main/kotlin/app/watchaudio/android/agent/NsdBridgeDiscovery.kt": {
+        "NSD": "agent access (#184): browses mDNS (_watchaudio-mcp._tcp) for the paired PC's bridge while on; announces nothing",
+    },
+}
+
+# What an allowed network site must keep doing (code with comments removed must match each
+# regex), so that the allow-list entry above stays true. file -> ((what, regex), ...).
+ALLOWED_API_REQUIREMENTS = {
+    "apps/android/src/main/kotlin/app/watchaudio/android/agent/TlsAgentTransport.kt": (
+        ("connects only to LAN addresses (isLanHost)", r"\bisLanHost\s*\("),
+        ("parses the address without DNS (InetAddresses.parseNumericAddress)", r"\bInetAddresses\.parseNumericAddress\s*\("),
+        ("pins the bridge key (PinningTrustManager)", r"\bPinningTrustManager\s*\("),
+        ("TLS 1.3 only", r'enabledProtocols\s*=\s*arrayOf\(\s*TLS_1_3\s*\)'),
+    ),
 }
 
 # URL literals in code must start with one of these prefixes (unused prefixes are reported).
@@ -137,6 +167,7 @@ ALLOWED_RESOLVED_DEPENDENCIES = (
     (r"org\.jspecify:jspecify", "nullness annotations"),
     (r"com\.github\.k2-fsa\.sherpa-onnx:[\w.-]+", "on-device ASR"),
     (r"net\.java\.dev\.jna:jna", "calls ONNX Runtime's C API for the on-device embedding model (shared/ort, #24); no network"),
+    (r"com\.google\.zxing:core", "decodes the agent access pairing QR code from a photo on the device (#184); no network"),
 )
 
 IOS_PROJECT = "apps/ios/project.yml"

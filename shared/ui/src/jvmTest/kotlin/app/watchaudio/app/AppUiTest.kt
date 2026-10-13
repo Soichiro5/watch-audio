@@ -30,6 +30,11 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import app.watchaudio.app.licenses.NoticeApp
 import app.watchaudio.app.licenses.OpenSourceNotices
 import app.watchaudio.app.state.NowProvider
+import app.watchaudio.core.agent.AgentLimits
+import app.watchaudio.core.agent.PairingUri
+import app.watchaudio.core.agent.encodeBase64Url
+import app.watchaudio.core.db.AgentAccessEntry
+import app.watchaudio.core.db.AgentAccessOutcome
 import app.watchaudio.core.db.ChunkState
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.db.NewSegment
@@ -600,10 +605,104 @@ class AppUiTest {
         screenshot("search-meaning")
     }
 
+    /**
+     * #184: 「エージェント連携」 opens from the status tab. Pairing by the typed string shows the
+     * 6-digit code and stores the pairing once confirmed; the switch turns access on with the
+     * chosen auto-off; the access log lists time, PC, tool, count and search terms; revoking asks
+     * first, removes the pairing and turns access off with the last one.
+     */
+    @Test
+    fun agentAccessPairTurnOnAndRevoke() = runDesktopComposeUiTest(width = 412, height = 915) {
+        runBlocking { store.updateSettings { it.copy(onboardingCompleted = true) } }
+        val agent = FakeAgentAccess(store, { now })
+        showApp(FakeAppServices(store, audioRoot = audioDir.path, initialStatus = ProcessingStatus(asrModel = ModelState.Ready), agentAccess = agent))
+        waitForText(Strings.TAB_STATUS)
+        onNodeWithText(Strings.TAB_STATUS).performClick()
+        waitForText(Strings.PRIVACY_NOTE_AGENT)
+        onNodeWithText(Strings.AGENT_OPEN).performScrollTo().performClick()
+        waitForText(Strings.AGENT_INTRO)
+        waitForText(Strings.AGENT_NO_PAIRINGS)
+        waitForText(Strings.AGENT_HISTORY_EMPTY)
+        screenshot("agent-empty")
+
+        // Pair by the string the CLI printed.
+        val fingerprint = encodeBase64Url(ByteArray(32) { 9 })
+        val uri = PairingUri(1, "仕事用ノート", fingerprint, listOf("192.168.1.20:47823"), encodeBase64Url(ByteArray(16) { 4 }), now + 300_000)
+        onNodeWithText(Strings.AGENT_ENTER).performClick()
+        onNode(hasSetTextAction()).performTextInput(uri.toUri())
+        onNodeWithText(Strings.AGENT_ENTER_SUBMIT).performClick()
+        waitForText("123 456")
+        waitForText(Strings.agentConfirmTitle("仕事用ノート"))
+        screenshot("agent-confirm")
+        onNodeWithText(Strings.AGENT_CODE_MATCHES).performClick()
+        waitForText(Strings.agentPaired("仕事用ノート"))
+        assertEquals(listOf(uri), agent.pairedUris)
+        val pairing = runBlocking { store.read { activeAgentPairing(fingerprint) } }!!
+        assertEquals(AgentLimits.DEFAULT_SCOPE_DAYS, pairing.scopeDays)
+        assertEquals(false, pairing.allowAudio)
+        onNodeWithText(Strings.AGENT_CLOSE).performClick()
+
+        // Agent access on for an hour; the PC shows as connected.
+        onNodeWithText(Strings.agentMinutes(60)).performScrollTo().performClick()
+        onNodeWithText(Strings.AGENT_SWITCH_DETAIL_OFF).performClick()
+        waitForText(Strings.agentOnUntil("16:40"))
+        waitForText("仕事用ノート: ${Strings.AGENT_LINK_CONNECTED}")
+        assertEquals(listOf(60), agent.turnOnRequests)
+
+        // Audio for this PC, a longer period, and what it read.
+        onNodeWithText(Strings.AGENT_ALLOW_AUDIO).performScrollTo().performClick()
+        onNodeWithText(Strings.agentScopeDays(30)).performScrollTo().performClick()
+        onNodeWithText(Strings.agentScopeDays(90)).performClick()
+        waitUntil(timeoutMillis = 10_000) { runBlocking { store.read { agentPairing(pairing.id) } }!!.let { it.allowAudio && it.scopeDays == 90 } }
+        runBlocking {
+            store.transaction {
+                logAgentAccess(AgentAccessEntry(now - 5 * 60_000L, pairing.id, "search_transcripts", AgentAccessOutcome.OK, 3, "来週の会議"))
+                logAgentAccess(AgentAccessEntry(now - 4 * 60_000L, pairing.id, "get_context", AgentAccessOutcome.OK, 11, "utterance 42"))
+                logAgentAccess(AgentAccessEntry(now - 2 * 60_000L, pairing.id, "get_audio_clip", AgentAccessOutcome.DENIED, 0, "utterance 42"))
+            }
+        }
+        waitForText("「来週の会議」")
+        onNodeWithText(Strings.AGENT_SWITCH_SECTION).performScrollTo()
+        screenshot("agent-on")
+        onNodeWithText("「来週の会議」").performScrollTo()
+        waitForText(Strings.agentOutcome(AgentAccessOutcome.DENIED)!!)
+        screenshot("agent-history")
+        assertNoEnglishExcept(setOf("「utterance 42」"))
+
+        // Revoke asks first, then removes the pairing and turns access off with the last one.
+        onNodeWithText(Strings.AGENT_REVOKE).performScrollTo().performClick()
+        waitForText(Strings.agentConfirmRevoke("仕事用ノート"))
+        onNodeWithText(Strings.AGENT_REVOKE_CONFIRM).performClick()
+        waitUntil(timeoutMillis = 10_000) { agent.turnOffs == 1 }
+        assertTrue(runBlocking { store.read { agentPairing(pairing.id) } }!!.revokedAt != null)
+        waitForText(Strings.AGENT_NO_PAIRINGS)
+        // The log keeps naming the revoked PC.
+        waitForText("仕事用ノート", substring = true)
+
+        onNodeWithText(Strings.AGENT_BACK).performClick()
+        waitForText(Strings.AGENT_OPEN)
+    }
+
+    /** Agent access is offered only where the platform has it. */
+    @Test
+    fun noAgentAccessEntryWithoutPlatformSupport() = runDesktopComposeUiTest(width = 412, height = 915) {
+        runBlocking { store.updateSettings { it.copy(onboardingCompleted = true) } }
+        showApp(FakeAppServices(store, audioRoot = audioDir.path))
+        waitForText(Strings.TAB_STATUS)
+        onNodeWithText(Strings.TAB_STATUS).performClick()
+        waitForText(Strings.PRIVACY_NOTE)
+        assertTrue(onAllNodes(hasText(Strings.AGENT_OPEN)).fetchSemanticsNodes().isEmpty())
+        assertTrue(onAllNodes(hasText(Strings.PRIVACY_NOTE_AGENT)).fetchSemanticsNodes().isEmpty())
+    }
+
     /** Fails on any text on screen (scrolled away or not) with an English word and no Japanese. */
-    private fun ComposeUiTest.assertNoEnglish() {
+    private fun ComposeUiTest.assertNoEnglish() = assertNoEnglishExcept(emptySet())
+
+    /** [assertNoEnglish], allowing [allowed] (data shown as it is, e.g. what an agent asked for). */
+    private fun ComposeUiTest.assertNoEnglishExcept(allowed: Set<String>) {
         val texts = onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text)).fetchSemanticsNodes()
             .flatMap { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } }
+            .filter { it !in allowed }
         assertTrue(texts.isNotEmpty())
         val english = texts.filter { text ->
             ENGLISH_WORD.containsMatchIn(text) && text.none { it in '\u3040'..'\u30FF' || it in '\u4E00'..'\u9FFF' }

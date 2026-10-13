@@ -11,7 +11,8 @@ name: Emulator smoke test
 # the search -> one tap -> play flow (#19, #25), the shared SQLite tests of shared/db and
 # shared/pipeline on Android (#14), on-device ASR with the real models and the wait without a model
 # (#22), the charging job and resuming after a force-stop (#20), the battery/thermal policy (#75),
-# the gap alert notification (#43) and the refused permission (#32); see .github/scripts/phone-scenarios.sh.
+# the gap alert notification (#43), the refused permission (#32) and agent access against the bridge CLI
+# on the host (#184, .github/scripts/agent-access.sh); see .github/scripts/phone-scenarios.sh.
 # On the Wear OS emulator it shows the BODY_SENSORS explanation and declines it (#161), shows the tile and the complication and taps the tile (#41):
 # .github/scripts/wear-surfaces.sh. Screenshots are uploaded as the screenshots-<name> artifact.
 # The phone APKs (release, debug, release-test) pack sherpa-onnx's JNI library built without text-to-speech, as the
@@ -30,6 +31,7 @@ on:
       - ".github/scripts/**"
       - ".github/actions/sherpa-onnx-jni/**"
       - "tools/sherpa-onnx-android/**"
+      - "tools/agent-bridge/**"
       - "!**/*.md"
       - "!docs/**"
       - "!**/src/iosMain/**"
@@ -55,6 +57,7 @@ on:
       - ".github/scripts/**"
       - ".github/actions/sherpa-onnx-jni/**"
       - "tools/sherpa-onnx-android/**"
+      - "tools/agent-bridge/**"
       - "!**/*.md"
       - "!docs/**"
       - "!**/src/iosMain/**"
@@ -171,6 +174,19 @@ jobs:
       - name: Download ASR models
         if: matrix.name == 'phone'
         run: tools/harness/download-models.sh
+
+      # #184: the agent access scenario pairs the phone with the real bridge CLI on this host.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: matrix.name == 'phone'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/agent-bridge/package-lock.json
+
+      - name: Build the agent bridge CLI
+        if: matrix.name == 'phone'
+        working-directory: tools/agent-bridge
+        run: npm ci --ignore-scripts --no-audit --no-fund && npm run build
 
       # #173: all phone APKs of this job pack the JNI library without TTS (the instrumented ASR tests use it too).
       - name: sherpa-onnx JNI without TTS

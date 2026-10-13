@@ -34,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.watchaudio.app.licenses.NoticeApp
 import app.watchaudio.app.logic.formatClock
+import app.watchaudio.app.state.AgentViewModel
 import app.watchaudio.app.state.DayViewModel
 import app.watchaudio.app.state.BackupViewModel
 import app.watchaudio.app.state.ExportViewModel
@@ -43,6 +44,8 @@ import app.watchaudio.app.state.OnboardingViewModel
 import app.watchaudio.app.state.SearchViewModel
 import app.watchaudio.app.state.SettingsViewModel
 import app.watchaudio.app.state.StatusViewModel
+import app.watchaudio.app.ui.AgentCallbacks
+import app.watchaudio.app.ui.AgentScreen
 import app.watchaudio.app.ui.AppIcons
 import app.watchaudio.app.ui.DayScreen
 import app.watchaudio.app.ui.BackupCallbacks
@@ -77,6 +80,7 @@ fun App(
     val backupViewModel = viewModel { BackupViewModel(services, timeZone, clock) }
     val settingsViewModel = viewModel { SettingsViewModel(services) }
     val onboardingViewModel = viewModel { OnboardingViewModel(services) }
+    val agentViewModel = viewModel { AgentViewModel(services, clock) }
 
     MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
         val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
@@ -86,6 +90,7 @@ fun App(
             false -> Onboarding(onboardingViewModel, onFinish = settingsViewModel::completeOnboarding)
             true -> MainTabs(
                 timeZone, services.noticeApps, dayViewModel, searchViewModel, statusViewModel, exportViewModel, backupViewModel, settingsViewModel,
+                agentViewModel.takeIf { services.supportsAgentAccess },
             ) {
                 onboardingViewModel.restart()
                 settingsViewModel.showOnboardingAgain()
@@ -126,6 +131,7 @@ private fun MainTabs(
     exportViewModel: ExportViewModel,
     backupViewModel: BackupViewModel,
     settingsViewModel: SettingsViewModel,
+    agentViewModel: AgentViewModel?,
     onShowOnboarding: () -> Unit,
 ) {
     var tabIndex by rememberSaveable { mutableIntStateOf(Tab.TIMELINE.ordinal) }
@@ -134,9 +140,17 @@ private fun MainTabs(
     // The licenses screen (#167) opens over the tabs from the status tab; its scroll position is kept.
     var showLicenses by rememberSaveable { mutableStateOf(false) }
     val statusScroll = rememberScrollState()
+    // Agent access (#184) opens over the tabs from the status tab too.
+    var showAgent by rememberSaveable { mutableStateOf(false) }
+    val agentState = agentViewModel?.state?.collectAsStateWithLifecycle()
     if (showLicenses) {
         BackHandler { showLicenses = false }
         LicensesScreen(noticeApps, onBack = { showLicenses = false })
+        return
+    }
+    if (showAgent && agentViewModel != null && agentState != null) {
+        BackHandler { showAgent = false }
+        AgentScreen(agentState.value, timeZone, agentCallbacks(agentViewModel) { showAgent = false })
         return
     }
 
@@ -244,6 +258,8 @@ private fun MainTabs(
                         onRestore = backupViewModel::restore,
                     ),
                     onShowLicenses = { showLicenses = true },
+                    agentAccessOn = agentState?.value?.access?.isOn,
+                    onShowAgentAccess = { showAgent = true },
                     scrollState = statusScroll,
                     modifier = modifier,
                 )
@@ -251,6 +267,23 @@ private fun MainTabs(
         }
     }
 }
+
+private fun agentCallbacks(viewModel: AgentViewModel, onBack: () -> Unit) = AgentCallbacks(
+    onBack = onBack,
+    onSwitch = viewModel::setOn,
+    onMinutes = viewModel::setOnMinutes,
+    onScan = viewModel::scan,
+    onOpenEntry = viewModel::openEntry,
+    onEntryText = viewModel::setEntryText,
+    onSubmitEntry = viewModel::submitEntry,
+    onConfirmCode = viewModel::confirmCode,
+    onDismissPairing = viewModel::dismissPairing,
+    onScopeDays = { pairing, days -> viewModel.setScopeDays(pairing, days) },
+    onAllowAudio = { pairing, allow -> viewModel.setAllowAudio(pairing, allow) },
+    onRequestRevoke = viewModel::requestRevoke,
+    onConfirmRevoke = viewModel::confirmRevoke,
+    onCancelRevoke = viewModel::cancelRevoke,
+)
 
 @Composable
 private fun PlaybackBar(nowPlaying: NowPlaying, timeZone: TimeZone, onStop: () -> Unit) {
