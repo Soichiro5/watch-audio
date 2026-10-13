@@ -1,7 +1,7 @@
 # Privacy Policy (draft)
 
 > **Draft. It must be reviewed by the operator and a legal expert before publication.**
-> Items in `[ ]` are to be filled in by the operator. The text follows the app as implemented on `main` (2026-10-12). Whenever a feature is added or changed, update this policy and the store declarations ([store-data-declarations.md](store-data-declarations.md), Japanese) together. The Japanese version ([privacy-policy.ja.md](privacy-policy.ja.md)) is the primary text; this is its translation.
+> Items in `[ ]` are to be filled in by the operator. The text follows the app as implemented on `main` (2026-10-13, and semantic search on iPhone, #178). Whenever a feature is added or changed, update this policy and the store declarations ([store-data-declarations.md](store-data-declarations.md), Japanese) together. The Japanese version ([privacy-policy.ja.md](privacy-policy.ja.md)) is the primary text; this is its translation.
 
 ---
 
@@ -31,7 +31,7 @@ The App records conversations while you wear your smartwatch, transcribes them o
 | Settings | Audio retention period, notification settings, when to transcribe, etc. | Watch and phone |
 | Diagnostics log | Records of processing for troubleshooting (times, identifiers, data sizes, processing times, error types, abnormal terminations and where in the program they occurred, app version, OS type and version, device model; on the watch also battery level and charging state). **It contains no audio, no transcript text and no error messages.** Its size is capped and the oldest entries are discarded | Watch and phone |
 | Transcription models | Models that turn speech into text (they contain none of your data) | Phone |
-| Semantic search data (Android) | Numbers (vectors) computed on the device from your transcripts so that you can find conversations by meaning even when the wording differs, and the model that computes them (the model contains none of your data). Deleted together with the transcripts | Phone |
+| Semantic search data | Numbers (vectors) computed on the device from your transcripts so that you can find conversations by meaning even when the wording differs, and the model that computes them (the model contains none of your data). Deleted together with the transcripts | Phone |
 
 ### Protection on the device
 
@@ -51,13 +51,14 @@ The App records conversations while you wear your smartwatch, transcribes them o
 - Transcription runs on your smartphone. **Audio is never sent to an external transcription service.**
 - On Android, the App runs an open-source speech recognition engine (sherpa-onnx) and speech recognition models on the device.
 - On iPhone, the App uses the on-device speech recognition built into iOS (SpeechAnalyzer). Server-based speech recognition is not used.
+- Semantic search (finding conversations by meaning even when the wording differs) is also computed on the device, on Android and iPhone alike (with the open-source ONNX Runtime and the downloaded semantic search model). Your search words and transcripts are never sent anywhere.
 
 ## 5. Network use
 
 The App uses the internet **only to download the models for transcription and semantic search**. No audio, transcripts or other data of yours are sent in this communication. Apart from this, on a phone (Android or iPhone), only while you have "agent access" (エージェント連携) turned on (on an iPhone, also only while the App is on screen), the App connects directly to your own PC on the same network (not over the internet; see section 7).
 
 - Android: during setup (and when a model needs to be fetched again), the App downloads a Japanese speech recognition model and a speech detection model (several hundred MB) from files published on Hugging Face (huggingface.co) and GitHub (github.com). You can restrict the download to Wi-Fi. Only if you turn on "Also transcribe English" (英語も文字起こしする), the App also downloads an English-capable speech recognition model (about 240 MB) from Hugging Face over Wi-Fi (or over mobile data if you choose to); turning the setting off deletes it. The first time you open the search screen, the App downloads the model for semantic search (about 44 MB) from Hugging Face over Wi-Fi. Your search words and transcripts are never sent (semantic search is computed on the device too).
-- iPhone: if the iOS Japanese speech recognition model is not on the device, iOS downloads it from Apple.
+- iPhone: if the iOS Japanese speech recognition model is not on the device, iOS downloads it from Apple. The first time you open the search screen, the App downloads the model for semantic search (about 44 MB, the same as on Android) from Hugging Face, over Wi-Fi only (not over mobile data, a personal hotspot or in Low Data Mode). Your search words and transcripts are never sent.
 - As with any internet communication, the download servers receive information needed for the connection, such as your device's IP address. That information is handled under each provider's privacy policy. We do not receive it.
 - The Wear OS watch app does not use the internet.
 

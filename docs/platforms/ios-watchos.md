@@ -2,7 +2,7 @@
 
 Apple Watch で装着中ずっと録音 → WatchConnectivity で iPhone へ（ローカルのみ）→ iPhone 上の Speech フレームワーク（SpeechAnalyzer / SpeechTranscriber, iOS 26, 日本語）でオンデバイス文字起こし → Kotlin 共有コードのローカル SQLite に保存、までの Apple 側の実装。充電中・睡眠中などの欠損は許容する。
 
-関連 Issue: #15（watchOS 録音）、#17（転送 + ACK）、#21（iOS 文字起こし）、#41（コンプリケーション、§14）、#185（エージェント連携、§16）
+関連 Issue: #15（watchOS 録音）、#17（転送 + ACK）、#21（iOS 文字起こし）、#41（コンプリケーション、§14）、#178（意味検索、§15）、#185（エージェント連携、§16）
 
 ## 1. コンポーネント
 
@@ -30,7 +30,9 @@ Apple Watch で装着中ずっと録音 → WatchConnectivity で iPhone へ（�
 | 〃 | `IosSpeechTranscriber.kt` | Swift 実装を受けるコールバック型インターフェースと共通 `Transcriber` へのアダプタ（英語オンのときは共通の `SegmentRouting` で英語のパスを足す、#170） |
 | 〃 | `IosTranscriptionCheck.kt` | シミュレータ検査用: 音声ファイルを一時 DB にチャンクとして取り込み、本番と同じアダプタと `TranscriptionPipeline` で文字起こしして保存されたセグメントを返す（`EnglishTranscriptionTests` が使う。アプリの DB には触れない） |
 | 〃 | `MainViewController.kt` | Compose UI のエントリ（Swift から引数なしで呼ぶ） |
+| iOS（意味検索） | `apps/ios/App/Embedding/*.swift`、`shared/ui/src/iosMain/.../IosEmbedding*.kt` | 埋め込みモデルの実行（ONNX Runtime の Swift パッケージ）と Wi-Fi のみのダウンロード（#178）。一覧は §15 |
 | iOS（エージェント連携） | `apps/ios/App/Agent/*.swift`、`shared/ui/src/iosMain/.../IosAgent*.kt` | PC のエージェントへの LAN 内の受け渡し（#185）。一覧は §16 |
+| テスト | `apps/ios/Tests/EmbeddingTests/EmbeddingTests.swift` | アプリをホストにした XCTest。アプリの ONNX Runtime で JVM・Python の参照ベクトルと一致、言い換えのクエリで会話が見つかる、ダウンロードが続きから再開して SHA-256 を確かめる（§15.5） |
 | テスト | `apps/ios/Tests/AgentAccessTests/AgentAccessTests.swift` | アプリをホストにした XCTest。CI のホストの本物の橋渡し CLI と 127.0.0.1 でペアリング → ON の間だけ答える → OFF・画面から外れる・取り消しで止まる（§16） |
 | テスト | `apps/ios/Tests/ProtocolTests/ChunkProtocolTests.swift` | Swift プロトコル実装と録音形式（`RecordingFormat.current`）を Kotlin のテストベクタ（`shared/protocol/testdata/*.json`）で検証 |
 | 〃 | `apps/ios/Tests/WatchLogicTests/RecorderPolicyTests.swift` | 停止理由（充電・低電池・ストレージ不足・割り込み・ユーザー停止・レコーダー停止）の判定、ヒステリシス（10% 未満で停止・15% 以上で再開）、自動再開、通知、無音判定（ピーク −40 dBFS）、停止理由がマニフェストの `endReason` に書かれること（#15）、しきい値が共通の `RecorderRules` と一致すること、Mark でチャンクを閉じずオフセットが manifest に入ること（#137） |
@@ -126,7 +128,7 @@ sequenceDiagram
 Swift から見える Kotlin API（`ComposeApp` フレームワーク、静的）:
 
 ```swift
-IosAppGraph.shared.start(transcriber: SpeechAnalyzerTranscriber(), agent: AgentPlatform())   // App.init で 1 回（BGTask 登録を含む。agent はエージェント連携 §16）
+IosAppGraph.shared.start(transcriber: SpeechAnalyzerTranscriber(), agent: AgentPlatform(), embedding: EmbeddingPlatform())   // App.init で 1 回（BGTask 登録を含む。agent はエージェント連携 §16、embedding は意味検索 §15）
 IosAppGraph.shared.inboxDirectoryPath()                               // 受信ファイルの退避先
 IosAppGraph.shared.ingest(manifestJson: json, filePath: path) { ackJson in … }  // ackJson: String?（nil = ACK しない）
 IosAppGraph.shared.setAppActive(active: true / false)                 // scenePhase .active / .background
@@ -195,7 +197,7 @@ Android と同じ共通の `DiagnosticsLog`（`shared/pipeline`、形式・上�
 - **音声の形式**: 解析の前に `SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith:)` と入力の `processingFormat` を比べ、違えば `AVAudioConverter` で一時 CAF に変換してから渡す（`SpeechTranscription.analyzerInput`。同じなら変換しない）。
 - **シミュレータ検査**: `IosTranscriptionCheck`（iosMain、公開）は音声ファイルを一時 DB にチャンクとして取り込み、本番と同じアダプタとパイプラインで文字起こしした結果を返す。`EnglishTranscriptionTests`（SpeechTests）がこれを Swift から呼ぶ。テストバンドルは PlaybackTests と同じく ComposeApp のヘッダだけを参照し、`SpeechAnalyzerTranscriber.swift` のコピーをコンパイルする。`SpeechTranscription.Engine.dictation`（DictationTranscriber）は SpeechTranscriber のないシミュレータのための検査用の選択肢で、アプリは使わない。
 
-- iPhone: `Application Support/WatchAudio/`（`watch-audio.db`、`audio/yyyy/MM/dd/<chunkId>.m4a`、`inbox/`、`diagnostics/`（§7.2））。`LocalDataDirectory`（shared/ui/iosMain）がディレクトリに `NSURLIsExcludedFromBackupKey` を設定して iCloud / PC バックアップに含めず、ファイル保護クラス `CompleteUntilFirstUserAuthentication`（BGTask・ロック中の取り込みから読める）を明示する（#76）。
+- iPhone: `Application Support/WatchAudio/`（`watch-audio.db`、`audio/yyyy/MM/dd/<chunkId>.m4a`、`inbox/`、`diagnostics/`（§7.2）、意味検索の `models/ruri-v3-30m/` と `search/`（§15））。`LocalDataDirectory`（shared/ui/iosMain）がディレクトリに `NSURLIsExcludedFromBackupKey` を設定して iCloud / PC バックアップに含めず、ファイル保護クラス `CompleteUntilFirstUserAuthentication`（BGTask・ロック中の取り込みから読める）を明示する（#76）。
 - Watch: `Application Support/WatchAudio/`（録音中・送信待ちチャンク、診断ログ）。ACK 後に削除。`ChunkOutbox` が `LocalDataProtection`（apps/ios/SharedSwift）で同じくバックアップ除外と `completeUntilFirstUserAuthentication` を設定する（画面オフ・ロック中も録音・再送できる）。
 - 属性は ios.yml のテスト（`LocalDataDirectoryTest`、`LocalDataProtectionTests`）で確認する（保護クラスの値はシミュレータが報告する場合だけ比較）。一覧は [02 §7.1](../architecture/02-architecture.md#71-保存場所と保護76)。
 - 音声・文字起こしとも端末外（自前サーバー・クラウド）には送らない。Speech もオンデバイスモデル。
@@ -234,6 +236,7 @@ iPhone アプリはマイクを使わない（録音は Watch だけ。再生は
 | 英語・日英混在（#170） | (a) 振り分けの規則: `SegmentRoutingTest` / `LanguageRoutingTest`（`jvmTest`、`iosSimulatorArm64Test`）。(b) iOS の Kotlin 側: `IosTranscriberBridgeTest`（シミュレータ）で、英語オンの日本語 → 英語 → 日本語のチャンクが `ja, en, ja` で保存され、日本語だけはオン・オフで同じ、英語のパスの失敗で日本語が残ること。(c) アプリのプロセスで Swift → Kotlin → SQLite まで: `EnglishTranscriptionTests`（SpeechTests）。CI が `say`（Kyoko / Samantha）で日本語 → 英語 → 日本語の音声（`make-mixed-speech.sh`）を作る。実際の認識器（SpeechTranscriber、なければ DictationTranscriber）の 2 件は、GitHub のシミュレータではどちらも動かない（SpeechTranscriber は `isAvailable` が false、DictationTranscriber は `bestAvailableAudioFormat` が nil で解析が「Audio format is not supported」）ため理由を記録してスキップし、認識器だけを文の時刻から答える `ScriptedTranscriber` に替えた 2 件で `ja, en, ja` と日本語だけのオン・オフ一致を確認。形式の変換が長さを保つことも確認 | CI で確認（実際の認識での精度は実機、§11 の 19） |
 | SpeechTranscriber（ja_JP）の文字起こし（#21） | `SpeechTests`（iOS アプリをホストにした XCTest）。CI が macOS の `say`（日本語音声）→ `afconvert` で Watch と同じ AAC 16 kHz モノラルの音声と正解文を作り、`SpeechTranscription` で文字起こし → セグメントの時刻（0 以上・音声長以内・昇順）と文字の再現率 0.5 以上を確認。3 秒の無音を前に連結した場合に時刻がずれることも確認。DB への保存は `IosTranscriberBridgeTest`（Kotlin、シミュレータ）で確認。シミュレータで使えない（`isAvailable` が false、ja_JP 非対応、モデルを入れられない、解析がエラー）場合は理由をログ（`build/swift-evidence/`、ジョブサマリー）に残してスキップし、実機確認は #60 | CI で確認（結果はジョブサマリーの「Speech check logs」） |
 | Swift の型・Swift 6 並行性チェック | Linux の Swift 6.2 + Apple フレームワークのスタブ（API 名は developer.apple.com で確認）で SIL 診断まで実行 | 通過（SwiftUI の画面ファイルは対象外） |
+| 意味検索（#178） | `EmbeddingTests`（iOS アプリをホストにした XCTest）: アプリの ONNX Runtime（Swift パッケージ）で参照ベクトルとの一致、言い換えのクエリの検索、ダウンロードの再開と SHA-256 の確認（§15.5）。ダウンロードの手順は `ModelInstallerTest`（`jvmTest`・`iosSimulatorArm64Test`）、テスト用スクリプトのファイルは `RuriFilesScriptTest` | CI で確認（ジョブサマリーの「Semantic search checks in the app process」）。速度・電池・実際の Wi-Fi は実機（§11 の 21） |
 | ComposeApp フレームワークのリンク（bundled SQLite を含む）、Xcode ビルド、SwiftUI、実 API との一致 | **CI（macOS）のみ** | 要確認 |
 | 録音・転送・文字起こしの実動作、電池 | **実機のみ** | 下記チェックリスト |
 
@@ -261,6 +264,8 @@ iPhone アプリはマイクを使わない（録音は Watch だけ。再生は
 19. 英語（#170、§7.5）: 状態タブ「英語も文字起こしする」をオン → 「英語モデルを準備中…」→「準備完了」（初回は OS がダウンロード。Wi-Fi・モバイル通信での挙動と所要時間を記録）。英語だけの会話と、日本語と英語が交互の会話を録音 → タイムラインで英語の発話が英語（`lang = en`）で、日本語はオフのときと同じに保存される。日本語だけの会話（相づち・小声・雑音を含む）でオンにしても英語に化けないこと。英語オンで文字起こし時間（診断ログの RTF）と電池がどれだけ増えるかを、日本語だけの録音（無音の多い 1 時間）と英語の録音で測る。確信度の閾値 0.5 が合っているかを、誤って英語になった・英語が残らなかった発話の数で確かめる。オフにすると英語のパスが止まり、`AssetInventory.reservedLocales` から `en_US` が消える（モデルの削除は OS 次第）。機内モードで初回にオン → 失敗の表示と「英語モデルをもう一度準備」、通信を戻すと準備できる。
 20. エージェント連携（#185、§16）: PC で `npx watch-audio-mcp pair` → iPhone の状態タブ「エージェント連携を開く」→「カメラで QR コードを読み取る」→ カメラの許可（初回だけ）→ ターミナルの QR（明るいテーマ・暗いテーマ）が読める → ローカルネットワークの許可（初回だけ）→ 両方に同じ 6 桁 → ペアリングできる。家の Wi-Fi とテザリングで、ON にしてから PC のエージェントが読めるまでの時間（mDNS で見つかるか、前回のアドレスでつながるか）。ON のままホーム画面に戻る・画面を消すと OFF になり、PC 側の呼び出しが答えなくなる（戻っても OFF）。ローカルネットワークを設定アプリで OFF にしてから ON → 「ローカルネットワークへのアクセスが許可されていない」の表示。カメラを拒否してから読み取り → 文字列の入力の案内。アプリを削除して入れ直したときに鍵が作り直され、ペアリングのやり直しになること。AP アイソレーションの Wi-Fi での表示。ON の 30 分間の電池消費。
 
+21. 意味検索（#178、§15）: Wi-Fi で検索タブを初めて開く → 「意味で探すためのモデルをダウンロード中 N%」→ 終わると「意味で探す準備中 N%」になり、言い回しの違うクエリ（例: 「サーバー代がいくら増えるって言ってた？」）で「意味が近い」の結果が出る。ダウンロードの所要時間、途中でアプリを裏に回して戻したときに続きから進むこと（診断ログの `model_download_start` の `bytes=` が減っている）を記録する。モバイル通信だけ・テザリング・省データモードの Wi-Fi では始まらず「Wi-Fi に接続したときにダウンロード」と出ること。初回の埋め込み（前面・電池では直近 48 時間の 50 チャンクまで、残りは充電中の BGProcessingTask）にかかる時間と電池、検索 1 回の時間（モデルの読み込みを含む初回と 2 回目）、モデルを読み込んだ間のメモリ（Xcode の Memory Report）、Release ビルドの App Store のサイズ（App Store Connect の「App のサイズ」）を記録する。
+
 ## 12. 既知のリスク・制約
 
 - **CI でしか分からないこと**: ComposeApp 静的フレームワークのリンク（androidx.sqlite の bundled SQLite を含む初めてのリンク）、Kotlin が生成する ObjC ヘッダの Swift 名（`ingest(manifestJson:filePath:completion:)`、`IosSpeechTranscriber` の各メソッド、`transcribe(parts:language:callback:)` と `IosAudioPart` のプロパティ）、SwiftUI の `.backgroundTask(.watchConnectivity)` などのビルド。
@@ -271,7 +276,8 @@ iPhone アプリはマイクを使わない（録音は Watch だけ。再生は
 - **充電後の自動再開**はアプリが前面に来たときのみ（上記 4 章）。バックグラウンドで録音を開始できるかは watchOS の制約次第。
 - **割り込み後の再開**: watchOS が中断後にバックグラウンドでの録音再開を許すかは M0-3 の検証課題。失敗時は通知でユーザーに促す。
 - **無音判定の閾値**（ピーク −40 dBFS、Wear OS と共通）は仮の値。実機で誤判定（会話を捨てる）が無いことを最優先で確認する。`peakPower` は `updateMeters()` を呼んだ時点のメーターの値で、Wear OS の `getMaxAmplitude()`（1 秒間の最大値）とは集計の仕方が違うので、短い音を取りこぼさないかもあわせて確かめる。
-- **BGProcessingTask の実行頻度**は OS 任せ（充電中・アイドル時）。前面で開いている間が最も確実。
+- **BGProcessingTask の実行頻度**は OS 任せ（充電中・アイドル時）。前面で開いている間が最も確実。意味検索の古い会話の埋め込み（バックフィル）も同じで、BGProcessingTask が来ないと前面で開いている間に少しずつ進む（§15.4）。
+- **意味検索（§15）**: アプリのサイズが ONNX Runtime の分だけ増える（§15.5）。シミュレータ（Apple Silicon の Mac）は実機と同じ arm64 の int8 演算を使うと見込むが、速度・メモリ・電池は実機でしか分からない（§11 の 21、#60）。ダウンロードは前面だけ（バックグラウンドの `URLSession` は使わない）。
 - **エージェント連携（§16）は画面に出している間だけ**: iOS の制約。PC のエージェントに長く使わせるには iPhone の画面を出しておく必要がある（自動ロックで画面が消えると OFF）。mDNS で見つけたサービスを UDP の `NWConnection` でアドレスに解決する方法と、ローカルネットワークの許可を拒否したときの `NWConnection` の状態（`waiting` の理由）は、シミュレータではローカルネットワークの許可がないため実機でのみ確かめられる（#60）。
 - 共有パイプラインの `TranscriptionPipeline` はキャンセル時の `resetInterrupted()` が（キャンセル済みのため）実行されない場合があるが、iOS では毎回の実行前に `recoverInterrupted()` を呼んで補っている。
 
@@ -367,26 +373,64 @@ cat "$DATA/Library/Application Support/WatchAudio/diagnostics.csv"
 | 実機の文字盤での表示、システムからの `widgetURL` の受け渡し、中断後の 1 タップ再開 | 実機のみ（§11 の 13、#60） | 要確認 |
 
 
-## 15. 意味検索（#24、未対応）
+## 15. 意味検索（#24、#178）
 
-**現状: iOS の検索はキーワードのみ**。`IosAppServices` は `AppServices.semanticSearch` を持たない（既定の null）ので、検索画面は従来のキーワード検索の画面のままで、`IosAppGraph` の `TranscriptionRun` にも埋め込みの段は無い。
+iPhone でも Android と**同じモデル（ruri-v3-30m int8）・同じ共通コード**で意味検索が動く（#178）。共通コード（`shared/pipeline` の `UnigramTokenizer`・`EmbeddingPassages`・`Int8Vectors`・`VectorCache`・`SemanticIndex`・`HybridSearch`・`EmbeddingStep`・`ModelInstaller`、`shared/platform` の `PositionalFile`（iOS は POSIX の `pread` / `pwrite`））はそのままで、iOS に固有なのは埋め込みモデルの実行（ONNX Runtime）とモデルのダウンロード（`URLSession`）の 2 つだけ。検索・埋め込みの段・キャッシュの仕組みは [02 §6.3「埋め込み」](../architecture/02-architecture.md#埋め込み意味検索24) と [§6.4](../architecture/02-architecture.md#64-検索)。
 
-共通コード（`shared/pipeline` の `UnigramTokenizer`・`EmbeddingPassages`・`Int8Vectors`・`VectorCache`・`SemanticIndex`・`HybridSearch`・`EmbeddingStep`、`shared/platform` の `PositionalFile`（iOS は POSIX の `pread` / `pwrite`））は iOS 向けにもコンパイルされる（`compileKotlinIosSimulatorArm64`）。iOS に足りないのは次の 3 つ:
+### 15.1 構成
 
-1. **埋め込みモデルを動かす `EncoderRuntime`**（`input_ids` と `attention_mask` → `last_hidden_state`）。
-2. **モデルのダウンロード**: iOS アプリはインターネットへは通信しない（音声認識のモデルは OS が管理。通信はエージェント連携の LAN 内の接続だけ、§16）。ruri-v3-30m（約 44 MB、Android と同じ URL・SHA-256、`ModelManifest.embeddingFiles` 相当）を取るには、`URLSession`（バックグラウンドの構成）での取得・`Sha256` での検証・原子的な配置が要る。`tools/privacy-check` は `URLSession` を検査対象にしているので、許可リスト（`ALLOWED_API_USES` / `ALLOWED_URL_PREFIXES`）と 02 §7.2 を更新する（iOS で初めてのインターネットへの通信箇所になる）。
-3. **組み込み**: `IosAppGraph` で `SemanticIndex`（`Application Support/WatchAudio/search/`。ディレクトリの保護クラスとバックアップ除外を引き継ぐ）と `EmbeddingStep` を作り、`TranscriptionRun(embedding = …)` と `IosAppServices.semanticSearch` に渡す。BGProcessingTask（充電中）でバックフィルが進む。
+| 場所 | ファイル | 役割 |
+| --- | --- | --- |
+| iOS (Swift) | `apps/ios/App/Embedding/EmbeddingPlatform.swift` | Kotlin の `IosEmbeddingPlatform` の実装。`OrtEncoderSession` が ONNX Runtime の Objective-C API（`ORTSession`、CPU、intra-op 1 スレッド）で `input_ids` / `attention_mask` → `last_hidden_state` を計算する |
+| 〃 | `apps/ios/App/Embedding/ModelDownload.swift` | モデルのファイル 1 つのダウンロード（`URLSession`、Wi-Fi のみ、HTTP の範囲指定で続きから）。**iPhone アプリがインターネットにつなぐ唯一の箇所** |
+| iOS (Kotlin) | `shared/ui/src/iosMain/.../IosEmbeddingPlatform.kt` | Swift に実装させるインターフェース（`openEncoder`、`download`、`runtimeVersion`） |
+| 〃 | `IosEmbedding.kt` | `OnnxEmbedder`（共通）に Swift のセッションを渡す `IosEncoderRuntime`（`LongArray` ↔ `NSData`）、`ModelFetcher` の実装 `IosModelFetcher`、検索タブが状態を聞いたときにダウンロードを始める `IosSemanticSearch` |
+| 〃 | `IosAppGraph.kt` | `ModelInstaller`（`RuriV3.FILES`）・`SemanticIndex`・`EmbeddingStep` を作り、`TranscriptionRun`・`IosAppServices.semanticSearch`・エージェント連携の道具に渡す |
+| 〃 | `IosEmbeddingCheck.kt` | シミュレータ検査用: アプリの `IosEmbeddingPlatform` で、参照ベクトルとの一致・言い換えの検索・ダウンロードの再開を一時ディレクトリで確かめる（`EmbeddingTests` が使う） |
+| 共通 | `shared/pipeline/.../embedding/ModelInstaller.kt` | ダウンロードの手順（`.part` に取得 → 大きさと SHA-256 を確認 → 原子的に移動、失敗後 60 秒は再試行しない、状態の Flow）。`ModelInstallerTest`（`jvmTest` / `iosSimulatorArm64Test`） |
+| 共通 | `RuriV3.FILES`（`Embedder.kt`） | 両スマホが取得するファイル（URL はコミット固定、大きさ、SHA-256）。Android の `ModelManifest.embeddingFiles` も、テスト用のスクリプト（`tools/harness/download-models.sh`、`.github/scripts/ios-embedding-model.sh`）もこれと一致させる（`RuriFilesScriptTest`） |
+| テスト | `apps/ios/Tests/EmbeddingTests/EmbeddingTests.swift` | アプリをホストにした XCTest（§15.5） |
 
-`EncoderRuntime` の候補:
+### 15.2 埋め込みモデルの実行: 方式の比較と選択
 
-| 案 | 内容 | 長所 | 短所 |
-| --- | --- | --- | --- |
-| **A. ONNX Runtime（SPM）を Swift で包む（推奨）** | `onnxruntime-swift-package-manager`（ObjC/Swift API）で `ORTSession` を作り、Swift で `EncoderRuntime` を実装して Kotlin に注入する（文字起こしの `IosSpeechTranscriber` と同じ Swift → Kotlin の注入の形、§6） | Android と**同じモデル・同じベクトル**（JVM で Python と一致を確認済み、[m0-6 §9.1](../research/m0-6-embedding-desktop.md#91-トークナイザと埋め込みの一致)）。評価結果（m0-6 §9.2）がそのまま当てはまる。SPM をそのまま使える | アプリが大きくなる（フル版の ONNX Runtime。ModernBERT の演算子があるかは Mobile 版では未確認）。Swift 側のテスト（XCTest、シミュレータ）を足す |
-| B. ONNX Runtime の C API を cinterop で呼ぶ | `onnxruntime_c_api.h` を cinterop し、`shared/ort` と同じ関数テーブルの呼び出しを Kotlin/Native で書く。xcframework は Xcode 側でリンク | 実装が Kotlin だけで、Android の `OrtApi` と同じ構造 | ヘッダの同梱、cinterop と静的リンクの設定（ComposeApp framework とホストアプリ）を CI の macOS でしか確かめられない。SPM のパッケージは cinterop から直接は使えない |
-| C. Core ML に変換 | coremltools で ruri-v3（ModernBERT）を `.mlpackage` に変換し、Core ML（Neural Engine）で動かす | 速い・電池に優しい可能性 | 変換したモデルの配布元が要る（このプロジェクトは上流のファイルだけをダウンロードする方針）。局所・大域アテンションの変換と、ONNX 版との一致を別に確かめる必要がある |
-| D. `NLContextualEmbedding`（Apple） | OS のトークン単位の埋め込みを平均して文ベクトルにする | ダウンロードもライブラリも不要（OS 管理のアセット） | 別のモデル（検索用に学習されていない、512 次元程度）で品質が未知（M0-6 §6.3）。Mac で m0-6 §9.2 と同じ評価をしてから判断する |
+| 案 | 内容 | アプリのサイズ | 速度 | 保守 | JVM のベクトルとの一致 |
+| --- | --- | --- | --- | --- | --- |
+| **A. ONNX Runtime（SPM）を Swift で包む（採用）** | Microsoft の公式パッケージ `onnxruntime-swift-package-manager`（MIT）を `exactVersion: 1.24.2` で固定し、その Objective-C API を Swift から呼ぶ。Kotlin の `EncoderRuntime` に注入する（文字起こしの `IosSpeechTranscriber` と同じ形、§6） | 増える（フル版の CPU 実行環境の静的ライブラリ。リンク後の増分は §15.5 の Release ビルドで計測） | CPU（int8、1 スレッド）。シミュレータの計測は §15.5、実機は #60 | フォークなし。上流の版を上げるときは `project.yml` の版を変えるだけ。モデル・トークナイザ・前後処理は Android と共通コード | **同じモデルファイル・同じ前後処理**。違いは CPU ごとの int8 演算（x86 の AVX2 / VNNI と ARM）だけで、§15.5 で計測 |
+| B. ONNX Runtime の C API を cinterop | `onnxruntime_c_api.h` を Kotlin/Native から呼ぶ（Android の `shared/ort` と同じ関数表） | A と同じ | A と同じ | ヘッダの同梱・cinterop・静的リンクの設定を自前で持ち、macOS の CI でしか確かめられない。SPM のパッケージは cinterop から直接は使えない | A と同じ |
+| C. Core ML に変換 | coremltools で ModernBERT（ruri-v3）を `.mlpackage` に変換し、Neural Engine で動かす | 実行環境は OS にあるので小さい | 速い・電池に優しい可能性 | **変換したモデルの置き場が要る**（このプロジェクトは上流のファイルをそのまま取得する方針。変換の手順と変換物の配布を自前で保守することになる）。局所・大域アテンションの変換が通るかも未確認 | **別のモデル**になる（int8 の動的量子化は変換されず fp16 になる）。Android と同じベクトルにならず、端末の間で検索結果が揃わない。一致の確認も別に要る |
+| D. `NLContextualEmbedding`（Apple） | OS のトークン単位の埋め込みを平均する | 増えない | 速い | ライブラリもダウンロードも無い | 別のモデル（検索用に学習されていない）で、品質が未評価（M0-6 §6.3） |
 
-**推奨**: A。Android と同じモデルなので、品質・速度の根拠（m0-6 §9）と `tools/harness` の評価がそのまま使え、トークナイザ・passage・キャッシュ・統合は共通コードのまま。B は A のサイズや保守に問題が出たときの代替、D はアプリサイズを最優先にする場合の候補（評価が先）。後続の Issue で、(1) Swift の `EncoderRuntime` と注入、(2) iOS のモデルダウンロード（privacy-check の更新を含む）、(3) シミュレータでの一致テスト（`testdata/ruri-reference.json` と同じ値になるか）と CI、(4) 実機の速度・メモリ・アプリサイズ、を扱う。
+**A を採用**した。フォークも変換物の保守もせず、上流のパッケージ（Microsoft の公式、MIT）と上流のモデルファイルをそのまま使える。Android と同じファイル・同じ共通コードなので、品質の評価（[m0-6 §9.2](../research/m0-6-embedding-desktop.md#92-検索品質キーワードのみ-と-ハイブリッド上位-5-件)）・`tools/harness` の評価がそのまま当てはまり、埋め込みモデルの id（`ruri-v3-30m-int8@1b41a27`）も同じ。代償はアプリのサイズで、気になるようなら B（同じランタイム）でも変わらず、C は保守の方針に合わない。ライセンスは MIT（ライセンス画面の「ONNX Runtime for iOS」、`OpenSourceNotices`）。パッケージはバイナリ（`pod-archive-onnxruntime-c-1.24.2.zip`、SHA-256 は上流の `Package.swift` が固定）を `download.onnxruntime.ai` から取るが、これはビルド時だけで、アプリは通信しない。
+
+### 15.3 モデルのダウンロード
+
+- **いつ**: 検索タブを初めて開いたとき（共通の `SearchViewModel` が `semanticStatus` を聞く → `IosSemanticSearch.status()` → `ModelInstaller.requestDownload()`）。Android と同じく、検索しない人は何もダウンロードしない。失敗したら、検索タブを開いている間に 60 秒おきに再試行する。
+- **何を**: `RuriV3.FILES`（Android と同じ 2 ファイル、計 約 44 MB）。URL は Hugging Face のコミット固定（`onnx-community/ruri-v3-30m-ONNX@1b41a27`、`cl-nagoya/ruri-v3-30m@24899e5`）。
+- **Wi-Fi のみ**: `ModelDownload` の `URLSessionConfiguration.ephemeral`（Cookie・キャッシュを残さない）で `allowsCellularAccess = false`・`allowsExpensiveNetworkAccess = false`（iPhone のテザリングなど）・`allowsConstrainedNetworkAccess = false`（省データモード）。条件に合う通信が無い間は `waitsForConnectivity` で待ち、その間は検索画面に「意味で探すためのモデルは Wi-Fi に接続したときにダウンロードします」と出る（`NWPathMonitor` は使わず、`URLSession` に任せる）。
+- **続きから**: ファイルは `<名前>.part` に書き、中断（アプリが裏に回る・通信が切れる）しても次の試行で `Range: bytes=<既存の長さ>-` で続きを取る。Hugging Face は CDN へリダイレクトするので、リダイレクト先にも範囲を付け直す（HTTPS 以外へは従わない）。サーバーが全体を返したら最初から書き直す。
+- **検証**: 取り終えたら大きさと SHA-256（`sha256Of`、共通）を確かめてから本来の名前に原子的に移す。違えば `.part` を消して最初から。
+- **進み具合**: 状態（`ModelState.Downloading`）を検索画面の「意味で探すためのモデルをダウンロード中 N%」に出す。取り終えると、受信済みの文字起こしの埋め込みがすぐ始まる（`requestTranscription()`）。
+- **置き場**: `Application Support/WatchAudio/models/ruri-v3-30m/`。`LocalDataDirectory` でバックアップ対象外・保護クラス `CompleteUntilFirstUserAuthentication`（§8、[02 §7.1](../architecture/02-architecture.md#71-保存場所と保護76)）。ベクトルのキャッシュは `search/`（同じ扱い）。「すべてのデータを削除」でもモデルは消さない（Android と同じ）。
+- **バックグラウンドの `URLSession` は使わない**: 約 44 MB で、Wi-Fi なら画面を開いている間に終わる。裏に回って止まっても、次に検索タブを開いたときに続きから取る。
+- **検査**: `tools/privacy-check` が `URLSession` を `ModelDownload.swift` だけに許し、そこに上の 3 つの制限・ephemeral・HTTPS だけであることが残っているか、`IosAppGraph.kt` が `RuriV3.FILES` だけを渡しているかを検査する（`ALLOWED_API_REQUIREMENTS`）。URL は Android と同じ許可済みの接頭辞だけ。診断ログには `model_download_start` / `model_download_done` / `model_ready` / `model_download_failed`（`model=embedding`、理由は `http_404`・`url_error_-1009` のような短い記号だけで URL は書かない）。
+
+### 15.4 組み込み
+
+- `IosAppGraph.start(…, embedding: EmbeddingPlatform())` で Swift の実装を受け取る（§6）。
+- `TranscriptionRun(embedding = EmbeddingStep(…))`: Android と同じく、文字起こし待ちが無くなってから埋め込む。前面の実行では、電池なら受信から 48 時間以内のチャンクを 1 回 50 件まで、充電中なら 1 回 300 件まで。埋め込みの段が「続きがある」（`RunAgain`）と言えば前面ではそのまま次の実行へ、BGProcessingTask でも期限まで続ける。「古い分は充電中に」（`OnCharge`）なら BGProcessingTask（`requiresExternalPower`）を予約する。
+- 日・全データの削除の後は `StorageManager.onDeleted` でベクトルのキャッシュからも消す。
+- エージェント連携（§16）の検索も意味検索を使う（モデルが準備できていれば）。
+
+### 15.5 検証
+
+- **CI（ios.yml「Semantic search on the iOS simulator」、`EmbeddingTests`）**: アプリのプロセスで、アプリ自身の `EmbeddingPlatform`（Swift パッケージの ONNX Runtime、`URLSession`）を `IosEmbeddingCheck` 経由で使う。モデルは `.github/scripts/ios-embedding-model.sh` がアプリと同じ固定のファイルを取り、`actions/cache`（スクリプトのハッシュがキー。固定のコミットが変わったときだけ取り直す）に置く。
+  1. Android と同じ参照ベクトル（`embedding-reference.json`、JVM が計算、`DeviceEmbeddingFixtureTest`）の 8 文と、コサインで比べる。言い換えのクエリ 4 件が（JVM で 0.05 以上の差がある）正しい会話を 1 位にする。
+  2. M0-6 の Python の参照（`tools/harness/testdata/ruri-reference.json`、「うん」・絵文字・半角カナを含む 10 文）とも比べる。
+  3. 一時 DB に 4 つの会話を入れ、`EmbeddingStep` と `HybridSearch` で「サーバー代がいくら増えるって言ってた？」（会話と共通の語なし）がその会話を意味で 1 位に見つける。
+  4. アプリのダウンロード（`ModelInstaller` + `ModelDownload`）でトークナイザ（6.7 MB）を固定のコミットから取り、2 MB で中断 → `.part` の続きから取り直して SHA-256 を確認して置く。置き場がバックアップ対象外。
+- 計測（シミュレータ、arm64 の Mac。JVM の参照は x86 の Linux）: TODO_MEASURED
+- **しきい値**: TODO_THRESHOLD
+- 実機（#60）: 速度・電池・メモリ・アプリのサイズ・実際の Wi-Fi でのダウンロード（§11 の 21）。
 
 ## 16. エージェント連携（#185）
 

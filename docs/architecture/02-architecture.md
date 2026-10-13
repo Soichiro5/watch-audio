@@ -1,10 +1,10 @@
 # 02. 全体構成（アーキテクチャ）
 
-> 現在のゴール（[03-roadmap.md](../product/03-roadmap.md)）は「装着中は常時録音 → スマホでオンデバイス文字起こし → 端末内に蓄積」。この文書は**実装済みの構成**を基本に書き、AI 要約・チャット・体調・場所など後回し（P2）の部分は「将来（P2）」と明記して区別する。意味検索（#24）は Android で実装済み（iOS はキーワード検索のみ、§6.4）。
+> 現在のゴール（[03-roadmap.md](../product/03-roadmap.md)）は「装着中は常時録音 → スマホでオンデバイス文字起こし → 端末内に蓄積」。この文書は**実装済みの構成**を基本に書き、AI 要約・チャット・体調・場所など後回し（P2）の部分は「将来（P2）」と明記して区別する。意味検索（#24）は Android と iOS（#178）で実装済み（§6.4）。
 
 ## 1. 設計方針
 
-1. **ローカルのみ / サーバーレス** — 音声・文字起こし・索引はすべて端末内。現時点のネットワーク利用は**文字起こしモデルのダウンロードだけ**（Android: sherpa-onnx の GitHub Releases から `HttpURLConnection` で取得、iOS: Speech のモデルは OS が `AssetInventory` で導入）。Watch → スマホの転送も端末間の直接接続のみ（Wear OS は `Node.isNearby` のノードへ `ChannelClient` / `MessageClient`。`DataClient` のクラウド同期経路は使わない）。将来（P2）の AI 機能で外部の LLM に送る場合も、送るのはテキストだけで、ユーザーが明示的に設定したときに限る。
+1. **ローカルのみ / サーバーレス** — 音声・文字起こし・索引はすべて端末内。現時点のネットワーク利用は**モデルのダウンロードだけ**（Android: 文字起こしと意味検索のモデルを `HttpURLConnection` で取得、iOS: Speech のモデルは OS が `AssetInventory` で導入し、意味検索のモデルだけアプリが `URLSession` で Wi-Fi のときに取得、#178）。エージェント連携の LAN 内の接続は §6.9。Watch → スマホの転送も端末間の直接接続のみ（Wear OS は `Node.isNearby` のノードへ `ChannelClient` / `MessageClient`。`DataClient` のクラウド同期経路は使わない）。将来（P2）の AI 機能で外部の LLM に送る場合も、送るのはテキストだけで、ユーザーが明示的に設定したときに限る。
 2. **Watch は薄く、スマホが頭脳** — Watch は「録音・Mark・チャンク化・転送」に専念し、重い処理（ASR）はスマホで後追い実行する。
 3. **ロジック共有、プラットフォーム固有部はアダプタ** — 転送プロトコル・DB・取り込み・文字起こしパイプライン・スマホ UI は Kotlin Multiplatform で 1 本化。ASR・ストレージ情報・再生・権限など OS 依存部はインターフェース（`Transcriber`, `StorageEnvironment`, `AppServices`）か `expect/actual`（`shared/platform`）で差し替える。`if (platform)` の分岐は書かない。
 4. **劣化動作（Graceful degradation）** — モデルが未準備、Watch が未接続などでも、受信済みのデータの保存・閲覧・検索は動く（文字起こしはモデルが揃ってから追いつく）。
@@ -23,8 +23,8 @@
 | DI | **手書きの composition root**（DI ライブラリは使わない） | Android スマホ: `AppGraph`（`apps/android`）、iOS: `IosAppGraph`（`shared/ui/iosMain`）、Wear OS: `AppGraph`（`apps/wear/WearApp.kt`）。グラフが小さく、Worker・Service・BGTask から UI なしで同じオブジェクトに届けばよいため |
 | 非同期 | Kotlin Coroutines / Flow | KMP 定番 |
 | バックグラウンド処理 | Android: WorkManager、iOS: `BGProcessingTask` | 文字起こし・保持期間の適用・途絶チェック |
-| ネットワーク | 専用の HTTP クライアントは使わない | 通信はモデルのダウンロードだけ（Android は `HttpURLConnection`、iOS は OS 管理）。AI 機能（P2）の HTTP クライアントは P2 で決める。CI の `tools/privacy-check` が通信 API・依存を検査（§7.3） |
-| 意味検索（#24） | 埋め込みモデル `cl-nagoya/ruri-v3-30m`（int8 ONNX、256 次元）、純 Kotlin の SentencePiece Unigram トークナイザ、int8 ベクトルの総当たり検索 + FTS5 との RRF。Android は ONNX Runtime の C API を JNA で（sherpa-onnx 同梱の `libonnxruntime.so` を共用、`shared/ort`）。iOS は未対応（キーワード検索のみ） | M0-6 で比較して採用（[research/m0-6](../research/m0-6-embedding-desktop.md)）。ONNX Runtime の Java パッケージを使わない理由は [android-phone §3.4](../platforms/android-phone.md#34-意味検索の埋め込みモデル24) |
+| ネットワーク | 専用の HTTP クライアントは使わない | 通信はモデルのダウンロードだけ（Android は `HttpURLConnection`、iOS は音声認識が OS 管理・意味検索のモデルが `URLSession`）。AI 機能（P2）の HTTP クライアントは P2 で決める。CI の `tools/privacy-check` が通信 API・依存を検査（§7.3） |
+| 意味検索（#24） | 埋め込みモデル `cl-nagoya/ruri-v3-30m`（int8 ONNX、256 次元）、純 Kotlin の SentencePiece Unigram トークナイザ、int8 ベクトルの総当たり検索 + FTS5 との RRF。Android は ONNX Runtime の C API を JNA で（sherpa-onnx 同梱の `libonnxruntime.so` を共用、`shared/ort`）。iOS は ONNX Runtime の公式 Swift パッケージ（`onnxruntime-swift-package-manager`、版を固定）の Objective-C API を Swift から（#178） | M0-6 で比較して採用（[research/m0-6](../research/m0-6-embedding-desktop.md)）。ONNX Runtime の Java パッケージを使わない理由は [android-phone §3.4](../platforms/android-phone.md#34-意味検索の埋め込みモデル24)、iOS で Core ML などと比べた結果は [ios-watchos §15.2](../platforms/ios-watchos.md#152-埋め込みモデルの実行-方式の比較と選択) |
 | CI | GitHub Actions（`android.yml` / `emulator.yml`: ubuntu、`ios.yml`: macOS、`deliver.yml`: `main` で APK を保存） | |
 | 将来（P2） | BYOK の LLM（要約・チャット）と API キー保管（Keychain / Keystore）、HealthKit / Health Connect | 採用ライブラリは着手時に決める |
 
@@ -218,11 +218,11 @@ no_audio（無音チャンク。文字起こししない）
 
 #### 埋め込み（意味検索、#24）
 
-`TranscriptionRun` は、文字起こし待ちのチャンクが無くなった後に `EmbeddingStep`（`shared/pipeline`、Android は埋め込みモデルがあるときだけ。iOS は無し）を動かす。文字起こしを遅らせないこと、電池・発熱の方針に従うことが条件。
+`TranscriptionRun` は、文字起こし待ちのチャンクが無くなった後に `EmbeddingStep`（`shared/pipeline`、埋め込みモデルがあるときだけ。Android・iOS（#178）とも）を動かす。文字起こしを遅らせないこと、電池・発熱の方針に従うことが条件。
 
 1. **対象**: 文字起こし済み（`TRANSCRIBED`）でセグメントがあり、今のモデル（`EmbeddingModelSpec.id`）の passage が無いチャンク。**新しい順**（最近の会話から意味で探せるようになる）。
 2. **短いセグメントの結合**（`EmbeddingPassages`）: #68 以降のセグメントは 1 つが 2 秒前後・12 文字前後と短く、そのままでは埋め込みの意味が弱く、1 年で 310 万件にもなる。チャンクの中で連続するセグメントを、トークン数（モデルのトークナイザで数える）が 24 以上になるまでつなぎ（最大 128、30 秒を超える間では切る）、1 つの passage として埋め込む。最後が短ければ 1 つ前に足す。評価（[m0-6 §9.2](../research/m0-6-embedding-desktop.md#92-検索品質キーワードのみ-と-ハイブリッド上位-5-件)）で 16〜24 が会話コーパスで最もよく、24 で約 3.2 セグメントが 1 passage（1 年 約 100 万件）。
-3. **埋め込み**: 「検索文書: 」を前に付けてトークナイズ（`UnigramTokenizer`、純 Kotlin で HF `tokenizers` と同じ ID 列）、`EncoderRuntime`（プラットフォーム。Android は ONNX Runtime）で `last_hidden_state`、平均プーリング、L2 正規化。1 件ずつ（int8 モデルはパディングで値が変わるため）。
+3. **埋め込み**: 「検索文書: 」を前に付けてトークナイズ（`UnigramTokenizer`、純 Kotlin で HF `tokenizers` と同じ ID 列）、`EncoderRuntime`（プラットフォーム。Android・iOS とも ONNX Runtime）で `last_hidden_state`、平均プーリング、L2 正規化。1 件ずつ（int8 モデルはパディングで値が変わるため）。
 4. **保存**: ベクトルごとの対称 int8 量子化（`Int8Vectors`、scale = 最大絶対値 / 127）で `passage_embedding` に。保存の直前に、読んだときとチャンクのセグメントが同じか確かめる（違えば保存せず、次の実行で埋め込み直す）。
 5. **埋め込み直し**: セグメントが変わる（境界の再認識 §6.3「チャンク境界をまたぐ発話」、文字起こしのやり直し、復元）とトリガがそのチャンクの passage を消すので、次の実行で 1 から埋め込み直す。モデルを変えたら（`id` が変わる）古いモデルの passage を少しずつ消し、全チャンクを埋め込み直す（その間も、埋め込んだ分は新しいモデルで探せる）。
 6. **電池**: 方針（`ProcessingPolicy`）が「実行してよい」と言う間だけ。電池駆動では受信から 48 時間以内のチャンクを 1 回 50 件まで（その日の会話）。古い分（初回のバックフィル・埋め込み直し）は充電中だけ、1 回 300 件・4 分まで。チャンクの合間ごとに、新しいチャンクの到着・OS の停止・方針の変化を確かめて止まる。失敗は文字起こしに影響しない（診断ログ `embedding_run` / `embedding_failed`）。
@@ -319,16 +319,16 @@ Watch は発話に関係なく約 5 分ごとにチャンクを区切るので�
 
 キーワード: `transcript_segment` の FTS5（trigram）によるキーワードの部分一致検索。trigram は 3 文字未満の語を引けないので、1〜2 文字の検索は `idx_segment_start_text` を新しい順に走査する `LIKE` で補う（#23、性能は §8）。
 
-#### 意味検索とハイブリッド（#24、Android のみ）
+#### 意味検索とハイブリッド（#24、iOS は #178）
 
 言い回しが違っても意味の近い会話を探せるように、キーワード検索に意味検索を組み合わせる（`HybridSearch`、`shared/pipeline` の `app.watchaudio.core.search`）。
 
 1. **キーワード**: 上の FTS5 の検索（新しい順、最大 100 件）。画面にはまずこれを出す。
 2. **意味**: クエリに「検索クエリ: 」を付けて埋め込み、int8 に量子化し、今のモデルの全 passage と総当たりで内積（≈ コサイン類似度）を取って上位 20 件（`SemanticIndex`）。ruri-v3 の類似度は無関係な会話でも 0.8〜0.9 と高く固定のしきい値では分けられないので、**最上位から 0.04 以内**のものだけ残す。
 3. **統合**: 2 つの順位を RRF（Reciprocal Rank Fusion、k = 60）で統合する。キーワードで見つかったセグメントが、意味でも見つかった passage に含まれていれば同じ結果として数える（passage ごとに最初の 1 件）ので、両方で見つかった会話が上に来る。意味だけで見つかった結果は passage の本文（最大 80 文字）を出し、そのセグメントの先頭から開く。
-4. 意味検索ができない間（iOS・モデル未取得・失敗）は**キーワード検索そのまま**。
+4. 意味検索ができない間（モデル未取得・失敗）は**キーワード検索そのまま**。
 
-**総当たりの検索**（`VectorCache`）: 毎回 SQLite から全ベクトルを読むと数秒かかる（M0-6 §4.3）ので、今のモデルのベクトルをアプリのデータ領域のフラットなファイル（Android `files/search/<モデル>.ids` / `.vec`）にも持つ。`.ids` は passage ID と scale（1 件 12 バイト。開くときにメモリへ読む）、`.vec` は int8 の値（1 件 256 バイト。検索時にブロックごとに読む。Java のヒープには載せず、OS のページキャッシュに任せる）。走査は行の範囲を 4 スレッドに分けて並列に行い、各スレッドの上位 K 件をまとめる。このファイルは**派生データのキャッシュ**で、正本は SQLite:
+**総当たりの検索**（`VectorCache`）: 毎回 SQLite から全ベクトルを読むと数秒かかる（M0-6 §4.3）ので、今のモデルのベクトルをアプリのデータ領域のフラットなファイル（Android `files/search/<モデル>.ids` / `.vec`、iOS `Application Support/WatchAudio/search/`）にも持つ。`.ids` は passage ID と scale（1 件 12 バイト。開くときにメモリへ読む）、`.vec` は int8 の値（1 件 256 バイト。検索時にブロックごとに読む。Java のヒープには載せず、OS のページキャッシュに任せる）。走査は行の範囲を 4 スレッドに分けて並列に行い、各スレッドの上位 K 件をまとめる。このファイルは**派生データのキャッシュ**で、正本は SQLite:
 
 - 追加: passage ID は再利用されない（AUTOINCREMENT）ので、前回より大きい ID の行を読んで末尾に足す。
 - 削除: passage の削除（チャンクの削除・埋め込み直し）はトリガが `passage_deletion` に記録し、キャッシュはそれを読んで該当レコードを**ゼロで上書き**する（消えた会話の意味をファイルに残さない）。適用した分は埋め込みの段の後に記録から消し、消した位置（`deletion_floor`）より古い状態のキャッシュは作り直す。全削除・日の削除の後はすぐに反映する（`StorageManager` の `onDeleted`）。
@@ -336,9 +336,9 @@ Watch は発話に関係なく約 5 分ごとにチャンクを区切るので�
 - 性能（JVM、[m0-6 §9.3](../research/m0-6-embedding-desktop.md#93-速度jvmこのコンテナの-4-vcpu負荷はほぼなし)）: 50 万件で p50 40 ms / p95 47 ms、110 万件（約 1 年）で 69 / 96 ms（4 スレッド）。スマホは 2〜3 倍と見込む（実機は未計測）。
 - 品質（m0-6 §9.2）: 会話らしい言い換えのクエリで上位 5 件に正解が入る割合が、キーワードのみ 0.00 → ハイブリッド 0.76（49 件）。
 
-**オンデバイスのみ**: クエリ・その埋め込み・passage・ベクトルはすべて端末内で扱い、どこにも送らない（`OnnxEmbedder` と `shared/ort` は通信しない。通信はモデルのダウンロードだけ、§7.2）。
+**オンデバイスのみ**: クエリ・その埋め込み・passage・ベクトルはすべて端末内で扱い、どこにも送らない（`OnnxEmbedder`・`shared/ort`・iOS の ONNX Runtime は通信しない。通信はモデルのダウンロードだけ、§7.2）。
 
-**iOS**: 共通コード（トークナイザ・passage・キャッシュ・統合）は iOS でもそのまま動くが、埋め込みモデルを動かす `EncoderRuntime` とモデルのダウンロードが無いので、`AppServices.semanticSearch` は null（キーワード検索のみ）。方針は [ios-watchos.md](../platforms/ios-watchos.md#15-意味検索24未対応) にまとめた。
+**iOS**（#178）: 共通コード（トークナイザ・passage・キャッシュ・統合・埋め込みの段）はそのままで、`EncoderRuntime` を Swift の ONNX Runtime（公式の Swift パッケージ）で、モデルのダウンロードを共通の `ModelInstaller` と Swift の `URLSession`（Wi-Fi のみ）で実装した。モデルのファイル（`RuriV3.FILES`）・id・ベクトルは Android と同じ。詳細と方式の比較は [ios-watchos.md §15](../platforms/ios-watchos.md#15-意味検索24178)。
 
 #### 将来（P2）: チャット（RAG）
 
@@ -650,7 +650,7 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 | Android スマホ | 受信中のチャンク | `cache/incoming/` | 同上 | 同上 |
 | Wear OS | 録音中・送信待ちのチャンク | `files/recording/`、`files/outbox/` | 同上 | `allowBackup="false"`。`data_extraction_rules` でクラウドバックアップと端末間転送の両方から全ドメインを除外 |
 | Wear OS | 診断ログ（イベントと電池残量の CSV。音声・文字起こしは含まない） | アプリ専用の外部ストレージ `Android/data/app.watchaudio/files/diagnostics/` | 他アプリからは読めない（Android 11+）。adb では取り出せる（電池計測用） | 同上（`external` ドメインも除外） |
-| iPhone | DB、音声、受信直後のファイル | `Application Support/WatchAudio/`（`watch-audio.db`、`audio/`、`inbox/`） | `NSFileProtectionCompleteUntilFirstUserAuthentication` をディレクトリに明示（`LocalDataDirectory`）。中に作るファイルはこのクラスを引き継ぐ | `NSURLIsExcludedFromBackupKey`（ディレクトリに設定すると中身も対象外） |
+| iPhone | DB、音声、受信直後のファイル、意味検索のモデルとベクトルのキャッシュ（#178） | `Application Support/WatchAudio/`（`watch-audio.db`、`audio/`、`inbox/`、`models/`、`search/`） | `NSFileProtectionCompleteUntilFirstUserAuthentication` をディレクトリに明示（`LocalDataDirectory`）。中に作るファイルはこのクラスを引き継ぐ | `NSURLIsExcludedFromBackupKey`（ディレクトリに設定すると中身も対象外） |
 | Android スマホ・iPhone | 診断ログ（イベントの CSV。本文・音声・例外メッセージは含まない）（#77） | Android: `files/diagnostics/`、iPhone: `Application Support/WatchAudio/diagnostics/` | 上の DB と同じ | 上の DB と同じ。端末外へはユーザーが共有シートで書き出したときだけ |
 | iPhone | 文字起こし用の一時ファイル | `tmp/` | 既定（同上） | 一時ディレクトリはバックアップされない。処理後に削除 |
 | iPhone | データの書き出し（#155）の ZIP、暗号化バックアップ（#40）のファイル（暗号化済み） | `tmp/data-export/` | 既定（同上） | 一時ディレクトリはバックアップされない。共有シートを閉じたら削除（次の書き出しでも前回分を削除）。Android はアプリの領域に書かず、ユーザーが作った文書へ直接書く |
@@ -670,12 +670,13 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 | Wear OS → スマホ | チャンクと ACK | 直接つながっているペアのスマホ（`Node.isNearby`） | `ChannelClient` / `MessageClient`（Wearable Data Layer）。クラウド経由で同期されうる `DataClient` は使わない。Wear OS アプリに INTERNET 権限はない |
 | Apple Watch → iPhone | チャンクと ACK | ペアの iPhone | WatchConnectivity（`transferFile` / `transferUserInfo`）。OS が管理する端末間の転送 |
 | iPhone | 音声認識モデル | Apple（OS が管理） | `SpeechAnalyzer` の `AssetInventory`。アプリは URL を持たない。文字起こし自体は端末上 |
+| iPhone | 意味検索の埋め込みモデル（ruri-v3-30m、約 44 MB、#178）のダウンロード。検索タブを初めて開いたときだけ、**Wi-Fi のみ**（モバイル通信・テザリング・省データモードでは待つ）。ファイル単位・続きから再開・SHA-256 検証 | Android と同じ `https://huggingface.co/onnx-community/ruri-v3-30m-ONNX`・`https://huggingface.co/cl-nagoya/ruri-v3-30m`（どちらもコミット固定。Hugging Face の CDN へのリダイレクトは HTTPS だけ従う） | URL とハッシュは `shared/pipeline` の `RuriV3.FILES`、手順は `ModelInstaller`、通信は `apps/ios/App/Embedding/ModelDownload.swift`（`URLSession`、ephemeral、`allowsCellularAccess` / `allowsExpensiveNetworkAccess` / `allowsConstrainedNetworkAccess = false`）。iPhone アプリがインターネットにつなぐのはここだけ |
 
 | Android スマホ → PC（エージェント連携、#184） | 本人が「エージェント接続」を ON にしている間（既定 30 分）だけ、ペアリングした PC の橋渡し CLI へ相互 TLS 1.3 でつなぎ、PC のエージェントの道具の呼び出しに答える。ペアリングのときは QR のアドレスへ 1 回つなぐ。スマホは待ち受けない | 同じネットワーク（または本人の VPN）内のペアリングした PC だけ。LAN の IP リテラル（プライベート・リンクローカル・100.64/10・ループバック、IPv6 の ULA・リンクローカル）に限り、DNS は引かない。PC の鍵は指紋で固定。mDNS（`_watchaudio-mcp._tcp`）は探すだけで告知しない | `apps/android/.../agent/TlsAgentTransport.kt`（`SSLSocket`）、`NsdBridgeDiscovery.kt`（`NsdManager`）。INTERNET 権限はこれとモデルのダウンロードのためだけ |
 | iPhone → PC（エージェント連携、#185） | 本人が「エージェント接続」を ON にしていて、**アプリを画面に出している間だけ**（裏に回ると OFF、既定 30 分）、ペアリングした PC の橋渡し CLI へ相互 TLS 1.3 でつなぎ、道具の呼び出しに答える。ペアリングのときは QR のアドレスへ 1 回つなぐ。iPhone は待ち受けない | Android と同じ（LAN の IP リテラルだけ、DNS は引かない、PC の鍵は指紋で固定）。mDNS（`_watchaudio-mcp._tcp`）は探すだけで告知しない。見つけたサービスのアドレスは UDP の `NWConnection` で名前だけ解決する（PC には何も送らない） | `apps/ios/App/Agent/AgentNetwork.swift`（Network.framework の `NWConnection`・`NWBrowser`）。宛先の判定（`isLanHost`）は `shared/ui/src/iosMain/.../IosAgentTransport.kt` |
 | PC（エージェント連携の橋渡し CLI、#183） | 待ち受け（ペアリングしたスマホからの相互 TLS 1.3）と mDNS の告知。CLI から外へ接続することはない | 同じネットワーク内のペアリングしたスマホだけ（mDNS は `224.0.0.251:5353`、リンクローカル） | `tools/agent-bridge/src/bridge.ts`・`pairing.ts`（`node:tls` の待ち受け）、`mdns.ts`（`multicast-dns`） |
 
-アプリのコード（出荷されるソース。テストコードは除く）で通信 API を使うのは `ModelDownloader.kt` と、エージェント連携の `TlsAgentTransport.kt`（LAN の TLS）・`NsdBridgeDiscovery.kt`（mDNS の探索）・iPhone の `AgentNetwork.swift`（Network.framework の TLS と mDNS の探索）だけ、URL を持つのは `ModelManifest.kt` だけ。`TlsAgentTransport.kt` は、LAN のアドレスだけにつなぐこと（`isLanHost`）・DNS を引かないこと・鍵の固定・TLS 1.3 だけであることも検査する（`ALLOWED_API_REQUIREMENTS`）。iPhone は `IosAgentTransport.kt` が `isLanHost` で宛先を絞り、`AgentNetwork.swift` が IP リテラルとして解釈すること（`IPv4Address` / `IPv6Address`）・TLS 1.3 の最小と最大・自分の鍵の提示・検証のブロックでの鍵の指紋の照合・探すサービスが `_watchaudio-mcp._tcp` だけであることを同じく検査する。待ち受け（`NWListener`）はどのファイルでも不可。CI の `tools/privacy-check` がこの一覧（`policy.py` の `ALLOWED_API_USES` / `ALLOWED_URL_PREFIXES`）とソースを照合し、ジョブサマリーに通信箇所を出す（§7.3）。一覧にあるのに使われなくなった項目も失敗にするので、一覧は実装とずれない。
+アプリのコード（出荷されるソース。テストコードは除く）で通信 API を使うのは `ModelDownloader.kt`・iPhone の `ModelDownload.swift`（#178）と、エージェント連携の `TlsAgentTransport.kt`（LAN の TLS）・`NsdBridgeDiscovery.kt`（mDNS の探索）・iPhone の `AgentNetwork.swift`（Network.framework の TLS と mDNS の探索）だけ、URL を持つのは `ModelManifest.kt` と `RuriV3.FILES`（`Embedder.kt`、両スマホの意味検索のモデル）だけ。iPhone の `ModelDownload.swift` は Wi-Fi のみの 3 つの設定・ephemeral・HTTPS だけであること、`IosAppGraph.kt` が `RuriV3.FILES` だけを渡すことも検査する。`TlsAgentTransport.kt` は、LAN のアドレスだけにつなぐこと（`isLanHost`）・DNS を引かないこと・鍵の固定・TLS 1.3 だけであることも検査する（`ALLOWED_API_REQUIREMENTS`）。iPhone は `IosAgentTransport.kt` が `isLanHost` で宛先を絞り、`AgentNetwork.swift` が IP リテラルとして解釈すること（`IPv4Address` / `IPv6Address`）・TLS 1.3 の最小と最大・自分の鍵の提示・検証のブロックでの鍵の指紋の照合・探すサービスが `_watchaudio-mcp._tcp` だけであることを同じく検査する。待ち受け（`NWListener`）はどのファイルでも不可。CI の `tools/privacy-check` がこの一覧（`policy.py` の `ALLOWED_API_USES` / `ALLOWED_URL_PREFIXES`）とソースを照合し、ジョブサマリーに通信箇所を出す（§7.3）。一覧にあるのに使われなくなった項目も失敗にするので、一覧は実装とずれない。
 
 ### 7.3 CI での検査（`tools/privacy-check`、#76）
 
@@ -686,7 +687,7 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 - **通信・保護**: 出荷されるソース（Kotlin / Java / Swift、コメントとテストコードを除く）での HTTP クライアント・ソケット・mDNS（`NsdManager`・マルチキャストロック）・WebView・`URLSession`・Network.framework・サーバー型の `SFSpeech…RecognitionRequest`・`DataClient`・保護なしのファイル（`.noFileProtection` など）の利用、URL リテラル。
 - **依存**: Gradle ファイルに解析・広告・クラッシュ送信・HTTP クライアントの SDK がない。リリースの実行時クラスパス（推移的な依存を含む）がすべて許可リストの範囲内。
 - **エージェント連携の橋渡し CLI**（PC、`tools/agent-bridge`、#183）: 出荷されるソース（`src/`）で TLS の待ち受けと mDNS を許可したファイルだけが使い、外向きの接続（`connect(`・`fetch(`・HTTP）と URL がない。実行時の npm パッケージ（推移的なものを含む）が許可リストの範囲内で、インストールスクリプトがない。E2E（`agent-bridge.yml`）は実行中に外向きの接続を拒否して記録するガードを入れて走らせる。
-- **iOS**: `project.yml` の Info.plist のキー・`UIBackgroundModes`・`NSBonjourServices`（エージェント連携の `_watchaudio-mcp._tcp` だけ、#185）、entitlements（App Group だけ。Watch アプリとコンプリケーションの間の状態共有、#41）、プライバシーマニフェスト（バンドルごとに 1 つ、追跡・収集なし、理由コードは許可リスト。#159）。
+- **iOS**: `project.yml` の Swift パッケージ（許可リスト `IOS_SWIFT_PACKAGES` にあり、`exactVersion` で固定。今は ONNX Runtime だけ、#178）、Info.plist のキー・`UIBackgroundModes`・`NSBonjourServices`（エージェント連携の `_watchaudio-mcp._tcp` だけ、#185）、entitlements（App Group だけ。Watch アプリとコンプリケーションの間の状態共有、#41）、プライバシーマニフェスト（バンドルごとに 1 つ、追跡・収集なし、理由コードは許可リスト。#159）。
 
 使い方と許可リストの広げ方は [04 §6.4](../dev/04-dev-environment.md#64-local-only-チェックtoolsprivacy-check76)。
 
