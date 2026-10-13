@@ -4,8 +4,7 @@ name: iOS & watchOS
 # Apple-side or shared code changes (or on demand).
 on:
   push:
-    # TEMPORARY (#185): runs on the feature branch before its PR exists; remove before the PR.
-    branches: [main, feat/185-ios-agent]
+    branches: [main]
     paths:
       - "apps/ios/**"
       - "shared/**"
@@ -29,6 +28,7 @@ on:
       - "!.github/scripts/launch-smoke.sh"
       - "!.github/scripts/release-asr.sh"
       - "!.github/scripts/push-models.sh"
+      - "!.github/scripts/agent-access.sh"
   pull_request:
     branches: [main]
     paths:
@@ -54,6 +54,7 @@ on:
       - "!.github/scripts/launch-smoke.sh"
       - "!.github/scripts/release-asr.sh"
       - "!.github/scripts/push-models.sh"
+      - "!.github/scripts/agent-access.sh"
   workflow_dispatch:
 
 permissions:

@@ -259,6 +259,7 @@ PR の CI 待ちを減らすため、変更したファイルに関係するワ�
 | JVM 専用（`src/jvmMain`・`src/jvmTest`） | 動く | 動かない | 動かない | 動く | 動く |
 | 共通コード（`src/commonMain` など）・Gradle の設定・`build-logic/**` | 動く | 動く | 動く | 動く | 動く |
 
+- `tools/agent-bridge/**` は `emulator.yml`（#184）と `ios.yml`（#185）も動かす: どちらのエージェント連携の確認もホストで本物の CLI（`e2e/emulator-host.ts`）を使うため。`agent-access.sh` は Android 専用、`ios-agent-access.sh` は iOS 専用のスクリプト。
 - `agent-bridge.yml`（エージェント連携の橋渡し CLI と偽スマホ、#183）は対象リスト（`paths`）: `tools/agent-bridge/**`・`tools/agent-fake-phone/**`・`shared/**`・Gradle の設定・`build-logic/**`・ワークフロー自身が変わったときだけ動く。
 - `.github/actions/sherpa-onnx-jni/**` と `tools/sherpa-onnx-android/**`（音声合成なしの sherpa-onnx、§7.3）は Android 専用の扱い（`emulator.yml` の対象リストに入れてある）。`deliver.yml` は main への push のほか、ほかのブランチで手動実行すると成果物を残さない試運転になる。
 - `android.yml` と `deliver.yml` は除外リスト（`paths-ignore`）。ドキュメント以外の変更では必ず動く。
