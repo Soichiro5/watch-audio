@@ -1,5 +1,8 @@
 package app.watchaudio.app
 
+import app.watchaudio.core.agent.AgentService
+import app.watchaudio.core.agent.AgentTools
+import app.watchaudio.core.agent.pruneAgentAccessLog
 import app.watchaudio.core.alert.GapAlertEvaluator
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.pipeline.ChunkIntake
@@ -40,6 +43,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.io.files.Path
+import kotlinx.datetime.TimeZone
 import kotlinx.io.files.SystemFileSystem
 import platform.BackgroundTasks.BGProcessingTaskRequest
 import platform.BackgroundTasks.BGTask
@@ -53,6 +57,7 @@ import platform.Foundation.NSUserDomainMask
 import platform.Foundation.dateWithTimeIntervalSinceNow
 import platform.UIKit.UIApplication
 import platform.UIKit.UIBackgroundTaskInvalid
+import platform.UIKit.UIDevice
 
 /**
  * Composition root of the iOS app, called from Swift as `IosAppGraph.shared`.
@@ -109,6 +114,11 @@ object IosAppGraph {
     private lateinit var appServices: IosAppServices
     private lateinit var gapAlerts: IosGapAlerts
     private lateinit var diagnostics: DiagnosticsLog
+    private lateinit var agentAccess: IosAgentAccess
+
+    /** The Swift side of agent access (#185); valid after [start]. */
+    internal lateinit var agentPlatform: IosAgentPlatform
+        private set
 
     /** For the shared Compose UI; valid after [start]. */
     val services: AppServices get() = appServices
@@ -136,11 +146,15 @@ object IosAppGraph {
         audio
     }
 
+    /** Agent access (#185); valid after [start]. For the app-hosted simulator check (`AgentAccessTests`). */
+    val agent: IosAgentAccess get() = agentAccess
+
     /**
      * Opens the database and registers the background task. Call once from the app's `init`
      * (BGTaskScheduler requires registration before launch finishes). Idempotent.
+     * [agent] reaches the Keychain, Network.framework and the camera for agent access (#185).
      */
-    fun start(transcriber: IosSpeechTranscriber) {
+    fun start(transcriber: IosSpeechTranscriber, agent: IosAgentPlatform) {
         if (started) return
         started = true
         this.transcriber = transcriber
@@ -183,6 +197,17 @@ object IosAppGraph {
                 )
             },
         )
+        agentPlatform = agent
+        // Agent access (#185): keyword search (no embedding model on iOS yet, #24) and audio clips
+        // for pairings allowed audio; connected only while on and the app is on screen.
+        agentAccess = IosAgentAccess(
+            store,
+            AgentService(store, AgentTools(store, TimeZone.currentSystemDefault(), audio = IosAudioClipSource(agent, audioRoot))),
+            agent,
+            software = "watch-audio-ios/${appVersion()}",
+            phoneName = UIDevice.currentDevice.model,
+            scope = scope,
+        )
         appServices = IosAppServices(
             store,
             audioRoot,
@@ -198,17 +223,24 @@ object IosAppGraph {
                 scope.launch { syncEnglish() }
             },
             onPrepareEnglishModel = { scope.launch { if (syncEnglish()) requestTranscription() } },
+            agentAccess = agentAccess,
         )
+        // Agent access log retention (#184): also when the screen is never opened.
+        scope.launch { runCatching { store.pruneAgentAccessLog(Clock.System.now().toEpochMilliseconds()) } }
         scope.launch { syncEnglish() }
         BGTaskScheduler.sharedScheduler.registerForTaskWithIdentifier(PROCESSING_TASK_ID, null) { task ->
             if (task != null) scope.launch { runBackgroundTask(task) }
         }
     }
 
-    /** Called from SwiftUI's scenePhase: transcribe while visible, hand over to BGTask otherwise. */
+    /**
+     * Called from SwiftUI's scenePhase: transcribe while visible, hand over to BGTask otherwise.
+     * Agent access (#185) turns off when the app leaves the screen.
+     */
     fun setAppActive(active: Boolean) {
         if (!started) return
         appActive = active
+        agentAccess.setAppActive(active)
         if (active) {
             requestTranscription()
         } else {
