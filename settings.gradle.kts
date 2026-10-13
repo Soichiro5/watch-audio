@@ -39,3 +39,5 @@ include(":apps:wear")
 
 // Device-free verification on Linux/CI (#44)
 include(":tools:harness")
+// Phone stand-in for the agent bridge CLI's end-to-end test (#183)
+include(":tools:agent-fake-phone")
