@@ -62,10 +62,12 @@
 apps/android/        Android スマホアプリ
 apps/wear/           Wear OS アプリ
 apps/ios/            iOS アプリ + watchOS アプリ（XcodeGen: project.yml）
-shared/              Kotlin Multiplatform の共通ロジック（model, protocol, platform, db, pipeline）
+shared/              Kotlin Multiplatform の共通ロジック（protocol, platform, db, pipeline, agent）
 shared/ui/           スマホ UI（Compose Multiplatform、Android/iOS 共通）
 build-logic/         Gradle の共通設定（convention plugin）
 tools/harness/       実機なしの通し検証（Watch シミュレータ + sherpa-onnx、Linux/CI）
+tools/agent-bridge/  エージェント連携の橋渡し CLI（watch-audio-mcp。PC の AI エージェント用の MCP サーバー）
+tools/agent-fake-phone/ 橋渡し CLI の E2E 用の偽スマホ（JVM）
 tools/test-audio/    検証用音声セットの生成（オフライン TTS の日本語会話 + Watch 録音を模した加工）
 tools/privacy-check/ 「データは端末内のみ」の CI チェック（権限・バックアップ・通信・依存の許可リスト）
 tools/check-links/   Markdown のリンク切れ検査（CI: links.yml）

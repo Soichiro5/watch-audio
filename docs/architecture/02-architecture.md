@@ -83,12 +83,15 @@ watch-audio/
 │   ├── platform/              #   expect/actual: SHA-256、IoDispatcher など
 │   ├── db/                    #   LocalStore（手書き SQL。StoreTransaction はチャンク・文字起こし・検索・容量管理・設定ごとのファイルに分割）、Schema.kt のマイグレーション、FTS5 検索
 │   ├── pipeline/              #   Ingestor・ChunkIntake（受信の入口）、TranscriptionPipeline・TranscriptionRun（文字起こし 1 回分）、Transcriber、発話区間の切り出し、境界の連結、StorageManager、設定（AppSettings）・状態（ProcessingStatus）・途絶アラートの判定、日のタイムライン（ギャップ）、データの書き出し（export）
+│   ├── agent/                 #   エージェント連携（UC11）: 読み取り専用の MCP の道具のロジック・範囲と量の制限・アクセス履歴の記録・スマホと橋渡し CLI のやり取りの形式（testdata/ は CLI 側と共有）
 │   ├── testing/               #   テスト専用: TempDir、manifest の組み立て（testManifest）。各モジュールのテストだけが使う
 │   └── ui/                    #   スマホ UI（Compose MP、Android/iOS 共通）、AppServices、ViewModel。iosMain に IosAppGraph と Swift とのブリッジ
 ├── build-logic/               # Gradle の convention plugin（KMP ライブラリ共通設定、SQLite テストを JVM/Android/iOS で動かす設定、Android アプリ共通設定と release、Wear OS の debug 入力の混入検査）
 ├── gradle/libs.versions.toml  # 依存バージョンのカタログ
 ├── tools/
 │   ├── harness/               #   実機なしの通し検証（Watch シミュレータ → 取り込み → sherpa-onnx → SQLite、Gradle モジュール）
+│   ├── agent-bridge/          #   エージェント連携の橋渡し CLI `watch-audio-mcp`（TypeScript / Node、stdio の MCP サーバー。PC で動く）
+│   ├── agent-fake-phone/      #   橋渡し CLI の E2E 用の偽スマホ（JVM、shared/agent の道具のロジック + 相互 TLS のクライアント、Gradle モジュール）
 │   ├── test-audio/            #   検証用の日本語会話音声セットの生成（Python）
 │   ├── privacy-check/         #   「データは端末内のみ」の CI チェック
 │   ├── check-links/           #   Markdown のリンク切れ検査
@@ -128,6 +131,8 @@ erDiagram
 | `passage_embedding` | id（AUTOINCREMENT。再利用しない）, chunk_id（`audio_chunk.id`、チャンクの削除で消える）, model_id（`embedding_model.id`）, first_index・segment_count（チャンクのセグメントを (start_at, id) 順に並べたときの範囲）, start_at, scale, vector（int8 の BLOB、256 バイト）。セグメントの追加・削除でそのチャンクの行はトリガが消す（派生データ。§6.3） |
 | `passage_deletion` | seq, passage_id（消えた passage の記録。検索用のキャッシュが読んで捨てる。§6.4） |
 | `embedding_state` | 1 行だけ: token（この DB を表す乱数。別の DB から作ったキャッシュを使わない）, deletion_floor（捨てた削除記録の最大の seq） |
+| `agent_pairing` | id, name（PC の名前）, key_fingerprint（PC の橋渡しの公開鍵の SHA-256、base64url。TLS で固定）, address（最後につながった `host:port`）, scope_days（読める期間。既定 30）, allow_audio（音声も読めるか。既定 0）, created_at, revoked_at（取り消した時刻。行は履歴のために残す。有効な行は鍵ごとに 1 つ）（マイグレーション 10、§6.9） |
+| `agent_access` | id, at, pairing_id（`agent_pairing.id`）, tool（道具の名前）, outcome（OK / DENIED / RATE_LIMITED / REVOKED / ERROR）, item_count（返した件数）, query（検索語・日付・発話 ID）。端末から出さない（バックアップ・書き出しに入れない）。「すべてのデータを削除」で消える（マイグレーション 10、§6.9） |
 | `backup_state` | 1 行だけ（id = 1）: epoch（今のバックアップのエポック）, deleted_epoch（最後にチャンクを削除したエポック）, saved_at・saved_diff・saved_epoch（最後に保存できたバックアップの作成時刻・差分か・含むエポック）, full_saved_at・full_epoch（その元の全体のバックアップ）, diffs_since_full（マイグレーション 8、§6.7） |
 
 時刻はすべてエポックミリ秒。
@@ -566,6 +571,59 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 
 テスト: `OffloadQueriesTest`（`shared/db`、マイグレーション 6 → 7 を含む）、`AudioOffloadPolicyTest`（`commonTest`）、`OffloadRestoreTest`（`shared/pipeline` の `sqliteTest`。保存していない・音声なしのバックアップでは何も消えない、バックアップ後に届いた音声と未処理の音声は残る、文字起こしと検索は変わらない、戻すと音声が同じバイトで戻る、新しい端末でも「バックアップにあり」が分かる、古さの条件）、`BackupViewModelTest`（保存できたときだけ記録、iOS で共有シートを閉じた・失敗・音声なしでは記録しない）、`ViewModelTest`（確認してから外す、外したチャンクの発話は再生しない、失敗の文言）、`AppUiTest`（`offload-confirm.png`・`offload-done.png`・`timeline-offloaded.png`・`search-offloaded.png`）。
 
+### 6.9 エージェント連携（UC11、#182・#183）
+
+本人が選んだ PC の AI エージェント（Claude Desktop / Claude Code / ローカル LLM のクライアントなど）に、スマホの文字起こしを読み取り専用の MCP の道具として渡す。方針と決定事項は [research/agent-access.md](../research/agent-access.md)（§3・§4・§6）。中継サーバーは持たず、同じネットワーク内で PC とスマホが直接つながる。
+
+```
+エージェント ─(stdio の MCP)─▶ 橋渡し CLI（tools/agent-bridge、PC の LAN で待ち受け、mDNS で告知）
+                                   ▲ 相互 TLS 1.3（自己署名の証明書を鍵の指紋で固定）
+                                   └── スマホのアプリがつなぎに行く（本人が ON の間だけ）。道具はスマホで実行（shared/agent）
+```
+
+**役割の分け方**
+
+| 部分 | 場所 | 内容 |
+| --- | --- | --- |
+| 道具のロジック・範囲と量の制限・アクセス履歴 | `shared/agent`（`AgentTools`・`AgentService`・`AgentLimits`） | Android と iOS で同じ規則にする（#182） |
+| やり取りの形式 | `shared/agent`（`AgentWire`・`Pairing.kt`）と `tools/agent-bridge/src/wire.ts`・`pairing.ts` | 両側のテストが `shared/agent/testdata/*.json`（参照値は Python で別に計算）を読む |
+| 接続の段取り | `shared/agent`（`AgentLink`: ペアリング・道具の呼び出しへの応答） | TLS の接続と鍵の保管はアプリ側（Android `SSLSocket` + Keystore、iOS Network.framework + Keychain。#184・#185） |
+| MCP サーバー・TLS の待ち受け・ペアリング・mDNS | `tools/agent-bridge`（TypeScript / Node、公式 MCP SDK v2） | 道具の一覧（`testdata/tools.json` と同じ）は CLI が返し、道具の呼び出しだけをスマホへ流す |
+
+**やり取りの形式**（`AgentWire`、プロトコル版 1）: 4 バイト（ビッグエンディアン）の長さ + UTF-8 の JSON 1 つを 1 フレームとし、上限 4 MiB（30 秒の音声が入る）。JSON の `type` で種類を分ける。MCP の JSON-RPC をそのまま流さずに薄い封筒を付けたのは、版の確認（`hello`）・ペアリングの段取り・切断の理由（`bye`）を MCP と混ぜないため。
+
+| 種類 | 向き | 内容 |
+| --- | --- | --- |
+| `pair_request` → `pair_pending` → `pair_confirm` → `pair_result` | スマホ ⇄ PC | ペアリング（下記） |
+| `hello` | 両方 | 接続の最初。版・役割・名前・ソフトウェア名 |
+| `rpc` | PC → スマホ / スマホ → PC | MCP の `tools/call` の要求と応答（JSON-RPC 2.0 のまま）。`initialize`・`tools/list` は CLI が自分で答える |
+| `error` / `bye` | 両方 | 拒否の理由（`pairing_expired` など）/ 正常な切断（`access_off`・`revoked`・`shutdown`） |
+
+**ペアリング**: `npx watch-audio-mcp pair` が QR コード（`watchaudio-mcp://pair?v=1&n=<PC 名>&fp=<鍵の指紋>&a=<host:port>&t=<使い捨ての値>&e=<期限>`）を出す。スマホは QR の指紋で PC を固定して TLS でつなぎ、自分の証明書と使い捨ての値（16 バイト、有効 5 分、1 回限り）を送る。両方の画面に同じ 6 桁の確認コード（SHA-256（ラベル ‖ 値 ‖ PC の指紋 ‖ スマホの指紋）の先頭 4 バイトを 10⁶ で割った余り）を出し、両方の本人が確定したときだけ互いの鍵を保存する。PC 側はスマホの証明書を保存して、以後の握手ではそれだけを信頼する（`ca`）。
+
+**接続**: CLI は既定のポート 47823（使用中なら空いているポート）で待ち受け、mDNS（`_watchaudio-mcp._tcp`）で知らせる。TXT には実行ごとの乱数 `n` と `h = base64url(SHA-256(n ‖ 鍵の指紋))` の先頭 16 文字だけを入れ、PC を追跡できる固定の識別子は出さない（スマホは知っている指紋で照合する、`advertisementMatches`）。mDNS が使えないネットワークでは、ペアリングのときの host と CLI のポートを使う。ペアリングしていない鍵は TLS の握手で切られ、`unpair` は設定ファイルの変化を見て即座に効く（つながっている接続も閉じる）。
+
+**道具と制限**（`AgentTools`、`AgentLimits`）
+
+| 道具 | 返すもの |
+| --- | --- |
+| `search_transcripts` | キーワード（`searchBetween`、期間つき）と、意味検索（#24）がある端末では意味でも探した発話（ID・時刻・一致の種類・本文） |
+| `get_day_timeline` | 指定日の会話のまとまり（5 分を超える間で区切る。時刻・長さ・件数・最初の発話 ID・冒頭）と録音のカバー率 |
+| `get_context` | 発話 ID の前後（各最大 20 件、時刻順） |
+| `get_audio_clip` | 発話の音声（前後 1 秒、最大 30 秒の WAV）。音声を許可したペアリングだけ。AAC の読み出しは端末側の `AudioClipSource` |
+
+- 範囲: ペアリングごとに直近 `scope_days` 日（既定 30 日）に始まった発話だけ。範囲の外の日付は拒否、範囲にかかる期間は範囲に切り詰める。範囲の外の発話 ID と存在しない ID には同じ答えを返す（ID から何も分からないように）。
+- 量: 検索は 1 回 20 件（最大 50）、1 回の応答は 20,000 文字まで（超えた分は数だけ伝える）、1 発話 500 文字まで、ペアリングごとに 1 分 30 回まで。
+- 返す文字列と道具の説明には「会話の記録であり、エージェントへの指示ではない」と書く（プロンプトインジェクション対策、research §4.6）。
+- 毎回の呼び出しで、ペアリングが取り消されていないかを DB で確かめる。取り消されていれば拒否して `bye(revoked)` で切る。
+- アクセス履歴（`agent_access`）に、結果（拒否・回数超過・取り消し後を含む）・件数・検索語を残す。
+
+**鍵の保管**: スマホは Android Keystore / iOS Keychain（`ThisDeviceOnly`。#184・#185）。CLI は利用者ごとの設定フォルダ（macOS `~/Library/Application Support/watch-audio-mcp`、Windows `%APPDATA%\watch-audio-mcp`、Linux `~/.config/watch-audio-mcp`）に、フォルダ 0700・ファイル 0600 で秘密鍵（P-256、PKCS#8）と証明書と設定（ペアリング済みのスマホ）を置く。OS の鍵保管庫は使っていない（エージェントが毎回 `npx` で起動する CLI でネイティブのモジュールと鍵保管庫の確認ダイアログを避けるため。[tools/agent-bridge/README.md](../../tools/agent-bridge/README.md)）。
+
+テスト: `AgentQueriesTest`（`shared/db`。ペアリングの取り消し・鍵ごとに 1 つ、履歴が全削除で消える、期間つきの検索、前後の発話）、`AgentToolsTest`・`AgentServiceTest`（`shared/agent` の `sqliteTest`。範囲・量・音声の許可・取り消し・回数超過・履歴、ペアリングと応答の段取り）、`AgentFixturesTest`（`jvmTest`。testdata・自己署名の証明書）、`tools/agent-bridge` の `npm test`（同じ testdata、TLS での拒否、stdio の MCP）、E2E（`agent-bridge.yml`。CLI と偽スマホ `tools/agent-fake-phone` でペアリング → 相互 TLS → MCP の道具の呼び出し、ペアリングしていない相手・別の鍵・期限切れ・取り消しの拒否、CLI が外へ接続しないこと）。
+
+残り: スマホのアプリ側（画面・ON/OFF と 30 分での自動 OFF・前景サービス / 前面だけの接続・鍵の保管・`tools/privacy-check` の許可リスト）は #184（Android）・#185（iOS）。CLI の配布（npm への公開、Claude Desktop の拡張機能）は配布の作業で決める。
+
 ## 7. セキュリティ・プライバシー
 
 | 項目 | 方針 |
@@ -573,11 +631,11 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 | 保存 | アプリサンドボックス内のみ（§7.1）。iOS・watchOS は `Application Support/WatchAudio`（ファイル保護クラス `CompleteUntilFirstUserAuthentication` を明示。ロック中の録音・送信・BGTask からも読める）、Android は内部ストレージ（`files/`） |
 | バックアップ | OS バックアップの対象外（データを端末外に出さないため。§7.1）。Android / Wear OS は `allowBackup=false` とバックアップ除外ルール、iOS・watchOS は保存先に `NSURLIsExcludedFromBackupKey`。代わりに、ユーザーが状態タブの「暗号化バックアップ」を押したときだけ、パスフレーズで暗号化したファイルをユーザーが選んだ保存先に書く（§6.7、#40）。パスフレーズと鍵は端末の外に出さず、保存もしない。アプリが自動でクラウドへ送ることはない |
 | API キー | 現在は扱わない。将来（P2）の BYOK では Keychain（`ThisDeviceOnly`）/ Android Keystore にだけ保存する |
-| 外部送信 | なし（ネットワーク利用はモデル（文字起こし・意味検索の埋め込み）のダウンロードのみ。§7.2、CI で検査 §7.3）。意味検索のクエリ・埋め込み・ベクトルも端末内だけで扱う（§6.4）。将来（P2）に AI プロバイダ（テキストのみ、ユーザーが設定した場合）、本人の AI エージェントへの LAN 内での受け渡し（UC11。ペアリングした PC だけ、本人が ON にした間だけ。中継サーバーは持たない。エージェントがクラウドの LLM を使う場合、取り出した分はその提供元に届く。方針は [research/agent-access.md](../research/agent-access.md)、詳細は [#131](https://github.com/Soichiro5/watch-audio/issues/131)）、OS ジオコーダを検討（追加時は §7.3 の許可リストを更新）。解析 SDK・広告 SDK・クラッシュ送信 SDK は入れない |
+| 外部送信 | なし（ネットワーク利用はモデル（文字起こし・意味検索の埋め込み）のダウンロードのみ。§7.2、CI で検査 §7.3）。意味検索のクエリ・埋め込み・ベクトルも端末内だけで扱う（§6.4）。将来（P2）に AI プロバイダ（テキストのみ、ユーザーが設定した場合）、本人の AI エージェントへの LAN 内での受け渡し（UC11。ペアリングした PC だけ、本人が ON にした間だけ。中継サーバーは持たない。エージェントがクラウドの LLM を使う場合、取り出した分はその提供元に届く。方針は [research/agent-access.md](../research/agent-access.md)。共通部分と PC の橋渡し CLI は実装済み（§6.9）、アプリの通信は #184・#185 で追加）、OS ジオコーダを検討（追加時は §7.3 の許可リストを更新）。解析 SDK・広告 SDK・クラッシュ送信 SDK は入れない |
 | 診断ログ | 処理の記録（時刻・ID・処理時間・エラーの種類、異常終了）を端末内の CSV（上限約 1 MB）に残す。文字起こしの本文・音声・例外メッセージは含めない。端末外へは、ユーザーが状態タブの「診断ログを書き出す」から共有先を選んだときだけ出る（#77、[impl/android-phone.md §4.2](../platforms/android-phone.md#42-診断ログ77)） |
 | 書き出し | ユーザーが状態タブの「データの書き出し」を押したときだけ、ユーザーが選んだ保存先にだけ書く（Android: SAF の保存ダイアログで作った文書へ直接、iOS: 一時ファイル → 共有シート。閉じたら一時ファイルを削除）。アプリは通信しない（§6.6、#155） |
 | 同意 | 初回オンボーディングで「録音対象者への告知」の注意喚起。Watch に録音中インジケータを常時表示 |
-| 削除 | 「この日のデータを削除」（その日に始まったチャンクの音声・文字起こし・マーク）と「すべてのデータを削除」（全録音・文字起こし・音声ファイルとスマホの診断ログ。DB は `VACUUM` で縮める。設定は残す。#159）。どちらもアプリ内の確認ステップ必須（全削除は「削除」と入力）。システムダイアログは使わない。AI 設定・API キーは実装時に全削除の対象に加える |
+| 削除 | 「この日のデータを削除」（その日に始まったチャンクの音声・文字起こし・マーク）と「すべてのデータを削除」（全録音・文字起こし・音声ファイルとスマホの診断ログ、エージェントのアクセス履歴（検索語を含む、§6.9）。DB は `VACUUM` で縮める。設定とエージェントのペアリングは残す。#159）。どちらもアプリ内の確認ステップ必須（全削除は「削除」と入力）。システムダイアログは使わない。AI 設定・API キーは実装時に全削除の対象に加える |
 
 ### 7.1 保存場所と保護（#76）
 
@@ -608,6 +666,8 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 | Apple Watch → iPhone | チャンクと ACK | ペアの iPhone | WatchConnectivity（`transferFile` / `transferUserInfo`）。OS が管理する端末間の転送 |
 | iPhone | 音声認識モデル | Apple（OS が管理） | `SpeechAnalyzer` の `AssetInventory`。アプリは URL を持たない。文字起こし自体は端末上 |
 
+| PC（エージェント連携の橋渡し CLI、#183） | 待ち受け（ペアリングしたスマホからの相互 TLS 1.3）と mDNS の告知。CLI から外へ接続することはない | 同じネットワーク内のペアリングしたスマホだけ（mDNS は `224.0.0.251:5353`、リンクローカル） | `tools/agent-bridge/src/bridge.ts`・`pairing.ts`（`node:tls` の待ち受け）、`mdns.ts`（`multicast-dns`）。スマホ側の接続は #184・#185 で追加する |
+
 アプリのコード（出荷されるソース。テストコードは除く）で通信 API を使うのは `ModelDownloader.kt`、URL を持つのは `ModelManifest.kt` だけ。CI の `tools/privacy-check` がこの一覧（`policy.py` の `ALLOWED_API_USES` / `ALLOWED_URL_PREFIXES`）とソースを照合し、ジョブサマリーに通信箇所を出す（§7.3）。一覧にあるのに使われなくなった項目も失敗にするので、一覧は実装とずれない。
 
 ### 7.3 CI での検査（`tools/privacy-check`、#76）
@@ -618,6 +678,7 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 - **バックアップ**: `allowBackup="false"`、`dataExtractionRules` があり、全ドメインを除外している（`<include>` は不可）。`usesCleartextTraffic` と独自の `networkSecurityConfig` も不可。
 - **通信・保護**: 出荷されるソース（Kotlin / Java / Swift、コメントとテストコードを除く）での HTTP クライアント・ソケット・WebView・`URLSession`・Network.framework・サーバー型の `SFSpeech…RecognitionRequest`・`DataClient`・保護なしのファイル（`.noFileProtection` など）の利用、URL リテラル。
 - **依存**: Gradle ファイルに解析・広告・クラッシュ送信・HTTP クライアントの SDK がない。リリースの実行時クラスパス（推移的な依存を含む）がすべて許可リストの範囲内。
+- **エージェント連携の橋渡し CLI**（PC、`tools/agent-bridge`、#183）: 出荷されるソース（`src/`）で TLS の待ち受けと mDNS を許可したファイルだけが使い、外向きの接続（`connect(`・`fetch(`・HTTP）と URL がない。実行時の npm パッケージ（推移的なものを含む）が許可リストの範囲内で、インストールスクリプトがない。E2E（`agent-bridge.yml`）は実行中に外向きの接続を拒否して記録するガードを入れて走らせる。
 - **iOS**: `project.yml` の Info.plist のキー・`UIBackgroundModes`、entitlements（App Group だけ。Watch アプリとコンプリケーションの間の状態共有、#41）、プライバシーマニフェスト（バンドルごとに 1 つ、追跡・収集なし、理由コードは許可リスト。#159）。
 
 使い方と許可リストの広げ方は [04 §6.4](../dev/04-dev-environment.md#64-local-only-チェックtoolsprivacy-check76)。

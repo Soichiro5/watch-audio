@@ -11,7 +11,7 @@ A smartwatch records continuously while worn → chunks go to the paired phone o
 ## Non-negotiables
 
 - **Local only.** Never upload recordings, transcripts or any user data. The only network use is downloading models. Watch→phone transfer must use direct connections only (Wear OS: `MessageClient`/`ChannelClient` to `Node.isNearby`; never `DataClient`). Keep `allowBackup=false` / backup exclusions.
-- **Wire contract.** `shared/protocol` is shared by Kotlin (phone, Wear OS) and Swift (watchOS: `apps/ios/SharedSwift/ChunkProtocol.swift`). Any change must update both sides **and** `shared/protocol/testdata/*.json` (tested on both sides). Times are epoch ms.
+- **Wire contract.** `shared/protocol` is shared by Kotlin (phone, Wear OS) and Swift (watchOS: `apps/ios/SharedSwift/ChunkProtocol.swift`). Any change must update both sides **and** `shared/protocol/testdata/*.json` (tested on both sides). Times are epoch ms. The same holds for the agent wire format: `shared/agent` (Kotlin) ⇄ `tools/agent-bridge` (TypeScript) ⇄ `shared/agent/testdata/*.json`.
 - **DB migrations are append-only** (`shared/db/.../Schema.kt`). Audio paths in the DB are relative to the audio root.
 - AI summaries/chat are out of scope until the core goal is met (`P2` label).
 - **Public repo: no secrets.** The repository and issues are public. Never commit or write secrets, credentials, API keys, signing keys or personal data into the repo, issues, PRs or CI logs; use GitHub Actions secrets and gitignored local files (`local.properties`). App-embedded keys are extractable, so no provider API keys in the app (BYOK keys stay in Keystore/Keychain on the device).
@@ -21,12 +21,14 @@ A smartwatch records continuously while worn → chunks go to the paired phone o
 | Path | What |
 | --- | --- |
 | `shared/*` | KMP logic: `protocol` (manifest/ACK), `db` (bundled SQLite + FTS5), `pipeline` (Ingestor, TranscriptionPipeline, VAD settings), `platform` (expect/actual) |
+| `shared/agent` | Agent access (UC11): read-only MCP tool logic over LocalStore, scope and amount limits, access log, phone ⇄ bridge wire format (`testdata/` shared with `tools/agent-bridge`) |
 | `shared/ort` | JVM/Android: ONNX Runtime's C API through JNA for the embedding model of semantic search (reuses sherpa-onnx's `libonnxruntime.so`) |
 | `shared/testing` | Test-only helpers shared by the shared modules' tests (`TempDir`, `testManifest`, `testAudio`) |
 | `shared/ui` | Shared phone UI (Compose MP) + `AppServices` contract; `iosMain` has the iOS graph/bridge (framework `ComposeApp`) |
 | `apps/android` / `apps/wear` | Android phone (receiver, sherpa-onnx ASR, WorkManager) / Wear OS recorder |
 | `apps/ios` | XcodeGen project (`project.yml`): `App` (iOS host), `Watch` + `WatchWidget` (watchOS recorder, complication), `SharedSwift`, `Tests/*` |
 | `tools/harness` | Device-free E2E on Linux: watch simulator → ingest → sherpa-onnx → SQLite |
+| `tools/agent-bridge` | `watch-audio-mcp`: the PC bridge CLI (TypeScript/Node, stdio MCP server; the paired phone connects to it over mutual TLS). `tools/agent-fake-phone`: JVM phone for its E2E |
 | `tools/roadmap-view` | Builds the issue dashboard (`python3 tools/roadmap-view/build.py out.html`) |
 | `tools/check-links` | Markdown link check (CI `links.yml`) |
 | `research` | Python benchmarks from the spikes (ASR, embeddings) |
@@ -40,6 +42,8 @@ A smartwatch records continuously while worn → chunks go to the paired phone o
 ./gradlew :apps:android:assembleDebug :apps:wear:assembleDebug      # apps
 ./gradlew :apps:android:lintDebug :apps:wear:lintDebug
 tools/harness/download-models.sh && ./gradlew :tools:harness:test   # real Japanese ASR E2E
+(cd tools/agent-bridge && npm ci --ignore-scripts && npm run lint && npm test)   # agent bridge CLI
+./gradlew --max-workers=2 :tools:agent-fake-phone:installDist && FAKE_PHONE=$PWD/tools/agent-fake-phone/build/install/agent-fake-phone/bin/agent-fake-phone npm --prefix tools/agent-bridge run test:e2e   # bridge E2E
 # Type-check iOS Kotlin on Linux (no linking) before pushing iOS changes:
 ./gradlew compileKotlinIosSimulatorArm64 -Pkotlin.native.enableKlibsCrossCompilation=true
 ```
