@@ -395,7 +395,7 @@ iPhone でも Android と**同じモデル（ruri-v3-30m int8）・同じ共通�
 
 | 案 | 内容 | アプリのサイズ | 速度 | 保守 | JVM のベクトルとの一致 |
 | --- | --- | --- | --- | --- | --- |
-| **A. ONNX Runtime（SPM）を Swift で包む（採用）** | Microsoft の公式パッケージ `onnxruntime-swift-package-manager`（MIT）を `exactVersion: 1.24.2` で固定し、その Objective-C API を Swift から呼ぶ。Kotlin の `EncoderRuntime` に注入する（文字起こしの `IosSpeechTranscriber` と同じ形、§6） | 増える（フル版の CPU 実行環境の静的ライブラリ。リンク後の増分は §15.5 の Release ビルドで計測） | CPU（int8、1 スレッド）。シミュレータの計測は §15.5、実機は #60 | フォークなし。上流の版を上げるときは `project.yml` の版を変えるだけ。モデル・トークナイザ・前後処理は Android と共通コード | **同じモデルファイル・同じ前後処理**。違いは CPU ごとの int8 演算（x86 の AVX2 / VNNI と ARM）だけで、§15.5 で計測 |
+| **A. ONNX Runtime（SPM）を Swift で包む（採用）** | Microsoft の公式パッケージ `onnxruntime-swift-package-manager`（MIT）を `exactVersion: 1.24.2` で固定し、その Objective-C API を Swift から呼ぶ。Kotlin の `EncoderRuntime` に注入する（文字起こしの `IosSpeechTranscriber` と同じ形、§6） | 増える（フル版の CPU 実行環境の静的ライブラリ。Release のバンドルで +30.7 MB、§15.5） | CPU（int8、1 スレッド）。シミュレータで passage 1 件 5〜9 ms、読み込み 1.3〜1.7 秒（§15.5）。実機は #60 | フォークなし。上流の版を上げるときは `project.yml` の版を変えるだけ。モデル・トークナイザ・前後処理は Android と共通コード | **同じモデルファイル・同じ前後処理**。違いは CPU ごとの int8 演算（x86 の AVX2 / VNNI と ARM）だけ。JVM の参照とのコサインは最小 0.998662・平均 0.999524（§15.5） |
 | B. ONNX Runtime の C API を cinterop | `onnxruntime_c_api.h` を Kotlin/Native から呼ぶ（Android の `shared/ort` と同じ関数表） | A と同じ | A と同じ | ヘッダの同梱・cinterop・静的リンクの設定を自前で持ち、macOS の CI でしか確かめられない。SPM のパッケージは cinterop から直接は使えない | A と同じ |
 | C. Core ML に変換 | coremltools で ModernBERT（ruri-v3）を `.mlpackage` に変換し、Neural Engine で動かす | 実行環境は OS にあるので小さい | 速い・電池に優しい可能性 | **変換したモデルの置き場が要る**（このプロジェクトは上流のファイルをそのまま取得する方針。変換の手順と変換物の配布を自前で保守することになる）。局所・大域アテンションの変換が通るかも未確認 | **別のモデル**になる（int8 の動的量子化は変換されず fp16 になる）。Android と同じベクトルにならず、端末の間で検索結果が揃わない。一致の確認も別に要る |
 | D. `NLContextualEmbedding`（Apple） | OS のトークン単位の埋め込みを平均する | 増えない | 速い | ライブラリもダウンロードも無い | 別のモデル（検索用に学習されていない）で、品質が未評価（M0-6 §6.3） |
@@ -428,8 +428,15 @@ iPhone でも Android と**同じモデル（ruri-v3-30m int8）・同じ共通�
   2. M0-6 の Python の参照（`tools/harness/testdata/ruri-reference.json`、「うん」・絵文字・半角カナを含む 10 文）とも比べる。
   3. 一時 DB に 4 つの会話を入れ、`EmbeddingStep` と `HybridSearch` で「サーバー代がいくら増えるって言ってた？」（会話と共通の語なし）がその会話を意味で 1 位に見つける。
   4. アプリのダウンロード（`ModelInstaller` + `ModelDownload`）でトークナイザ（6.7 MB）を固定のコミットから取り、2 MB で中断 → `.part` の続きから取り直して SHA-256 を確認して置く。置き場がバックアップ対象外。
-- 計測（シミュレータ、arm64 の Mac。JVM の参照は x86 の Linux）: TODO_MEASURED
-- **しきい値**: TODO_THRESHOLD
+- **計測**（[run 38402593169](https://github.com/Soichiro5/watch-audio/actions/runs/38402593169)、macOS 26 ランナーの iPhone シミュレータ = arm64。参照は x86 の Linux で計算。ONNX Runtime 1.24.2）:
+
+  | 参照 | テキスト（コサイン） | 最小 / 平均 |
+  | --- | --- | --- |
+  | JVM（`embedding-reference.json`） | 沖縄の passage 1.000000、歯医者の passage 1.000000、サーバーの passage 1.000000、札幌の passage **0.998662**、「沖縄旅行の飛行機とホテル」**0.998769**、「歯医者の予約いつだっけ」1.000000、「サーバー代がいくら増えるって言ってた？」0.999313、「年末に札幌の実家へ帰るかもって話」0.999450 | 0.998662 / 0.999524（0.999 以上は 8 件中 6 件） |
+  | Python（`ruri-reference.json`） | 「えーと、あのー 来週の木曜…」**0.998910**、「会議の結論どうなった」0.999588、「🍣 寿司 ｶﾀｶﾅ と Wi-Fi」0.999702、ほかの 7 件（「うん」を含む）1.000000 | 0.998910 / 0.999820 |
+
+  順位: 言い換えのクエリ 4 件とも正しい会話が 1 位（2 位との差 0.115〜0.184）。言い換えの検索: 「サーバー代がいくら増えるって言ってた？」が `passage-2` を意味だけで 1 位に見つけた（キーワードの一致なし）。速度（シミュレータ）: モデルの読み込みと最初のクエリ 1.3〜1.7 秒、passage 1 件 5〜9 ms、クエリ 1 件 4〜5 ms。ダウンロード: トークナイザを 2,269,264 バイトで中断 → 続きから（206）取り直して SHA-256 一致、計 1.5 秒、置き場はバックアップ対象外。アプリのサイズ: Release の端末向けビルド（署名なし、`xcodebuild build` のバンドル。シンボルを落とす前）が 50,408 KB → 81,876 KB（**+30.7 MB**、ios.yml の `RELEASE_BUILD_CHECK`、main の [run 38399441244](https://github.com/Soichiro5/watch-audio/actions/runs/38399441244) と比較）。App Store でのダウンロードの大きさは圧縮・シンボル除去後なので小さくなる（TestFlight で確かめる、#60）。
+- **しきい値**: Issue の完了条件は「コサイン 0.999 以上」だが、**テキストごとには満たさない**（最小 0.998662）。半分の文は 1.000000 で完全に一致し、ずれるのは一部の文だけなので、モデル・トークナイザ・前後処理の違いではなく、int8 の演算（`DynamicQuantizeLinear` / `MatMulInteger`）の CPU ごとの実装の違い（x86 の AVX2 / VNNI と ARM）による（同じ x86 でも CPU が違う CI のランナーの JVM で、Python の参照に対して文で 0.998、「うん」で 0.994 になった。`EmbedderParityTest`）。そこで `EmbeddingTests` は、リポジトリの CPU 間の基準 `CROSS_MACHINE_COSINE = 0.99`（Android の `EmbeddingDeviceTest`・`EmbedderParityTest` と同じ）を**テキストごと**に、Issue の 0.999 を**平均**に課す。間違ったトークナイザやモデルなら 0.99 を大きく下回る。順位はすべて JVM と同じ。
 - 実機（#60）: 速度・電池・メモリ・アプリのサイズ・実際の Wi-Fi でのダウンロード（§11 の 21）。
 
 ## 16. エージェント連携（#185）
