@@ -5,11 +5,23 @@ import androidx.lifecycle.viewModelScope
 import app.watchaudio.app.AppServices
 import app.watchaudio.app.logic.TranscriptEntry
 import app.watchaudio.app.logic.buildTranscriptEntries
+import app.watchaudio.core.db.HighlightRecord
+import app.watchaudio.core.pipeline.DiagnosticEvents
+import app.watchaudio.core.summary.HourAction
+import app.watchaudio.core.summary.HourPlan
+import app.watchaudio.core.summary.LlmAvailability
+import app.watchaudio.core.summary.SummaryProgress
+import app.watchaudio.core.summary.SummaryRun
+import app.watchaudio.core.summary.SummaryRunResult
+import app.watchaudio.core.summary.planDay
 import app.watchaudio.core.timeline.DayTimeline
 import app.watchaudio.core.timeline.buildDayTimeline
 import app.watchaudio.core.timeline.dayWindow
 import app.watchaudio.core.timeline.localDateOf
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.job
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -37,6 +49,9 @@ data class DayUiState(
     val nowPlaying: NowPlaying? = null,
     /** Progress of 「この日のデータを削除」, which needs an explicit confirmation. */
     val deletion: DayDeletion = DayDeletion.NONE,
+    /** 「この日を要約」 (#27) while it runs on this day, and what the last run had to say. */
+    val summaryRun: SummaryRunState? = null,
+    val summaryNotice: SummaryNotice? = null,
 ) {
     val isToday: Boolean get() = date == today
     val canGoForward: Boolean get() = date < today
@@ -54,7 +69,31 @@ data class DayContent(
     val audioInBackupChunks: Int = 0,
     /** Creation time of the newest backup holding that audio, or null. */
     val audioBackupAt: Long? = null,
+    /** Hour summaries (#27); null when nothing was said on the day. */
+    val summaries: DaySummaries? = null,
 )
+
+/** The day's hours with speech or a summary, and whether the on-device LLM can make summaries. */
+data class DaySummaries(
+    val availability: LlmAvailability,
+    /** Hours with anything to show ([HourAction.NOTHING] left out), oldest first. */
+    val hours: List<HourPlan>,
+) {
+    /** Hours 「この日を要約」 would send to the LLM. */
+    val toSummarize: Int get() = hours.count { it.action == HourAction.SUMMARIZE }
+}
+
+/** A run of hour summaries on [date]: [progress] counts the hours that need the LLM. */
+data class SummaryRunState(val date: LocalDate, val progress: SummaryProgress)
+
+/** What the last summary run could not do (the hours keep their own states). */
+enum class SummaryNotice {
+    /** The system asked to slow down; the rest of the day is left. */
+    RATE_LIMITED,
+
+    /** Something unexpected stopped the run (the error type is in the diagnostics log). */
+    FAILED,
+}
 
 enum class DayDeletion {
     NONE,
@@ -83,12 +122,22 @@ class DayViewModel(
     private val focus = MutableStateFlow<Long?>(null)
     private val playing = MutableStateFlow<NowPlaying?>(null)
     private val deletion = MutableStateFlow(DayDeletion.NONE)
+    private val summaryRun = MutableStateFlow<SummaryRunState?>(null)
+    private val summaryNotice = MutableStateFlow<SummaryNotice?>(null)
+    private var summaryJob: Job? = null
 
     private val content: StateFlow<DayContent?> = selected
         .flatMapLatest { date -> refreshSignal(services, refreshPeriodMs).conflate().mapLatest { load(date) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    val state: StateFlow<DayUiState> = combine(selected, content, focus, playing, deletion) { date, content, focus, playing, deletion ->
+    private val summaryState = combine(summaryRun, summaryNotice) { run, notice -> run to notice }
+
+    val state: StateFlow<DayUiState> = combine(
+        combine(selected, content, focus) { date, content, focus -> Triple(date, content, focus) },
+        playing,
+        deletion,
+        summaryState,
+    ) { (date, content, focus), playing, deletion, (run, notice) ->
         DayUiState(
             date = date,
             today = today(),
@@ -97,11 +146,14 @@ class DayViewModel(
             focusSegmentId = focus,
             nowPlaying = playing,
             deletion = deletion,
+            summaryRun = run?.takeIf { it.date == date },
+            summaryNotice = notice,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DayUiState(selected.value, today()))
 
     fun selectDate(date: LocalDate) {
         if (deletion.value == DayDeletion.DELETING) return
+        if (minOf(date, today()) != selected.value) stopSummaries()
         selected.value = minOf(date, today())
         focus.value = null
         deletion.value = DayDeletion.NONE
@@ -177,6 +229,60 @@ class DayViewModel(
         }
     }
 
+    /**
+     * 「この日を要約」 (#27): makes the summaries of the selected day's hours that need one, one hour
+     * at a time, while the screen is open ([stopSummaries] when it closes or the day changes;
+     * finished hours are kept). Only from the user's tap.
+     */
+    fun summarizeDay() = startSummaries(null)
+
+    /** 「もう一度」 for one hour whose summary failed. */
+    fun retrySummary(hourStart: Long) = startSummaries(setOf(hourStart))
+
+    /** Stops a running summary run (the screen closed, the day changed, or 「中止」). */
+    fun stopSummaries() {
+        summaryJob?.cancel()
+        summaryJob = null
+        summaryRun.value = null
+    }
+
+    /** A highlight's citation: scrolls to its first segment and plays it. */
+    fun openHighlight(highlight: HighlightRecord) {
+        val first = highlight.segmentIds.firstOrNull() ?: return
+        viewModelScope.launch {
+            val segment = services.store.read { segment(first) } ?: return@launch
+            openSegment(segment.chunkId, segment.id, segment.startAt)
+        }
+    }
+
+    private fun startSummaries(onlyHours: Set<Long>?) {
+        if (summaryJob?.isActive == true) return
+        val date = selected.value
+        val window = dayWindow(date, timeZone)
+        summaryNotice.value = null
+        summaryRun.value = SummaryRunState(date, SummaryProgress(0, 0, null))
+        summaryJob = viewModelScope.launch {
+            val self = coroutineContext.job
+            try {
+                val run = SummaryRun(services.store, services.llm, timeZone, clock::now, services.diagnostics)
+                val result = run.run(window, onlyHours) { progress -> summaryRun.value = SummaryRunState(date, progress) }
+                if (result is SummaryRunResult.RateLimited) summaryNotice.value = SummaryNotice.RATE_LIMITED
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Never the message: it may hold transcript text.
+                services.diagnostics.log(DiagnosticEvents.SUMMARY_FAILED, "type=${e::class.simpleName}")
+                summaryNotice.value = SummaryNotice.FAILED
+            } finally {
+                // A newer run (after 「中止」 and a new tap) owns the state now.
+                if (summaryJob === self) {
+                    summaryJob = null
+                    summaryRun.value = null
+                }
+            }
+        }
+    }
+
     private fun startPlayback(request: NowPlaying) {
         services.play(request.audioPath, request.offsetMs)
         playing.value = request
@@ -192,6 +298,8 @@ class DayViewModel(
                 segmentsBetween(window.start, window.end),
             )
         }
+        val summaries = services.store.read { hourSummariesBetween(window.start, window.end) }
+        val hours = planDay(window, chunks, segments, summaries, now).filter { it.action != HourAction.NOTHING }
         return DayContent(
             date = date,
             timeline = buildDayTimeline(window, chunks, previous, now),
@@ -200,7 +308,17 @@ class DayViewModel(
             audioPurgedChunks = chunks.count { it.audioPurgedAt != null && !it.isAudioOnlyInBackup },
             audioInBackupChunks = chunks.count { it.isAudioOnlyInBackup },
             audioBackupAt = chunks.filter { it.isAudioOnlyInBackup }.mapNotNull { it.audioBackedUpAt }.maxOrNull(),
+            summaries = hours.takeIf { it.isNotEmpty() }?.let { DaySummaries(llmAvailability(), it) },
         )
+    }
+
+    /** The LLM's availability; a platform error counts as unsupported rather than breaking the day. */
+    private suspend fun llmAvailability(): LlmAvailability = try {
+        services.llm.availability()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        LlmAvailability.Unsupported("availability_error")
     }
 
     private fun today(): LocalDate = localDateOf(clock.now(), timeZone)

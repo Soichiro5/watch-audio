@@ -32,6 +32,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,6 +43,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import app.watchaudio.app.Strings
 import app.watchaudio.app.logic.TranscriptEntry
 import app.watchaudio.app.logic.formatClock
@@ -57,8 +60,8 @@ import app.watchaudio.core.timeline.TimelineSpan
 import app.watchaudio.core.timeline.localDateOf
 import kotlinx.datetime.TimeZone
 
-/** Number of LazyColumn items above the transcript entries (summary, gaps, header). */
-private const val HEADER_ITEMS = 3
+/** Number of LazyColumn items above the transcript entries (coverage, gaps, hour summaries, header). */
+private const val HEADER_ITEMS = 4
 
 @Composable
 internal fun DayScreen(
@@ -73,9 +76,13 @@ internal fun DayScreen(
     onDeleteDay: () -> Unit,
     onConfirmDeleteDay: () -> Unit,
     onCancelDeleteDay: () -> Unit,
+    summaryCallbacks: SummaryCallbacks,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
+    // Summaries are made only while this screen is open (#27): leaving it or the app stops the run.
+    DisposableEffect(Unit) { onDispose { summaryCallbacks.onStop() } }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { summaryCallbacks.onStop() }
     var highlighted by remember { mutableStateOf<Long?>(null) }
     val content = state.content
 
@@ -98,6 +105,7 @@ internal fun DayScreen(
         DayContentList(
             state, timeZone, listState, highlighted, onPlay, onTranscribe,
             DeleteDayCallbacks(onDeleteDay, onConfirmDeleteDay, onCancelDeleteDay),
+            summaryCallbacks,
         )
     }
 }
@@ -113,6 +121,7 @@ private fun DayContentList(
     onPlay: (TranscriptEntry.Utterance) -> Unit,
     onTranscribe: (TranscriptEntry.Untranscribed) -> Unit,
     deleteDay: DeleteDayCallbacks,
+    summaryCallbacks: SummaryCallbacks,
 ) {
     val content = state.content
     LazyColumn(
@@ -131,6 +140,9 @@ private fun DayContentList(
         }
         item(key = "gaps") {
             if (content != null) GapList(content.timeline, timeZone)
+        }
+        item(key = "hourSummaries") {
+            content?.summaries?.let { SummaryCard(state, it, timeZone, summaryCallbacks) }
         }
         item(key = "transcriptHeader") {
             if (content != null) {

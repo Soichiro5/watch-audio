@@ -10,6 +10,8 @@ import app.watchaudio.core.pipeline.Diagnostics
 import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.search.SemanticSearch
+import app.watchaudio.core.summary.LlmProvider
+import app.watchaudio.core.summary.UnsupportedLlmProvider
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.io.RawSink
 import kotlinx.io.RawSource
@@ -164,7 +166,17 @@ interface AppServices {
     val agentAccess: AgentAccess? get() = null
 
     val supportsAgentAccess: Boolean get() = agentAccess != null
+
+    /**
+     * The on-device LLM for hour summaries (#27): Apple's Foundation Models on the iPhone (#196).
+     * Platforms without one keep [UnsupportedLlmProvider] (Android until its method is decided,
+     * #39 §8), which the day screen shows as 「使えません」 like an iPhone without Apple Intelligence.
+     * Nothing it is given may leave the device.
+     */
+    val llm: LlmProvider get() = NO_LLM
 }
+
+private val NO_LLM: LlmProvider = UnsupportedLlmProvider()
 
 /** MIME type of encrypted backup files (#40) for [AppServices.saveExport]: they have no registered type. */
 const val BACKUP_MIME_TYPE = "application/octet-stream"
