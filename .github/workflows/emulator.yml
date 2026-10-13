@@ -19,7 +19,7 @@ name: Emulator smoke test
 # distributed builds do (#173, .github/actions/sherpa-onnx-jni), so these checks run on that library.
 on:
   push:
-    branches: [main]
+    branches: [main, feat/27-hour-summaries, feat/196-ios-foundation-models] # TEMP(#27/#196): remove before the PR
     paths:
       - "apps/android/**"
       - "apps/wear/**"

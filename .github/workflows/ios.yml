@@ -4,7 +4,7 @@ name: iOS & watchOS
 # Apple-side or shared code changes (or on demand).
 on:
   push:
-    branches: [main]
+    branches: [main, feat/27-hour-summaries, feat/196-ios-foundation-models] # TEMP(#27/#196): remove before the PR
     paths:
       - "apps/ios/**"
       - "shared/**"

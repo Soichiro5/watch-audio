@@ -3,7 +3,7 @@ name: Android & shared
 # Runs on every PR into main and on main itself (the official branch).
 on:
   push:
-    branches: [main]
+    branches: [main, feat/27-hour-summaries, feat/196-ios-foundation-models] # TEMP(#27/#196): remove before the PR
     paths-ignore:
       - "docs/**"
       - "**/*.md"
