@@ -102,6 +102,11 @@ class AgentAccessScenarioTest {
             val service = agentServiceRecord()
             val foreground = "isForeground=true" in service
             val read = waitForLog(firstOn, "a tool call answered while on")
+            // The screen shows it: the auto-off time and the PC as connected.
+            compose.diagnosed("the switch shown on") {
+                compose.onAllNodes(hasText(Strings.agentOnUntil(""), substring = true)).fetchSemanticsNodes().isNotEmpty() &&
+                    compose.onAllNodes(hasText(Strings.AGENT_LINK_CONNECTED, substring = true)).fetchSemanticsNodes().isNotEmpty()
+            }
             Evidence.screenshot("agent-on")
             device.openNotification()
             SystemClock.sleep(1_500)
@@ -113,6 +118,7 @@ class AgentAccessScenarioTest {
             // Off: the connection ends; the host sees the phone gone. Then on again.
             compose.onNodeWithText(Strings.AGENT_SWITCH).performScrollTo().performClick()
             PlaybackFixtures.waitFor(15_000, "access off") { access.state.value.takeIf { !it.isOn } }
+            compose.waitForText(Strings.AGENT_SWITCH_DETAIL_OFF)
             // A call already being answered when the switch flipped may still be logged just after.
             val offSince = System.currentTimeMillis() + IN_FLIGHT_MS
             SystemClock.sleep(OFF_WINDOW_MS)
