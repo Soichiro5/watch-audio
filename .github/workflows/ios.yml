@@ -193,6 +193,24 @@ jobs:
         if: (success() || failure()) && steps.xcodegen.outcome == 'success'
         run: .github/scripts/xcode-test.sh SwiftUnitTests "Swift unit tests on the iOS simulator"
 
+      # #196: hour summaries with Apple's on-device Foundation Models (no Kotlin framework). The
+      # availability codes, the schema from Kotlin's JSON and the error codes always run; the
+      # generation needs Apple Intelligence, which these virtual runners do not have, so it records
+      # the reason (LLM_AVAILABILITY) and skips. The device checks are #60.
+      - name: On-device language model on the iOS simulator
+        if: (success() || failure()) && steps.xcodegen.outcome == 'success'
+        timeout-minutes: 15
+        run: |
+          status=0
+          .github/scripts/xcode-test.sh LanguageModelTests "On-device language model (Foundation Models, #196) on the iOS simulator" || status=$?
+          {
+            echo "On-device language model checks (build/swift-evidence/llm-*.txt):"
+            echo '```'
+            cat build/swift-evidence/llm-*.txt 2>/dev/null || echo "no evidence written"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
       - name: Launch iOS app on an iPhone simulator
         if: (success() || failure()) && steps.build-ios.outcome == 'success'
         run: |
