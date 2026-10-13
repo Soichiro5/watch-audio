@@ -33,7 +33,7 @@
 | [docs/architecture/02-architecture.md](docs/architecture/02-architecture.md) | 技術スタック・全体構成・データモデル・主要フロー |
 | [docs/product/03-roadmap.md](docs/product/03-roadmap.md) | 実装手順（マイルストーンと Issue 一覧） |
 | [docs/dev/04-dev-environment.md](docs/dev/04-dev-environment.md) | 開発・検証環境、ビルド手順、実機なしでの通し検証 |
-| [docs/research/](docs/research/) | 技術検証の結果（ASR・埋め込み・電池計測手順） |
+| [docs/research/](docs/research/) | 技術検証の結果と方式の検討（ASR・英語 ASR・埋め込み・電池計測手順・[エージェント連携](docs/research/agent-access.md)・[端末内の LLM での要約](docs/research/on-device-llm.md)） |
 | [docs/platforms/android-phone.md](docs/platforms/android-phone.md) | Android スマホ側の実装（受信・ACK・オンデバイス文字起こし・モデル配信） |
 | [docs/platforms/phone-ui.md](docs/platforms/phone-ui.md) | スマホ UI（タイムライン・検索・状態画面）の実装メモ |
 | [docs/legal/](docs/legal/privacy-policy.ja.md) | プライバシーポリシー（日本語・英語）とストア申告の下書き（#36、レビュー前） |
