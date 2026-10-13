@@ -4,7 +4,7 @@ name: iOS & watchOS
 # Apple-side or shared code changes (or on demand).
 on:
   push:
-    branches: [main, feat/178-ios-semantic-search]
+    branches: [main]
     paths:
       - "apps/ios/**"
       - "shared/**"

@@ -428,7 +428,7 @@ iPhone でも Android と**同じモデル（ruri-v3-30m int8）・同じ共通�
   2. M0-6 の Python の参照（`tools/harness/testdata/ruri-reference.json`、「うん」・絵文字・半角カナを含む 10 文）とも比べる。
   3. 一時 DB に 4 つの会話を入れ、`EmbeddingStep` と `HybridSearch` で「サーバー代がいくら増えるって言ってた？」（会話と共通の語なし）がその会話を意味で 1 位に見つける。
   4. アプリのダウンロード（`ModelInstaller` + `ModelDownload`）でトークナイザ（6.7 MB）を固定のコミットから取り、2 MB で中断 → `.part` の続きから取り直して SHA-256 を確認して置く。置き場がバックアップ対象外。
-- **計測**（[run 38402593169](https://github.com/Soichiro5/watch-audio/actions/runs/38402593169)、macOS 26 ランナーの iPhone シミュレータ = arm64。参照は x86 の Linux で計算。ONNX Runtime 1.24.2）:
+- **計測**（[run 38402593169](https://github.com/Soichiro5/watch-audio/actions/runs/38402593169) と、しきい値を下の形にした後の [run 38407251069](https://github.com/Soichiro5/watch-audio/actions/runs/38407251069)（全件成功）で同じ値。macOS 26 ランナーの iPhone シミュレータ = arm64。参照は x86 の Linux で計算。ONNX Runtime 1.24.2）:
 
   | 参照 | テキスト（コサイン） | 最小 / 平均 |
   | --- | --- | --- |
