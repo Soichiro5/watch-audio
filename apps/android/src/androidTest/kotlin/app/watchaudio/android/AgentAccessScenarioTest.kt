@@ -99,7 +99,7 @@ class AgentAccessScenarioTest {
             val firstOn = System.currentTimeMillis()
             compose.onNodeWithText(Strings.AGENT_SWITCH_DETAIL_OFF).performScrollTo().performClick()
             PlaybackFixtures.waitFor(60_000, "the connection to the bridge") { access.state.value.links[pairing.id]?.takeIf { it == LinkState.CONNECTED } }
-            val service = Evidence.shell("dumpsys activity services app.watchaudio/.agent.AgentAccessService")
+            val service = agentServiceRecord()
             val foreground = "isForeground=true" in service
             val read = waitForLog(firstOn, "a tool call answered while on")
             Evidence.screenshot("agent-on")
@@ -116,10 +116,11 @@ class AgentAccessScenarioTest {
             // A call already being answered when the switch flipped may still be logged just after.
             val offSince = System.currentTimeMillis() + IN_FLIGHT_MS
             SystemClock.sleep(OFF_WINDOW_MS)
-            val serviceAfterOff = Evidence.shell("dumpsys activity services app.watchaudio/.agent.AgentAccessService")
+            val serviceAfterOff = agentServiceRecord()
             val duringOff = log(offSince).count { it.outcome == AgentAccessOutcome.OK }
-            Evidence.log("AGENT_CHECK phase=off service_running=${"AgentAccessService" in serviceAfterOff} calls_answered_while_off=$duringOff")
+            Evidence.log("AGENT_CHECK phase=off service_running=${serviceAfterOff.isNotEmpty()} calls_answered_while_off=$duringOff")
             assertEquals(0, duringOff)
+            assertTrue(serviceAfterOff.isEmpty(), "the foreground service still runs after OFF: $serviceAfterOff")
 
             compose.waitForText(Strings.agentMinutes(30))
             val secondOn = System.currentTimeMillis()
@@ -160,6 +161,10 @@ class AgentAccessScenarioTest {
             throw AssertionError("timed out waiting for $what", e)
         }
     }
+
+    /** The `ServiceRecord` block of AgentAccessService in `dumpsys activity services`, or "" if it is not running. */
+    private fun agentServiceRecord(): String = Evidence.shell("dumpsys activity services app.watchaudio")
+        .split("* ServiceRecord").firstOrNull { "agent.AgentAccessService" in it }.orEmpty()
 
     private fun log(since: Long) = runBlocking { graph.store.read { agentAccessLog(500) } }.filter { it.at >= since }
 
