@@ -116,6 +116,21 @@ fun confirmationCode(token: String, bridgeFingerprint: String, phoneFingerprint:
 
 private const val CODE_LABEL = "watch-audio-mcp pairing v1"
 
+/** mDNS / DNS-SD service type the bridge advertises while it listens. */
+const val MDNS_SERVICE_TYPE = "_watchaudio-mcp._tcp"
+
+/**
+ * True if an mDNS advertisement's TXT values `n` ([nonce]) and `h` ([hash]) belong to the bridge
+ * with [fingerprint]: h is the first 16 characters of base64url(SHA-256(nonce ‖ fingerprint)), with
+ * nonce and fingerprint as their decoded bytes. The nonce changes on every run, so the
+ * advertisement carries no stable identifier; the TLS handshake still checks the key.
+ */
+fun advertisementMatches(nonce: String, hash: String, fingerprint: String): Boolean {
+    val nonceBytes = decodeBase64Url(nonce) ?: return false
+    val key = fingerprintBytes(fingerprint) ?: return false
+    return encodeBase64Url(sha256(nonceBytes + key)).take(16) == hash
+}
+
 internal fun sha256(bytes: ByteArray): ByteArray {
     val sha = Sha256()
     sha.update(bytes)

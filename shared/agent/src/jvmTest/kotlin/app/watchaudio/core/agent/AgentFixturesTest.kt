@@ -86,6 +86,16 @@ class AgentFixturesTest {
     }
 
     @Test
+    fun mdnsAdvertisementHash() {
+        val mdns = fixture("pairing.json").getValue("mdns").jsonObject
+        val nonce = mdns.getValue("nonce").jsonPrimitive.content
+        val fingerprint = mdns.getValue("fingerprint").jsonPrimitive.content
+        val hash = mdns.getValue("h").jsonPrimitive.content
+        assertEquals(true, advertisementMatches(nonce, hash, fingerprint))
+        assertEquals(false, advertisementMatches(nonce, hash, encodeBase64Url(ByteArray(32))))
+    }
+
+    @Test
     fun toolListMatchesTheTools() {
         val tools = fixture("tools.json").getValue("tools").jsonArray.map { it.jsonObject }
         assertEquals(AgentTool.entries.map { it.wireName }, tools.map { it.getValue("name").jsonPrimitive.content })
