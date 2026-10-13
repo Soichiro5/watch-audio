@@ -1,0 +1,10 @@
+{
+  "bye_shutdown": {
+    "message": {
+      "type": "bye",
+      "reason": "shutdown"
+    },
+    "hex": "000000227b2274797065223a22627965222c22726561736f6e223a2273687574646f776e227d"
+  },
+  "oversize_header_hex": "00400001"
+}

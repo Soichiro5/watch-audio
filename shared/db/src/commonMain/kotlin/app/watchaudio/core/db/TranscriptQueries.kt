@@ -16,6 +16,16 @@ interface TranscriptQueries {
 
     /** Segments overlapping `[from, to)`, oldest first. */
     fun segmentsBetween(from: Long, to: Long): List<SegmentRecord>
+
+    /** The segment with row id [id], if stored. */
+    fun segment(id: Long): SegmentRecord?
+
+    /**
+     * Up to [before] segments before and [after] segments after [segment] in time order
+     * (start, then id), across chunks, among segments that started in `[from, to)`; oldest
+     * first, [segment] itself included only if it started in the range.
+     */
+    fun segmentsAround(segment: SegmentRecord, before: Int, after: Int, from: Long = Long.MIN_VALUE, to: Long = Long.MAX_VALUE): List<SegmentRecord>
 }
 
 internal class TranscriptSql(private val db: SQLiteConnection) : TranscriptQueries {
@@ -57,4 +67,28 @@ internal class TranscriptSql(private val db: SQLiteConnection) : TranscriptQueri
         to,
         from,
     ) { toSegment() }
+
+    override fun segment(id: Long): SegmentRecord? =
+        db.queryOne("SELECT $SEGMENT_COLUMNS FROM $SEGMENTS WHERE s.id = ?", id) { toSegment() }
+
+    override fun segmentsAround(segment: SegmentRecord, before: Int, after: Int, from: Long, to: Long): List<SegmentRecord> {
+        val earlier = db.queryList(
+            """
+            SELECT $SEGMENT_COLUMNS FROM $SEGMENTS
+            WHERE (s.start_at < ? OR (s.start_at = ? AND s.id < ?)) AND s.start_at >= ? AND s.start_at < ?
+            ORDER BY s.start_at DESC, s.id DESC LIMIT ?
+            """.trimIndent(),
+            segment.startAt, segment.startAt, segment.id, from, to, before,
+        ) { toSegment() }
+        val later = db.queryList(
+            """
+            SELECT $SEGMENT_COLUMNS FROM $SEGMENTS
+            WHERE (s.start_at > ? OR (s.start_at = ? AND s.id > ?)) AND s.start_at >= ? AND s.start_at < ?
+            ORDER BY s.start_at, s.id LIMIT ?
+            """.trimIndent(),
+            segment.startAt, segment.startAt, segment.id, from, to, after,
+        ) { toSegment() }
+        val self = if (segment.startAt in from until to) listOf(segment) else emptyList()
+        return earlier.asReversed() + self + later
+    }
 }

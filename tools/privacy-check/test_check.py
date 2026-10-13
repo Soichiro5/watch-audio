@@ -191,6 +191,10 @@ class RepositoryTest(unittest.TestCase):
         self.assertEqual([], [str(v) for v in report.violations])
         # The model download is the only network call site.
         self.assertEqual({MODEL_DOWNLOADER}, {site[0] for site in report.network_sites})
+        # The agent bridge on the PC only listens (TLS) and advertises (mDNS).
+        self.assertEqual({("tools/agent-bridge/src/bridge.ts", "tls"), ("tools/agent-bridge/src/pairing.ts", "tls"),
+                          ("tools/agent-bridge/src/mdns.ts", "mdns")},
+                         {(path, api) for path, _, api, _ in report.bridge_sites})
 
 
 class FixtureTestCase(unittest.TestCase):
@@ -428,6 +432,67 @@ class IosTest(FixtureTestCase):
             check._check_privacy_manifest(path, str(path), report)
         self.assertEqual([], report.violations)
         self.assertEqual(3, len(list((REPO_ROOT / "apps/ios").rglob("PrivacyInfo.xcprivacy"))))
+
+
+BRIDGE_PACKAGE = """\
+{"name": "watch-audio-mcp", "dependencies": {"@modelcontextprotocol/server": "2.2.0", "multicast-dns": "7.2.5",
+ "uqr": "0.1.3"}, "devDependencies": {"typescript": "6.0.3"}}
+"""
+
+BRIDGE_LOCK = """\
+{"lockfileVersion": 3, "packages": {"": {}, "node_modules/@modelcontextprotocol/server": {}, "node_modules/zod": {},
+ "node_modules/multicast-dns": {}, "node_modules/uqr": {}, "node_modules/typescript": {"dev": true}}}
+"""
+
+
+class AgentBridgeTest(FixtureTestCase):
+    """tools/agent-bridge (#183): the CLI on the PC talks only to the paired phone."""
+
+    def setUp(self):
+        super().setUp()
+        self.repo.write("tools/agent-bridge/src/bridge.ts", "import { createServer } from 'node:tls';\n")
+        self.repo.write("tools/agent-bridge/src/pairing.ts", "import { createServer } from 'node:tls';\n")
+        self.repo.write("tools/agent-bridge/src/mdns.ts", "import multicastDns from 'multicast-dns';\n")
+        self.repo.write("tools/agent-bridge/src/cli.ts", "// talks to nothing: https://example.org in a comment is fine\n")
+        self.repo.write("tools/agent-bridge/test/x.test.ts", "import { connect } from 'node:tls'; connect({});\n")
+        self.repo.write("tools/agent-bridge/package.json", BRIDGE_PACKAGE)
+        self.repo.write("tools/agent-bridge/package-lock.json", BRIDGE_LOCK)
+
+    def test_fixture_passes_and_lists_the_sites(self):
+        report = self.repo.run()
+        self.assertEqual([], [str(v) for v in report.violations])
+        self.assertEqual({"tls", "mdns"}, {api for _, _, api, _ in report.bridge_sites})
+
+    def test_outbound_connection_fails(self):
+        self.repo.write("tools/agent-bridge/src/bridge.ts", "import { createServer, connect } from 'node:tls';\nconnect({ port: 1 });\n")
+        self.assertViolation(self.repo.run(), "agent-bridge", "outbound TCP / TLS connection")
+
+    def test_http_and_fetch_fail(self):
+        self.repo.write("tools/agent-bridge/src/cli.ts", "import https from 'node:https';\nawait fetch(u);\n")
+        report = self.repo.run()
+        self.assertViolation(report, "agent-bridge", "HTTP client / server modules")
+        self.assertViolation(report, "agent-bridge", "fetch")
+
+    def test_url_fails(self):
+        self.repo.write("tools/agent-bridge/src/cli.ts", "const u = 'https://telemetry.example.org/v1';\n")
+        self.assertViolation(self.repo.run(), "agent-bridge", "URL https://telemetry.example.org/v1")
+
+    def test_tls_outside_the_allowed_files_fails(self):
+        self.repo.write("tools/agent-bridge/src/cli.ts", "import tls from 'tls';\n")
+        self.assertViolation(self.repo.run(), "agent-bridge", "only allowed in files")
+
+    def test_unlisted_dependency_fails(self):
+        self.repo.replace("tools/agent-bridge/package.json", '"uqr": "0.1.3"', '"uqr": "0.1.3", "posthog-node": "1"')
+        self.repo.replace("tools/agent-bridge/package-lock.json", '"node_modules/uqr": {}',
+                          '"node_modules/uqr": {}, "node_modules/posthog-node": {}, "node_modules/x": {"hasInstallScript": true}')
+        report = self.repo.run()
+        self.assertViolation(report, "agent-bridge", "dependency posthog-node is not in")
+        self.assertViolation(report, "agent-bridge", "runtime package posthog-node is not in")
+        self.assertViolation(report, "agent-bridge", "x has an install script")
+
+    def test_stale_entries_fail(self):
+        self.repo.write("tools/agent-bridge/src/mdns.ts", "export {};\n")
+        self.assertViolation(self.repo.run(), "agent-bridge", "stale allow-list entry: mdns")
 
 
 class ParserTest(unittest.TestCase):

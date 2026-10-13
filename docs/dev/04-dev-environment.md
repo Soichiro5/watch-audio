@@ -177,6 +177,8 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 | `emulator.yml`（phone） | 同上（`phone-scenarios.sh`） | 文字起こしの途中で `am force-stop` → 再起動で全チャンクが 1 回ずつ文字起こしされる（欠落・重複 0、中断したチャンクは 2 回目以降で完了）（`ResumeAfterKillTest`、#20） | `RESUME_CHECK` 行、成果物 `logcat-phone` の `scenario-logs/` |
 | `emulator.yml`（phone） | 同上（`phone-scenarios.sh`） | 診断ログ: チャンクの受信（`ChunkReceiver.store`）→ 文字起こし → `am force-stop` → 再起動で、ログに `chunk_received`・`transcription_started` / `_finished`（RTF つき）・`app_start`・強制終了の `previous_exit`（OS が報告した終了理由）が残り、状態タブの「診断ログを書き出す」で CSV が書き出されて共有シートが開く（書き出しに文字起こし本文を含まない）（`DiagnosticsScenarioTest`、#77） | `DIAGNOSTICS_CHECK` 行と書き出した CSV の抜粋（`DIAGNOSTICS_EXPORT`）、スクリーンショット `diagnostics-export.png`、成果物 `logcat-phone` の `scenario-logs/diagnostics-export.csv` |
 | `emulator.yml`（wear） | 同上（`wear-surfaces.sh`） | Tile とコンプリケーションの表示（停止中 → Tile のタップでアプリが開き録音開始 → 録音中）（#41） | `WEAR_SURFACE_CHECK` 行、スクリーンショット `wear-tile-*.png` / `wear-complication-*.png` |
+| `agent-bridge.yml`（cli、Linux・macOS・Windows） | `npm run lint` / `npm test`（`tools/agent-bridge`） | エージェント連携の橋渡し CLI（#183）の型検査と単体テスト: Kotlin と共有するやり取りの形式（`shared/agent/testdata`）、自己署名の証明書、ペアリング（使い捨ての値・確認コード）、TLS での拒否（ペアリングしていない鍵・別の鍵の PC・解除後）、stdio の MCP（道具の一覧・スマホ未接続時の応答） | テスト結果 |
+| `agent-bridge.yml`（e2e） | End to end: bridge CLI + fake phone | ペアリング（両側の確認コードが一致）→ 相互 TLS 1.3 → stdio の MCP クライアントからの道具の呼び出しが偽スマホ（`tools/agent-fake-phone`。共通部分 `shared/agent` の道具のロジックとデモの DB）の記録を返す。範囲外（30 日より前）・音声の未許可は返らない。ペアリングしていない相手・鍵の違う PC は握手で、期限切れのペアリング値は最初のメッセージで、PC・スマホで取り消したペアリングは以後の接続で拒否。CLI が外向きの接続を一度も開かない（`e2e/no-egress.ts`） | テスト結果（`node --test` の出力） |
 | `ios.yml` | Shared tests (iOS simulator) | 共通ロジックを iOS シミュレータで実行（SQLite を使う shared/db / Ingestor のテストを含む）。shared/ui の `IosPlaybackTest`: `IosAppServices.play` 直接・共有 UI で前日のタイムラインの発話タップ／検索結果の 1 タップのそれぞれで、そのチャンクの AAC が AVAudioPlayer に指定位置（±0.2 秒）・正しい長さで用意される（#19, #25。テスト実行ファイルはアプリではないので再生開始 `started=` は記録のみ）。`IosTranscriberBridgeTest`: Swift の文字起こし結果が絶対時刻つきで DB・FTS に入る（#21） | ジョブサマリーのテスト一覧と `PLAYBACK_CHECK` 行 |
 | `ios.yml` | Shared tests (iOS simulator) / Swift unit tests | iPhone の DB・音声・受信ディレクトリ（`LocalDataDirectoryTest`）と Watch の送信待ちディレクトリ（`LocalDataProtectionTests`、`ChunkOutboxTests`）がバックアップ対象外で、保護クラス `CompleteUntilFirstUserAuthentication` を設定できる（シミュレータは保護クラスを報告しないことがあるため、値は報告される場合だけ比較。#76） | ジョブサマリーのテスト一覧、ログ |
 | `ios.yml` | Launch iOS app / Launch watchOS app | ビルドした iOS・watchOS アプリをシミュレータに入れて起動し、15 秒後もプロセスが生きていてクラッシュレポートがない | ジョブサマリー、成果物 `simulator-smoke`（スクリーンショット・ログ） |
@@ -256,6 +258,7 @@ PR の CI 待ちを減らすため、変更したファイルに関係するワ�
 | JVM 専用（`src/jvmMain`・`src/jvmTest`） | 動く | 動かない | 動かない | 動く | 動く |
 | 共通コード（`src/commonMain` など）・Gradle の設定・`build-logic/**` | 動く | 動く | 動く | 動く | 動く |
 
+- `agent-bridge.yml`（エージェント連携の橋渡し CLI と偽スマホ、#183）は対象リスト（`paths`）: `tools/agent-bridge/**`・`tools/agent-fake-phone/**`・`shared/**`・Gradle の設定・`build-logic/**`・ワークフロー自身が変わったときだけ動く。
 - `.github/actions/sherpa-onnx-jni/**` と `tools/sherpa-onnx-android/**`（音声合成なしの sherpa-onnx、§7.3）は Android 専用の扱い（`emulator.yml` の対象リストに入れてある）。`deliver.yml` は main への push のほか、ほかのブランチで手動実行すると成果物を残さない試運転になる。
 - `android.yml` と `deliver.yml` は除外リスト（`paths-ignore`）。ドキュメント以外の変更では必ず動く。
 - `links.yml`（Markdown のリンク検査、数秒）は絞り込みなしで毎回動く。ドキュメントだけの変更でもリンク切れを見つけるためと、コードの移動で docs からのリンクが切れることがあるため。手元では `python3 tools/check-links/check_links.py`（テストは `python3 -m unittest discover -s tools/check-links -v`）。
@@ -278,6 +281,7 @@ CLAUDE.md の「Local only」（録音・文字起こし・ユーザーデータ
 | 依存（宣言） | `gradle/libs.versions.toml` と `*.gradle.kts`（`research/` を除く） | firebase・crashlytics・sentry・amplitude などの解析・クラッシュ送信 SDK、okhttp・retrofit・ktor などの HTTP クライアント |
 | 依存（解決結果） | リリースの実行時クラスパス | 許可リスト（AndroidX、Kotlin、Compose、play-services-wearable、sherpa-onnx など）にないモジュール |
 | iOS | `apps/ios/project.yml`、コミットされた `*.entitlements`・`*.xcprivacy` | 許可リストにない Info.plist のキー（`NSAppTransportSecurity`、位置情報など）、`UIBackgroundModes`、entitlements。アプリ・拡張のターゲットに `PrivacyInfo.xcprivacy`（`buildPhase: resources`）がないこと、マニフェストの追跡・追跡ドメイン・収集データ、許可リストにない理由コード（#159） |
+| エージェント連携の橋渡し CLI（PC、#183） | `tools/agent-bridge/src/**/*.ts`（`test/`・`e2e/` は出荷しないので除外）、`package.json`、`package-lock.json` | 許可されていないファイルでの `node:tls`・mDNS、どこでも `fetch(`・`connect(`・`node:http(s)`・`node:net`・`node:dgram`・`node:dns`・`child_process`・HTTP ライブラリ、URL リテラル、許可リストにない実行時の npm パッケージ（推移的なものを含む）、インストールスクリプトを持つパッケージ |
 
 手元での実行:
 
@@ -293,7 +297,7 @@ python3 tools/privacy-check/check.py --resolved-deps apps/wear=/tmp/deps-wear.tx
 
 **許可リストを広げるとき**（新しい権限・依存・通信先が本当に必要な場合）:
 
-1. `tools/privacy-check/policy.py` の該当する表に、理由を添えて追加する（権限は `ANDROID_APPS`、ライブラリが足す権限は `library_permissions`、通信するファイルは `ALLOWED_API_USES`、URL は `ALLOWED_URL_PREFIXES`、依存は `ALLOWED_RESOLVED_DEPENDENCIES`、iOS は `IOS_TARGETS` / `IOS_ENTITLEMENTS` / `IOS_REQUIRED_REASONS`）。拒否パターン（`GUARDED_APIS`・`DENIED_DEPENDENCIES`）は緩めず、許可リスト側に足す。
+1. `tools/privacy-check/policy.py` の該当する表に、理由を添えて追加する（権限は `ANDROID_APPS`、ライブラリが足す権限は `library_permissions`、通信するファイルは `ALLOWED_API_USES`、URL は `ALLOWED_URL_PREFIXES`、依存は `ALLOWED_RESOLVED_DEPENDENCIES`、iOS は `IOS_TARGETS` / `IOS_ENTITLEMENTS` / `IOS_REQUIRED_REASONS`、橋渡し CLI は `AGENT_BRIDGE_ALLOWED_API_USES` / `AGENT_BRIDGE_DEPENDENCIES` / `AGENT_BRIDGE_RUNTIME_PACKAGES`）。拒否パターン（`GUARDED_APIS`・`DENIED_DEPENDENCIES`）は緩めず、許可リスト側に足す。
 2. ユーザーデータが端末の外に出ないことを PR の本文で説明する。データを外に出す変更（AI プロバイダなど P2）は、CLAUDE.md の方針の変更として Issue で合意してから。
 3. [02 §7](../architecture/02-architecture.md#7-セキュリティプライバシー) の保存場所・通信箇所の一覧を更新し、`test_check.py` の期待値（通信箇所の集合など）も直す。
 

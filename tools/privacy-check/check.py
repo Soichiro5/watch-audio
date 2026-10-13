@@ -11,6 +11,8 @@ Static checks (repository files only, no build needed):
   * iOS project.yml / committed plists: Info.plist keys, background modes, entitlements and the
     privacy manifests (one per app / extension target, no tracking, no collected data, reasons
     from the allow-list).
+  * Agent bridge CLI on the PC (tools/agent-bridge): network modules only where allowed (listening
+    TLS, mDNS), no URLs, runtime npm packages (transitive ones included) from the allow-list.
 
 Build outputs (optional, after `assembleDebug` / `dependencies`):
   --merged-manifest APP=PATH   merged AndroidManifest.xml (library permissions included)
@@ -22,6 +24,7 @@ Allow-lists live in policy.py. Python standard library only.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import plistlib
 import re
@@ -54,6 +57,8 @@ class Report:
     violations: list[Violation] = field(default_factory=list)
     # Allowed network call sites found in code: (path, line, api id, reason).
     network_sites: list[tuple[str, int, str, str]] = field(default_factory=list)
+    # The same for the agent bridge CLI on the PC (tools/agent-bridge).
+    bridge_sites: list[tuple[str, int, str, str]] = field(default_factory=list)
 
     def add(self, check: str, path: str, line: int, message: str) -> None:
         self.violations.append(Violation(check, path, line, message))
@@ -544,6 +549,76 @@ def check_ios(root: Path, report: Report) -> None:
 
 
 # ---------------------------------------------------------------------------------------------
+# Agent bridge CLI (tools/agent-bridge, #183)
+
+
+def check_agent_bridge(root: Path, report: Report) -> None:
+    """The bridge on the PC talks only to the paired phone: network modules only where the policy
+    allows them, no URLs, and runtime dependencies (transitive ones included) from the allow-list."""
+    base = root / policy.AGENT_BRIDGE_DIR
+    if not base.is_dir():
+        return
+    apis = [(api_id, re.compile(pattern, re.MULTILINE), what) for api_id, pattern, what in policy.AGENT_BRIDGE_GUARDED_APIS]
+    used: set[tuple[str, str]] = set()
+    for path in sorted((base / "src").rglob("*.ts")):
+        rel = _rel(root, path)
+        code = strip_comments(path.read_text(encoding="utf-8", errors="replace"))
+        allowed = policy.AGENT_BRIDGE_ALLOWED_API_USES.get(rel, {})
+        for api_id, regex, what in apis:
+            for match in regex.finditer(code):
+                line = code.count("\n", 0, match.start()) + 1
+                if api_id in allowed:
+                    used.add((rel, api_id))
+                    report.bridge_sites.append((rel, line, api_id, allowed[api_id]))
+                else:
+                    report.add("agent-bridge", rel, line, f"{match.group(0).strip()} ({what}) is only allowed in files "
+                               "listed in policy.AGENT_BRIDGE_ALLOWED_API_USES")
+        for match in URL_PATTERN.finditer(code):
+            line = code.count("\n", 0, match.start()) + 1
+            report.add("agent-bridge", rel, line, f"URL {match.group(0)}: the bridge talks to the paired phone only")
+    for rel, allowed in policy.AGENT_BRIDGE_ALLOWED_API_USES.items():
+        for api_id in allowed:
+            if (rel, api_id) not in used:
+                report.add("agent-bridge", rel, 0, f"stale allow-list entry: {api_id} is no longer used here "
+                           "(remove it from policy.AGENT_BRIDGE_ALLOWED_API_USES)")
+
+    package_rel = f"{policy.AGENT_BRIDGE_DIR}/package.json"
+    try:
+        package = json.loads((base / "package.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        report.add("agent-bridge", package_rel, 0, f"cannot read: {e}")
+        return
+    dependencies = package.get("dependencies") or {}
+    for name in dependencies:
+        if name not in policy.AGENT_BRIDGE_DEPENDENCIES:
+            report.add("agent-bridge", package_rel, 0, f"dependency {name} is not in policy.AGENT_BRIDGE_DEPENDENCIES")
+    for name in policy.AGENT_BRIDGE_DEPENDENCIES:
+        if name not in dependencies:
+            report.add("agent-bridge", "tools/privacy-check/policy.py", 0,
+                       f"stale allow-list entry: {name} is not a dependency (remove it from AGENT_BRIDGE_DEPENDENCIES)")
+    all_names = list(dependencies) + list(package.get("devDependencies") or {})
+    for name, pattern in policy.DENIED_DEPENDENCIES:
+        for dep in all_names:
+            if re.search(pattern, dep, re.IGNORECASE):
+                report.add("agent-bridge", package_rel, 0, f"'{dep}' looks like a {name} dependency (policy.DENIED_DEPENDENCIES)")
+
+    lock_rel = f"{policy.AGENT_BRIDGE_DIR}/package-lock.json"
+    try:
+        lock = json.loads((base / "package-lock.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        report.add("agent-bridge", lock_rel, 0, f"cannot read (dependencies must be pinned by a lockfile): {e}")
+        return
+    for key, entry in (lock.get("packages") or {}).items():
+        if not key or entry.get("dev"):
+            continue
+        name = key.rsplit("node_modules/", 1)[-1]
+        if name not in policy.AGENT_BRIDGE_RUNTIME_PACKAGES:
+            report.add("agent-bridge", lock_rel, 0, f"runtime package {name} is not in policy.AGENT_BRIDGE_RUNTIME_PACKAGES")
+        if entry.get("hasInstallScript"):
+            report.add("agent-bridge", lock_rel, 0, f"{name} has an install script")
+
+
+# ---------------------------------------------------------------------------------------------
 
 
 def run(root: Path, merged: dict[str, Path] | None = None, resolved: dict[str, Path] | None = None) -> Report:
@@ -552,6 +627,7 @@ def run(root: Path, merged: dict[str, Path] | None = None, resolved: dict[str, P
     check_sources(root, report)
     check_declared_dependencies(root, report)
     check_ios(root, report)
+    check_agent_bridge(root, report)
     for module, path in (merged or {}).items():
         check_merged_manifest(root, module, path, report)
     for module, path in (resolved or {}).items():
@@ -568,6 +644,8 @@ def summary_markdown(report: Report) -> str:
         lines.append("No violations.")
     lines += ["", "Network call sites (policy.ALLOWED_API_USES):", ""]
     lines += [f"- `{path}:{line}` {api}: {reason}" for path, line, api, reason in report.network_sites] or ["- none"]
+    lines += ["", "Agent bridge on the PC (policy.AGENT_BRIDGE_ALLOWED_API_USES):", ""]
+    lines += [f"- `{path}:{line}` {api}: {reason}" for path, line, api, reason in report.bridge_sites] or ["- none"]
     return "\n".join(lines) + "\n"
 
 
@@ -593,6 +671,8 @@ def main(argv: list[str] | None = None) -> int:
                  _pairs(args.resolved_deps, "--resolved-deps"))
     for path, line, api, reason in report.network_sites:
         print(f"allowed network call site: {path}:{line} {api} ({reason})")
+    for path, line, api, reason in report.bridge_sites:
+        print(f"allowed agent bridge network site: {path}:{line} {api} ({reason})")
     for violation in report.violations:
         print(violation, file=sys.stderr)
     if args.summary:

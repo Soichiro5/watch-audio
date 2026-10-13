@@ -1,0 +1,31 @@
+{
+  "uri": "watchaudio-mcp://pair?v=1&n=Taro%27s%20MacBook&fp=yPiN-S4TATHtFw2pt2tI-M3EAeKZvNvTKMmwbA2Zyls&a=192.168.1.20:47823,[fd00::20]:47823&t=AQIDBAUGBwgJCgsMDQ4PEA&e=1791622800000",
+  "parsed": {
+    "version": 1,
+    "name": "Taro's MacBook",
+    "fingerprint": "yPiN-S4TATHtFw2pt2tI-M3EAeKZvNvTKMmwbA2Zyls",
+    "addresses": [
+      "192.168.1.20:47823",
+      "[fd00::20]:47823"
+    ],
+    "token": "AQIDBAUGBwgJCgsMDQ4PEA",
+    "expiresAt": 1791622800000
+  },
+  "confirmation": {
+    "token": "AQIDBAUGBwgJCgsMDQ4PEA",
+    "bridgeFingerprint": "yPiN-S4TATHtFw2pt2tI-M3EAeKZvNvTKMmwbA2Zyls",
+    "phoneFingerprint": "BsgF-1F16PliWgN7ZmcFbwFxNAPBfEpIFHq20Ls9Uqg",
+    "code": "312686"
+  },
+  "mdns": {
+    "nonce": "ZGVmZ2hpams",
+    "fingerprint": "yPiN-S4TATHtFw2pt2tI-M3EAeKZvNvTKMmwbA2Zyls",
+    "h": "ajeihPgKjxIoIMpf"
+  },
+  "invalid": [
+    "https://example.invalid/pair?v=1",
+    "watchaudio-mcp://pair?v=2&n=Taro%27s%20MacBook&fp=yPiN-S4TATHtFw2pt2tI-M3EAeKZvNvTKMmwbA2Zyls&a=192.168.1.20:47823,[fd00::20]:47823&t=AQIDBAUGBwgJCgsMDQ4PEA&e=1791622800000",
+    "watchaudio-mcp://pair?v=1&n=Taro%27s%20MacBook&fp=yPiN-S4TATHtFw2pt2tI-M3EAeKZvNvTKMmwbA2Zyls&a=192.168.1.20:47823,[fd00::20]:47823&t=short&e=1791622800000",
+    "watchaudio-mcp://pair?v=1&n=Taro%27s%20MacBook&fp=AAAA&a=192.168.1.20:47823,[fd00::20]:47823&t=AQIDBAUGBwgJCgsMDQ4PEA&e=1791622800000"
+  ]
+}

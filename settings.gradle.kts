@@ -28,6 +28,7 @@ include(":shared:protocol")
 include(":shared:platform")
 include(":shared:db")
 include(":shared:pipeline")
+include(":shared:agent") // agent access: MCP tool logic, scope, access log, phone-bridge wire format (#182)
 include(":shared:testing") // test setup shared by the modules' tests
 include(":shared:ort") // ONNX Runtime C API through JNA (JVM + Android) for the embedding model (#24)
 
@@ -38,3 +39,5 @@ include(":apps:wear")
 
 // Device-free verification on Linux/CI (#44)
 include(":tools:harness")
+// Phone stand-in for the agent bridge CLI's end-to-end test (#183)
+include(":tools:agent-fake-phone")

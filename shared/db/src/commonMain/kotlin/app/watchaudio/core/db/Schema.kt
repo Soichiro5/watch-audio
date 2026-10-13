@@ -358,4 +358,39 @@ internal val MIGRATIONS: List<List<String>> = listOf(
         END
         """,
     ),
+    // 10: agent access (#182, docs/research/agent-access.md). agent_pairing holds the PCs paired
+    // for agent access: the key fingerprint of the PC's bridge (base64url SHA-256 of its public
+    // key), where it was last reached, and what it may read (scope_days back from now; audio only
+    // when allow_audio). Revoking keeps the row (revoked_at) so the access log still names the
+    // PC; pairing the same PC again adds a new row, so only one active row per key is enforced.
+    // agent_access is the access log shown to the user: every tool call with its outcome, the
+    // number of items returned and the search terms. It never leaves the device (not in backups
+    // or exports) and "delete all data" deletes it (StorageQueries.deleteAllChunks).
+    listOf(
+        """
+        CREATE TABLE agent_pairing (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            name            TEXT    NOT NULL,
+            key_fingerprint TEXT    NOT NULL,
+            address         TEXT,
+            scope_days      INTEGER NOT NULL,
+            allow_audio     INTEGER NOT NULL DEFAULT 0,
+            created_at      INTEGER NOT NULL,
+            revoked_at      INTEGER
+        )
+        """,
+        "CREATE UNIQUE INDEX idx_agent_pairing_key ON agent_pairing(key_fingerprint) WHERE revoked_at IS NULL",
+        """
+        CREATE TABLE agent_access (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            at           INTEGER NOT NULL,
+            pairing_id   INTEGER NOT NULL REFERENCES agent_pairing(id) ON DELETE CASCADE,
+            tool         TEXT    NOT NULL,
+            outcome      TEXT    NOT NULL,
+            item_count   INTEGER NOT NULL,
+            query        TEXT
+        )
+        """,
+        "CREATE INDEX idx_agent_access_at ON agent_access(at)",
+    ),
 )
