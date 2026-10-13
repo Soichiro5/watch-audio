@@ -52,14 +52,15 @@ interface StorageQueries {
 
     /**
      * Deletes chunks with their transcripts and marks (the search index follows through the
-     * triggers). Deleting the audio files is the caller's job.
+     * triggers), and the hour summaries of the hours they overlap (#27, trigger). Deleting the
+     * audio files is the caller's job.
      * @return number of chunks deleted.
      */
     fun deleteChunks(ids: List<String>): Int
 
     /**
-     * Deletes every chunk, transcript, mark and passage embedding, and the agent access log
-     * (#182: it holds search terms); settings and agent pairings are kept.
+     * Deletes every chunk, transcript, mark, passage embedding and hour summary (#27), and the agent
+     * access log (#182: it holds search terms); settings and agent pairings are kept.
      * @return number of chunks deleted.
      */
     fun deleteAllChunks(): Int
@@ -174,6 +175,7 @@ internal class StorageSql(private val db: SQLiteConnection) : StorageQueries {
         )
         db.execute("DELETE FROM passage_deletion")
         db.execute("DELETE FROM agent_access")
+        db.execute("DELETE FROM hour_summary")
         return deleted
     }
 
