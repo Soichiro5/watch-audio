@@ -105,10 +105,11 @@ class AgentAccessScenarioTest {
             // Off: the connection ends; the host sees the phone gone. Then on again.
             compose.onNodeWithText(Strings.AGENT_SWITCH).performScrollTo().performClick()
             PlaybackFixtures.waitFor(15_000, "access off") { access.state.value.takeIf { !it.isOn } }
+            // A call already being answered when the switch flipped may still be logged just after.
+            val offSince = System.currentTimeMillis() + IN_FLIGHT_MS
             SystemClock.sleep(OFF_WINDOW_MS)
             val serviceAfterOff = Evidence.shell("dumpsys activity services app.watchaudio/.agent.AgentAccessService")
-            val offAt = System.currentTimeMillis()
-            val duringOff = log(offAt - OFF_WINDOW_MS).count { it.outcome == AgentAccessOutcome.OK }
+            val duringOff = log(offSince).count { it.outcome == AgentAccessOutcome.OK }
             Evidence.log("AGENT_CHECK phase=off service_running=${"AgentAccessService" in serviceAfterOff} calls_answered_while_off=$duringOff")
             assertEquals(0, duringOff)
 
@@ -119,7 +120,7 @@ class AgentAccessScenarioTest {
             // Revoke: the connection ends at once and nothing is answered any more.
             compose.onNodeWithText(Strings.AGENT_REVOKE).performScrollTo().performClick()
             compose.onNodeWithText(Strings.AGENT_REVOKE_CONFIRM).performClick()
-            val revokedAt = System.currentTimeMillis()
+            val revokedAt = System.currentTimeMillis() + IN_FLIGHT_MS
             PlaybackFixtures.waitFor(15_000, "access off after revoking the last pairing") { access.state.value.takeIf { !it.isOn } }
             SystemClock.sleep(OFF_WINDOW_MS)
             val afterRevoke = log(revokedAt).count { it.outcome == AgentAccessOutcome.OK }
@@ -148,5 +149,8 @@ class AgentAccessScenarioTest {
 
         /** Long enough for the host (one call per second) to notice. */
         const val OFF_WINDOW_MS = 6_000L
+
+        /** Margin for a call that was being answered at the moment access ended. */
+        const val IN_FLIGHT_MS = 1_000L
     }
 }

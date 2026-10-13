@@ -142,7 +142,7 @@ class AgentViewModel(
                 is QrScan.Found -> pair(scan.text)
                 QrScan.Cancelled -> local.update { it.copy(pairing = PairingStep.Idle) }
                 QrScan.NotFound -> fail(Strings.AGENT_SCAN_NOT_FOUND)
-                QrScan.Unavailable -> local.update { it.copy(pairing = PairingStep.Entering()) }.also { fail(Strings.AGENT_SCAN_UNAVAILABLE) }
+                QrScan.Unavailable -> fail(Strings.AGENT_SCAN_UNAVAILABLE)
             }
         }
     }

@@ -135,15 +135,22 @@ class AndroidAgentAccess(
         if (store.read { agentPairings() }.none { it.isActive }) return TurnOnResult.NO_PAIRINGS
         if (!localNetworkAllowed()) return TurnOnResult.PERMISSION_DENIED
         transport() // the Keystore key, before the service needs it
+        session++
         mutableState.update { it.copy(offAt = now() + minutes * 60_000L) }
         AgentAccessService.start(app)
         return TurnOnResult.ON
     }
 
     override fun turnOff() {
+        session++
         mutableState.value = AgentAccessState()
         AgentAccessService.stop(app)
     }
+
+    /** Counts turn-ons and offs, so that a service stopping late cannot turn off a newer session. */
+    @Volatile
+    var session = 0
+        private set
 
     /** When access turns itself off, or null while off. */
     val offAt: Long? get() = mutableState.value.offAt
@@ -155,9 +162,9 @@ class AndroidAgentAccess(
     /** The service reports each pairing's connection. */
     fun publishLinks(links: Map<Long, LinkState>) = mutableState.update { if (it.offAt != null) it.copy(links = links) else it }
 
-    /** The service stopped (auto-off, the notification's button, or the system). */
-    fun markOff() {
-        mutableState.value = AgentAccessState()
+    /** The service of [session] stopped (auto-off, the notification's button, or the system). */
+    fun markOff(session: Int) {
+        if (session == this.session) mutableState.value = AgentAccessState()
     }
 
     /** Android 17+ asks the user before an app reaches devices on the local network. */

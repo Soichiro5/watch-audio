@@ -20,6 +20,7 @@ import app.watchaudio.android.MainActivity
 import app.watchaudio.app.Strings
 import app.watchaudio.app.logic.formatClock
 import app.watchaudio.core.agent.LinkState
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -39,8 +40,17 @@ import kotlinx.datetime.TimeZone
  * system (START_NOT_STICKY): access stays off until the user turns it on again.
  */
 class AgentAccessService : Service() {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main.immediate + CoroutineExceptionHandler { _, e ->
+            // E.g. the Keystore refused the key: access goes off rather than the app crashing.
+            Log.e(TAG, "agent access failed (${e.javaClass.simpleName})")
+            access.turnOff()
+        },
+    )
     private var running: Job? = null
+
+    /** [AndroidAgentAccess.session] this service runs for. */
+    private var session = -1
 
     private val access get() = AppGraph.get(this).agentAccess
 
@@ -52,6 +62,7 @@ class AgentAccessService : Service() {
             stopEverything()
             return START_NOT_STICKY
         }
+        session = access.session
         ensureChannel()
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(offAt, emptyList()), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
         scheduleAlarm(offAt)
@@ -97,14 +108,14 @@ class AgentAccessService : Service() {
         running?.cancel()
         running = null
         cancelAlarm()
-        access.markOff()
+        access.markOff(session)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
     override fun onDestroy() {
         cancelAlarm()
-        access.markOff()
+        access.markOff(session)
         scope.cancel()
         super.onDestroy()
     }
