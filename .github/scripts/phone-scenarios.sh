@@ -9,7 +9,8 @@
 #   3. #20 ResumeAfterKillTest: seeds chunks, opens the app, force-stops it in the middle of the
 #      transcription run and verifies that every chunk is transcribed exactly once after the restart,
 #   4. #77 DiagnosticsScenarioTest: receives and transcribes a chunk, force-stops the app and checks
-#      the diagnostics log (events, previous exit reason) and its export from the Status tab.
+#      the diagnostics log (events, previous exit reason) and its export from the Status tab,
+#   5. #184 AgentAccessScenarioTest: agent access against the bridge CLI on the host (agent-access.sh).
 #
 # Evidence: *_CHECK lines in scenario-logs/ (logcat and `am instrument` output), screenshots in
 # /data/local/tmp/watchaudio-screenshots (pulled by the workflow). Exit status 1 if a check failed.
@@ -126,6 +127,11 @@ if [ -s "$OUT/diagnostics-export.csv" ]; then
   log "DIAGNOSTICS_EXPORT rows=$(($(wc -l < "$OUT/diagnostics-export.csv") - 1)) file=$OUT/diagnostics-export.csv; excerpt:"
   grep -E "chunk=diagnostics-check|,app_start,|,previous_exit," "$OUT/diagnostics-export.csv" | tail -n 8 | sed 's/^/  /' | tee -a "$OUT/summary.txt"
 fi
+
+# 5. Agent access (#184): pairing with the real bridge CLI on the host, tool calls answered only
+#    while on, off, on again and after revoking (agent-access.sh, tools/agent-bridge/e2e/emulator-host.ts).
+OUT="$OUT" bash .github/scripts/agent-access.sh || status=1
+save_logcat
 
 # Lines can be logged twice (Log + System.out); keep the first of each.
 grep -ho "[A-Z_]*_CHECK .*\|SCREENSHOT .*\|MODEL_INSTALL .*" "$OUT/logcat-scenarios.txt" | awk '!seen[$0]++' >> "$OUT/summary.txt" || true
