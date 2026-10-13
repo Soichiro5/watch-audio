@@ -47,6 +47,8 @@ MODEL_DOWNLOADER = "apps/android/src/main/kotlin/app/watchaudio/android/asr/Mode
 MODEL_MANIFEST = "apps/android/src/main/kotlin/app/watchaudio/android/asr/ModelManifest.kt"
 AGENT_TLS = "apps/android/src/main/kotlin/app/watchaudio/android/agent/TlsAgentTransport.kt"
 AGENT_NSD = "apps/android/src/main/kotlin/app/watchaudio/android/agent/NsdBridgeDiscovery.kt"
+AGENT_IOS = "apps/ios/App/Agent/AgentNetwork.swift"
+AGENT_IOS_TRANSPORT = "shared/ui/src/iosMain/kotlin/app/watchaudio/app/IosAgentTransport.kt"
 NOTICES = "shared/ui/src/commonMain/kotlin/app/watchaudio/app/licenses/OpenSourceNotices.kt"
 LICENSE_TEXTS = "shared/ui/src/commonMain/kotlin/app/watchaudio/app/licenses/LicenseTexts.kt"
 
@@ -143,6 +145,21 @@ class FixtureRepo:
             }
             """)
         self.write(AGENT_NSD, "val nsd = context.getSystemService(NsdManager::class.java)\n")
+        self.write(AGENT_IOS, """\
+            import Network
+            static let serviceType = "_watchaudio-mcp._tcp"
+            func connect(host: String, fingerprint: String) {
+                let endpoint: NWEndpoint.Host = IPv4Address(host).map { .ipv4($0) } ?? IPv6Address(host).map { .ipv6($0) }!
+                sec_protocol_options_set_min_tls_protocol_version(security, .TLSv13)
+                sec_protocol_options_set_max_tls_protocol_version(security, .TLSv13)
+                sec_protocol_options_set_local_identity(security, identity)
+                sec_protocol_options_set_verify_block(security, { _, trust, complete in
+                    complete(chain.first.flatMap(AgentKeychain.fingerprint(of:)) == fingerprint)
+                }, queue)
+                let connection = NWConnection(host: endpoint, port: 1, using: parameters)
+            }
+            """)
+        self.write(AGENT_IOS_TRANSPORT, "fun check(host: String) = require(isLanHost(host))\n")
         self.write(NOTICES, 'val url = "https://github.com/k2-fsa/sherpa-onnx"\n')
         self.write(LICENSE_TEXTS, 'const val APACHE = """http://www.apache.org/licenses/"""\n')
         # Test code is not shipped: a local fake server is fine there.
@@ -201,10 +218,10 @@ class RepositoryTest(unittest.TestCase):
     def test_repository_passes(self):
         report = check.run(REPO_ROOT)
         self.assertEqual([], [str(v) for v in report.violations])
-        # The model download and, for agent access (#184), the LAN connection to the paired PC and
-        # its mDNS discovery are the only network call sites.
+        # The model download and, for agent access (#184, #185), the LAN connection to the paired PC
+        # and its mDNS discovery are the only network call sites.
         self.assertEqual({(MODEL_DOWNLOADER, "URLConnection"), (MODEL_DOWNLOADER, "openConnection"),
-                          (AGENT_TLS, "Socket"), (AGENT_NSD, "NSD")},
+                          (AGENT_TLS, "Socket"), (AGENT_NSD, "NSD"), (AGENT_IOS, "Network.framework")},
                          {(path, api) for path, _, api, _ in report.network_sites})
         # The agent bridge on the PC only listens (TLS) and advertises (mDNS).
         self.assertEqual({("tools/agent-bridge/src/bridge.ts", "tls"), ("tools/agent-bridge/src/pairing.ts", "tls"),
@@ -228,7 +245,7 @@ class BaselineTest(FixtureTestCase):
         report = self.repo.run()
         self.assertEqual([], [str(v) for v in report.violations])
         self.assertEqual({(MODEL_DOWNLOADER, "URLConnection"), (MODEL_DOWNLOADER, "openConnection"),
-                          (AGENT_TLS, "Socket"), (AGENT_NSD, "NSD")},
+                          (AGENT_TLS, "Socket"), (AGENT_NSD, "NSD"), (AGENT_IOS, "Network.framework")},
                          {(path, api) for path, _, api, _ in report.network_sites})
 
     def test_stale_allow_list_entries_fail(self):
@@ -362,6 +379,29 @@ class SourceTest(FixtureTestCase):
         self.assertViolation(report, "network", "no longer connects only to LAN addresses")
         self.assertViolation(report, "network", "no longer parses the address without DNS")
 
+    def test_ios_network_outside_agent_access_fails(self):
+        # #185: Network.framework is allowed in AgentNetwork.swift only, and nowhere may listen.
+        self.repo.write("apps/ios/App/Sync.swift", "import Network\nlet c = NWConnection(to: endpoint, using: .tcp)\n")
+        self.repo.replace(AGENT_IOS, "let connection = NWConnection(", "let listener = try NWListener(using: parameters)\n    let connection = NWConnection(")
+        report = self.repo.run()
+        self.assertViolation(report, "network", "Sync.swift:1: import Network")
+        self.assertViolation(report, "network", "Sync.swift:2: NWConnection")
+        self.assertViolation(report, "network", "AgentNetwork.swift:11: NWListener")
+
+    def test_ios_agent_connection_must_stay_on_the_lan(self):
+        # The entry holds only while the iPhone connects to LAN IP literals with TLS 1.3, its key and
+        # the pinned bridge key.
+        self.repo.replace(AGENT_IOS, "IPv4Address(host).map { .ipv4($0) } ?? IPv6Address(host).map { .ipv6($0) }!",
+                          "NWEndpoint.Host(host)")
+        self.repo.replace(AGENT_IOS, "set_max_tls_protocol_version(security, .TLSv13)", "set_max_tls_protocol_version(security, .TLSv12)")
+        self.repo.replace(AGENT_IOS, "== fingerprint", "!= nil")
+        self.repo.write(AGENT_IOS_TRANSPORT, "fun check(host: String) = true\n")
+        report = self.repo.run()
+        self.assertViolation(report, "network", "AgentNetwork.swift: allowed network site no longer parses the host as an IP literal")
+        self.assertViolation(report, "network", "no longer TLS 1.3 only (minimum and maximum)")
+        self.assertViolation(report, "network", "no longer pins the bridge key in the verify block")
+        self.assertViolation(report, "network", "IosAgentTransport.kt: allowed network site no longer connects only to LAN addresses")
+
     def test_allowed_api_in_another_file_fails(self):
         self.repo.write("apps/android/src/main/kotlin/Other.kt", "import java.net.HttpURLConnection\n")
         self.assertViolation(self.repo.run(), "network", "Other.kt:1: HttpURLConnection")
@@ -411,6 +451,15 @@ class IosTest(FixtureTestCase):
                           "        UIBackgroundModes: [processing]\n        NSAppTransportSecurity:\n"
                           "          NSAllowsArbitraryLoads: true")
         self.assertViolation(self.repo.run(), "ios", "NSAppTransportSecurity")
+
+    def test_agent_access_info_keys_and_bonjour_services(self):
+        # #185: the camera, local network and the bridge's Bonjour type are allowed; other types are not.
+        self.repo.replace("apps/ios/project.yml", "        UIBackgroundModes: [processing]",
+                          "        UIBackgroundModes: [processing]\n        NSCameraUsageDescription: QR\n"
+                          "        NSLocalNetworkUsageDescription: PC\n        NSBonjourServices: [_watchaudio-mcp._tcp]")
+        self.assertEqual([], [str(v) for v in self.repo.run().violations])
+        self.repo.replace("apps/ios/project.yml", "[_watchaudio-mcp._tcp]", "[_watchaudio-mcp._tcp, _airplay._tcp]")
+        self.assertViolation(self.repo.run(), "ios", "NSBonjourServices '_airplay._tcp' of iosApp")
 
     def test_unexpected_background_mode_fails(self):
         self.repo.replace("apps/ios/project.yml", "          - audio", "          - audio\n          - location")
