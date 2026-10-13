@@ -206,3 +206,56 @@ IOS_ENTITLEMENTS = {
         "watch app <-> complication share the recorder state (#41) in an on-device App Group container; "
         "no iCloud / network",
 }
+
+# ---------------------------------------------------------------------------------------------
+# Agent bridge CLI (tools/agent-bridge, #183): runs on the user's PC and talks only to the paired
+# phone. It listens on the LAN (the phone connects to it over mutual TLS) and multicasts mDNS on the
+# local link; it never opens a connection itself. Shipped code is src/**/*.ts (test/ and e2e/ are
+# not shipped; e2e/ checks the same at run time with a guard that refuses outbound connections).
+AGENT_BRIDGE_DIR = "tools/agent-bridge"
+
+# Network-capable modules and calls in TypeScript (matched with comments removed).
+AGENT_BRIDGE_GUARDED_APIS = (
+    ("http", r"""['"](?:node:)?(?:http|https|http2)['"]""", "HTTP client / server modules"),
+    ("fetch", r"\bfetch\s*\(", "fetch"),
+    ("web-sockets", r"\b(?:XMLHttpRequest|WebSocket|EventSource)\b", "browser-style network clients"),
+    ("connect", r"\b(?:connect|createConnection)\s*\(", "outbound TCP / TLS connection"),
+    ("net", r"""['"](?:node:)?net['"]""", "raw TCP"),
+    ("dgram", r"""['"](?:node:)?dgram['"]""", "UDP sockets"),
+    ("dns", r"""['"](?:node:)?dns(?:/promises)?['"]""", "DNS lookups"),
+    ("child_process", r"""['"](?:node:)?child_process['"]""", "starting other programs"),
+    ("http-libraries", r"""['"](?:undici|axios|got|node-fetch|ky|superagent|ws)['"]""", "HTTP / WebSocket libraries"),
+    ("tls", r"""['"](?:node:)?tls['"]""", "TLS"),
+    ("mdns", r"""['"](?:multicast-dns|bonjour-service|bonjour)['"]""", "mDNS"),
+)
+
+# file -> {api id: reason}: the bridge's only network sites. Unused entries are reported.
+AGENT_BRIDGE_ALLOWED_API_USES = {
+    "tools/agent-bridge/src/bridge.ts": {
+        "tls": "listens for the paired phone: mutual TLS 1.3, only paired phones' certificates (never connects out)",
+    },
+    "tools/agent-bridge/src/pairing.ts": {
+        "tls": "listens for one pairing attempt during `pair` (5-minute one-time value)",
+    },
+    "tools/agent-bridge/src/mdns.ts": {
+        "mdns": "advertises _watchaudio-mcp._tcp to 224.0.0.251:5353 on the local link (no stable identifier)",
+    },
+}
+
+# Runtime dependencies in package.json, and every non-dev package of package-lock.json (with the
+# transitive ones). Adding one is a privacy decision: say why here.
+AGENT_BRIDGE_DEPENDENCIES = {
+    "@modelcontextprotocol/server": "official MCP SDK; only its stdio transport is used",
+    "multicast-dns": "mDNS advertisement on the local link",
+    "uqr": "QR code in the terminal (no network)",
+}
+AGENT_BRIDGE_RUNTIME_PACKAGES = {
+    "@modelcontextprotocol/server": "see AGENT_BRIDGE_DEPENDENCIES",
+    "@modelcontextprotocol/core": "part of the MCP SDK",
+    "zod": "schema validation used by the MCP SDK",
+    "multicast-dns": "see AGENT_BRIDGE_DEPENDENCIES",
+    "dns-packet": "DNS message encoding for multicast-dns",
+    "@leichtgewicht/ip-codec": "IP address encoding for dns-packet",
+    "thunky": "lazy init helper of multicast-dns",
+    "uqr": "see AGENT_BRIDGE_DEPENDENCIES",
+}
