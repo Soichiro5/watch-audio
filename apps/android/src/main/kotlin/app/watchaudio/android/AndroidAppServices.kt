@@ -17,6 +17,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import app.watchaudio.android.agent.AndroidAgentAccess
 import app.watchaudio.android.asr.ModelManager
 import app.watchaudio.android.work.TranscriptionScheduler
 import app.watchaudio.app.AppPermission
@@ -77,6 +78,8 @@ class AndroidAppServices(
     override val semanticSearch: SemanticSearch? = null,
     /** A run is embedding for semantic search (#24), not transcribing. */
     embeddingRunning: StateFlow<Boolean> = MutableStateFlow(false),
+    /** Agent access (#184). */
+    override val agentAccess: AndroidAgentAccess? = null,
 ) : AppServices {
     override val audioRoot: String = audioRootDir.absolutePath
 

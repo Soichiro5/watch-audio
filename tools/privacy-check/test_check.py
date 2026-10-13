@@ -45,6 +45,8 @@ WEAR_RULES = (f"<data-extraction-rules><cloud-backup>{ALL_DOMAINS}</cloud-backup
 
 MODEL_DOWNLOADER = "apps/android/src/main/kotlin/app/watchaudio/android/asr/ModelDownloader.kt"
 MODEL_MANIFEST = "apps/android/src/main/kotlin/app/watchaudio/android/asr/ModelManifest.kt"
+AGENT_TLS = "apps/android/src/main/kotlin/app/watchaudio/android/agent/TlsAgentTransport.kt"
+AGENT_NSD = "apps/android/src/main/kotlin/app/watchaudio/android/agent/NsdBridgeDiscovery.kt"
 NOTICES = "shared/ui/src/commonMain/kotlin/app/watchaudio/app/licenses/OpenSourceNotices.kt"
 LICENSE_TEXTS = "shared/ui/src/commonMain/kotlin/app/watchaudio/app/licenses/LicenseTexts.kt"
 
@@ -131,6 +133,16 @@ class FixtureRepo:
             const val RURI_ONNX_HF = "https://huggingface.co/onnx-community/ruri-v3-30m-ONNX/resolve/abc"
             const val RURI_HF = "https://huggingface.co/cl-nagoya/ruri-v3-30m/resolve/abc"
             """)
+        self.write(AGENT_TLS, """\
+            fun connect(host: String, port: Int, fingerprint: String) {
+                if (!isLanHost(host)) throw IOException("not a local network address")
+                val address = InetAddresses.parseNumericAddress(host)
+                val context = SSLContext.getInstance("TLSv1.3").apply { init(null, arrayOf(PinningTrustManager(fingerprint)), null) }
+                val socket = context.socketFactory.createSocket() as SSLSocket
+                socket.enabledProtocols = arrayOf(TLS_1_3)
+            }
+            """)
+        self.write(AGENT_NSD, "val nsd = context.getSystemService(NsdManager::class.java)\n")
         self.write(NOTICES, 'val url = "https://github.com/k2-fsa/sherpa-onnx"\n')
         self.write(LICENSE_TEXTS, 'const val APACHE = """http://www.apache.org/licenses/"""\n')
         # Test code is not shipped: a local fake server is fine there.
@@ -189,8 +201,11 @@ class RepositoryTest(unittest.TestCase):
     def test_repository_passes(self):
         report = check.run(REPO_ROOT)
         self.assertEqual([], [str(v) for v in report.violations])
-        # The model download is the only network call site.
-        self.assertEqual({MODEL_DOWNLOADER}, {site[0] for site in report.network_sites})
+        # The model download and, for agent access (#184), the LAN connection to the paired PC and
+        # its mDNS discovery are the only network call sites.
+        self.assertEqual({(MODEL_DOWNLOADER, "URLConnection"), (MODEL_DOWNLOADER, "openConnection"),
+                          (AGENT_TLS, "Socket"), (AGENT_NSD, "NSD")},
+                         {(path, api) for path, _, api, _ in report.network_sites})
         # The agent bridge on the PC only listens (TLS) and advertises (mDNS).
         self.assertEqual({("tools/agent-bridge/src/bridge.ts", "tls"), ("tools/agent-bridge/src/pairing.ts", "tls"),
                           ("tools/agent-bridge/src/mdns.ts", "mdns")},
@@ -212,7 +227,8 @@ class BaselineTest(FixtureTestCase):
     def test_fixture_passes(self):
         report = self.repo.run()
         self.assertEqual([], [str(v) for v in report.violations])
-        self.assertEqual({(MODEL_DOWNLOADER, "URLConnection"), (MODEL_DOWNLOADER, "openConnection")},
+        self.assertEqual({(MODEL_DOWNLOADER, "URLConnection"), (MODEL_DOWNLOADER, "openConnection"),
+                          (AGENT_TLS, "Socket"), (AGENT_NSD, "NSD")},
                          {(path, api) for path, _, api, _ in report.network_sites})
 
     def test_stale_allow_list_entries_fail(self):
@@ -326,6 +342,25 @@ class SourceTest(FixtureTestCase):
     def test_display_only_file_without_urls_is_stale(self):
         self.repo.write(LICENSE_TEXTS, "const val MIT = \"Permission is hereby granted\"\n")
         self.assertViolation(self.repo.run(), "network", "LicenseTexts.kt has no URL")
+
+    def test_sockets_and_mdns_outside_agent_access_fail(self):
+        # #184: the LAN client and mDNS are allowed in their two files only.
+        self.repo.write("shared/pipeline/src/commonMain/kotlin/Peer.kt", "val s = SSLSocket()\n")
+        self.repo.write("apps/android/src/main/kotlin/Finder.kt", "val nsd = getSystemService(NsdManager::class.java)\n")
+        self.repo.write("apps/android/src/main/kotlin/Lock.kt", "val lock = wifi.createMulticastLock(tag)\n")
+        report = self.repo.run()
+        self.assertViolation(report, "network", "Peer.kt:1: SSLSocket")
+        self.assertViolation(report, "network", "Finder.kt:1: NsdManager")
+        self.assertViolation(report, "network", "Lock.kt:1: createMulticastLock")
+
+    def test_agent_connection_must_stay_on_the_lan(self):
+        # The allow-list entry holds only while the transport refuses public addresses and DNS,
+        # pins the key and speaks TLS 1.3 only.
+        self.repo.replace(AGENT_TLS, "if (!isLanHost(host)) throw", "// isLanHost(host) dropped\n    if (false) throw")
+        self.repo.replace(AGENT_TLS, "InetAddresses.parseNumericAddress(host)", "InetAddress.getByName(host)")
+        report = self.repo.run()
+        self.assertViolation(report, "network", "no longer connects only to LAN addresses")
+        self.assertViolation(report, "network", "no longer parses the address without DNS")
 
     def test_allowed_api_in_another_file_fails(self):
         self.repo.write("apps/android/src/main/kotlin/Other.kt", "import java.net.HttpURLConnection\n")

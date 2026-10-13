@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Only the diagnostics export (#77) is shareable: a copy of the event log that the user sends
-    from the share sheet. Recordings and transcripts are never under this path.
+    Only two cache directories are reachable through the FileProvider, each granted to one app for
+    one action the user started:
+    - diagnostics-export/: the diagnostics export (#77), a copy of the event log that the user sends
+      from the share sheet;
+    - qr-scan/: the photo of the PC's pairing QR code (agent access, #184), written by the camera
+      app the user opens and deleted as soon as the code is read.
+    Recordings and transcripts are never under these paths.
 -->
 <paths>
     <cache-path name="diagnostics" path="diagnostics-export/" />
+    <cache-path name="qr-scan" path="qr-scan/" />
 </paths>

@@ -151,6 +151,8 @@ object OpenSourceNotices {
         library(
             "JNA (Java Native Access)", "JNA contributors", License.APACHE_2_0, "https://github.com/java-native-access/jna", ANDROID,
         ),
+        // Reads the agent access pairing QR code from a photo (#184).
+        library("ZXing", "ZXing authors", License.APACHE_2_0, "https://github.com/zxing/zxing", ANDROID),
         library("kaldi-native-fbank", "k2-fsa", License.APACHE_2_0, "https://github.com/csukuangfj/kaldi-native-fbank", ANDROID, includedIn = SHERPA_ONNX),
         library("kaldi-decoder", "k2-fsa", License.APACHE_2_0, "https://github.com/k2-fsa/kaldi-decoder", ANDROID, includedIn = SHERPA_ONNX),
         library("kaldifst", "k2-fsa", License.APACHE_2_0, "https://github.com/csukuangfj/kaldifst", ANDROID, includedIn = SHERPA_ONNX),

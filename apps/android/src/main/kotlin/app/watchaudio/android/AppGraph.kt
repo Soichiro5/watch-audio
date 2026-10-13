@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
 import androidx.annotation.VisibleForTesting
+import app.watchaudio.android.agent.AacClipSource
+import app.watchaudio.android.agent.AndroidAgentAccess
 import app.watchaudio.android.alert.GapAlertMonitor
 import app.watchaudio.android.asr.AndroidSherpaTranscriber
 import app.watchaudio.android.asr.ModelManager
@@ -12,6 +14,9 @@ import app.watchaudio.android.search.AndroidSemanticSearch
 import app.watchaudio.android.transfer.ChunkReceiver
 import app.watchaudio.android.work.AndroidDeviceConditions
 import app.watchaudio.android.work.TranscriptionScheduler
+import app.watchaudio.core.agent.AgentService
+import app.watchaudio.core.agent.AgentTools
+import app.watchaudio.core.agent.pruneAgentAccessLog
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.embedding.EmbeddingStep
 import app.watchaudio.core.pipeline.ChunkIntake
@@ -39,6 +44,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.datetime.TimeZone
 import kotlinx.io.files.Path
 
 /**
@@ -151,6 +157,19 @@ class AppGraph private constructor(context: Context) {
 
     val chunkReceiver = ChunkReceiver(app, chunkIntake, scope, diagnostics)
 
+    private val semanticSearch = AndroidSemanticSearch(semanticIndex, models)
+
+    /**
+     * Agent access (#184): the tools a paired PC's agent may call (search by meaning where the
+     * embedding model is ready, audio clips for pairings allowed audio) and the connection while on.
+     */
+    val agentAccess = AndroidAgentAccess(
+        app,
+        store,
+        AgentService(store, AgentTools(store, TimeZone.currentSystemDefault(), semantic = semanticSearch, audio = AacClipSource(audioRoot))),
+        software = "watch-audio-android/" + runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull().orEmpty(),
+    )
+
     val services = AndroidAppServices(
         app,
         store,
@@ -163,8 +182,9 @@ class AppGraph private constructor(context: Context) {
         scope,
         diagnostics,
         onGapAlertSettingsChanged = gapAlerts::onSettingsChanged,
-        semanticSearch = AndroidSemanticSearch(semanticIndex, models),
+        semanticSearch = semanticSearch,
         embeddingRunning = embeddingRunning,
+        agentAccess = agentAccess,
     )
 
     /**
@@ -178,6 +198,8 @@ class AppGraph private constructor(context: Context) {
         models.refresh()
         models.syncEnglish(store.loadSettings().transcribeEnglish)
         models.syncEmbedding()
+        // Agent access log retention (#184): also when the app is not opened.
+        store.pruneAgentAccessLog(System.currentTimeMillis())
     }
 
     suspend fun hasPendingChunks(): Boolean = pipeline.hasPending()

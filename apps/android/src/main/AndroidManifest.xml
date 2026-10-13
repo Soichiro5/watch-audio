@@ -2,7 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Only used to download the speech models; recordings and transcripts never leave the phone. -->
+    <!-- Downloads the speech models; and, only while the user has agent access on (#184), the
+         LAN connection to their own paired PC (agent/TlsAgentTransport.kt). Nothing else. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- The model download (hundreds of MB) runs as a WorkManager foreground worker. -->
@@ -10,6 +11,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- Gap alert (#43) and model download progress; requested during onboarding (Android 13+). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Agent access (#184): the connection to the paired PC runs as a foreground service of type
+         connectedDevice while the user has it on; that type needs one of the network permissions
+         below, and the multicast lock keeps mDNS replies coming while the bridge is looked for. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- Agent access (#184): Android 17+ asks the user before an app reaches the local network. -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
     <application
         android:name=".WatchAudioApp"
@@ -41,7 +49,14 @@
             </intent-filter>
         </service>
 
-        <!-- The user's diagnostics log export (#77), shared only from the share sheet they open. -->
+        <!-- Agent access (#184): keeps the connection to the paired PC while the user has it on. -->
+        <service
+            android:name=".agent.AgentAccessService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- The user's diagnostics log export (#77), shared only from the share sheet they open;
+             also where the camera app writes the photo of the pairing QR code (#184). -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.diagnostics"

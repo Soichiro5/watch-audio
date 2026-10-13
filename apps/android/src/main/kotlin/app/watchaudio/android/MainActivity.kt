@@ -31,6 +31,14 @@ class MainActivity : ComponentActivity() {
     private val backupOpenLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> services.onBackupPicked(uri) }
 
+    /** The camera app taking the photo of the PC's pairing QR code (agent access, #184; no CAMERA permission). */
+    private val pictureLauncher =
+        registerForActivityResult(ActivityResultContracts.TakePicture()) { saved -> services.agentAccess?.onPictureTaken(saved) }
+
+    /** The local network permission (Android 17+) agent access asks for before connecting. */
+    private val localNetworkLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> services.agentAccess?.onPermissionResult(granted) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -39,6 +47,7 @@ class MainActivity : ComponentActivity() {
         services.attachSaveLauncher(AndroidAppServices.EXPORT_MIME_TYPE, exportLauncher)
         services.attachSaveLauncher(BACKUP_MIME_TYPE, backupSaveLauncher)
         services.attachOpenBackupLauncher(backupOpenLauncher)
+        services.agentAccess?.attachLaunchers(pictureLauncher, localNetworkLauncher)
         setContent { App(services) }
     }
 
@@ -47,6 +56,7 @@ class MainActivity : ComponentActivity() {
         services.detachSaveLauncher(AndroidAppServices.EXPORT_MIME_TYPE, exportLauncher)
         services.detachSaveLauncher(BACKUP_MIME_TYPE, backupSaveLauncher)
         services.detachOpenBackupLauncher(backupOpenLauncher)
+        services.agentAccess?.detachLaunchers(pictureLauncher, localNetworkLauncher)
         super.onDestroy()
     }
 }

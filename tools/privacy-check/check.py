@@ -285,6 +285,12 @@ def check_sources(root: Path, report: Report) -> None:
             if not prefixes:
                 line = code.count("\n", 0, match.start()) + 1
                 report.add("network", rel, line, f"URL {url} is not in policy.ALLOWED_URL_PREFIXES")
+    for rel, requirements in policy.ALLOWED_API_REQUIREMENTS.items():
+        path = root / rel
+        code = strip_comments(path.read_text(encoding="utf-8", errors="replace")) if path.is_file() else ""
+        for what, pattern in requirements:
+            if not re.search(pattern, code, re.MULTILINE):
+                report.add("network", rel, 0, f"allowed network site no longer {what} (policy.ALLOWED_API_REQUIREMENTS)")
     # Stale entries would make the list of network call sites (docs/architecture/02 §7.2) wrong.
     for rel, allowed in policy.ALLOWED_API_USES.items():
         for api_id in allowed:
