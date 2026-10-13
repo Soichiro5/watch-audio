@@ -5,7 +5,7 @@ import androidx.sqlite.SQLiteConnection
 /**
  * Queries available inside [LocalStore.transaction] / [LocalStore.read], one interface per
  * concern: [ChunkQueries], [TranscriptQueries], [SearchQueries], [StorageQueries],
- * [SettingQueries], [ExportQueries], [RestoreQueries], [BackupQueries] and [EmbeddingQueries]. Column lists and row mappers are shared in `Rows.kt`.
+ * [SettingQueries], [ExportQueries], [RestoreQueries], [BackupQueries], [EmbeddingQueries] and [AgentQueries]. Column lists and row mappers are shared in `Rows.kt`.
  */
 class StoreTransaction private constructor(db: SQLiteConnection, private val searchSql: SearchSql) :
     ChunkQueries by ChunkSql(db),
@@ -16,11 +16,12 @@ class StoreTransaction private constructor(db: SQLiteConnection, private val sea
     ExportQueries by ExportSql(db),
     RestoreQueries by RestoreSql(db),
     BackupQueries by BackupSql(db),
-    EmbeddingQueries by EmbeddingSql(db) {
+    EmbeddingQueries by EmbeddingSql(db),
+    AgentQueries by AgentSql(db) {
 
     internal constructor(db: SQLiteConnection) : this(db, SearchSql(db))
 
     /** [search] with the window of the 1-2 character LIKE scan as a parameter (for tests). */
     internal fun search(query: String, limit: Int, recentSegments: Int): List<SearchHit> =
-        searchSql.search(query, limit, recentSegments)
+        searchSql.search(query, limit, Long.MIN_VALUE, Long.MAX_VALUE, recentSegments)
 }

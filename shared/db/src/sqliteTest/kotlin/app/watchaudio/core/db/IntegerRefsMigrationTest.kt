@@ -126,6 +126,7 @@ class IntegerRefsMigrationTest {
             assertEquals(emptyList(), db.texts("SELECT at FROM mark"), "marks of the deleted chunk")
             assertEquals(
                 listOf(
+                    "idx_agent_access_at", "idx_agent_pairing_key",
                     "idx_chunk_purgeable", "idx_chunk_started_at", "idx_chunk_state", "idx_passage_chunk", "idx_passage_model",
                     "idx_segment_chunk", "idx_segment_start_at",
                 ),

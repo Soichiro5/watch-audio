@@ -58,7 +58,8 @@ interface StorageQueries {
     fun deleteChunks(ids: List<String>): Int
 
     /**
-     * Deletes every chunk, transcript, mark and passage embedding; settings are kept.
+     * Deletes every chunk, transcript, mark and passage embedding, and the agent access log
+     * (#182: it holds search terms); settings and agent pairings are kept.
      * @return number of chunks deleted.
      */
     fun deleteAllChunks(): Int
@@ -172,6 +173,7 @@ internal class StorageSql(private val db: SQLiteConnection) : StorageQueries {
             "UPDATE embedding_state SET deletion_floor = MAX(deletion_floor, COALESCE((SELECT MAX(seq) FROM passage_deletion), 0))",
         )
         db.execute("DELETE FROM passage_deletion")
+        db.execute("DELETE FROM agent_access")
         return deleted
     }
 

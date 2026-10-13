@@ -18,22 +18,37 @@ interface SearchQueries {
      * Snippets are built in Kotlin for the returned rows only ([highlightSnippet]).
      */
     fun search(query: String, limit: Int = 50): List<SearchHit>
+
+    /** [search] limited to segments that started in `[from, to)` (agent access scope, #182). */
+    fun searchBetween(query: String, from: Long, to: Long, limit: Int = 50): List<SearchHit>
 }
 
 internal class SearchSql(private val db: SQLiteConnection) : SearchQueries {
 
-    override fun search(query: String, limit: Int): List<SearchHit> = search(query, limit, SHORT_QUERY_RECENT_SEGMENTS)
+    override fun search(query: String, limit: Int): List<SearchHit> =
+        search(query, limit, Long.MIN_VALUE, Long.MAX_VALUE, SHORT_QUERY_RECENT_SEGMENTS)
 
-    /** [search] with the window of the 1-2 character LIKE scan as a parameter (for tests). */
-    fun search(query: String, limit: Int, recentSegments: Int): List<SearchHit> {
+    override fun searchBetween(query: String, from: Long, to: Long, limit: Int): List<SearchHit> =
+        search(query, limit, from, to, SHORT_QUERY_RECENT_SEGMENTS)
+
+    /**
+     * [search] over segments that started in `[from, to)`, with the window of the 1-2 character
+     * LIKE scan as a parameter (for tests). The window counts the newest segments in the range.
+     */
+    fun search(query: String, limit: Int, from: Long, to: Long, recentSegments: Int): List<SearchHit> {
         val q = query.trim()
-        if (q.isEmpty()) return emptyList()
+        if (q.isEmpty() || from >= to) return emptyList()
+        // Unbounded (the search screen): exactly the queries measured by the benchmark (#72).
+        // Bounds are Longs, so inlining them is safe.
+        val bounded = from != Long.MIN_VALUE || to != Long.MAX_VALUE
+        val inRange = if (bounded) " AND t.start_at >= $from AND t.start_at < $to" else ""
+        val recentRange = if (bounded) " WHERE start_at >= $from AND start_at < $to" else ""
         val segments = if (q.length >= 3) {
             db.queryList(
                 """
                 SELECT $SEGMENT_COLUMNS FROM $SEGMENTS WHERE s.id IN (
                     SELECT t.id FROM segment_fts JOIN transcript_segment t ON t.id = segment_fts.rowid
-                    WHERE segment_fts MATCH ? ORDER BY t.start_at DESC LIMIT ?
+                    WHERE segment_fts MATCH ?$inRange ORDER BY t.start_at DESC LIMIT ?
                 ) ORDER BY s.start_at DESC
                 """.trimIndent(),
                 "\"" + q.replace("\"", "\"\"") + "\"",
@@ -44,7 +59,7 @@ internal class SearchSql(private val db: SQLiteConnection) : SearchQueries {
                 """
                 SELECT $SEGMENT_COLUMNS FROM $SEGMENTS WHERE s.id IN (
                     SELECT id FROM (
-                        SELECT id, text FROM transcript_segment ORDER BY start_at DESC LIMIT $recentSegments
+                        SELECT id, text FROM transcript_segment$recentRange ORDER BY start_at DESC LIMIT $recentSegments
                     ) WHERE text LIKE ? ESCAPE '\' LIMIT ?
                 ) ORDER BY s.start_at DESC
                 """.trimIndent(),
@@ -61,7 +76,7 @@ internal class SearchSql(private val db: SQLiteConnection) : SearchQueries {
                     SELECT $SEGMENT_COLUMNS FROM $SEGMENTS WHERE s.id IN (
                         SELECT t.id FROM transcript_segment t WHERE t.id IN (
                             SELECT doc FROM segment_fts_terms WHERE term >= ? AND term < ?
-                        ) ORDER BY t.start_at DESC LIMIT ?
+                        )$inRange ORDER BY t.start_at DESC LIMIT ?
                     ) ORDER BY s.start_at DESC
                     """.trimIndent(),
                     prefix,
