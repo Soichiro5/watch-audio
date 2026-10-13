@@ -59,7 +59,9 @@ class AgentAccessScenarioTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             compose.openTab(Strings.TAB_STATUS)
             compose.onNodeWithText(Strings.AGENT_OPEN).performScrollTo().performClick()
+            compose.waitForText(Strings.AGENT_ENTER)
             compose.onNodeWithText(Strings.AGENT_ENTER).performClick()
+            compose.waitUntil(10_000) { compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
             compose.onNode(hasSetTextAction()).performTextInput(uri)
             compose.onNodeWithText(Strings.AGENT_ENTER_SUBMIT).performClick()
             compose.waitUntil(30_000) { compose.onAllNodes(hasText(Strings.AGENT_CODE_MATCHES)).fetchSemanticsNodes().isNotEmpty() }
@@ -86,6 +88,8 @@ class AgentAccessScenarioTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             compose.openTab(Strings.TAB_STATUS)
             compose.onNodeWithText(Strings.AGENT_OPEN).performScrollTo().performClick()
+            // The switch is enabled once the pairings are loaded (the time choices show then).
+            compose.waitForText(Strings.agentMinutes(30))
 
             // On: the foreground service connects and the PC's agent reads the transcript.
             val firstOn = System.currentTimeMillis()
@@ -113,13 +117,15 @@ class AgentAccessScenarioTest {
             Evidence.log("AGENT_CHECK phase=off service_running=${"AgentAccessService" in serviceAfterOff} calls_answered_while_off=$duringOff")
             assertEquals(0, duringOff)
 
+            compose.waitForText(Strings.agentMinutes(30))
             val secondOn = System.currentTimeMillis()
             compose.onNodeWithText(Strings.AGENT_SWITCH_DETAIL_OFF).performClick()
             waitForLog(secondOn, "a tool call answered after turning on again")
 
             // Revoke: the connection ends at once and nothing is answered any more.
             compose.onNodeWithText(Strings.AGENT_REVOKE).performScrollTo().performClick()
-            compose.onNodeWithText(Strings.AGENT_REVOKE_CONFIRM).performClick()
+            compose.waitForText(Strings.AGENT_REVOKE_CONFIRM)
+            compose.onNodeWithText(Strings.AGENT_REVOKE_CONFIRM).performScrollTo().performClick()
             val revokedAt = System.currentTimeMillis() + IN_FLIGHT_MS
             PlaybackFixtures.waitFor(15_000, "access off after revoking the last pairing") { access.state.value.takeIf { !it.isOn } }
             SystemClock.sleep(OFF_WINDOW_MS)
@@ -137,6 +143,9 @@ class AgentAccessScenarioTest {
             assertFalse(access.state.value.isOn)
         }
     }
+
+    private fun androidx.compose.ui.test.junit4.ComposeTestRule.waitForText(text: String) =
+        waitUntil(20_000) { onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty() }
 
     private fun log(since: Long) = runBlocking { graph.store.read { agentAccessLog(500) } }.filter { it.at >= since }
 

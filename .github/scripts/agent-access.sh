@@ -60,6 +60,12 @@ fi
 log "AGENT_HOST phase=pair uri_prefix=${uri%%&t=*}"
 encoded=$(printf %s "$uri" | base64 -w0 | tr '+/' '-_' | tr -d '=')
 instrument agent-pair -e class app.watchaudio.android.AgentAccessScenarioTest#pair -e scenario agent-pair -e pairingUri "$encoded"
+# If the phone never got as far as the code, `pair` would wait out its 5 minutes.
+for _ in $(seq 1 30); do
+  kill -0 "$pair_pid" 2>/dev/null || break
+  sleep 1
+done
+kill "$pair_pid" 2>/dev/null
 wait "$pair_pid"
 pair_status=$?
 pc_code=$(sed -n 's/^PC_CODE //p' "$OUT/agent-host-pair.txt" | head -n 1)
