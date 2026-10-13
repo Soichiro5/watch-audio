@@ -48,9 +48,12 @@ class HourSummarizer(
 
         val whole = SummaryPrompts.linesPrompt(lines)
         if (fits(whole, hourBudget)) {
-            return when (val result = call(SummaryPrompts.HOUR_INSTRUCTIONS, whole, lines.mapTo(HashSet()) { it.number })) {
-                is Call.Ok -> HourOutcome.Done(result.draft, calls)
-                is Call.Stop -> result.outcome
+            when (val result = generateChecked(SummaryPrompts.HOUR_INSTRUCTIONS, whole, lines.mapTo(HashSet()) { it.number })) {
+                is Generated.Ok -> return HourOutcome.Done(result.draft, calls)
+                Generated.Refused -> return HourOutcome.Refused
+                is Generated.Stop -> return result.outcome
+                // The platform counted more than the estimate: split as if it had not fitted.
+                Generated.ContextExceeded -> Unit
             }
         }
 

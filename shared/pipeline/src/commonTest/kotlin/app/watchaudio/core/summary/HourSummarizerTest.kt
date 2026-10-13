@@ -143,6 +143,18 @@ class HourSummarizerTest {
     }
 
     @Test
+    fun aWholeHourThePlatformFindsTooLongIsSplitInstead() = runTest {
+        val provider = FakeLlmProvider()
+        provider.scripted += LlmResult.ContextExceeded
+        val outcome = HourSummarizer(provider).summarize(busyHour(chars = 600)).done()
+        assertEquals(
+            listOf(SummaryPrompts.HOUR_INSTRUCTIONS, SummaryPrompts.PART_INSTRUCTIONS),
+            provider.requests.map { it.instructions },
+        )
+        assertTrue(outcome.draft.highlights.isNotEmpty())
+    }
+
+    @Test
     fun aContextTooSmallForAnyLinesFails() = runTest {
         assertEquals(HourOutcome.Failed("context_too_small"), HourSummarizer(FakeLlmProvider(context = 1_000)).summarize(busyHour(chars = 600)))
     }
