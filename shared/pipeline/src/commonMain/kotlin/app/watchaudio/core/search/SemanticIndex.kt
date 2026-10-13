@@ -26,7 +26,7 @@ sealed interface SemanticStatus {
 
 /**
  * Searching by meaning (#24), as the shared UI uses it (`AppServices.semanticSearch`; null where the
- * platform has no embedding model, e.g. iOS for now: keyword search only).
+ * platform has no embedding model: keyword search only).
  */
 interface SemanticSearch {
     /** The id of the embedding model whose passages [search] returns. */
