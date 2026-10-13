@@ -7,7 +7,7 @@
 - 中継サーバーはない。PC とスマホが同じネットワーク内で直接つながる（相互 TLS 1.3。互いの鍵をペアリングで交換し、それ以外の相手は最初の握手で切る）。
 - スマホで「エージェント接続」を ON にしている間だけ読める。読める範囲（既定は直近 30 日・テキストのみ）と 1 回の量・1 分あたりの回数はスマホが決めて守る。いつ何を読んだか（検索語を含む）はスマホのアクセス履歴に残る。
 
-設計の背景: [docs/research/agent-access.md](../../docs/research/agent-access.md)、仕組み: [docs/architecture/02 §6.9](../../docs/architecture/02-architecture.md#69-エージェント連携uc11182183)。
+設計の背景: [docs/research/agent-access.md](../../docs/research/agent-access.md)、仕組み: [docs/architecture/02 §6.9](../../docs/architecture/02-architecture.md#69-エージェント連携uc11182183184)。
 
 > **注意（クラウドの LLM を使うエージェント）**: Claude など、クラウドの LLM で動くエージェントに渡した文字起こしは、その LLM の提供元に届く。どこにも出したくない場合は、ローカル LLM で動くクライアント（下の「LM Studio」）を使う。
 >
@@ -15,7 +15,7 @@
 
 ## 状態
 
-スマホのアプリ側（ペアリングの画面・エージェント接続の ON/OFF）は Android が #184、iOS が #185 で実装中。この CLI と、スマホの代わりの偽スマホ（`tools/agent-fake-phone`）とのつなぎ込みは CI で確かめている（`.github/workflows/agent-bridge.yml`）。npm への公開（`npx watch-audio-mcp` で取得できるようにすること）は配布の作業で決める。それまでは、このリポジトリからビルドして使う:
+スマホのアプリ側（ペアリングの画面・エージェント接続の ON/OFF）は Android が実装済み（#184。エミュレータでこの CLI とのペアリングと応答を CI で確かめている）、iOS が #185 で実装中。この CLI と、スマホの代わりの偽スマホ（`tools/agent-fake-phone`）とのつなぎ込みは CI で確かめている（`.github/workflows/agent-bridge.yml`）。npm への公開（`npx watch-audio-mcp` で取得できるようにすること）は配布の作業で決める。それまでは、このリポジトリからビルドして使う:
 
 ```bash
 cd tools/agent-bridge

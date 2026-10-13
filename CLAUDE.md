@@ -10,7 +10,7 @@ A smartwatch records continuously while worn → chunks go to the paired phone o
 
 ## Non-negotiables
 
-- **Local only.** Never upload recordings, transcripts or any user data. The only network use is downloading models. Watch→phone transfer must use direct connections only (Wear OS: `MessageClient`/`ChannelClient` to `Node.isNearby`; never `DataClient`). Keep `allowBackup=false` / backup exclusions.
+- **Local only.** Never upload recordings, transcripts or any user data. The only network use is downloading models and, when the user turns agent access on, a LAN connection to the user's own paired PC (agent access, `docs/research/agent-access.md`). Watch→phone transfer must use direct connections only (Wear OS: `MessageClient`/`ChannelClient` to `Node.isNearby`; never `DataClient`). Keep `allowBackup=false` / backup exclusions.
 - **Wire contract.** `shared/protocol` is shared by Kotlin (phone, Wear OS) and Swift (watchOS: `apps/ios/SharedSwift/ChunkProtocol.swift`). Any change must update both sides **and** `shared/protocol/testdata/*.json` (tested on both sides). Times are epoch ms. The same holds for the agent wire format: `shared/agent` (Kotlin) ⇄ `tools/agent-bridge` (TypeScript) ⇄ `shared/agent/testdata/*.json`.
 - **DB migrations are append-only** (`shared/db/.../Schema.kt`). Audio paths in the DB are relative to the audio root.
 - AI summaries/chat are out of scope until the core goal is met (`P2` label).

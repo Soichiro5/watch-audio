@@ -2,7 +2,7 @@
 
 対象 Issue: [M1-6 (#18)](https://github.com/Soichiro5/watch-audio/issues/18)（Wear OS → Android 転送 + ACK）、[M2-3 (#22)](https://github.com/Soichiro5/watch-audio/issues/22)（Android Transcriber とモデル配信）、[M2-1 (#20)](https://github.com/Soichiro5/watch-audio/issues/20) の Android 部分（WorkManager）。
 
-コアの目標「Watch で装着中ずっと録音 → **直接の Bluetooth / Wi-Fi 接続**でスマホへ転送 → スマホ上で文字起こし → ローカル SQLite に蓄積」のうち、スマホ側を `apps/android` に実装した。**音声・文字起こしはどこにもアップロードしない**（ネットワークを使うのはモデル（ASR と意味検索の埋め込み）のダウンロードのみ）。意味検索（[#24](https://github.com/Soichiro5/watch-audio/issues/24)）の Android 部分は §3.4・§4.5。
+コアの目標「Watch で装着中ずっと録音 → **直接の Bluetooth / Wi-Fi 接続**でスマホへ転送 → スマホ上で文字起こし → ローカル SQLite に蓄積」のうち、スマホ側を `apps/android` に実装した。**音声・文字起こしはどこにもアップロードしない**（ネットワークを使うのはモデル（ASR と意味検索の埋め込み）のダウンロードと、本人がエージェント連携を ON にしている間の、ペアリングした PC への LAN 内の接続だけ）。意味検索（[#24](https://github.com/Soichiro5/watch-audio/issues/24)）の Android 部分は §3.4・§4.5、エージェント連携（[#184](https://github.com/Soichiro5/watch-audio/issues/184)）は §4.6。
 
 ## 1. コンポーネント
 
@@ -19,7 +19,8 @@
 | `TranscriptionScheduler` / `TranscriptionWorker` / `AndroidDeviceConditions` | `work/` | WorkManager による文字起こしの起動。ワーカーは共通の `TranscriptionRun` を呼び、その `FollowUp` を WorkManager の予約に対応づけるだけ（§4）。電池と発熱の方針の端末の状態の読み取り（§4.0） |
 | `GapAlertMonitor` / `GapAlertWorker` | `alert/` | 録音の途絶アラート（#43）。判定は共通の `GapAlertEvaluator`、ここでは WorkManager でのチェックと通知の表示のみ（§4.1） |
 | `AndroidEmbedding` / `AndroidSemanticSearch` | `search/` | 意味検索（#24、§3.4・§4.5）。埋め込みモデル（ruri-v3-30m int8）を共通の `OnnxEmbedder` で組み立て（推論は `shared/ort` の ONNX Runtime C API を JNA で、sherpa-onnx 同梱の `libonnxruntime.so` 上で呼ぶ）、`AppGraph` の `SemanticIndex`（`files/search/` のベクトルのキャッシュ）と共通の `EmbeddingStep`（`TranscriptionRun` の中の埋め込みの段）に渡す。`AndroidSemanticSearch` は検索画面が状態を尋ねたときにモデルのダウンロード（Wi-Fi のみ）を予約する |
-| `MainActivity` | `MainActivity.kt` | `App(services)` をホスト。オンボーディングの権限要求用に Activity Result の launcher を `AndroidAppServices` に渡す |
+| `AndroidAgentAccess` / `AgentAccessService` / `TlsAgentTransport` / `NsdBridgeDiscovery` / `AgentIdentity` / `QrDecoder` / `AacClipSource` | `agent/` | エージェント連携（#184、§4.6）。共通 UI の `AgentAccess` の実装（ペアリング・ON/OFF・QR の写真の読み取り・ローカルネットワークの許可）、接続を保つ前景サービス、相互 TLS 1.3 の接続（Keystore の鍵・PC の鍵の固定）、mDNS の探索、Keystore の鍵と証明書、QR のデコード（ZXing）、`get_audio_clip` の音声の切り出し |
+| `MainActivity` | `MainActivity.kt` | `App(services)` をホスト。オンボーディングの権限要求用に Activity Result の launcher を `AndroidAppServices` に渡す（エージェント連携のカメラのアプリとローカルネットワークの許可の launcher は `AndroidAgentAccess` に） |
 
 共通コードの追加:
 
@@ -257,14 +258,28 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 
 
 - `android:allowBackup="false"`、`dataExtractionRules` でクラウドバックアップは全ドメイン除外（端末間移行 = device-transfer はローカル転送なので許可）。Android 11 以前向けに `fullBackupContent` でも全除外。
-- `INTERNET` 権限はモデルのダウンロードのためだけに使う。解析 SDK・広告 SDK・クラッシュ収集 SDK はなし（異常終了は §4.2 の診断ログに端末内で残す）。
-- `FileProvider`（非公開・`grantUriPermissions`）が公開するのは診断ログの書き出し先 `cache/diagnostics-export/` だけ。録音・文字起こしのディレクトリは対象外。データの書き出し（§4.3）は `FileProvider` を使わず、ユーザーが SAF で作った文書にだけ書く。
+- `INTERNET` 権限はモデルのダウンロードと、エージェント連携を ON にしている間の、ペアリングした PC への LAN 内の接続（§4.6）だけに使う。解析 SDK・広告 SDK・クラッシュ収集 SDK はなし（異常終了は §4.2 の診断ログに端末内で残す）。
+- `FileProvider`（非公開・`grantUriPermissions`）が公開するのは診断ログの書き出し先 `cache/diagnostics-export/` と、エージェント連携の QR の写真を撮るカメラのアプリが書く `cache/qr-scan/`（読んだらすぐ消す）だけ。録音・文字起こしのディレクトリは対象外。データの書き出し（§4.3）は `FileProvider` を使わず、ユーザーが SAF で作った文書にだけ書く。
 - ABI は `arm64-v8a`（実機）と `x86_64`（エミュレータ）のみ。sherpa-onnx の C/C++ API ライブラリ（JNI からは未使用）は APK から除外。
 - **配布する APK の sherpa-onnx の JNI ライブラリは音声合成なしのもの（#173）**: AAR の `libsherpa-onnx-jni.so` には音声合成用の eSpeak NG（GPL-3.0）が静的にリンクされているので、CI が `gradle/libs.versions.toml` の版と同じ上流タグを、CMake のオプションだけ変えて（音声合成と話者分離をオフ。フォークではない）ビルドし、配布する APK ではそれに差し替える（`.github/actions/sherpa-onnx-jni` がビルドしてキャッシュし、`build-logic` の `SherpaOnnxJniPlugin` が `WATCHAUDIO_SHERPA_ONNX_JNI_DIR` の `.so` を入れる）。Kotlin の API と `libonnxruntime.so` は AAR のまま。差し替えたビルドでは `assemble` のたびに、APK の `.so` が指定したもので、eSpeak NG と音声合成の痕跡がなく、同じ APK の `libonnxruntime.so` にリンクしていることを確かめる（`verify<Variant>SherpaOnnxJni`）。手元の開発ビルドは AAR の `.so` のまま（配布しない）。仕組みと版の上げ方（`libs.versions.toml` の 1 行だけ）は [docs/dev/04 §7.3](../dev/04-dev-environment.md#73-sherpa-onnx-の-jni-ライブラリ音声合成なし173)。
 - **release ビルド（#78）**: R8 でコードとリソースを縮小・難読化する（`watchaudio.android.app` プラグイン、設定と署名は [docs/dev/04 §7.1](../dev/04-dev-environment.md#71-android-の-release-ビルドと署名78)）。keep ルール（`apps/android/proguard-rules.pro`）:
   - sherpa-onnx: パッケージ `com.k2fsa.sherpa.onnx` 全体を keep（JNI がフィールド名で設定を読み、結果のオブジェクトをクラス名で作るため）。
   - それ以外は各ライブラリが同梱するルールで足りる: kotlinx.serialization（`@Serializable` の生成シリアライザ）、WorkManager（`Worker` のコンストラクタ）、bundled SQLite（JNI）、Data Layer の受信サービス（manifest から参照されるので R8 が残す）。
   - CI: `android.yml` で `assembleRelease`、`emulator.yml` で release の APK を入れて起動し、クラッシュしないことを確認する（`launch-smoke.sh`）。続けて release ビルドに対して計装テスト `ReleaseAsrTest` を実行し、既知の日本語チャンクが取り込み → WorkManager の文字起こし（sherpa-onnx）→ DB の経路で保存・検索できることを確認する（`release-asr.sh`。テストが呼ぶものを残す keep ルール `proguard-release-test.pro` はそのビルドでだけ足す。docs/dev/04 §7.1）。
+
+### 4.6 エージェント連携（#184）
+
+PC の AI エージェントが、本人が ON にしている間だけ、ペアリングした PC の橋渡し CLI（`tools/agent-bridge`）を通してこのスマホの文字起こしを読む（方針は [research/agent-access.md](../research/agent-access.md)、共通の仕組みは [02 §6.9](../architecture/02-architecture.md#69-エージェント連携uc11182183184)、画面は [phone-ui.md §1.13](phone-ui.md#113-エージェント連携184)）。道具のロジック・範囲・量の上限・アクセス履歴・接続の段取りは `shared/agent`、Android はつなぎ方と鍵だけを持つ。
+
+- **鍵（`AgentIdentity`）**: Android Keystore の EC P-256（`PURPOSE_SIGN`、`DIGEST_NONE`・`DIGEST_SHA256`。Conscrypt は鍵を読めないとき TLS 1.3 の CertificateVerify を `NONEwithECDSA` で署名させるため `NONE` も要る）。取り出せない。画面オフでも PC に答えるため、ロック解除を条件にしない。証明書は `shared/agent` の `SelfSignedCertificate` と同じ形（拡張なし、2020〜9999 年）を Keystore の鍵で署名して `no_backup/agent/identity.der` に置く（公開情報。PC 側は Node / OpenSSL がこの証明書を `ca` として検証する。Keystore が作る証明書は KeyUsage などの拡張を持ちうるので使わない）。鍵がなくなれば作り直し、ペアリングもやり直しになる。
+- **接続（`TlsAgentTransport`）**: `SSLContext("TLSv1.3")` の `SSLSocket`、`enabledProtocols = TLSv1.3` だけ。`X509ExtendedKeyManager` が Keystore の鍵と証明書を出し、`X509ExtendedTrustManager` は PC の証明書の公開鍵の指紋がペアリングで覚えたものと一致するときだけ通す（認証局もホスト名も使わない）。宛先は LAN の IP リテラル（`isLanHost`。プライベート・リンクローカル・100.64/10・ループバック、IPv6 の ULA・リンクローカル）だけで、`InetAddresses.parseNumericAddress` で DNS を引かずに解釈する。接続 5 秒・握手 10 秒で諦める。スマホは待ち受けない。
+- **探索（`NsdBridgeDiscovery`）**: ON の間だけ `NsdManager` で `_watchaudio-mcp._tcp` を探し（告知はしない）、見つかったものを 1 つずつ解決して TXT の `n`・`h` とアドレスを `AgentConnector` に渡す。鍵の指紋に合う広告だけを使う（`advertisementMatches`）。省電力で mDNS の返事が落ちないよう、探している間だけ Wi-Fi のマルチキャストロックを持つ。見つからなければ前回のアドレス（ペアリング時の QR のアドレス + CLI のポート、以後は最後につながったアドレス）へつなぐ。
+- **前景サービス（`AgentAccessService`）**: 種類は **`connectedDevice`**（`FOREGROUND_SERVICE_CONNECTED_DEVICE`。前提の権限として `CHANGE_WIFI_MULTICAST_STATE` を持ち、マルチキャストロックに実際に使う）。`dataSync` にしなかったのは、Play のポリシーでの `dataSync` は「アップロード・ダウンロード・バックアップ・インポート / エクスポート」などのデータの転送で、本人の PC という外部の機器とネットワークでつながり続けて応答する使い方は `connectedDevice`（「Bluetooth・NFC・IR・USB・ネットワーク接続を要する外部の機器とのやり取り」）に当たるため。`dataSync` には Android 15 の 1 日 6 時間の上限もある。Play Console の前景サービスの申告（説明と動画）が要る（[legal/store-data-declarations.md §3.2](../legal/store-data-declarations.md#32-前景サービスの申告play-console-の前景サービスの権限)）。通知（重要度「低」、常駐）に接続中の PC・自動 OFF の時刻・「OFF にする」を出す。期限（既定 30 分、画面で 15 分〜2 時間）にサービスのタイマーで止め、CPU が眠ってタイマーが遅れる場合に備えて `setAndAllowWhileIdle` の（不正確でよい）アラームも置く。接続は期限を過ぎた呼び出しに答えない（`AgentConnector` の `allowed`）。`START_NOT_STICKY` なので、プロセスが終わったら OFF のまま（自動で ON に戻らない）。前景サービスのプロセスは Doze 中もネットワークを使える。
+- **ON にする前**: 有効なペアリングがあること。Android 17 以降はローカルネットワークの許可（`ACCESS_LOCAL_NETWORK`）を求める（ペアリングのときも）。
+- **QR の読み取り**: `ActivityResultContracts.TakePicture` で**システムのカメラのアプリ**に撮ってもらい（`ACTION_IMAGE_CAPTURE`。アプリは CAMERA 権限を持たない）、写真（`cache/qr-scan/`、`FileProvider` 経由でカメラのアプリにだけ書かせる）を端末上で ZXing（`QrDecoder`。白黒反転・行の間の隙間に対応、長辺 2048 px に縮めて読む）で読み、すぐ消す。読めなければもう一度撮るか、CLI が出した文字列を入力する。**Google のコードスキャナ（`play-services-code-scanner`）は採らなかった**: 依存に ML Kit の共通ライブラリと `com.google.android.datatransport:transport-backend-cct`・`firebase-encoders` などが入り、ML Kit は API の利用状況のログを Google に送るため（アプリのプロセスからの通信になり、「通信はモデルのダウンロードと本人の PC だけ」と `tools/privacy-check` の依存の許可リストに反する）。
+- **音声（`AacClipSource`）**: 音声を許可したペアリングの `get_audio_clip` だけ。チャンクの音声を `AudioDecoder` で 16 kHz に戻して切り出す（最長 30 秒、`shared/agent` が WAV にする）。
+- **アクセス履歴の保持**: 90 日より前を消す（起動時の `AppGraph.startup` と画面を開いたとき）。「すべてのデータを削除」で全部消え、ペアリングは残る。
+- **端末名**: ペアリングのとき PC に `Build.MODEL`（例: Pixel 8）を名乗る。利用者が付けた端末名（本人の名前を含みうる）は送らない。
 
 ## 6. 検証方法
 
@@ -343,3 +358,5 @@ Watch が無くても、ADB 経由の Wear OS エミュレータとスマホエ�
 - `AudioDecoder` は 1 チャンク分（5 分 ≈ 480 万サンプル ≈ 19 MB）をメモリに展開する。極端に長いチャンクが来る場合はストリーミング VAD に変える。
 - データの書き出し（§4.3、#155）と暗号化バックアップ（§4.4、#40）の保存・選択ダイアログ（SAF）から実際の文書を書く・読む部分は、エミュレータの計装テストがまだない（ZIP・暗号化の中身・画面・失敗時の扱いは共通コードのテストで確認済み。バックアップの書き出しと復元はエミュレータの `sqliteTest` でも確認）。実機で、保存した ZIP を開けること・キャンセルで何も残らないこと、作ったバックアップを別の端末（iPhone を含む）で戻せることを確かめる。オフロード（#156）は、音声入りのバックアップを保存 → 状態タブの「バックアップ済みの音声を端末から外す」で外す → タイムラインに「バックアップにあり」・検索は変わらない → そのバックアップを戻すと再生できる、を実機で確かめる（保存ダイアログでキャンセルしたバックアップでは外せる音声が増えないことも）。差分バックアップ（#164）は、全体のバックアップを保存した後に「差分」を作って SAF で保存し（ファイル名が `…-diff.wabackup`）、別の端末（iPhone を含む）で全体と差分を（逆順でも）戻すと元の端末と同じになること、保存ダイアログでキャンセルした差分では「前回のバックアップ」の表示が変わらないこと、1 日を削除すると差分が選べなくなることを実機で確かめる。
 - 48 kHz などからのダウンサンプルは低域通過フィルタなしの線形補間（Watch は 16 kHz で録音するので通常は通らない）。
+- **エージェント連携（§4.6、#184）の実機確認は未実施**（#61）。エミュレータ（`emulator.yml` の `agent-access.sh`）では、ホストの CLI と 10.0.2.2 でペアリング → ON で道具の呼び出しに応答 → OFF で止まる → 再び ON → 取り消しで止まる、を確かめている（mDNS はエミュレータのネットワークを越えないので、前回のアドレスでつながる経路）。実機で確かめること: 家の Wi-Fi とテザリングでの mDNS の発見とつながるまでの時間、AP アイソレーションの Wi-Fi での表示、画面オフ・Doze 中の応答と期限での自動 OFF（通知が消える）、Android 17 のローカルネットワークの許可、実際のカメラのアプリで撮ったターミナルの QR（明るいテーマ・暗いテーマ）の読み取り、ON の 30 分間の電池消費。
+- QR を読めないときの手入力は、CLI が出す長い文字列（約 170 文字）をそのまま入れる。短いコードにするには CLI とやり取りの形式の変更が要る（#183 の範囲）。

@@ -11,7 +11,7 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
 | --- | --- |
 | **タイムライン** | 日付の前後移動（未来日へは進めない・「今日」に戻るボタン）、録音カバー率、24 時間バー、録音できていない時間の一覧、その日の文字起こし（時刻 + テキスト）。発話をタップすると、その位置から音声を再生（再生できる発話には ▶ を表示）。リスト末尾に「この日のデータを削除」（§1.4） |
 | **検索** | 文字起こし全体を部分一致検索（FTS5 trigram。2 文字以下は LIKE）。一致箇所を太字 + 背景色で強調。意味検索のあるプラットフォーム（Android、#24）では、意味の近い会話も合わせて出す（§1.12）。結果をタップするとその日のタイムラインへ移動し、該当発話までスクロール・ハイライトして再生 |
-| **状態** | Watch からの受信状況（最終受信時刻、10 分以上途絶えたら警告）、文字起こしモデルの状態（未取得 / ダウンロード中 / 準備完了 / エラー）とダウンロード操作、通知設定（途絶アラートのオン/オフ、おやすみ時間）、保存データの統計、**ストレージ**（容量の内訳・空き容量の警告・音声の保持期間・すべてのデータを削除。§1.4）、プライバシー表記「データはこの端末内にのみ保存され、外部に送信されません」、「初回の説明をもう一度見る」、一番下に「ライセンス」（§1.11） |
+| **状態** | Watch からの受信状況（最終受信時刻、10 分以上途絶えたら警告）、文字起こしモデルの状態（未取得 / ダウンロード中 / 準備完了 / エラー）とダウンロード操作、通知設定（途絶アラートのオン/オフ、おやすみ時間）、保存データの統計、**ストレージ**（容量の内訳・空き容量の警告・音声の保持期間・すべてのデータを削除。§1.4）、「エージェント連携」（対応するプラットフォームだけ、§1.13）、プライバシー表記「データはこの端末内にのみ保存され、外部に送信されません」（エージェント連携のあるプラットフォームでは、ON の間にペアリングした PC へ渡る分が例外であることも書く）、「初回の説明をもう一度見る」、一番下に「ライセンス」（§1.11） |
 
 再生中は下部ナビの上に「HH:mm から再生中 [停止]」のバーを出す（再生終了はプラットフォームから通知されないので、停止するまで表示）。
 
@@ -188,6 +188,22 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
 - **準備の状態**（`SemanticStatus`、`SearchViewModel.semanticStatus`、5 秒ごとと DB の変更で読み直す）: モデルの取得待ち「意味で探すためのモデルは Wi-Fi に接続したときにダウンロードします（今は言葉の一致だけで探します）」、取得中「…ダウンロード中 N%」、埋め込みの途中「意味で探す準備中 N%（準備できた会話から探します。古い会話は充電中に準備します）」（N は埋め込み済みのチャンクの割合、99% まで）。すべて埋め込み済みなら何も出さない。Android では、この状態を初めて尋ねたとき（検索タブを開いたとき）にモデルのダウンロード（Wi-Fi のみ）を予約する（[android-phone.md §3.4](android-phone.md#34-意味検索の埋め込みモデル24)）。
 - テスト: `ViewModelTest` の `searchShowsKeywordHitsFirstThenAddsHitsByMeaning`（キーワードの結果 → 統合の順、ラベルの付き方、passage の本文と開く発話、準備中の文言）と `withoutSemanticSearchThereIsNoStatus`、`AppUiTest` の `searchByMeaning`（準備中の表示・「意味が近い」のラベル・英語だけのテキストがないこと、`search-meaning.png`）。統合の規則は `shared/pipeline` の `HybridSearchTest`。
 
+### 1.13 エージェント連携（#184）
+
+`AppServices.agentAccess` があるプラットフォーム（Android。iOS は #185）では、状態タブに「エージェント連携」のカード（説明・ON のときは「エージェント接続: ON」・「エージェント連携を開く」）を出し、ライセンス画面と同じくタブの代わりに `AgentScreen` を開く（「戻る」とシステムの戻る操作で戻る）。仕組みは [02 §6.9](../architecture/02-architecture.md#69-エージェント連携uc11182183184)、方針は [research/agent-access.md](../research/agent-access.md)。
+
+| 部分 | 内容 |
+| --- | --- |
+| 説明 | PC の AI エージェントが文字起こしを道具として読めること、データはスマホに置いたまま同じネットワーク内の PC に直接つなぐこと（中継なし）、クラウドの LLM を使うエージェントには取り出した分が届くこと |
+| 接続 | 「エージェント接続」のスイッチ（ペアリングがないと押せない）。OFF のときは「自動で OFF にするまで」（15 分・30 分（既定）・1 時間・2 時間）を選ぶ。ON のときは「HH:MM に自動で OFF になります」と、ペアリングごとに「接続中」/「PC を探しています（…）」。許可がない・ペアリングがないときはその旨 |
+| PC をペアリング | 手順（PC で `npx watch-audio-mcp pair`）、「QR コードを撮影して読み取る」（プラットフォームが読めるときだけ）と「文字列を入力」。つないでいる間は進捗と「やめる」。両方の画面に出る 6 桁の確認コード（`123 456` の形）を見比べて「一致する」/「一致しない」。一致した後は「PC での確定を待っています…」、終わると結果（ペアリングした / 中止 / 期限切れ / 使用済み / PC 側で中止 / つながらない / 許可がない）を出し「閉じる」 |
+| ペアリングした PC | PC の名前・ペアリングした日・「読める期間」（直近 7・30（既定）・90・365 日）・「音声も読ませる」（既定 OFF）・「ペアリングを取り消す」（確認の文と「取り消す」/「やめる」）。取り消すとすぐにつながらなくなり、最後の 1 台なら接続も OFF にする |
+| アクセス履歴 | 新しい順に最大 200 件: 日時・PC の名前・道具（検索・日のタイムライン・前後の発話・音声）・件数、検索語（「」で囲む）、拒否のときは理由。90 日より前のものは自動で消える（画面を開いたとき、Android は起動時も） |
+
+- 状態は `AgentViewModel`（`AgentUiState`・`PairingStep`）。ペアリング・期間・音声・取り消し・履歴は `LocalStore`（`AgentQueries`）を直接読み書きし、接続はプラットフォームの `AgentAccess`（`state`・`scanQr`・`pair`・`turnOn`・`turnOff`）。取り消しは DB の書き込みだけで、プラットフォームの接続（`AgentConnector`）がそれを見て切る。
+- 読み取った文字列は `PairingUri.parse` で確かめ、PC のペアリング用でなければ・期限が切れていれば、PC につなぐ前に知らせる。
+- テスト: `AgentViewModelTest`（QR の結果ごとの表示、文字列の入力と失敗の文言、確認コードで一致しないと保存しない、スイッチ（ペアリングなし・許可なし・時間の選択）、取り消しの確認と最後の 1 台で OFF、90 日より前の履歴を消す）、`AppUiTest` の `agentAccessPairTurnOnAndRevoke`（状態タブから開く → 文字列でペアリング → 確認コード → 1 時間で ON → 音声と期間 → 履歴 → 取り消し → 戻る。英語だけのテキストがないこと。`agent-empty.png`・`agent-confirm.png`・`agent-on.png`・`agent-history.png`）と `noAgentAccessEntryWithoutPlatformSupport`。エミュレータでは本物の CLI と（[android-phone.md §4.6](android-phone.md#46-エージェント連携184)）。
+
 ## 2. データの流れ
 
 ```mermaid
@@ -250,6 +266,7 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 | `jvmTest/…/AppUiTest` | Skia でヘッドレス描画し、(1) タイムライン→再生→検索→結果を開く→状態→おやすみ時間の切り替え→ストレージ（「削除」を入力して全削除）→「診断ログを書き出す」、(2) オンボーディング（同意しないと次へ進めない→通知許可→モデルのダウンロード選択→はじめる→タブ画面→説明をもう一度）、(3) 通知を拒否したときの「設定を開く」（`onboarding-permission-denied.png`）を操作。(4) 状態タブのお知らせ（Wi-Fi 待ち・文字起こし失敗）とモデルのダウンロード失敗（英語の `reason` を渡しても表示されない）を表示し、画面上に英語だけのテキストがないことを確認（`status-waiting-for-wifi.png`、`status-notice.png`、`status-model-failed.png`、#135）。(5) DB に英語の例外メッセージを持つ失敗チャンクのあるタイムラインで、失敗の行に決まった文言だけが出て例外のメッセージが表示されず、英語だけのテキストもないことを確認（`timeline-failed.png`、#144）。(6) 「データの書き出し」で「期間を指定」と「音声ファイルを含める」を選び、押すまで保存先を聞かないこと、押すと ZIP が渡され結果が出ること（`export.png`、`export-done.png`、#155）。(7) 「暗号化バックアップ」でパスフレーズと確認を入れ（不一致の表示を経て）、押すまで保存先を聞かないこと、作成したファイルを同じ端末に戻すと「すでにこの端末にあった」件数が出ること（`backup.png`、`backup-done.png`、`restore-done.png`、#40）。全体のバックアップを保存した後は前回の日時と差分（件数と大きさ）が出て、作ると `-diff` のファイルが渡り、前回の表示が差分に変わること（`backup-diff.png`、`backup-diff-done.png`、#164）。(8) 音声入りのバックアップを作ってから「バックアップ済みの音声を端末から外す」→ 確認（バックアップの作成日が出る）→ 外すと、タイムラインの発話に「バックアップにあり」と説明が出て、タップしても再生せず、検索は同じ結果を返すこと（`offload-confirm.png`、`offload-done.png`、`timeline-offloaded.png`、`search-offloaded.png`、#156）。(9) 「英語も文字起こしする」（#81）: 英語に対応するプラットフォームではスイッチが出て、押すと設定が保存されプラットフォームに伝わり、英語モデルの Wi-Fi 待ち・ダウンロード中の表示と「モバイルデータ通信でもダウンロード」が働くこと（`status-english-downloading.png`）、対応しないプラットフォームでは出ないこと。英語のカードに SenseVoice の帰属表示が出ること（#167）。モデルを OS が入れるプラットフォーム（iOS、#170）では、大きさ・帰属表示・モバイル通信のボタンが出ず、準備中と失敗の文言と「英語モデルをもう一度準備」が働き、OS の英語の失敗理由が出ないこと（`status-english-os-managed-preparing.png`）。(10) 状態タブの「ライセンスを表示」でライセンス画面が開き、Android の一覧のすべての名前と URL・SenseVoice の作者と FunASR の要点があり、iOS だけのもの（Skia）がないこと、本文は押すまで閉じていて「本文を表示」で Apache-2.0 の全文が出ること、「戻る」で状態タブに戻ること（`licenses.png`、`licenses-text.png`、#167）。スクリーンショットを `shared/ui/build/screenshots/` に出力（CI の成果物 `ui-screenshots`） |
 | `apps/android/src/androidTest/…/PlaybackTest` | エミュレータ上の実アプリで、実際の AAC を MediaPlayer が指定位置から再生すること、検索 → 結果を 1 タップ → 発話の位置から再生されることを確認（CI `emulator.yml`、[android-phone.md §6.1](android-phone.md#61-実機なしlinux--ci)） |
 | `apps/android/src/androidTest/…/PermissionDeniedTest` | エミュレータでオンボーディングから通知の許可を求め、システムのダイアログで拒否 → 理由と「設定を開く」が表示され、押すとアプリの設定画面が開く（インストール直後に `phone-scenarios.sh` から実行。スクリーンショット `onboarding-permission-denied.png` ほか） |
+| `apps/android/src/androidTest/…/AgentAccessScenarioTest` | エージェント連携（#184）: エミュレータで、CI のホストで動く本物の橋渡し CLI（10.0.2.2）とペアリング（文字列の入力 → 確認コード。PC 側のコードと一致すること）し、スイッチで ON（前景サービス・通知）にすると PC のエージェントの検索に答え、OFF の間は答えず、再び ON で答え、取り消すと答えなくなること（`agent-access.sh` から実行。スクリーンショット `agent-confirm.png`・`agent-paired.png`・`agent-on.png`・`agent-notification.png`・`agent-revoked.png`） |
 | `apps/android/src/androidTest/…/ModelWaitTest` | モデルなしの状態タブ（「モデルが未ダウンロードです」・文字起こし待ち）と、モデルを置いた後の「準備完了」のスクリーンショット（`status-model-*.png`） |
 | `shared/ui/src/iosTest/…/IosPlaybackTest` | iOS シミュレータで、本番の `Ingestor` で取り込んだ前日の AAC チャンクについて、`IosAppServices.play` 直接・共有 UI（`App`）で「前の日」→ 発話をタップ・検索 → 結果を 1 タップ、のそれぞれで「HH:mm から再生中」が表示され、そのチャンクのファイルが AVAudioPlayer に指定位置（±0.2 秒）・正しい長さで用意されることを確認（CI `ios.yml` の Shared tests、`PLAYBACK_CHECK` 行。`./gradlew iosSimulatorArm64Test`）。テスト実行ファイルはアプリではなく `play()` が false を返すので、再生開始（`started=`）は記録のみ |
 | `apps/ios/Tests/PlaybackTests/HostedPlaybackTests.swift` | iOS アプリをホストにした XCTest で、アプリの本物の `IosAppServices`（`IosAppGraph.shared.services`）が AAC 16 kHz の音声を指定位置（8 秒）から再生し、2 秒後に 1 秒以上進むこと（CI `ios.yml` の「Playback in the iOS app」、`PLAYBACK_CHECK check=hosted_player` 行） |
@@ -268,4 +285,5 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 - 長いギャップ一覧の折りたたみ、Mark の表示
 - 暗号化バックアップ（#40）: 圧縮。差分（#164）は削除を運べないので、削除の後は全体からやり直す
 - ストレージ: バックアップ済みの音声の自動オフロード（今は状態タブからの手動のみ、#156）、AI 設定・API キー（未実装）の全削除
+- エージェント連携（#184）: iOS の接続（#185）。QR を読めないときの短いコード（今は CLI が出す長い文字列を入れる）
 - 意味検索（#24）: iOS への対応（[ios-watchos.md §15](ios-watchos.md#15-意味検索24未対応)）、期間での絞り込み、意味の結果の中での一致箇所の強調（passage のどの発話が近いか）への追加、音声コーデック比較による容量見積もりの更新（#33 の残り）

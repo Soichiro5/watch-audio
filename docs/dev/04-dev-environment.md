@@ -268,7 +268,7 @@ PR の CI 待ちを減らすため、変更したファイルに関係するワ�
 
 ### 6.4 Local-only チェック（`tools/privacy-check`、#76）
 
-CLAUDE.md の「Local only」（録音・文字起こし・ユーザーデータを端末の外に出さない。通信はモデルの取得だけ）を CI で守るための静的チェック。Python の標準ライブラリだけで動き、`android.yml` で 2 回実行する。
+CLAUDE.md の「Local only」（録音・文字起こし・ユーザーデータを端末の外に出さない。通信はモデルの取得と、本人が ON にしたエージェント連携での自分の PC への LAN 内の接続だけ）を CI で守るための静的チェック。Python の標準ライブラリだけで動き、`android.yml` で 2 回実行する。
 
 1. **最初のステップ（ビルド不要、数秒）**: `test_check.py`（違反を 1 つずつ入れたフィクスチャで失敗することを確かめるテスト）と、リポジトリのファイルに対するチェック。
 2. **Assemble の後**: リリースのマージ後マニフェスト（`processReleaseMainManifest`）と、`./gradlew :<app>:dependencies --configuration releaseRuntimeClasspath` の出力（推移的な依存を含む）も検査し、通信箇所の一覧をジョブサマリーに出す。
@@ -277,7 +277,7 @@ CLAUDE.md の「Local only」（録音・文字起こし・ユーザーデータ
 | --- | --- | --- |
 | 権限 | `apps/android` / `apps/wear` の `src/*/AndroidManifest.xml`、マージ後マニフェスト | Wear OS に `INTERNET`、スマホに位置情報・広告 ID、依存が勝手に足した権限 |
 | バックアップ | `<application>` と `res/xml` のルール | `allowBackup="true"`、`dataExtractionRules` なし、除外していないドメイン、`<include>`、`usesCleartextTraffic="true"` |
-| 通信・保護 | `apps/android/src`・`apps/wear/src`・`shared`・`apps/ios` の `.kt` / `.java` / `.swift`（コメントと、出荷されないテストコード = `test` や `Test` を含むディレクトリは除外） | 許可されていないファイルでの `HttpURLConnection`・`URLSession`・ソケット・WebView・`SFSpeech…RecognitionRequest`、`DataClient` / `PutDataRequest`、`.noFileProtection`、許可されていない URL、使われなくなった許可リストの項目 |
+| 通信・保護 | `apps/android/src`・`apps/wear/src`・`shared`・`apps/ios` の `.kt` / `.java` / `.swift`（コメントと、出荷されないテストコード = `test` や `Test` を含むディレクトリは除外） | 許可されていないファイルでの `HttpURLConnection`・`URLSession`・ソケット・mDNS（`NsdManager`・マルチキャストロック）・WebView・`SFSpeech…RecognitionRequest`、`DataClient` / `PutDataRequest`、`.noFileProtection`、許可されていない URL、使われなくなった許可リストの項目、許可した通信箇所が守るべきこと（`ALLOWED_API_REQUIREMENTS`。エージェント連携の `TlsAgentTransport.kt` は LAN のアドレスだけ・DNS なし・鍵の固定・TLS 1.3 だけ）を守らなくなったこと |
 | 依存（宣言） | `gradle/libs.versions.toml` と `*.gradle.kts`（`research/` を除く） | firebase・crashlytics・sentry・amplitude などの解析・クラッシュ送信 SDK、okhttp・retrofit・ktor などの HTTP クライアント |
 | 依存（解決結果） | リリースの実行時クラスパス | 許可リスト（AndroidX、Kotlin、Compose、play-services-wearable、sherpa-onnx など）にないモジュール |
 | iOS | `apps/ios/project.yml`、コミットされた `*.entitlements`・`*.xcprivacy` | 許可リストにない Info.plist のキー（`NSAppTransportSecurity`、位置情報など）、`UIBackgroundModes`、entitlements。アプリ・拡張のターゲットに `PrivacyInfo.xcprivacy`（`buildPhase: resources`）がないこと、マニフェストの追跡・追跡ドメイン・収集データ、許可リストにない理由コード（#159） |
@@ -297,7 +297,7 @@ python3 tools/privacy-check/check.py --resolved-deps apps/wear=/tmp/deps-wear.tx
 
 **許可リストを広げるとき**（新しい権限・依存・通信先が本当に必要な場合）:
 
-1. `tools/privacy-check/policy.py` の該当する表に、理由を添えて追加する（権限は `ANDROID_APPS`、ライブラリが足す権限は `library_permissions`、通信するファイルは `ALLOWED_API_USES`、URL は `ALLOWED_URL_PREFIXES`、依存は `ALLOWED_RESOLVED_DEPENDENCIES`、iOS は `IOS_TARGETS` / `IOS_ENTITLEMENTS` / `IOS_REQUIRED_REASONS`、橋渡し CLI は `AGENT_BRIDGE_ALLOWED_API_USES` / `AGENT_BRIDGE_DEPENDENCIES` / `AGENT_BRIDGE_RUNTIME_PACKAGES`）。拒否パターン（`GUARDED_APIS`・`DENIED_DEPENDENCIES`）は緩めず、許可リスト側に足す。
+1. `tools/privacy-check/policy.py` の該当する表に、理由を添えて追加する（権限は `ANDROID_APPS`、ライブラリが足す権限は `library_permissions`、通信するファイルは `ALLOWED_API_USES`（守るべきことがあれば `ALLOWED_API_REQUIREMENTS` にも）、URL は `ALLOWED_URL_PREFIXES`、依存は `ALLOWED_RESOLVED_DEPENDENCIES`、iOS は `IOS_TARGETS` / `IOS_ENTITLEMENTS` / `IOS_REQUIRED_REASONS`、橋渡し CLI は `AGENT_BRIDGE_ALLOWED_API_USES` / `AGENT_BRIDGE_DEPENDENCIES` / `AGENT_BRIDGE_RUNTIME_PACKAGES`）。拒否パターン（`GUARDED_APIS`・`DENIED_DEPENDENCIES`）は緩めず、許可リスト側に足す。
 2. ユーザーデータが端末の外に出ないことを PR の本文で説明する。データを外に出す変更（AI プロバイダなど P2）は、CLAUDE.md の方針の変更として Issue で合意してから。
 3. [02 §7](../architecture/02-architecture.md#7-セキュリティプライバシー) の保存場所・通信箇所の一覧を更新し、`test_check.py` の期待値（通信箇所の集合など）も直す。
 

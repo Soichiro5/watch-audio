@@ -7,7 +7,7 @@
 ## 1. 申告の前提
 
 - アプリは録音・文字起こし・その他のユーザーデータを**端末の外へ送らない**。運営者のサーバーはない。解析・広告・クラッシュ送信の SDK はない。アカウントもない。
-- 端末外への通信は、Android スマホの文字起こしモデルのダウンロード（Hugging Face・GitHub の公開ファイル）と、iOS が行う音声認識モデルのダウンロード（OS 管理）だけ。ユーザーデータは送らない。
+- 端末外への通信は、Android スマホの文字起こしモデルのダウンロード（Hugging Face・GitHub の公開ファイル）と、iOS が行う音声認識モデルのダウンロード（OS 管理）だけ。ユーザーデータは送らない。例外はエージェント連携（Android、#184）: ユーザーが ON にしている間だけ、ユーザーがペアリングした自分の PC へ、同じネットワーク内で直接（相互 TLS）つなぎ、その PC のエージェントが読んだ分を渡す。開発者のサーバー・中継はない。
 - Watch → スマホの転送は、ユーザー自身の端末間の直接通信（Wear OS: 近くで直接つながったノードだけ、Apple: WatchConnectivity）。開発者には届かない。
 - ユーザーが自分で端末外に出せるのは、診断ログの書き出し（OS の共有シートで送り先をユーザーが選ぶ）、データの書き出し（#155。文字起こし・マーク・ギャップと任意で音声を ZIP にして、Android は SAF の保存ダイアログ、iOS は共有シートでユーザーが選んだ保存先にだけ書く）と、暗号化バックアップ（#40。同じ保存先の選び方で、ユーザーのパスフレーズで暗号化したファイルを書く。復元はユーザーが選んだファイルを読むだけ）だけ。パスフレーズと鍵は端末の外に出さない。課金（#34）・AI 機能（P2）は未公開。公開時にこの文書とポリシーを更新する。
 
@@ -118,6 +118,7 @@ iPhone アプリの `NSMicrophoneUsageDescription` は削除した（#159）。i
 - **モデルのダウンロード**: Hugging Face・GitHub への HTTP リクエストで、相手のサーバーには IP アドレスなど通信に必要な情報が届く。送るのは公開ファイルの取得要求だけで、ユーザーデータは送らず、開発者はそのログを受け取らないため「収集・共有なし」と整理している。
 - **診断ログの書き出し**: ユーザーが共有シートで選んだ送り先に渡すもので、Google の定義の「ユーザーが開始した操作で、ユーザーが合理的に予期する転送」に当たり、「共有」の対象外と整理している。
 - **データの書き出し（#155）**: ユーザーが SAF の保存ダイアログで作った文書にだけ書く（アプリは通信しない）。診断ログと同じく「ユーザーが開始した操作で、ユーザーが合理的に予期する転送」で、「共有」の対象外と整理している。
+- **エージェント連携（#184）**: ユーザーが自分でペアリングし ON にした、ユーザー自身の PC への LAN 内の直接の転送で、開発者には届かない。ユーザーが開始し、ユーザーが合理的に予期する転送として「収集・共有なし」と整理している。PC のエージェントがクラウドの LLM を使う場合にその提供元へ渡るのは、ユーザーが選んだ PC のソフトウェアの動作（アプリの送信ではない）と整理しているが、審査で問われたら説明できるよう、プライバシーポリシーの第 7 条に明記した。**要レビュー**。
 - **Android vitals**: ユーザーが Google と使用状況・診断情報の共有を許可している場合に Play Console に届くクラッシュ統計は、Google（OS）が集めるもので、アプリの申告対象ではないと理解している。
 
 ### 3.2 前景サービスの申告（Play Console の「前景サービスの権限」）
@@ -142,6 +143,15 @@ iPhone アプリの `NSMicrophoneUsageDescription` は削除した（#159）。i
   - 上限に達したとき: `onTimeout` は WorkManager の `SystemForegroundService` が処理する（2.10.0-alpha03 で「`dataSync` の前景ワーカーが `stopSelf()` されず ANR になる」問題を修正、2.10.0-alpha04 で停止理由 `STOP_REASON_FOREGROUND_SERVICE_TIMEOUT` を追加。[WorkManager のリリースノート](https://developer.android.com/jetpack/androidx/releases/work)。本アプリは 2.11.2）。ワーカーは止められて再実行の予約に戻り、ダウンロードは `Range` で続きから再開する（`ModelDownloader.kt`）。再実行でアプリが背面にあれば `setForeground` が `IllegalStateException`（`ForegroundServiceStartNotAllowedException`）になり、ワーカーはそれを捕まえて通常のワーカーとして続ける（`ModelDownloadWorker.kt`）。
   - 結論: **コードの変更は不要**。申告の用途は Play Console の一覧の「Network transfer: Upload or download」を選ぶ（[前景サービスの要件](https://support.google.com/googleplay/android-developer/answer/13392821)）。
   - 推奨（任意）: (1) エミュレータで上限を短くして（`adb shell am compat enable FGS_INTRODUCE_TIME_LIMITS app.watchaudio`、`adb shell device_config put activity_manager data_sync_fgs_timeout_duration 60000`）異常終了せず続きから再開することを確かめる。(2) Google はユーザーが求めた通信には「ユーザーが開始するデータ転送ジョブ（user-initiated data transfer job）」を勧めている（同ページの FAQ）。WorkManager からは使えず JobScheduler を直接使う必要があるため、今は採らない。前景サービスの申告が通らなかった場合の代替として残す。
+
+**Android スマホアプリ: `FOREGROUND_SERVICE_CONNECTED_DEVICE`（`AgentAccessService`、`foregroundServiceType="connectedDevice"`、#184）**
+
+- 機能: エージェント連携。ユーザーが自分の PC（PC 用の CLI `watch-audio-mcp`）をペアリングし、アプリで「エージェント接続」を ON にしている間（既定 30 分で自動 OFF、最長 2 時間）だけ、PC の AI エージェントからの読み取り専用の問い合わせ（文字起こしの検索など）に答える。
+- 前景サービスが必要な理由: ユーザーが ON にした間は、画面を消していても PC からの問い合わせに答え続ける必要がある。接続中は通知に接続中の PC・自動 OFF の時刻・「OFF にする」を常に表示する。期限・OFF・ペアリングの取り消しで止まり、自動で再開しない。
+- 種類の選択: ネットワークでつながった外部の機器（ユーザーの PC）とのやり取りなので `connectedDevice`。前提の権限は `CHANGE_WIFI_MULTICAST_STATE`（PC を mDNS で探す間のマルチキャストロックに使う）。`dataSync` はデータの転送用で、6 時間の上限もあり合わない。
+- データの扱い: ユーザーがペアリングした PC にだけ、同じネットワーク内で相互 TLS でつなぐ。開発者のサーバーには送らない。
+- 英文案: "Agent access: the user pairs their own PC (running our command-line companion) and turns agent access on in the app. Only while it is on (30 minutes by default, at most 2 hours), the phone stays connected to that PC on the local network, over mutually authenticated TLS, and answers read-only requests from the user's AI agent on the PC (for example, searching their transcripts). A connected-device foreground service keeps the connection while the screen is off; a notification always shows the connected PC, when access turns itself off and a button to turn it off. It stops when the time is up, when the user turns it off or revokes the pairing, and never restarts by itself. Nothing is sent to any server of ours."
+- 動画: ペアリング → ON（通知）→ PC のエージェントが検索 → 「OFF にする」で止まる。
 
 ### 3.3 そのほかの「アプリのコンテンツ」
 
@@ -272,6 +282,7 @@ Play Console で権限の用途を聞かれたとき（アプリのコンテン�
 | Silero VAD（発話区間の検出モデル、ダウンロード） | MIT | Android |
 | Ruri v3 30m（意味検索の埋め込みモデル、検索タブを開いたときに Wi-Fi でダウンロード、#24） | Apache-2.0 | Android |
 | JNA（Java Native Access。意味検索のモデルを動かすために ONNX Runtime の C API を呼ぶ、#24） | Apache-2.0（LGPL-2.1 とのデュアル。Apache-2.0 を選ぶ） | Android |
+| ZXing（エージェント連携のペアリングの QR コードを写真から読む、#184） | Apache-2.0 | Android |
 | SenseVoice Small（英語の文字起こしモデル、「英語も文字起こしする」をオンにしたときだけダウンロード） | FunASR Model Open Source License Agreement v1.1（出典と作者の表示、モデル名の保持が条件。英語のカードにも帰属表示を出す） | Android |
 | sherpa-onnx と、そのネイティブライブラリに含まれる ONNX Runtime・JSON for Modern C++（MIT）・kaldi-native-fbank・kaldi-decoder・kaldifst・OpenFst・simple-sentencepiece（Apache-2.0） | Apache-2.0 ほか | Android |
 | AndroidX・Kotlin・kotlinx（coroutines・serialization・io・datetime・atomicfu）・Compose Multiplatform・Guava ListenableFuture・JSpecify・JetBrains Java Annotations | Apache-2.0 | Android・Wear OS・iOS（それぞれ使う分） |

@@ -74,7 +74,7 @@ PC のエージェント（Claude Desktop / Code、ローカル LLM など）
 ### 4.3 ペアリングと通信
 
 - PC で `npx watch-audio-mcp pair` を実行すると、ターミナルに QR コードが出る。QR には PC の公開鍵の指紋、待ち受けのアドレス、使い捨てのペアリング用の値（有効 5 分）を入れる。スマホのアプリの「エージェント連携」→「PC をペアリング」で読み取り（カメラの代わりに短いコードの入力もできる）、スマホの公開鍵を PC に渡す。両方の画面に同じ確認コード（6 桁）を出し、本人が照合して確定する。**パスワードや固定のトークンは使わない**。
-- QR の読み取りは、カメラの常時の許可を増やさない方法を優先する（Android は Google のコードスキャナ、iOS は `DataScannerViewController`。iOS はカメラの許可が要るので、読み取るときだけ求める）。
+- QR の読み取りは、カメラの常時の許可を増やさない方法を優先する（iOS は `DataScannerViewController`。iOS はカメラの許可が要るので、読み取るときだけ求める）。Android は当初 Google のコードスキャナを予定していたが、その依存（ML Kit の共通ライブラリ）が API の利用状況のログを Google に送る送信部（`transport-backend-cct`）を含むため採らず、**システムのカメラのアプリで撮った写真を端末上の ZXing で読む**ことにした（カメラの許可は不要、写真はすぐ消す。#184、[platforms/android-phone.md §4.6](../platforms/android-phone.md#46-エージェント連携184)）。
 - **通信は相互 TLS 1.3**（決定 §6）。どちらも自己署名の証明書を使い、ペアリング時に交換した鍵の指紋で固定して照合する（認証局は使わない）。OS 標準の TLS（Android は `SSLSocket`、iOS は Network.framework、CLI は Node の `tls`）を使い、暗号のライブラリは足さない。
 - 秘密鍵は Android Keystore / iOS Keychain（`ThisDeviceOnly`）、CLI 側は OS の鍵保管庫（macOS キーチェーン、Windows 資格情報マネージャー、Linux Secret Service）に置き、使えない環境では権限 600 のファイルに置く。
 - ペアリングの取り消しはスマホ側の登録を消すだけで即座に効く。
@@ -84,7 +84,7 @@ PC のエージェント（Claude Desktop / Code、ローカル LLM など）
 - 「エージェント接続」を ON にしたときだけ応答し、既定 30 分で自動 OFF。
 - ペアリングごとに範囲を決める: 期間（既定は直近 30 日）、**テキストのみ（既定）** / 音声も（本人がペアリングごとに ON にしたときだけ）。
 - 1 回の応答の量と 1 分あたりの回数に上限を置き、全件を一度に取り出せないようにする。
-- アクセスの履歴（時刻・ペアリング名・道具・件数・**検索語**）を端末内に残し、画面で見られるようにする（決定 §6）。履歴は端末から出さず、「すべてのデータを削除」で消える。
+- アクセスの履歴（時刻・ペアリング名・道具・件数・**検索語**）を端末内に残し、画面で見られるようにする（決定 §6）。履歴は端末から出さず、**90 日より前のものは自動で消え**（#184 で決定）、「すべてのデータを削除」で全部消える。ペアリングは設定なので全削除でも残る。
 
 ### 4.5 道具（MCP の tools、案）
 
@@ -141,7 +141,7 @@ UC11（#130）の sub-issue として次の順に進める。
 
 1. [#182](https://github.com/Soichiro5/watch-audio/issues/182) 共通部分（`shared/*`）: 道具のロジック（検索・日ごとのタイムライン・前後の文脈）、範囲と量の制限、ペアリングとアクセス履歴の DB（追記のみのマイグレーション）、やり取りの形式。JVM のテストで確かめる
 2. [#183](https://github.com/Soichiro5/watch-audio/issues/183) 橋渡し CLI（`tools/agent-bridge`、TypeScript）: stdio の MCP サーバー、TLS の待ち受け、ペアリング、鍵の保管、mDNS。テスト用の偽スマホ（JVM）との E2E を CI で回す
-3. [#184](https://github.com/Soichiro5/watch-audio/issues/184) Android: エージェント連携の画面（ペアリング・ON/OFF・範囲・履歴・取り消し）、前景サービスでの接続、`tools/privacy-check` の許可リストの更新
+3. [#184](https://github.com/Soichiro5/watch-audio/issues/184) Android: エージェント連携の画面（ペアリング・ON/OFF・範囲・履歴・取り消し）、前景サービスでの接続、`tools/privacy-check` の許可リストの更新 — **実装済み**（画面は `shared/ui` で iOS と共通、接続の維持は `shared/agent` の `AgentConnector`。前景サービスの種類は `connectedDevice`、鍵は Keystore の EC P-256、QR はカメラのアプリの写真 + ZXing。エミュレータでホストの CLI とペアリング → 応答 → OFF・取り消しで停止を確認。実機の確認は #61）
 4. [#185](https://github.com/Soichiro5/watch-audio/issues/185) iOS: 同じ画面と、前面にある間だけの接続、ローカルネットワークの許可
 
 ## 8. 参考
