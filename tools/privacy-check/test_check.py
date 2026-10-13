@@ -49,6 +49,8 @@ AGENT_TLS = "apps/android/src/main/kotlin/app/watchaudio/android/agent/TlsAgentT
 AGENT_NSD = "apps/android/src/main/kotlin/app/watchaudio/android/agent/NsdBridgeDiscovery.kt"
 AGENT_IOS = "apps/ios/App/Agent/AgentNetwork.swift"
 AGENT_IOS_TRANSPORT = "shared/ui/src/iosMain/kotlin/app/watchaudio/app/IosAgentTransport.kt"
+MODEL_DOWNLOAD_IOS = "apps/ios/App/Embedding/ModelDownload.swift"
+IOS_APP_GRAPH = "shared/ui/src/iosMain/kotlin/app/watchaudio/app/IosAppGraph.kt"
 NOTICES = "shared/ui/src/commonMain/kotlin/app/watchaudio/app/licenses/OpenSourceNotices.kt"
 LICENSE_TEXTS = "shared/ui/src/commonMain/kotlin/app/watchaudio/app/licenses/LicenseTexts.kt"
 
@@ -80,6 +82,10 @@ PRIVACY_MANIFEST = """\
 
 PROJECT_YML = """\
 name: WatchAudio
+packages:
+  OnnxRuntime:
+    url: https://github.com/microsoft/onnxruntime-swift-package-manager
+    exactVersion: 1.24.2
 targets:
   iosApp:
     type: application
@@ -160,6 +166,17 @@ class FixtureRepo:
             }
             """)
         self.write(AGENT_IOS_TRANSPORT, "fun check(host: String) = require(isLanHost(host))\n")
+        self.write(MODEL_DOWNLOAD_IOS, """\
+            func start(_ urlString: String) {
+                guard let url = URL(string: urlString), url.scheme == "https" else { return }
+                let configuration = URLSessionConfiguration.ephemeral
+                configuration.allowsCellularAccess = false
+                configuration.allowsExpensiveNetworkAccess = false
+                configuration.allowsConstrainedNetworkAccess = false
+                URLSession(configuration: configuration).dataTask(with: url).resume()
+            }
+            """)
+        self.write(IOS_APP_GRAPH, "val model = ModelInstaller(RuriV3.FILES, root, fetcher, scope)\n")
         self.write(NOTICES, 'val url = "https://github.com/k2-fsa/sherpa-onnx"\n')
         self.write(LICENSE_TEXTS, 'const val APACHE = """http://www.apache.org/licenses/"""\n')
         # Test code is not shipped: a local fake server is fine there.
@@ -218,10 +235,11 @@ class RepositoryTest(unittest.TestCase):
     def test_repository_passes(self):
         report = check.run(REPO_ROOT)
         self.assertEqual([], [str(v) for v in report.violations])
-        # The model download and, for agent access (#184, #185), the LAN connection to the paired PC
-        # and its mDNS discovery are the only network call sites.
+        # The model downloads (Android; the iPhone since #178) and, for agent access (#184, #185), the
+        # LAN connection to the paired PC and its mDNS discovery are the only network call sites.
         self.assertEqual({(MODEL_DOWNLOADER, "URLConnection"), (MODEL_DOWNLOADER, "openConnection"),
-                          (AGENT_TLS, "Socket"), (AGENT_NSD, "NSD"), (AGENT_IOS, "Network.framework")},
+                          (AGENT_TLS, "Socket"), (AGENT_NSD, "NSD"), (AGENT_IOS, "Network.framework"),
+                          (MODEL_DOWNLOAD_IOS, "URLSession")},
                          {(path, api) for path, _, api, _ in report.network_sites})
         # The agent bridge on the PC only listens (TLS) and advertises (mDNS).
         self.assertEqual({("tools/agent-bridge/src/bridge.ts", "tls"), ("tools/agent-bridge/src/pairing.ts", "tls"),
@@ -245,7 +263,8 @@ class BaselineTest(FixtureTestCase):
         report = self.repo.run()
         self.assertEqual([], [str(v) for v in report.violations])
         self.assertEqual({(MODEL_DOWNLOADER, "URLConnection"), (MODEL_DOWNLOADER, "openConnection"),
-                          (AGENT_TLS, "Socket"), (AGENT_NSD, "NSD"), (AGENT_IOS, "Network.framework")},
+                          (AGENT_TLS, "Socket"), (AGENT_NSD, "NSD"), (AGENT_IOS, "Network.framework"),
+                          (MODEL_DOWNLOAD_IOS, "URLSession")},
                          {(path, api) for path, _, api, _ in report.network_sites})
 
     def test_stale_allow_list_entries_fail(self):
@@ -402,6 +421,16 @@ class SourceTest(FixtureTestCase):
         self.assertViolation(report, "network", "no longer pins the bridge key in the verify block")
         self.assertViolation(report, "network", "IosAgentTransport.kt: allowed network site no longer connects only to LAN addresses")
 
+    def test_ios_model_download_must_stay_on_wifi(self):
+        self.repo.replace(MODEL_DOWNLOAD_IOS, "configuration.allowsExpensiveNetworkAccess = false\n", "")
+        self.assertViolation(self.repo.run(), "network", "refuses expensive networks")
+        self.repo.replace(MODEL_DOWNLOAD_IOS, "url.scheme == \"https\"", "url.scheme != nil")
+        self.assertViolation(self.repo.run(), "network", "fetches HTTPS URLs only")
+
+    def test_ios_model_download_fetches_only_the_embedding_model(self):
+        self.repo.replace(IOS_APP_GRAPH, "ModelInstaller(RuriV3.FILES,", "ModelInstaller(otherFiles,")
+        self.assertViolation(self.repo.run(), "network", "downloads only the embedding model's pinned files")
+
     def test_allowed_api_in_another_file_fails(self):
         self.repo.write("apps/android/src/main/kotlin/Other.kt", "import java.net.HttpURLConnection\n")
         self.assertViolation(self.repo.run(), "network", "Other.kt:1: HttpURLConnection")
@@ -460,6 +489,21 @@ class IosTest(FixtureTestCase):
         self.assertEqual([], [str(v) for v in self.repo.run().violations])
         self.repo.replace("apps/ios/project.yml", "[_watchaudio-mcp._tcp]", "[_watchaudio-mcp._tcp, _airplay._tcp]")
         self.assertViolation(self.repo.run(), "ios", "NSBonjourServices '_airplay._tcp' of iosApp")
+
+    def test_swift_packages_must_be_allowed_and_pinned(self):
+        self.repo.replace("apps/ios/project.yml", "    exactVersion: 1.24.2\n",
+                          "    from: 1.24.2\n  Analytics:\n    url: https://github.com/example/analytics-sdk\n"
+                          "    exactVersion: 1.0.0\n")
+        report = self.repo.run()
+        messages = [v.message for v in report.violations]
+        self.assertTrue(any("analytics-sdk" in m and "IOS_SWIFT_PACKAGES" in m for m in messages), messages)
+        self.assertTrue(any("OnnxRuntime must be pinned with exactVersion" in m for m in messages), messages)
+
+    def test_unused_swift_package_entry_is_stale(self):
+        self.repo.replace("apps/ios/project.yml", "packages:\n  OnnxRuntime:\n"
+                          "    url: https://github.com/microsoft/onnxruntime-swift-package-manager\n"
+                          "    exactVersion: 1.24.2\n", "")
+        self.assertViolation(self.repo.run(), "ios", "stale allow-list entry: no Swift package")
 
     def test_unexpected_background_mode_fails(self):
         self.repo.replace("apps/ios/project.yml", "          - audio", "          - audio\n          - location")

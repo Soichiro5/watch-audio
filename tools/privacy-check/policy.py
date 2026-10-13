@@ -108,6 +108,11 @@ ALLOWED_API_USES = {
     "apps/android/src/main/kotlin/app/watchaudio/android/agent/NsdBridgeDiscovery.kt": {
         "NSD": "agent access (#184): browses mDNS (_watchaudio-mcp._tcp) for the paired PC's bridge while on; announces nothing",
     },
+    # The iPhone's model download (#178): its only connection to the internet.
+    "apps/ios/App/Embedding/ModelDownload.swift": {
+        "URLSession": "downloads the embedding model of semantic search (RuriV3.FILES: pinned Hugging Face commits, "
+                      "SHA-256 checked by ModelInstaller) on Wi-Fi only, once the user opens the search tab (#178)",
+    },
     # The iPhone's side (#185): the same connection with Network.framework, only while on and on screen.
     "apps/ios/App/Agent/AgentNetwork.swift": {
         "Network.framework": "agent access (#185): mutual TLS 1.3 from the iPhone to the paired PC's bridge on the LAN "
@@ -124,6 +129,18 @@ ALLOWED_API_REQUIREMENTS = {
         ("parses the address without DNS (InetAddresses.parseNumericAddress)", r"\bInetAddresses\.parseNumericAddress\s*\("),
         ("pins the bridge key (PinningTrustManager)", r"\bPinningTrustManager\s*\("),
         ("TLS 1.3 only", r'enabledProtocols\s*=\s*arrayOf\(\s*TLS_1_3\s*\)'),
+    ),
+    # #178: Swift fetches what Kotlin asks for, over HTTPS on Wi-Fi only; Kotlin asks only for the
+    # embedding model's pinned files.
+    "apps/ios/App/Embedding/ModelDownload.swift": (
+        ("refuses cellular", r"\.allowsCellularAccess\s*=\s*false"),
+        ("refuses expensive networks (personal hotspot)", r"\.allowsExpensiveNetworkAccess\s*=\s*false"),
+        ("refuses constrained networks (Low Data Mode)", r"\.allowsConstrainedNetworkAccess\s*=\s*false"),
+        ("uses an ephemeral session (no cookies or cache on disk)", r"URLSessionConfiguration\.ephemeral"),
+        ("fetches HTTPS URLs only", r'url\.scheme\s*==\s*"https"'),
+    ),
+    "shared/ui/src/iosMain/kotlin/app/watchaudio/app/IosAppGraph.kt": (
+        ("downloads only the embedding model's pinned files (RuriV3.FILES)", r"\bModelInstaller\(\s*RuriV3\.FILES\b"),
     ),
     # #185: the Kotlin side decides where the iPhone may connect; Swift only opens what it is given.
     "shared/ui/src/iosMain/kotlin/app/watchaudio/app/IosAgentTransport.kt": (
@@ -148,9 +165,10 @@ ALLOWED_URL_PREFIXES = {
     "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17":
         "English (SenseVoice) model files, pinned commit, opt-in download only (ModelManifest.englishFiles, #81)",
     "https://huggingface.co/onnx-community/ruri-v3-30m-ONNX":
-        "embedding model of semantic search (ruri-v3-30m int8 ONNX), pinned commit, Wi-Fi only (ModelManifest.embeddingFiles, #24)",
+        "embedding model of semantic search (ruri-v3-30m int8 ONNX), pinned commit, Wi-Fi only; both phones "
+        "(RuriV3.FILES, #24 / #178)",
     "https://huggingface.co/cl-nagoya/ruri-v3-30m":
-        "tokenizer of the embedding model, pinned commit, Wi-Fi only (ModelManifest.embeddingFiles, #24)",
+        "tokenizer of the embedding model, pinned commit, Wi-Fi only; both phones (RuriV3.FILES, #24 / #178)",
 }
 
 # Files whose URL literals are only shown as text and never opened or fetched: any URL is allowed
@@ -229,6 +247,14 @@ IOS_TARGETS = {
         },
         "background_modes": {},
     },
+}
+
+# Swift packages of the iOS project (project.yml `packages`), each pinned with `exactVersion`.
+# Adding one is a privacy decision: say what it does and that it does not reach the network.
+IOS_SWIFT_PACKAGES = {
+    "https://github.com/microsoft/onnxruntime-swift-package-manager":
+        "ONNX Runtime (MIT) for the embedding model of semantic search on the iPhone (#178): runs the model on the "
+        "CPU; no network, no telemetry (the Objective-C API only creates sessions and runs them)",
 }
 
 # Bonjour service types an app may browse (NSBonjourServices). Agent access (#185) browses for the

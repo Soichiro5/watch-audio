@@ -2,12 +2,12 @@
 
 > **下書きです。運営者と法律の専門家のレビュー前で、申請フォームの項目名・要件は申請時点の App Store Connect / Play Console の表示で確認し直す必要があります。**
 > プライバシーポリシー（[日本語](privacy-policy.ja.md) / [英語](privacy-policy.en.md)）と同じ内容になるように書いています。ポリシーと申告は必ず同時に更新してください（#36 の完了条件「ポリシー・ストアのデータ申告が『データは端末内のみ』と一致している」）。
-> 内容は 2026-10-12 時点の `main`（5681119）の実装に基づきます（プライバシーマニフェスト・iPhone のマイク・全削除の範囲・Google Play の確認は #159 で更新）。根拠のコード箇所は末尾の「[レビュー用メモ: 主張と根拠](#5-レビュー用メモ-主張と根拠)」にまとめています。
+> 内容は 2026-10-12 時点の `main`（5681119）の実装に基づきます（プライバシーマニフェスト・iPhone のマイク・全削除の範囲・Google Play の確認は #159、iPhone の意味検索（モデルのダウンロード・ONNX Runtime の Swift パッケージ）は #178 で更新）。根拠のコード箇所は末尾の「[レビュー用メモ: 主張と根拠](#5-レビュー用メモ-主張と根拠)」にまとめています。
 
 ## 1. 申告の前提
 
 - アプリは録音・文字起こし・その他のユーザーデータを**端末の外へ送らない**。運営者のサーバーはない。解析・広告・クラッシュ送信の SDK はない。アカウントもない。
-- 端末外への通信は、Android スマホの文字起こしモデルのダウンロード（Hugging Face・GitHub の公開ファイル）と、iOS が行う音声認識モデルのダウンロード（OS 管理）だけ。ユーザーデータは送らない。例外はエージェント連携（Android #184、iPhone #185）: ユーザーが ON にしている間だけ（iPhone はアプリを画面に出している間だけ）、ユーザーがペアリングした自分の PC へ、同じネットワーク内で直接（相互 TLS）つなぎ、その PC のエージェントが読んだ分を渡す。開発者のサーバー・中継はない。
+- 端末外への通信は、Android スマホの文字起こしモデルのダウンロード（Hugging Face・GitHub の公開ファイル）、両スマホの意味検索のモデルのダウンロード（Hugging Face の公開ファイル、検索タブを初めて開いたときに Wi-Fi だけ。iPhone は #178）と、iOS が行う音声認識モデルのダウンロード（OS 管理）だけ。ユーザーデータは送らない。例外はエージェント連携（Android #184、iPhone #185）: ユーザーが ON にしている間だけ（iPhone はアプリを画面に出している間だけ）、ユーザーがペアリングした自分の PC へ、同じネットワーク内で直接（相互 TLS）つなぎ、その PC のエージェントが読んだ分を渡す。開発者のサーバー・中継はない。
 - Watch → スマホの転送は、ユーザー自身の端末間の直接通信（Wear OS: 近くで直接つながったノードだけ、Apple: WatchConnectivity）。開発者には届かない。
 - ユーザーが自分で端末外に出せるのは、診断ログの書き出し（OS の共有シートで送り先をユーザーが選ぶ）、データの書き出し（#155。文字起こし・マーク・ギャップと任意で音声を ZIP にして、Android は SAF の保存ダイアログ、iOS は共有シートでユーザーが選んだ保存先にだけ書く）と、暗号化バックアップ（#40。同じ保存先の選び方で、ユーザーのパスフレーズで暗号化したファイルを書く。復元はユーザーが選んだファイルを読むだけ）だけ。パスフレーズと鍵は端末の外に出さない。課金（#34）・AI 機能（P2）は未公開。公開時にこの文書とポリシーを更新する。
 
@@ -19,7 +19,7 @@
 | --- | --- | --- |
 | このアプリからデータを収集しますか | **いいえ（データの収集なし / Data Not Collected）** | Apple の定義の「収集」は、アプリから端末の外へ送られ、開発者や第三者が一定期間以上アクセスできる状態になること。録音・文字起こし・診断ログは端末内にだけ保存し、開発者は受け取らない |
 | トラッキング | なし（App Tracking Transparency の許可も求めない） | 広告・解析 SDK がなく、端末外に送るデータがない |
-| サードパーティのパートナー（SDK）が集めるデータ | なし | Swift パッケージ・外部 SDK は使っていない。Kotlin 側も実行時の依存は許可リストで検査している |
+| サードパーティのパートナー（SDK）が集めるデータ | なし | Swift パッケージは ONNX Runtime（Microsoft、MIT。意味検索のモデルを端末の CPU で動かすだけで、通信・解析の機能はない。#178）だけ。解析・広告などの外部 SDK はない。Swift パッケージは `tools/privacy-check` の `IOS_SWIFT_PACKAGES` の許可リストと版の固定（`exactVersion`）を、Kotlin 側の実行時の依存は許可リストを検査している |
 | プライバシーポリシーの URL | ［公開 URL］ | 必須。アプリ内からも見られるようにする（§4 の残作業） |
 
 要確認（レビューで判断）:
@@ -74,7 +74,7 @@ iPhone アプリの `NSMicrophoneUsageDescription` は削除した（#159）。i
 
 | ファイル | 入るバンドル |
 | --- | --- |
-| `apps/ios/Privacy/App/PrivacyInfo.xcprivacy` | iPhone アプリ（`iosApp`）。Kotlin の `ComposeApp` フレームワーク（Compose Multiplatform・skiko・SQLite を含む）は静的にリンクされるので、その分もここで申告する |
+| `apps/ios/Privacy/App/PrivacyInfo.xcprivacy` | iPhone アプリ（`iosApp`）。Kotlin の `ComposeApp` フレームワーク（Compose Multiplatform・skiko・SQLite を含む）と ONNX Runtime（Swift パッケージ、#178）は静的にリンクされるので、その分もここで申告する |
 | `apps/ios/Privacy/Watch/PrivacyInfo.xcprivacy` | Apple Watch アプリ（`WatchApp`） |
 | `apps/ios/Privacy/WatchWidget/PrivacyInfo.xcprivacy` | コンプリケーションの拡張（`WatchWidget`） |
 
@@ -84,7 +84,7 @@ iPhone アプリの `NSMicrophoneUsageDescription` は削除した（#159）。i
 
 | ターゲット | 区分 | 使っている箇所 | 理由コード |
 | --- | --- | --- | --- |
-| iosApp | ファイルのタイムスタンプ（`FileTimestamp`） | 同梱の SQLite（`androidx.sqlite:sqlite-bundled`）が DB ファイルに `stat` / `fstat` / `lstat`、skiko が `stat` / `fstat` を使う。どちらもアプリのコンテナ（とアプリのバンドル）内のファイルの大きさなどの属性 | `C617.1`（アプリ・App Group のコンテナ内のファイルの属性） |
+| iosApp | ファイルのタイムスタンプ（`FileTimestamp`） | 同梱の SQLite（`androidx.sqlite:sqlite-bundled`）が DB ファイルに `stat` / `fstat` / `lstat`、skiko が `stat` / `fstat`、ONNX Runtime（#178）がモデルファイルに `stat` / `fstat` を使う。どれもアプリのコンテナ（とアプリのバンドル）内のファイルの大きさなどの属性 | `C617.1`（アプリ・App Group のコンテナ内のファイルの属性） |
 | iosApp | 空き容量（`DiskSpace`） | `IosStorageEnvironment.freeBytes`（`NSURLVolumeAvailableCapacityForImportantUsageKey`、取れなければ `NSFileSystemFreeSize`）。状態タブの「端末の空き容量」と空き容量の警告に表示する（#33）。同梱の SQLite には `statfs` / `fstatfs` もある（ファイルシステムの種類を見てロック方式を選ぶため。空き容量は読まない） | `85F4.1`（空き容量をユーザーに表示する） |
 | iosApp | システムの起動時刻（`SystemBootTime`） | skiko（Compose Multiplatform の描画）の `mach_absolute_time`。フレームの経過時間の計測 | `35F9.1`（アプリ内の経過時間の計測） |
 | WatchApp | `UserDefaults` | `RecorderController.swift`（録音を続けるかの状態 `wantsRecording`、端末 ID）、`WatchAudioApp.swift`（`complicationURL`）、`DebugAudioFileInput.swift`（Debug ビルドのみ） | `CA92.1`（アプリ自身だけが読み書きする） |
@@ -101,6 +101,7 @@ iPhone アプリの `NSMicrophoneUsageDescription` は削除した（#159）。i
 - Swift: `apps/ios/{App,SharedSwift,Watch,WatchWidget}`（テストを除く）を、Apple の一覧の API 名・キー名（`UserDefaults`、`creationDate` / `modificationDate`、`attributesOfItem`、`stat` 系、`volumeAvailableCapacity*`、`systemFreeSize`、`statfs` 系、`systemUptime`、`mach_absolute_time`、`activeInputModes`）で検索した。
 - Kotlin: `shared/*/src/iosMain` を同じ名前で検索した（該当は `IosStorageEnvironment.kt` だけ）。
 - 依存ライブラリ: iOS 向けの klib（Gradle キャッシュの `*-iossimulatorarm64`。Compose Multiplatform 1.12.1、skiko 0.150.1、androidx.sqlite 2.7.1、kotlinx-io 0.9.1、kotlinx-coroutines、lifecycle など）を開き、中のシンボル名を同じ一覧で照合した（JetBrains の [required-reason-finder](https://kotlinlang.org/docs/multiplatform/multiplatform-privacy-manifest.html) と同じ考え方）。該当は sqlite-bundled（`stat` / `fstat` / `lstat` / `statfs` / `fstatfs`）と skiko（`stat` / `fstat` / `mach_absolute_time`）だけ。kotlinx-io はファイルの種類と大きさを `NSFileManager` で読むだけで、タイムスタンプは読まない。
+- ONNX Runtime（#178）: Swift パッケージのバイナリ（`pod-archive-onnxruntime-c-1.24.2.zip` の `ios-arm64` の静的ライブラリ）のシンボル名を同じ一覧で照合した（2026-10-13）。該当は `stat` / `fstat`（モデルファイルの大きさ、上の `C617.1` の範囲）だけ。ほかに `sysctl` / `sysctlbyname`（CPU の機能を調べる。理由の申告が必要な API には当たらない）。通信の関数（`socket` / `connect` / `getaddrinfo`、`NSURLSession`）はない。パッケージにプライバシーマニフェストは含まれない。Objective-C の部分（ソースからビルドされる `OnnxRuntimeBindings`）はセッションの作成と実行だけ。
 - Kotlin/Native のランタイム: 1.9.20 以降は既定のメモリアロケータが `mach_absolute_time` を使わない（JetBrains の同じ資料。本リポジトリは Kotlin 2.4）。
 
 補足:
@@ -222,9 +223,10 @@ Play Console で権限の用途を聞かれたとき（アプリのコンテン�
 
 | 主張 | 根拠 |
 | --- | --- |
-| 解析・広告・クラッシュ送信 SDK、HTTP クライアントのライブラリがない | `tools/privacy-check/policy.py` の `DENIED_DEPENDENCIES` と `ALLOWED_RESOLVED_DEPENDENCIES`（リリースの実行時クラスパスを CI で照合）。`gradle/libs.versions.toml`。iOS は `apps/ios/project.yml` に Swift パッケージなし |
+| 解析・広告・クラッシュ送信 SDK、HTTP クライアントのライブラリがない | `tools/privacy-check/policy.py` の `DENIED_DEPENDENCIES` と `ALLOWED_RESOLVED_DEPENDENCIES`（リリースの実行時クラスパスを CI で照合）。`gradle/libs.versions.toml`。iOS の Swift パッケージは `apps/ios/project.yml` の ONNX Runtime（`exactVersion: 1.24.2`）だけで、`policy.IOS_SWIFT_PACKAGES` が許可リストと版の固定を検査する（#178） |
 | 通信はモデルのダウンロードだけ | `policy.py` の `ALLOWED_API_USES`（通信 API は `apps/android/src/main/kotlin/app/watchaudio/android/asr/ModelDownloader.kt` だけ）と `ALLOWED_URL_PREFIXES`（`https://huggingface.co/csukuangfj/reazonspeech-k2-v2`、`https://github.com/k2-fsa/sherpa-onnx/releases/download/`、英語用の `https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17`）。URL は `ModelManifest.kt`。[docs/architecture/02 §7.2](../architecture/02-architecture.md#72-通信箇所の一覧) |
-| iOS のモデルは OS がダウンロード、サーバー型の音声認識は使わない | `apps/ios/App/SpeechTranscription.swift`（`AssetInventory`、`SpeechAnalyzer`）。`policy.py` が `SF…RecognitionRequest` を禁止 |
+| iOS の音声認識モデルは OS がダウンロード、サーバー型の音声認識は使わない | `apps/ios/App/SpeechTranscription.swift`（`AssetInventory`、`SpeechAnalyzer`）。`policy.py` が `SF…RecognitionRequest` を禁止 |
+| iPhone の通信は意味検索のモデルのダウンロード（Wi-Fi のみ、固定のコミット、SHA-256 の確認）だけ（エージェント連携の LAN 内の接続を除く） | `apps/ios/App/Embedding/ModelDownload.swift`（`URLSession`、`allowsCellularAccess` / `allowsExpensiveNetworkAccess` / `allowsConstrainedNetworkAccess = false`、ephemeral、HTTPS のみ）、URL とハッシュは `RuriV3.FILES`（`shared/pipeline`）、検証は `ModelInstaller`。`policy.py` の `ALLOWED_API_USES` / `ALLOWED_API_REQUIREMENTS` が CI で検査（#178） |
 | Wear OS アプリはインターネットを使わない | `apps/wear/src/main/AndroidManifest.xml` に `INTERNET` なし。`policy.py` の Wear OS の権限の許可リスト |
 | Wear OS → スマホは直接接続のノードだけ、`DataClient` は使わない | `apps/wear/.../outbox/OutboxUploader.kt`（`isNearby` のノードだけ）、スマホ側も `apps/android/.../transfer/ChunkReceiver.kt` で `isNearby` を確認。`policy.py` が `DataClient` を禁止。[docs/platforms/wearos.md](../platforms/wearos.md) の手動確認 17 |
 | Apple Watch → iPhone は WatchConnectivity | `apps/ios/Watch/Recording/ChunkTransport.swift`（`transferFile` / `transferUserInfo`）、`apps/ios/App/WatchReceiver.swift` |
@@ -288,7 +290,8 @@ Play Console で権限の用途を聞かれたとき（アプリのコンテン�
 | --- | --- | --- |
 | ReazonSpeech k2 v2（日本語の文字起こしモデル、ダウンロード） | Apache-2.0 | Android |
 | Silero VAD（発話区間の検出モデル、ダウンロード） | MIT | Android |
-| Ruri v3 30m（意味検索の埋め込みモデル、検索タブを開いたときに Wi-Fi でダウンロード、#24） | Apache-2.0 | Android |
+| Ruri v3 30m（意味検索の埋め込みモデル、検索タブを開いたときに Wi-Fi でダウンロード、#24・#178） | Apache-2.0 | Android・iOS |
+| ONNX Runtime for iOS（`onnxruntime-swift-package-manager`。iPhone で意味検索のモデルを動かす Swift パッケージ、#178） | MIT | iOS |
 | JNA（Java Native Access。意味検索のモデルを動かすために ONNX Runtime の C API を呼ぶ、#24） | Apache-2.0（LGPL-2.1 とのデュアル。Apache-2.0 を選ぶ） | Android |
 | ZXing（エージェント連携のペアリングの QR コードを写真から読む、#184） | Apache-2.0 | Android |
 | SenseVoice Small（英語の文字起こしモデル、「英語も文字起こしする」をオンにしたときだけダウンロード） | FunASR Model Open Source License Agreement v1.1（出典と作者の表示、モデル名の保持が条件。英語のカードにも帰属表示を出す） | Android |
@@ -299,7 +302,7 @@ Play Console で権限の用途を聞かれたとき（アプリのコンテン�
 | SQLite（AndroidX SQLite の bundled に含まれる） | パブリックドメイン | Android・iOS |
 | Skiko と、それに含まれる Skia・libwebp（BSD-3-Clause）・ICU（Unicode License v3）・HarfBuzz（Old MIT）・libpng・zlib・Expat（MIT）・libjpeg-turbo（IJG / BSD-3-Clause） | Apache-2.0 ほか | iOS |
 
-- 一覧は、リリースの実行時クラスパス（`./gradlew :apps:android:dependencies --configuration releaseRuntimeClasspath`、Wear OS も同じ）と各 POM のライセンス、iOS の klib（`:shared:ui` の `iosArm64CompileKlibraries`）、アプリに入るネイティブライブラリ（sherpa-onnx はアプリ用にビルドした JNI ライブラリと AAR の ONNX Runtime、Skiko は klib）、`ModelManifest` のモデルから作った。依存やモデルを足したら一覧も更新する（Android のモデルは `ModelNoticesTest` が照合する）。
+- 一覧は、リリースの実行時クラスパス（`./gradlew :apps:android:dependencies --configuration releaseRuntimeClasspath`、Wear OS も同じ）と各 POM のライセンス、iOS の klib（`:shared:ui` の `iosArm64CompileKlibraries`）と Swift パッケージ（`apps/ios/project.yml`）、アプリに入るネイティブライブラリ（sherpa-onnx はアプリ用にビルドした JNI ライブラリと AAR の ONNX Runtime、Skiko は klib）、`ModelManifest` と `RuriV3.FILES` のモデルから作った。依存やモデルを足したら一覧も更新する（Android のモデルは `ModelNoticesTest`、両スマホの意味検索のモデルは `OpenSourceNoticesTest` が照合する）。
 - sherpa-onnx の公開 AAR（v1.13.8）の JNI ライブラリには、音声合成用の eSpeak NG（GPL-3.0）・piper-phonemize と話者分離用の hclust-cpp が静的にリンクされている。このアプリは音声合成も話者分離も使わないので、**配布する Android アプリ**には、上流の同じタグを CMake のオプションだけ変えて（音声合成と話者分離をオフ。フォークやパッチではない）CI でビルドした JNI ライブラリを入れ、これらは配布物に含めない（#173。ビルドと検査は [docs/dev/04 §7.3](../dev/04-dev-environment.md#73-sherpa-onnx-の-jni-ライブラリ音声合成なし173)）。配布の経路（`deliver.yml`）と CI の APK（`android.yml`・`emulator.yml`）は、`libsherpa-onnx-jni.so` に eSpeak NG と音声合成の痕跡があれば失敗する。上の一覧はこの配布物に合わせてある。
 - 開発者が手元でビルドする APK（配布しない）は、AAR の JNI ライブラリをそのまま使うので eSpeak NG などを含む。人に渡す APK は、必ず CI（`deliver.yml` など）が作ったものにする。
 - SenseVoice（FunASR Model License）を配布に含めるかは運営者の判断（#167 の「判断事項」）。

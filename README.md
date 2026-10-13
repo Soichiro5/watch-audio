@@ -44,13 +44,14 @@
 - watchOS: SwiftUI / Wear OS: Compose for Wear OS
 - オンデバイス ASR: SpeechAnalyzer (iOS) / sherpa-onnx + Zipformer ReazonSpeech (Android)
 - ローカル DB: bundled SQLite + FTS5（日本語部分一致検索）
+- 意味検索: ruri-v3-30m（int8 ONNX）を端末内の ONNX Runtime で実行（Android は sherpa-onnx の ONNX Runtime、iOS は Swift パッケージ）。モデルは検索タブを初めて開いたときに Wi-Fi でダウンロード
 - AI 要約・チャット: 後回し（将来はクラウド LLM も可）
 
 ## ライセンス
 
 アプリが使っているライブラリとモデルの名前・作者・ライセンスは、アプリの「状態」タブの「ライセンス」で確認できる（#167）。主なもの:
 
-- Apache-2.0: sherpa-onnx、ReazonSpeech k2 v2（日本語モデル）、AndroidX、Kotlin・kotlinx、Compose Multiplatform、Skiko
+- Apache-2.0: sherpa-onnx、ReazonSpeech k2 v2（日本語モデル）、Ruri v3 30m（意味検索のモデル）、AndroidX、Kotlin・kotlinx、Compose Multiplatform、Skiko
 - MIT: Silero VAD、ONNX Runtime ほか
 - FunASR Model Open Source License Agreement v1.1: SenseVoice Small（英語モデル。「英語も文字起こしする」をオンにしたときだけダウンロード）
 - パブリックドメイン: SQLite

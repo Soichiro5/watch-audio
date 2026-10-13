@@ -10,6 +10,15 @@ configFiles:
   Debug: Configuration/Config.xcconfig
   Release: Configuration/Config.xcconfig
 
+# Swift packages: each one is a privacy decision (tools/privacy-check policy.IOS_SWIFT_PACKAGES) and
+# pinned to an exact version.
+packages:
+  # ONNX Runtime (MIT, Microsoft) for the embedding model of semantic search on the iPhone (#178):
+  # the official package with the Objective-C API over the prebuilt runtime (CPU only, no network).
+  OnnxRuntime:
+    url: https://github.com/microsoft/onnxruntime-swift-package-manager
+    exactVersion: 1.24.2
+
 settings:
   base:
     DEVELOPMENT_TEAM: $(TEAM_ID)
@@ -64,6 +73,9 @@ targets:
           cd "$SRCROOT/../.."
           ./gradlew :shared:ui:embedAndSignAppleFrameworkForXcode
     dependencies:
+      # The embedding model of semantic search (#178), App/Embedding/EmbeddingPlatform.swift.
+      - package: OnnxRuntime
+        product: onnxruntime
       - target: WatchApp
         embed: true
         codeSign: true
@@ -249,6 +261,30 @@ targets:
         CLANG_MODULES_AUTOLINK: NO
         EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
 
+  # Semantic search (#178) in the app process: the app's own EmbeddingPlatform (ONNX Runtime from
+  # the Swift package, the URLSession download) through IosEmbeddingCheck, against the JVM's
+  # reference vectors, a paraphrase search and a resumed download. The model comes from
+  # build/embedding-model (.github/scripts/ios-embedding-model.sh). Linked like PlaybackTests.
+  EmbeddingTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests/EmbeddingTests
+      - Tests/TestSupport
+    dependencies:
+      - target: iosApp
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).embeddingtests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/WatchAudio.app/WatchAudio
+        BUNDLE_LOADER: $(TEST_HOST)
+        FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../../shared/ui/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
+        OTHER_SWIFT_FLAGS: [$(inherited), -Xfrontend, -disable-autolink-framework, -Xfrontend, ComposeApp]
+        CLANG_MODULES_AUTOLINK: NO
+        EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
+
 schemes:
   # The watch app is built and embedded through iosApp's target dependency; listing it
   # here as well would restrict the scheme to watchOS destinations.
@@ -286,3 +322,9 @@ schemes:
         AgentAccessTests: [test]
     test:
       targets: [AgentAccessTests]
+  EmbeddingTests:
+    build:
+      targets:
+        EmbeddingTests: [test]
+    test:
+      targets: [EmbeddingTests]

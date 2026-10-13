@@ -520,6 +520,23 @@ def _check_privacy_manifest(path: Path, rel: str, report: Report) -> None:
                 report.add("ios", rel, 0, f"reason {reason} for {category} is not in policy.IOS_REQUIRED_REASONS")
 
 
+def _check_swift_packages(packages: dict, rel: str, report: Report) -> None:
+    """Every Swift package is allow-listed and pinned to an exact version; no allow-list entry is stale."""
+    used = set()
+    for name, spec in packages.items():
+        spec = spec or {}
+        url = str(spec.get("url") or spec.get("path") or "")
+        used.add(url)
+        if url not in policy.IOS_SWIFT_PACKAGES:
+            report.add("ios", rel, 0, f"Swift package {name} ({url}) is not in policy.IOS_SWIFT_PACKAGES")
+        if not spec.get("exactVersion"):
+            report.add("ios", rel, 0, f"Swift package {name} must be pinned with exactVersion")
+    for url in policy.IOS_SWIFT_PACKAGES:
+        if url not in used:
+            report.add("ios", "tools/privacy-check/policy.py", 0,
+                       f"stale allow-list entry: no Swift package {url} (remove it from IOS_SWIFT_PACKAGES)")
+
+
 def check_ios(root: Path, report: Report) -> None:
     project_path = root / policy.IOS_PROJECT
     if project_path.is_file():
@@ -532,6 +549,7 @@ def check_ios(root: Path, report: Report) -> None:
             project = {}
         if "CODE_SIGN_ENTITLEMENTS" in text:
             report.add("ios", rel, 0, "CODE_SIGN_ENTITLEMENTS needs a policy review (policy.IOS_ENTITLEMENTS)")
+        _check_swift_packages(project.get("packages") or {}, rel, report)
         for target, spec in (project.get("targets") or {}).items():
             spec = spec or {}
             info = (spec.get("info") or {}).get("properties") or {}

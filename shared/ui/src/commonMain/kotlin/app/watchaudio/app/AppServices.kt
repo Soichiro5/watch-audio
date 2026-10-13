@@ -66,8 +66,8 @@ interface AppServices {
     val noticeApps: Set<NoticeApp> get() = NoticeApp.entries.toSet()
 
     /**
-     * Search by meaning (#24): the on-device embedding index, or null where the platform has none
-     * (iOS for now), which leaves the search screen a keyword search exactly as before.
+     * Search by meaning (#24; Android, and iOS since #178): the on-device embedding index, or null
+     * where the platform has none (test fakes), which leaves the search screen a keyword search.
      */
     val semanticSearch: SemanticSearch? get() = null
 

@@ -6,6 +6,7 @@ import app.watchaudio.core.pipeline.DiagnosticsLog
 import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.platform.IoDispatcher
+import app.watchaudio.core.search.SemanticSearch
 import kotlin.coroutines.resume
 import kotlin.math.abs
 import kotlin.time.Clock
@@ -66,6 +67,8 @@ class IosAppServices internal constructor(
     private val onPrepareEnglishModel: () -> Unit = {},
     /** Agent access (#185): only while the app is on screen. */
     override val agentAccess: AgentAccess? = null,
+    /** Search by meaning (#178); its model is downloaded when the search tab first asks. */
+    override val semanticSearch: SemanticSearch? = null,
 ) : AppServices {
     private var player: AVAudioPlayer? = null
 
