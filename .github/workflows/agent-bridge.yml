@@ -4,7 +4,7 @@ name: Agent bridge
 # JVM fake phone (tools/agent-fake-phone, the shared tool logic in shared/agent).
 on:
   push:
-    branches: [main, feat/182-agent-bridge] # TEMPORARY: the feature branch, until the PR exists (remove before merge)
+    branches: [main]
     paths:
       - "tools/agent-bridge/**"
       - "tools/agent-fake-phone/**"
