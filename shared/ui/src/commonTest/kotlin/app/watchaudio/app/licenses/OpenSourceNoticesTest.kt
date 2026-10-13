@@ -1,5 +1,6 @@
 package app.watchaudio.app.licenses
 
+import app.watchaudio.core.embedding.RuriV3
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -64,11 +65,24 @@ class OpenSourceNoticesTest {
         assertTrue("Skia" !in android)
         // sherpa-onnx's JNI library is built without text-to-speech and speaker diarization (#173).
         assertTrue(listOf("eSpeak NG", "piper-phonemize", "hclust-cpp (fastcluster)").none { it in android }, "$android")
-        // iOS transcribes with the OS (no downloaded models) and renders Compose with Skiko.
-        assertTrue(ios.none { it.kind == NoticeKind.MODEL })
+        // iOS transcribes with the OS and downloads only the embedding model (#178), which ONNX
+        // Runtime from its Swift package runs; it renders Compose with Skiko.
+        assertEquals(listOf(OpenSourceNotices.RURI_V3), ios.filter { it.kind == NoticeKind.MODEL })
+        assertTrue(ios.any { it.name.startsWith("ONNX Runtime") && it.license == License.MIT && it.includedIn == null })
         assertTrue(listOf("Compose Multiplatform", "Skiko", "Skia", "SQLite").all { name -> ios.any { it.name == name } })
         assertTrue(ios.none { it.name == "sherpa-onnx" })
         assertEquals(all, OpenSourceNotices.forApps(NoticeApp.entries.toSet()))
+    }
+
+    /** Both phones download [RuriV3.FILES] (#24, #178); the licenses screen names their source. */
+    @Test
+    fun theEmbeddingModelsFilesHaveANoticeOnBothPhones() {
+        for (app in listOf(NoticeApp.ANDROID, NoticeApp.IOS)) {
+            val models = OpenSourceNotices.forApps(setOf(app)).filter { it.kind == NoticeKind.MODEL }
+            for (file in RuriV3.FILES) {
+                assertTrue(models.any { notice -> notice.downloads.any { file.url.startsWith(it) } }, "$app: no notice for ${file.url}")
+            }
+        }
     }
 
     @Test

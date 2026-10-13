@@ -8,7 +8,7 @@ struct iOSApp: App {
     init() {
         // Order matters: the Kotlin graph (database, BGTask registration) must exist before
         // WatchConnectivity can deliver chunks, and BGTask registration must happen during launch.
-        IosAppGraph.shared.start(transcriber: SpeechAnalyzerTranscriber(), agent: AgentPlatform())
+        IosAppGraph.shared.start(transcriber: SpeechAnalyzerTranscriber(), agent: AgentPlatform(), embedding: EmbeddingPlatform())
         WatchReceiver.shared.activate()
     }
 

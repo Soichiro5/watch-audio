@@ -53,9 +53,10 @@ data class OpenSourceNotice(
  *
  * Collected from the release runtime classpaths of `apps/android` and `apps/wear`, the iOS
  * framework's klibs (`shared/ui`), the native libraries the app ships (sherpa-onnx's JNI library as
- * CI builds it for distributed APKs, `tools/sherpa-onnx-android/build-jni.sh`; Skiko), and the
- * models in the Android model manifest. A new dependency or model needs an entry here (the Android
- * manifest is checked by a unit test).
+ * CI builds it for distributed APKs, `tools/sherpa-onnx-android/build-jni.sh`; Skiko), the iOS
+ * project's Swift packages (`apps/ios/project.yml`), and the models in the Android model manifest
+ * and `RuriV3.FILES`. A new dependency or model needs an entry here (the model lists are checked by
+ * unit tests).
  */
 object OpenSourceNotices {
     private val PHONES = setOf(NoticeApp.ANDROID, NoticeApp.IOS)
@@ -100,14 +101,14 @@ object OpenSourceNotices {
         downloads = listOf("https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/"),
     )
 
-    /** The embedding model of semantic search (#24): downloaded automatically, Wi-Fi only. */
+    /** The embedding model of semantic search (#24, iOS #178): downloaded automatically, Wi-Fi only. */
     val RURI_V3 = OpenSourceNotice(
         name = "Ruri v3 30m (ruri-v3-30m)",
         author = "Hayato Tsukagoshi, Ryohei Sasano (Nagoya University, cl-nagoya)",
         license = License.APACHE_2_0,
         url = "https://huggingface.co/cl-nagoya/ruri-v3-30m",
         kind = NoticeKind.MODEL,
-        apps = ANDROID,
+        apps = PHONES,
         downloads = listOf("https://huggingface.co/onnx-community/ruri-v3-30m-ONNX/", "https://huggingface.co/cl-nagoya/ruri-v3-30m/"),
     )
 
@@ -161,6 +162,12 @@ object OpenSourceNotices {
         library(
             "JSON for Modern C++", "Niels Lohmann", License.MIT, "https://github.com/nlohmann/json", ANDROID,
             copyright = "Copyright (c) 2013-2025 Niels Lohmann", includedIn = SHERPA_ONNX,
+        ),
+        // The embedding model of semantic search on the iPhone (#178): the official Swift package, its
+        // Objective-C API over the prebuilt runtime, linked into the app.
+        library(
+            "ONNX Runtime for iOS (onnxruntime-swift-package-manager)", "Microsoft", License.MIT,
+            "https://github.com/microsoft/onnxruntime-swift-package-manager", IOS, copyright = "Copyright (c) Microsoft Corporation",
         ),
         // Compose Multiplatform's renderer on iOS and what it links
         library(SKIKO, "JetBrains", License.APACHE_2_0, "https://github.com/JetBrains/skiko", IOS),

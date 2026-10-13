@@ -5,6 +5,9 @@ import app.watchaudio.core.agent.AgentTools
 import app.watchaudio.core.agent.pruneAgentAccessLog
 import app.watchaudio.core.alert.GapAlertEvaluator
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.embedding.EmbeddingStep
+import app.watchaudio.core.embedding.ModelInstaller
+import app.watchaudio.core.embedding.RuriV3
 import app.watchaudio.core.pipeline.ChunkIntake
 import app.watchaudio.core.pipeline.DiagnosticEvents
 import app.watchaudio.core.pipeline.DiagnosticsLog
@@ -21,6 +24,7 @@ import app.watchaudio.core.pipeline.TranscriptionPipeline
 import app.watchaudio.core.pipeline.TranscriptionRun
 import app.watchaudio.core.pipeline.TranscriptionRun.FollowUp
 import app.watchaudio.core.platform.platformName
+import app.watchaudio.core.search.SemanticIndex
 import app.watchaudio.core.settings.loadSettings
 import app.watchaudio.core.protocol.toJson
 import kotlin.concurrent.Volatile
@@ -70,6 +74,8 @@ import platform.UIKit.UIDevice
  * nothing leaves the phone.
  * The diagnostics log (#77) is `diagnostics/diagnostics.csv` there; it leaves only through the
  * user's export ([IosAppServices.exportDiagnostics]) and is cleared by "delete all data" (#159).
+ * Semantic search (#178) keeps its downloaded model in `models/` and its vector cache in `search/`
+ * there; the runs embed new transcripts after transcribing, and older ones while charging.
  *
  * Threading: [start] and [setAppActive] are called on the main thread; [ingest] from any thread.
  * Internal state is only mutated on the main dispatcher.
@@ -115,6 +121,11 @@ object IosAppGraph {
     private lateinit var gapAlerts: IosGapAlerts
     private lateinit var diagnostics: DiagnosticsLog
     private lateinit var agentAccess: IosAgentAccess
+    private lateinit var embeddingModel: ModelInstaller
+
+    /** The Swift side of semantic search (#178); valid after [start]. For the simulator check (`EmbeddingTests`). */
+    lateinit var embeddingPlatform: IosEmbeddingPlatform
+        private set
 
     /** The Swift side of agent access (#185); valid after [start]. */
     internal lateinit var agentPlatform: IosAgentPlatform
@@ -146,18 +157,27 @@ object IosAppGraph {
         audio
     }
 
+    /** The embedding model's files (#178): `models/ruri-v3-30m`, excluded from backup like the rest. */
+    internal val modelsDirectory: String by lazy {
+        val models = "$rootDirectory/models"
+        LocalDataDirectory.prepare(models)
+        models
+    }
+
     /** Agent access (#185); valid after [start]. For the app-hosted simulator check (`AgentAccessTests`). */
     val agent: IosAgentAccess get() = agentAccess
 
     /**
      * Opens the database and registers the background task. Call once from the app's `init`
      * (BGTaskScheduler requires registration before launch finishes). Idempotent.
-     * [agent] reaches the Keychain, Network.framework and the camera for agent access (#185).
+     * [agent] reaches the Keychain, Network.framework and the camera for agent access (#185);
+     * [embedding] ONNX Runtime and the Wi-Fi-only model download for semantic search (#178).
      */
-    fun start(transcriber: IosSpeechTranscriber, agent: IosAgentPlatform) {
+    fun start(transcriber: IosSpeechTranscriber, agent: IosAgentPlatform, embedding: IosEmbeddingPlatform) {
         if (started) return
         started = true
         this.transcriber = transcriber
+        embeddingPlatform = embedding
         diagnostics = DiagnosticsLog(
             Path("$rootDirectory/diagnostics/${DiagnosticsLog.FILE_NAME}"),
             exportDirectory = Path(NSTemporaryDirectory(), DIAGNOSTICS_EXPORT_DIR),
@@ -177,7 +197,29 @@ object IosAppGraph {
         // SpeechAnalyzer reports neither a speech probability nor a noise level, so the filter keeps
         // everything for now; it applies as soon as the Swift side supplies them (#105).
         val pipeline = TranscriptionPipeline(store, Path(audioRoot), adapter, segmentFilter = FalsePositiveFilter.DEFAULT)
-        storage = StorageManager(store, Path(audioRoot), IosStorageEnvironment(rootDirectory), diagnostics = diagnostics)
+        // Semantic search (#178): the model (downloaded on Wi-Fi once the search tab is opened; a
+        // finished download embeds what is there) and the vector cache of its passages.
+        embeddingModel = ModelInstaller(
+            RuriV3.FILES,
+            Path(modelsDirectory),
+            IosModelFetcher(embedding),
+            scope,
+            diagnostics,
+            onReady = { scope.launch { requestTranscription() } },
+        )
+        val embedder = IosEmbedding.embedder(embedding, modelsDirectory)
+        val searchDirectory = "$rootDirectory/search"
+        LocalDataDirectory.prepare(searchDirectory)
+        val semanticIndex = SemanticIndex(store, embedder, searchDirectory, modelState = embeddingModel::currentState)
+        val semanticSearch = IosSemanticSearch(semanticIndex, embeddingModel)
+        storage = StorageManager(
+            store,
+            Path(audioRoot),
+            IosStorageEnvironment(rootDirectory),
+            diagnostics = diagnostics,
+            // Deleted transcripts leave no vectors behind in the cache files.
+            onDeleted = { semanticIndex.sync(prune = true) },
+        )
         gapAlerts = IosGapAlerts(GapAlertEvaluator(store), diagnostics)
         intake = ChunkIntake(Ingestor(store, Path(audioRoot)), diagnostics, onStored = { chunkStored() })
         transcriptionRun = TranscriptionRun(
@@ -196,13 +238,17 @@ object IosAppGraph {
                     diagnostics = diagnostics,
                 )
             },
+            embedding = EmbeddingStep(store, embedder, semanticIndex, diagnostics, isModelReady = embeddingModel::isReady),
         )
         agentPlatform = agent
-        // Agent access (#185): keyword search (no embedding model on iOS yet, #24) and audio clips
-        // for pairings allowed audio; connected only while on and the app is on screen.
+        // Agent access (#185): search by meaning where the embedding model is ready (#178) and audio
+        // clips for pairings allowed audio; connected only while on and the app is on screen.
         agentAccess = IosAgentAccess(
             store,
-            AgentService(store, AgentTools(store, TimeZone.currentSystemDefault(), audio = IosAudioClipSource(agent, audioRoot))),
+            AgentService(
+                store,
+                AgentTools(store, TimeZone.currentSystemDefault(), semantic = semanticSearch, audio = IosAudioClipSource(agent, audioRoot)),
+            ),
             agent,
             software = "watch-audio-ios/${appVersion()}",
             phoneName = UIDevice.currentDevice.model,
@@ -224,6 +270,7 @@ object IosAppGraph {
             },
             onPrepareEnglishModel = { scope.launch { if (syncEnglish()) requestTranscription() } },
             agentAccess = agentAccess,
+            semanticSearch = semanticSearch,
         )
         // Agent access log retention (#184): also when the screen is never opened.
         scope.launch { runCatching { store.pruneAgentAccessLog(Clock.System.now().toEpochMilliseconds()) } }
@@ -391,6 +438,15 @@ object IosAppGraph {
         // TranscriptionRun logged the error type.
         if (report.retention is TranscriptionRun.Retention.Failed) {
             status.update { it.copy(notice = StatusNotice.RetentionFailed) }
+        }
+        // Semantic search (#178): with nothing left to transcribe, the embedding step's own follow-up.
+        if (report.followUp == FollowUp.None) {
+            when (report.embedding?.followUp) {
+                EmbeddingStep.FollowUp.RunAgain -> return FollowUp.RunAgain
+                // Older transcripts wait for the charger (the BGProcessingTask requires external power).
+                EmbeddingStep.FollowUp.OnCharge -> scheduleBackgroundProcessing()
+                EmbeddingStep.FollowUp.None, null -> Unit
+            }
         }
         return report.followUp
     }
