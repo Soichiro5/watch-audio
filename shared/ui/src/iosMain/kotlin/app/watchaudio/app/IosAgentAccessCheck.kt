@@ -104,7 +104,7 @@ object IosAgentAccessCheck {
             val error = outcome.fold(
                 onSuccess = { attempt ->
                     when (attempt) {
-                        is PairAttempt.Done -> (attempt.outcome as? PairOutcome.Paired)?.let { null } ?: "pairing ended: ${attempt.outcome}"
+                        is PairAttempt.Done -> if (attempt.outcome is PairOutcome.Paired) null else "pairing ended: ${attempt.outcome}"
                         else -> "pairing failed: $attempt"
                     }
                 },
