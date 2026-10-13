@@ -127,15 +127,19 @@ class IntegerRefsMigrationTest {
             assertEquals(
                 listOf(
                     "idx_agent_access_at", "idx_agent_pairing_key",
-                    "idx_chunk_purgeable", "idx_chunk_started_at", "idx_chunk_state", "idx_passage_chunk", "idx_passage_model",
-                    "idx_segment_chunk", "idx_segment_start_at",
+                    "idx_chunk_purgeable", "idx_chunk_started_at", "idx_chunk_state", "idx_citation_segment", "idx_highlight_summary",
+                    "idx_hour_summary_hour", "idx_passage_chunk", "idx_passage_model", "idx_segment_chunk", "idx_segment_start_at",
                 ),
                 db.texts("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_%' ORDER BY name"),
             )
             assertEquals(
                 // segment_change_*: change tracking for diff backups (migration 8, #164);
-                // segment_passage_*: invalidating passage embeddings (migration 9, #24).
-                listOf("segment_ad", "segment_ai", "segment_change_ad", "segment_change_ai", "segment_passage_ad", "segment_passage_ai"),
+                // segment_passage_*: invalidating passage embeddings (migration 9, #24);
+                // segment_summary_*: marking hour summaries stale (migration 11, #27).
+                listOf(
+                    "segment_ad", "segment_ai", "segment_change_ad", "segment_change_ai", "segment_passage_ad", "segment_passage_ai",
+                    "segment_summary_ad", "segment_summary_ai",
+                ),
                 db.texts("SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'transcript_segment' ORDER BY name"),
             )
             // The chunk key is an INTEGER PRIMARY KEY (a rowid alias), so VACUUM cannot renumber it.
