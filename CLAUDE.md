@@ -10,10 +10,10 @@ A smartwatch records continuously while worn → chunks go to the paired phone o
 
 ## Non-negotiables
 
-- **Local only.** Never upload recordings, transcripts or any user data. The only network use is downloading models and, when the user turns agent access on, a LAN connection to the user's own paired PC (agent access, `docs/research/agent-access.md`). Watch→phone transfer must use direct connections only (Wear OS: `MessageClient`/`ChannelClient` to `Node.isNearby`; never `DataClient`). Keep `allowBackup=false` / backup exclusions.
+- **Local only.** Never send recordings, transcripts, summaries or any other private user content off the device (the owner's line, confirmed 2026-10-13). App network use is limited to downloading models; when the user turns agent access on, a LAN connection to the user's own paired PC (`docs/research/agent-access.md`); and, only if the owner approves a specific SDK, its diagnostics/usage logs that carry no user content (allow-listed with the reason in `tools/privacy-check` and declared in the privacy policy and store forms). Watch→phone transfer must use direct connections only (Wear OS: `MessageClient`/`ChannelClient` to `Node.isNearby`; never `DataClient`). Keep `allowBackup=false` / backup exclusions.
 - **Wire contract.** `shared/protocol` is shared by Kotlin (phone, Wear OS) and Swift (watchOS: `apps/ios/SharedSwift/ChunkProtocol.swift`). Any change must update both sides **and** `shared/protocol/testdata/*.json` (tested on both sides). Times are epoch ms. The same holds for the agent wire format: `shared/agent` (Kotlin) ⇄ `tools/agent-bridge` (TypeScript) ⇄ `shared/agent/testdata/*.json`.
 - **DB migrations are append-only** (`shared/db/.../Schema.kt`). Audio paths in the DB are relative to the audio root.
-- AI summaries/chat are out of scope until the core goal is met (`P2` label).
+- AI features (UC9) start **on-device** (owner decision 2026-10-13, #39, `docs/research/on-device-llm.md`): a 「この日を要約」 button that makes hour summaries only on request; iOS uses Foundation Models' on-device `SystemLanguageModel` (never Private Cloud Compute). Cloud LLMs (BYOK, #26) and chat (#31) stay `P2`.
 - **Public repo: no secrets.** The repository and issues are public. Never commit or write secrets, credentials, API keys, signing keys or personal data into the repo, issues, PRs or CI logs; use GitHub Actions secrets and gitignored local files (`local.properties`). App-embedded keys are extractable, so no provider API keys in the app (BYOK keys stay in Keystore/Keychain on the device).
 
 ## Repo map

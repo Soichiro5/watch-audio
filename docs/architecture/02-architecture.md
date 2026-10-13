@@ -349,7 +349,7 @@ Watch は発話に関係なく約 5 分ごとにチャンクを区切るので�
 
 ### 6.5 将来（P2）: AI プロバイダ（BYOK）
 
-未実装の構想。HTTP クライアントや SDK は着手時に決める。
+未実装の構想。HTTP クライアントや SDK は着手時に決める。端末内の LLM（Apple Foundation Models・Android で動かすモデル）で 1 時間ごとの要約を先に作る案は [research/on-device-llm.md](../research/on-device-llm.md)（#39、提案。下の `LlmProvider` の最小の部分を先に作る）。
 
 ```kotlin
 interface LlmProvider {
