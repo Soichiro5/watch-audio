@@ -707,6 +707,7 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 - **通信・保護**: 出荷されるソース（Kotlin / Java / Swift、コメントとテストコードを除く）での HTTP クライアント・ソケット・mDNS（`NsdManager`・マルチキャストロック）・WebView・`URLSession`・Network.framework・サーバー型の `SFSpeech…RecognitionRequest`・`DataClient`・保護なしのファイル（`.noFileProtection` など）の利用、URL リテラル。
 - **依存**: Gradle ファイルに解析・広告・クラッシュ送信・HTTP クライアントの SDK がない。リリースの実行時クラスパス（推移的な依存を含む）がすべて許可リストの範囲内。
 - **エージェント連携の橋渡し CLI**（PC、`tools/agent-bridge`、#183）: 出荷されるソース（`src/`）で TLS の待ち受けと mDNS を許可したファイルだけが使い、外向きの接続（`connect(`・`fetch(`・HTTP）と URL がない。実行時の npm パッケージ（推移的なものを含む）が許可リストの範囲内で、インストールスクリプトがない。E2E（`agent-bridge.yml`）は実行中に外向きの接続を拒否して記録するガードを入れて走らせる。
+- **端末内の LLM**（#196）: `FoundationModels` は `apps/ios/App/Llm/OnDeviceLanguageModel.swift` の 1 つのファイルだけが使い、そのファイルは `SystemLanguageModel`（端末内のモデル）と本人の文章の変換向けの guardrail を使い続ける。Private Cloud Compute（`PrivateCloudComputeLanguageModel`）・`SystemLanguageModel` 以外の `LanguageModel`（サーバー・他社のモデル）・`LanguageModelFeedbackAttachment` はどのファイルでも不可。ジョブサマリーにそのファイルを出す。
 - **iOS**: `project.yml` の Swift パッケージ（許可リスト `IOS_SWIFT_PACKAGES` にあり、`exactVersion` で固定。今は ONNX Runtime だけ、#178）、Info.plist のキー・`UIBackgroundModes`・`NSBonjourServices`（エージェント連携の `_watchaudio-mcp._tcp` だけ、#185）、entitlements（App Group だけ。Watch アプリとコンプリケーションの間の状態共有、#41）、プライバシーマニフェスト（バンドルごとに 1 つ、追跡・収集なし、理由コードは許可リスト。#159）。
 
 使い方と許可リストの広げ方は [04 §6.4](../dev/04-dev-environment.md#64-local-only-チェックtoolsprivacy-check76)。
