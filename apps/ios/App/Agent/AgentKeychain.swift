@@ -61,7 +61,7 @@ enum AgentKeychain {
             throw Failure("creating the key: \(error?.takeRetainedValue().localizedDescription ?? "unknown")")
         }
         // A new key needs a new certificate.
-        SecItemDelete([kSecClass: kSecClassCertificate, kSecAttrLabel: label] as CFDictionary)
+        SecItemDelete(certificateQuery as CFDictionary)
         return key
     }
 
@@ -99,7 +99,7 @@ enum AgentKeychain {
     /// Stores `der` as the certificate of the key, replacing an earlier one.
     static func installCertificate(_ der: Data) throws {
         guard let certificate = SecCertificateCreateWithData(nil, der as CFData) else { throw Failure("not a certificate") }
-        SecItemDelete([kSecClass: kSecClassCertificate, kSecAttrLabel: label] as CFDictionary)
+        SecItemDelete(certificateQuery as CFDictionary)
         let add: [CFString: Any] = [
             kSecClass: kSecClassCertificate,
             kSecValueRef: certificate,
@@ -108,6 +108,11 @@ enum AgentKeychain {
         ]
         let status = SecItemAdd(add as CFDictionary, nil)
         guard status == errSecSuccess || status == errSecDuplicateItem else { throw Failure("storing the certificate", status) }
+    }
+
+    /// Matches the stored certificate.
+    private static var certificateQuery: [CFString: Any] {
+        [kSecClass: kSecClassCertificate, kSecAttrLabel: label]
     }
 
     static func storedCertificate() -> SecCertificate? {

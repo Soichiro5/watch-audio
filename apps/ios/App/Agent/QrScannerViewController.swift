@@ -22,10 +22,9 @@ final class QrScannerViewController: UIViewController, @preconcurrency AVCapture
         case .authorized:
             present(completion: completion)
         case .notDetermined:
-            AVCaptureDevice.requestAccess(for: .video) { granted in
-                Task { @MainActor in
-                    if granted { present(completion: completion) } else { completion(nil, true) }
-                }
+            Task { @MainActor in
+                let granted = await AVCaptureDevice.requestAccess(for: .video)
+                if granted { present(completion: completion) } else { completion(nil, true) }
             }
         default:
             completion(nil, true)
