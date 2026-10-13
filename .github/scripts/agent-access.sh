@@ -76,7 +76,9 @@ if [ "$pair_status" -ne 0 ] || [ -z "$pc_code" ] || [ "$pc_code" != "$phone_code
   status=1
 fi
 
-# 2. Serving while on, then off, on again, revoked.
+# 2. Serving while on, then off, on again, revoked. The permission scenario refused notifications on
+#    this install; allow them so the foreground service's notification shows in the screenshot.
+adb shell pm grant app.watchaudio android.permission.POST_NOTIFICATIONS || true
 node "$HOST_JS" serve "$home" > "$OUT/agent-host-serve.txt" 2> "$OUT/agent-host-serve-stderr.txt" &
 serve_pid=$!
 sleep 2

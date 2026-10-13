@@ -41,7 +41,8 @@ import kotlinx.datetime.TimeZone
  */
 class AgentAccessService : Service() {
     private val scope = CoroutineScope(
-        SupervisorJob() + Dispatchers.Main.immediate + CoroutineExceptionHandler { _, e ->
+        // Off the main thread: answering a call can be heavy (search by meaning runs the embedding model).
+        SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e ->
             // E.g. the Keystore refused the key: access goes off rather than the app crashing.
             Log.e(TAG, "agent access failed (${e.javaClass.simpleName})")
             access.turnOff()
