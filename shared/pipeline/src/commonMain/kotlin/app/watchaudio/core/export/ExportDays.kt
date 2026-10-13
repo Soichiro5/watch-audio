@@ -4,6 +4,8 @@ import app.watchaudio.core.db.AudioFileInfo
 import app.watchaudio.core.db.ChunkBackupInfo
 import app.watchaudio.core.db.ChunkRecord
 import app.watchaudio.core.db.ChunkState
+import app.watchaudio.core.db.HourSummaryRecord
+import app.watchaudio.core.db.HourSummaryState
 import app.watchaudio.core.db.MarkRecord
 import app.watchaudio.core.db.SegmentRecord
 import app.watchaudio.core.db.StoreTransaction
@@ -30,18 +32,34 @@ data class DayRecords(
     val audioFiles: Map<String, AudioFileInfo>,
     /** For a backup (#40) only: what the backup keeps of [chunks] beyond the export, by chunk UUID. */
     val backupInfo: Map<String, ChunkBackupInfo> = emptyMap(),
+    /** Not for a backup: the summaries of the day's hours (#27) and the segments they cite, by id. */
+    val summaries: List<HourSummaryRecord> = emptyList(),
+    val citedSegments: Map<Long, SegmentRecord> = emptyMap(),
 )
 
-/** Reads [DayRecords] for [window]; with [forBackup], also [DayRecords.backupInfo]. */
-fun StoreTransaction.readDayRecords(window: DayWindow, forBackup: Boolean = false): DayRecords = DayRecords(
-    chunks = chunksStartedBetween(window.start, window.end),
-    overlapping = chunksBetween(window.start, window.end),
-    previous = lastChunkBefore(window.start),
-    segments = segmentsOfChunksStartedBetween(window.start, window.end),
-    marks = marksOfChunksStartedBetween(window.start, window.end),
-    audioFiles = audioFilesOfChunksStartedBetween(window.start, window.end),
-    backupInfo = if (forBackup) backupInfoOfChunksStartedBetween(window.start, window.end) else emptyMap(),
-)
+/**
+ * Reads [DayRecords] for [window]; with [forBackup], also [DayRecords.backupInfo], otherwise also
+ * the hour summaries (#27: exported, but derived data a backup leaves out).
+ */
+fun StoreTransaction.readDayRecords(window: DayWindow, forBackup: Boolean = false): DayRecords {
+    val summaries = if (forBackup) emptyList() else hourSummariesBetween(window.start, window.end)
+    val segments = segmentsOfChunksStartedBetween(window.start, window.end)
+    val known = segments.associateBy { it.id }
+    val cited = summaries.flatMap { s -> s.highlights.flatMap { it.segmentIds } }.distinct()
+        .mapNotNull { id -> known[id] ?: segment(id) }
+        .associateBy { it.id }
+    return DayRecords(
+        chunks = chunksStartedBetween(window.start, window.end),
+        overlapping = chunksBetween(window.start, window.end),
+        previous = lastChunkBefore(window.start),
+        segments = segments,
+        marks = marksOfChunksStartedBetween(window.start, window.end),
+        audioFiles = audioFilesOfChunksStartedBetween(window.start, window.end),
+        backupInfo = if (forBackup) backupInfoOfChunksStartedBetween(window.start, window.end) else emptyMap(),
+        summaries = summaries,
+        citedSegments = cited,
+    )
+}
 
 /**
  * These records narrowed to the chunks [ids] (a diff backup, #164) with their segments, marks and
@@ -90,8 +108,28 @@ fun buildExportDay(
                 GapCause.NoRecording -> null
             }
         },
+        summaries = records.summaries.sortedBy { it.hourStart }.map { it.toExport(records.citedSegments) },
     )
 }
+
+private fun HourSummaryRecord.toExport(cited: Map<Long, SegmentRecord>) = ExportHourSummary(
+    hourStart = hourStart,
+    hourEnd = hourEnd,
+    state = when (state) {
+        HourSummaryState.DONE -> ExportSummaryState.DONE
+        HourSummaryState.LITTLE_SPEECH -> ExportSummaryState.LITTLE_SPEECH
+        HourSummaryState.REFUSED -> ExportSummaryState.REFUSED
+        HourSummaryState.FAILED -> ExportSummaryState.FAILED
+    },
+    summary = summary,
+    highlights = highlights.map { h ->
+        ExportHighlight(h.title, h.body, h.segmentIds.mapNotNull { cited[it] }.map { ExportCitation(it.chunkId, it.startAt) })
+    },
+    stale = stale,
+    provider = provider,
+    modelVersion = modelVersion,
+    createdAt = createdAt,
+)
 
 private fun ChunkRecord.toExport(file: AudioFileInfo?, includedPath: String?) = ExportChunk(
     id = id,

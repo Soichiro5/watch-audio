@@ -4,6 +4,8 @@ import app.watchaudio.core.protocol.AudioCodec
 import app.watchaudio.core.protocol.ChunkEndReason
 import app.watchaudio.core.protocol.SourcePlatform
 import kotlinx.datetime.LocalDate
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -49,6 +51,10 @@ data class ExportIndexDay(
     val marks: Int,
     val gaps: Int,
     val audioFiles: Int,
+    /** Hour summaries in the day file (#27); left out of the file when there are none. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val summaries: Int = 0,
 )
 
 /**
@@ -72,7 +78,54 @@ data class ExportDay(
     val marks: List<ExportMark>,
     /** Spans of the day with no recording, by start time, clipped to the day and the export time. */
     val gaps: List<ExportGap>,
+    /**
+     * Hour summaries made on the device (#27), by hour; left out of the file when there are none.
+     * Never in a backup (#40): they are derived data, made again after a restore.
+     */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val summaries: List<ExportHourSummary> = emptyList(),
 )
+
+/** What the on-device LLM made of one local hour (#27). */
+@Serializable
+data class ExportHourSummary(
+    /** The hour as `[hourStart, hourEnd)`. */
+    val hourStart: Long,
+    val hourEnd: Long,
+    val state: ExportSummaryState,
+    /** For [ExportSummaryState.DONE]: two or three sentences. */
+    val summary: String? = null,
+    val highlights: List<ExportHighlight> = emptyList(),
+    /** The hour's transcript changed after the summary was made. */
+    val stale: Boolean = false,
+    /** The LLM that made it (e.g. `apple-fm`) and its version. */
+    val provider: String,
+    val modelVersion: String? = null,
+    val createdAt: Long,
+)
+
+/** A highlight of an hour and the utterances it is based on. */
+@Serializable
+data class ExportHighlight(val title: String, val body: String, val citations: List<ExportCitation>)
+
+/** An [ExportSegment] a highlight cites, by its chunk and start time. */
+@Serializable
+data class ExportCitation(val chunkId: String, val startAt: Long)
+
+@Serializable
+enum class ExportSummaryState {
+    @SerialName("done") DONE,
+
+    /** Too little speech to summarize. */
+    @SerialName("little_speech") LITTLE_SPEECH,
+
+    /** The model declined to summarize the hour. */
+    @SerialName("refused") REFUSED,
+
+    /** Making the summary failed; it can be tried again in the app. */
+    @SerialName("failed") FAILED,
+}
 
 /** A recorded chunk (normally 5 minutes) as the watch described it. */
 @Serializable

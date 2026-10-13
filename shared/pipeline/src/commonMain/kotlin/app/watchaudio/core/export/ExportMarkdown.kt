@@ -22,6 +22,9 @@ object MarkdownText {
     const val GAP_MISSING = "データ欠落（未受信）"
     const val GAP_AWAITING = "転送待ち"
     const val NEXT_DAY = "翌日"
+    const val SUMMARIES = "1 時間ごとの要約"
+    const val SUMMARIES_NOTE = "端末内の AI が作った要約です。言い間違い・聞き間違いを含むことがあるので、要点の時刻の文字起こしで確かめてください。"
+    const val SUMMARY_STALE = "（この要約のあとに文字起こしが更新されています）"
     const val AUDIO_PURGED = "保持期間を過ぎて削除済み"
     const val AUDIO_IN_BACKUP = "暗号化バックアップにあり（端末からは削除済み）"
     const val AUDIO_NOT_FOUND = "ファイルが見つかりませんでした"
@@ -126,6 +129,25 @@ fun renderDayMarkdown(day: ExportDay, archiveRoot: String = "../"): String = bui
         appendLine("## ${MarkdownText.GAPS}")
         appendLine()
         day.gaps.forEach { gap -> appendLine("- ${clockRange(gap.start, gap.end, day, zone, seconds = false)} ${gapText(gap)}") }
+    }
+
+    val summaries = day.summaries.filter { it.state == ExportSummaryState.DONE && it.summary != null }
+    if (summaries.isNotEmpty()) {
+        appendLine()
+        appendLine("## ${MarkdownText.SUMMARIES}")
+        appendLine()
+        appendLine(MarkdownText.SUMMARIES_NOTE)
+        summaries.forEach { summary ->
+            appendLine()
+            appendLine("### ${hourHeading(summary.hourStart, day, zone)}")
+            appendLine()
+            appendLine(escapeMarkdown(summary.summary.orEmpty()) + if (summary.stale) MarkdownText.SUMMARY_STALE else "")
+            if (summary.highlights.isNotEmpty()) appendLine()
+            summary.highlights.forEach { h ->
+                val at = h.citations.minOfOrNull { it.startAt }?.let { "（${clock(it, day, zone)}）" }.orEmpty()
+                appendLine("- **${escapeMarkdown(h.title)}**: ${escapeMarkdown(h.body)}$at")
+            }
+        }
     }
 
     appendLine()
