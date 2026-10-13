@@ -90,7 +90,39 @@ GUARDED_APIS = (
      "Wear Data Layer DataClient (items may sync through the cloud); use MessageClient/ChannelClient"),
     ("WeakFileProtection", r"\bNSFileProtectionNone\b|\.noFileProtection\b|\bFileProtectionType\.none\b|"
      r"\bMODE_WORLD_(?:READABLE|WRITEABLE)\b", "files readable without protection / by other apps"),
+    # Apple Foundation Models (#196, docs/research/on-device-llm.md §5.2). Since iOS 27 the framework
+    # also has Apple's server model and other companies' models behind the same `LanguageModel`
+    # protocol, and feedback attachments that carry the prompt and the answer to Apple. The app uses
+    # only the on-device SystemLanguageModel, in one file (SINGLE_FILE_FRAMEWORKS); the rest is never
+    # allowed. Other companies' model packages are also stopped by IOS_SWIFT_PACKAGES.
+    ("FoundationModels", r"\bimport\s+(?:\w+\s+)?FoundationModels\b|\bFoundationModels\.",
+     "Apple Foundation Models (only in the file of policy.SINGLE_FILE_FRAMEWORKS)"),
+    ("PrivateCloudCompute", r"\bPrivateCloudCompute\w*", "Apple's server model (Private Cloud Compute): transcripts would leave the device"),
+    ("LanguageModelFeedback", r"\bLanguageModelFeedback\w*", "feedback attachments for Apple (they carry the prompt and the answer)"),
+    ("OtherLanguageModel", r"(?<!\w)LanguageModel\b",
+     "a model other than the on-device SystemLanguageModel (the LanguageModel protocol of iOS 27: server or third-party models)"),
 )
+
+# Frameworks that run on the device but whose module also offers APIs that would send data off it
+# (guarded above): each may be used in exactly one reviewed file. api id -> (file, reason). The file
+# must keep doing what makes it safe (SINGLE_FILE_REQUIREMENTS), and an entry that no longer matches
+# is reported as stale.
+SINGLE_FILE_FRAMEWORKS = {
+    "FoundationModels": (
+        "apps/ios/App/Llm/OnDeviceLanguageModel.swift",
+        "hour summaries on the iPhone (#196): Apple's on-device SystemLanguageModel only; no Private Cloud Compute, "
+        "no other company's model, no feedback attachments",
+    ),
+}
+
+# file -> ((what, regex), ...): code (comments removed) must match each regex.
+SINGLE_FILE_REQUIREMENTS = {
+    "apps/ios/App/Llm/OnDeviceLanguageModel.swift": (
+        ("uses the on-device SystemLanguageModel", r"\bSystemLanguageModel\.default\b"),
+        ("generates with the system model and the guardrails for the user's own text",
+         r"SystemLanguageModel\(\s*useCase:\s*\.general,\s*guardrails:\s*\.permissiveContentTransformations\s*\)"),
+    ),
+}
 
 # file (relative path) -> {api id: reason}. These are the app's only network call sites.
 # An entry that no longer matches anything is reported too, so the list stays accurate.
