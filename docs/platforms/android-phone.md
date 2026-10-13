@@ -269,7 +269,7 @@ adb shell am force-stop app.watchaudio   # 次の起動で取り込まれる
 
 ### 4.6 エージェント連携（#184）
 
-PC の AI エージェントが、本人が ON にしている間だけ、ペアリングした PC の橋渡し CLI（`tools/agent-bridge`）を通してこのスマホの文字起こしを読む（方針は [research/agent-access.md](../research/agent-access.md)、共通の仕組みは [02 §6.9](../architecture/02-architecture.md#69-エージェント連携uc11182183184)、画面は [phone-ui.md §1.13](phone-ui.md#113-エージェント連携184)）。道具のロジック・範囲・量の上限・アクセス履歴・接続の段取りは `shared/agent`、Android はつなぎ方と鍵だけを持つ。
+PC の AI エージェントが、本人が ON にしている間だけ、ペアリングした PC の橋渡し CLI（`tools/agent-bridge`）を通してこのスマホの文字起こしを読む（方針は [research/agent-access.md](../research/agent-access.md)、共通の仕組みは [02 §6.9](../architecture/02-architecture.md#69-エージェント連携uc11182183184185)、画面は [phone-ui.md §1.13](phone-ui.md#113-エージェント連携184)）。道具のロジック・範囲・量の上限・アクセス履歴・接続の段取りは `shared/agent`、Android はつなぎ方と鍵だけを持つ。
 
 - **鍵（`AgentIdentity`）**: Android Keystore の EC P-256（`PURPOSE_SIGN`、`DIGEST_NONE`・`DIGEST_SHA256`。Conscrypt は鍵を読めないとき TLS 1.3 の CertificateVerify を `NONEwithECDSA` で署名させるため `NONE` も要る）。取り出せない。画面オフでも PC に答えるため、ロック解除を条件にしない。証明書は `shared/agent` の `SelfSignedCertificate` と同じ形（拡張なし、2020〜9999 年）を Keystore の鍵で署名して `no_backup/agent/identity.der` に置く（公開情報。PC 側は Node / OpenSSL がこの証明書を `ca` として検証する。Keystore が作る証明書は KeyUsage などの拡張を持ちうるので使わない）。鍵がなくなれば作り直し、ペアリングもやり直しになる。
 - **接続（`TlsAgentTransport`）**: `SSLContext("TLSv1.3")` の `SSLSocket`、`enabledProtocols = TLSv1.3` だけ。`X509ExtendedKeyManager` が Keystore の鍵と証明書を出し、`X509ExtendedTrustManager` は PC の証明書の公開鍵の指紋がペアリングで覚えたものと一致するときだけ通す（認証局もホスト名も使わない）。宛先は LAN の IP リテラル（`isLanHost`。プライベート・リンクローカル・100.64/10・ループバック、IPv6 の ULA・リンクローカル）だけで、`InetAddresses.parseNumericAddress` で DNS を引かずに解釈する。接続 5 秒・握手 10 秒で諦める。スマホは待ち受けない。

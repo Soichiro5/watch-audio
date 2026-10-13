@@ -190,19 +190,19 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
 
 ### 1.13 エージェント連携（#184）
 
-`AppServices.agentAccess` があるプラットフォーム（Android。iOS は #185）では、状態タブに「エージェント連携」のカード（説明・ON のときは「エージェント接続: ON」・「エージェント連携を開く」）を出し、ライセンス画面と同じくタブの代わりに `AgentScreen` を開く（「戻る」とシステムの戻る操作で戻る）。仕組みは [02 §6.9](../architecture/02-architecture.md#69-エージェント連携uc11182183184)、方針は [research/agent-access.md](../research/agent-access.md)。
+`AppServices.agentAccess` があるプラットフォーム（Android #184、iOS #185）では、状態タブに「エージェント連携」のカード（説明・ON のときは「エージェント接続: ON」・「エージェント連携を開く」）を出し、ライセンス画面と同じくタブの代わりに `AgentScreen` を開く（「戻る」とシステムの戻る操作で戻る）。仕組みは [02 §6.9](../architecture/02-architecture.md#69-エージェント連携uc11182183184185)、方針は [research/agent-access.md](../research/agent-access.md)。
 
 | 部分 | 内容 |
 | --- | --- |
 | 説明 | PC の AI エージェントが文字起こしを道具として読めること、データはスマホに置いたまま同じネットワーク内の PC に直接つなぐこと（中継なし）、クラウドの LLM を使うエージェントには取り出した分が届くこと |
-| 接続 | 「エージェント接続」のスイッチ（ペアリングがないと押せない）。OFF のときは「自動で OFF にするまで」（15 分・30 分（既定）・1 時間・2 時間）を選ぶ。ON のときは「HH:MM に自動で OFF になります」と、ペアリングごとに「接続中」/「PC を探しています（…）」。許可がない・ペアリングがないときはその旨 |
-| PC をペアリング | 手順（PC で `npx watch-audio-mcp pair`）、「QR コードを撮影して読み取る」（プラットフォームが読めるときだけ）と「文字列を入力」。つないでいる間は進捗と「やめる」。両方の画面に出る 6 桁の確認コード（`123 456` の形）を見比べて「一致する」/「一致しない」。一致した後は「PC での確定を待っています…」、終わると結果（ペアリングした / 中止 / 期限切れ / 使用済み / PC 側で中止 / つながらない / 許可がない）を出し「閉じる」 |
+| 接続 | 「エージェント接続」のスイッチ（ペアリングがないと押せない）。OFF のときは「自動で OFF にするまで」（15 分・30 分（既定）・1 時間・2 時間）を選ぶ。ON のときは「HH:MM に自動で OFF になります」と、ペアリングごとに「接続中」/「PC を探しています（…）」。許可がない・ペアリングがないときはその旨（許可の場所はプラットフォームで違う: Android 17+ は「付近のデバイス」、iOS は設定アプリの「ローカルネットワーク」。`AgentAccess.localNetworkSetting`）。iOS（`AgentAccess.foregroundOnly`）では「iPhone では、このアプリを画面に出している間だけ PC に答えます…」を常に出す（アプリが画面から外れると OFF になる） |
+| PC をペアリング | 手順（PC で `npx watch-audio-mcp pair`）、「QR コードを撮影して読み取る」（Android: カメラのアプリの写真）/「カメラで QR コードを読み取る」（iOS: アプリのカメラの画面。カメラの許可は読み取るときだけ）（プラットフォームが読めるときだけ、`AgentAccess.qrScanner`）と「文字列を入力」。つないでいる間は進捗と「やめる」。両方の画面に出る 6 桁の確認コード（`123 456` の形）を見比べて「一致する」/「一致しない」。一致した後は「PC での確定を待っています…」、終わると結果（ペアリングした / 中止 / 期限切れ / 使用済み / PC 側で中止 / つながらない / 許可がない）を出し「閉じる」 |
 | ペアリングした PC | PC の名前・ペアリングした日・「読める期間」（直近 7・30（既定）・90・365 日）・「音声も読ませる」（既定 OFF）・「ペアリングを取り消す」（確認の文と「取り消す」/「やめる」）。取り消すとすぐにつながらなくなり、最後の 1 台なら接続も OFF にする |
-| アクセス履歴 | 新しい順に最大 200 件: 日時・PC の名前・道具（検索・日のタイムライン・前後の発話・音声）・件数、検索語（「」で囲む）、拒否のときは理由。90 日より前のものは自動で消える（画面を開いたとき、Android は起動時も） |
+| アクセス履歴 | 新しい順に最大 200 件: 日時・PC の名前・道具（検索・日のタイムライン・前後の発話・音声）・件数、検索語（「」で囲む）、拒否のときは理由。90 日より前のものは自動で消える（画面を開いたときと起動時） |
 
 - 状態は `AgentViewModel`（`AgentUiState`・`PairingStep`）。ペアリング・期間・音声・取り消し・履歴は `LocalStore`（`AgentQueries`）を直接読み書きし、接続はプラットフォームの `AgentAccess`（`state`・`scanQr`・`pair`・`turnOn`・`turnOff`）。取り消しは DB の書き込みだけで、プラットフォームの接続（`AgentConnector`）がそれを見て切る。
 - 読み取った文字列は `PairingUri.parse` で確かめ、PC のペアリング用でなければ・期限が切れていれば、PC につなぐ前に知らせる。
-- テスト: `AgentViewModelTest`（QR の結果ごとの表示、文字列の入力と失敗の文言、確認コードで一致しないと保存しない、スイッチ（ペアリングなし・許可なし・時間の選択）、取り消しの確認と最後の 1 台で OFF、90 日より前の履歴を消す）、`AppUiTest` の `agentAccessPairTurnOnAndRevoke`（状態タブから開く → 文字列でペアリング → 確認コード → 1 時間で ON → 音声と期間 → 履歴 → 取り消し → 戻る。英語だけのテキストがないこと。`agent-empty.png`・`agent-confirm.png`・`agent-on.png`・`agent-history.png`）と `noAgentAccessEntryWithoutPlatformSupport`。エミュレータでは本物の CLI と（[android-phone.md §4.6](android-phone.md#46-エージェント連携184)）。
+- テスト: `AgentViewModelTest`（QR の結果ごとの表示、文字列の入力と失敗の文言、確認コードで一致しないと保存しない、スイッチ（ペアリングなし・許可なし・時間の選択）、取り消しの確認と最後の 1 台で OFF、90 日より前の履歴を消す）、`AppUiTest` の `agentAccessPairTurnOnAndRevoke`（状態タブから開く → 文字列でペアリング → 確認コード → 1 時間で ON → 音声と期間 → 履歴 → 取り消し → 戻る。英語だけのテキストがないこと。`agent-empty.png`・`agent-confirm.png`・`agent-on.png`・`agent-history.png`）と `noAgentAccessEntryWithoutPlatformSupport`、iOS の表示（前面にある間だけの注意・カメラのボタン・ローカルネットワークの案内、`agent-ios.png`）の `agentAccessOnIos` と `AgentViewModelTest.iosWording`。エミュレータ（[android-phone.md §4.6](android-phone.md#46-エージェント連携184)）と iOS シミュレータ（[ios-watchos.md §16](ios-watchos.md#16-エージェント連携185)）では本物の CLI と。
 
 ## 2. データの流れ
 
@@ -269,6 +269,7 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 | `apps/android/src/androidTest/…/AgentAccessScenarioTest` | エージェント連携（#184）: エミュレータで、CI のホストで動く本物の橋渡し CLI（10.0.2.2）とペアリング（文字列の入力 → 確認コード。PC 側のコードと一致すること）し、スイッチで ON（前景サービス・通知）にすると PC のエージェントの検索に答え、OFF の間は答えず、再び ON で答え、取り消すと答えなくなること（`agent-access.sh` から実行。スクリーンショット `agent-confirm.png`・`agent-paired.png`・`agent-on.png`・`agent-notification.png`・`agent-revoked.png`） |
 | `apps/android/src/androidTest/…/ModelWaitTest` | モデルなしの状態タブ（「モデルが未ダウンロードです」・文字起こし待ち）と、モデルを置いた後の「準備完了」のスクリーンショット（`status-model-*.png`） |
 | `shared/ui/src/iosTest/…/IosPlaybackTest` | iOS シミュレータで、本番の `Ingestor` で取り込んだ前日の AAC チャンクについて、`IosAppServices.play` 直接・共有 UI（`App`）で「前の日」→ 発話をタップ・検索 → 結果を 1 タップ、のそれぞれで「HH:mm から再生中」が表示され、そのチャンクのファイルが AVAudioPlayer に指定位置（±0.2 秒）・正しい長さで用意されることを確認（CI `ios.yml` の Shared tests、`PLAYBACK_CHECK` 行。`./gradlew iosSimulatorArm64Test`）。テスト実行ファイルはアプリではなく `play()` が false を返すので、再生開始（`started=`）は記録のみ |
+| `apps/ios/Tests/AgentAccessTests/AgentAccessTests.swift` | エージェント連携（#185）: iOS アプリをホストにした XCTest で、アプリの本物の `IosAgentAccess` が CI のホストの橋渡し CLI（127.0.0.1）とペアリング（確認コードが PC と一致）し、ON の間だけ PC のエージェントの検索に答え、OFF・アプリが画面から外れる・取り消しで答えなくなること（`ios-agent-access.sh` から実行、`AGENT_CHECK` 行）。画面のタップは `AppUiTest` で確かめ、ここでは画面と同じ呼び方（`IosAgentAccessCheck`）で動かす |
 | `apps/ios/Tests/PlaybackTests/HostedPlaybackTests.swift` | iOS アプリをホストにした XCTest で、アプリの本物の `IosAppServices`（`IosAppGraph.shared.services`）が AAC 16 kHz の音声を指定位置（8 秒）から再生し、2 秒後に 1 秒以上進むこと（CI `ios.yml` の「Playback in the iOS app」、`PLAYBACK_CHECK check=hosted_player` 行） |
 
 共通ロジックのテスト: `shared/pipeline` の `AudioRetentionPolicyTest`（未処理・最近の音声は消さない、無期限は何も消さない）と `StorageManagerTest`（一時ディレクトリ + 実 `LocalStore`）、`AudioOffloadPolicyTest`・`OffloadRestoreTest`（#156。バックアップしていない音声は消さない、戻すと音声が戻る）、`DiagnosticsLogTest`（診断ログの書式・上限での切り替え・書き出しの順序・クラッシュ行にメッセージを含めない）と `TranscriptionPipelineTest.diagnosticsGetTimingsAndErrorTypesButNeverTextOrMessages`（文字起こしの本文や例外メッセージがログに入らない）、`shared/db` の `StorageQueriesTest`（削除の連鎖・FTS・設定・マイグレーションの冪等性）と `OffloadQueriesTest`（#156。バックアップ済みの記録・オフロードの条件・マイグレーション 7）。実 SQLite を使うテストは `src/sqliteTest` にあり、JVM・iOS シミュレータ・Android 端末で実行される（[04-dev-environment.md §6](../dev/04-dev-environment.md#6-ci-での自動確認実機なし)）。
@@ -285,5 +286,5 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 - 長いギャップ一覧の折りたたみ、Mark の表示
 - 暗号化バックアップ（#40）: 圧縮。差分（#164）は削除を運べないので、削除の後は全体からやり直す
 - ストレージ: バックアップ済みの音声の自動オフロード（今は状態タブからの手動のみ、#156）、AI 設定・API キー（未実装）の全削除
-- エージェント連携（#184）: iOS の接続（#185）。QR を読めないときの短いコード（今は CLI が出す長い文字列を入れる）
+- エージェント連携（#184・#185）: QR を読めないときの短いコード（今は CLI が出す長い文字列を入れる）。iOS で画面を出していなくても答える方法（iOS の制約で今はない）
 - 意味検索（#24）: iOS への対応（[ios-watchos.md §15](ios-watchos.md#15-意味検索24未対応)）、期間での絞り込み、意味の結果の中での一致箇所の強調（passage のどの発話が近いか）への追加、音声コーデック比較による容量見積もりの更新（#33 の残り）
