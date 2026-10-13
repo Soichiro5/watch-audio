@@ -40,6 +40,18 @@ object AgentLimits {
 
     /** A pause longer than this starts a new conversation in `get_day_timeline`. */
     const val CONVERSATION_GAP_MS = 5 * 60_000L
+
+    /** Access log entries older than this are deleted (#184; "delete all data" deletes them all). */
+    const val ACCESS_LOG_RETENTION_DAYS = 90
+
+    /** Agent access turns itself off this long after the user turned it on, unless they chose another time. */
+    const val DEFAULT_ON_MINUTES = 30
+
+    /** How long the user can keep agent access on in one go. */
+    val ON_MINUTES_CHOICES = listOf(15, 30, 60, 120)
+
+    /** Periods the user can let a pairing read (days back from now). */
+    val SCOPE_DAYS_CHOICES = listOf(7, 30, 90, 365)
 }
 
 /** Sliding one-minute window of tool calls for one pairing. */
