@@ -4,7 +4,11 @@ import android.os.SystemClock
 import android.util.Base64
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.junit4.ComposeTestRule
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToLog
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -60,17 +64,17 @@ class AgentAccessScenarioTest {
             compose.openTab(Strings.TAB_STATUS)
             compose.onNodeWithText(Strings.AGENT_OPEN).performScrollTo().performClick()
             compose.waitForText(Strings.AGENT_ENTER)
-            compose.onNodeWithText(Strings.AGENT_ENTER).performClick()
-            compose.waitUntil(10_000) { compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
-            compose.onNode(hasSetTextAction()).performTextInput(uri)
-            compose.onNodeWithText(Strings.AGENT_ENTER_SUBMIT).performClick()
-            compose.waitUntil(30_000) { compose.onAllNodes(hasText(Strings.AGENT_CODE_MATCHES)).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText(Strings.AGENT_ENTER).performScrollTo().performClick()
+            compose.diagnosed("the text field") { compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNode(hasSetTextAction()).performScrollTo().performTextInput(uri)
+            compose.onNodeWithText(Strings.AGENT_ENTER_SUBMIT).performScrollTo().performClick()
+            compose.diagnosed("the confirmation code", 30_000) { compose.onAllNodes(hasText(Strings.AGENT_CODE_MATCHES)).fetchSemanticsNodes().isNotEmpty() }
             val code = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text)).fetchSemanticsNodes()
                 .flatMap { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } }
                 .firstOrNull { CODE.matches(it) }
             Evidence.screenshot("agent-confirm")
-            compose.onNodeWithText(Strings.AGENT_CODE_MATCHES).performClick()
-            compose.waitUntil(60_000) { compose.onAllNodes(hasText("ペアリングしました", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText(Strings.AGENT_CODE_MATCHES).performScrollTo().performClick()
+            compose.diagnosed("the pairing result", 60_000) { compose.onAllNodes(hasText("ペアリングしました", substring = true)).fetchSemanticsNodes().isNotEmpty() }
             Evidence.screenshot("agent-paired")
             val pairing = runBlocking { graph.store.read { agentPairings() } }.singleOrNull { it.isActive }
             Evidence.log("AGENT_CHECK phase=paired code=${code?.replace(" ", "")} pc=${pairing?.name} address=${pairing?.address} scope_days=${pairing?.scopeDays} audio=${pairing?.allowAudio}")
@@ -93,7 +97,7 @@ class AgentAccessScenarioTest {
 
             // On: the foreground service connects and the PC's agent reads the transcript.
             val firstOn = System.currentTimeMillis()
-            compose.onNodeWithText(Strings.AGENT_SWITCH_DETAIL_OFF).performClick()
+            compose.onNodeWithText(Strings.AGENT_SWITCH_DETAIL_OFF).performScrollTo().performClick()
             PlaybackFixtures.waitFor(60_000, "the connection to the bridge") { access.state.value.links[pairing.id]?.takeIf { it == LinkState.CONNECTED } }
             val service = Evidence.shell("dumpsys activity services app.watchaudio/.agent.AgentAccessService")
             val foreground = "isForeground=true" in service
@@ -119,7 +123,7 @@ class AgentAccessScenarioTest {
 
             compose.waitForText(Strings.agentMinutes(30))
             val secondOn = System.currentTimeMillis()
-            compose.onNodeWithText(Strings.AGENT_SWITCH_DETAIL_OFF).performClick()
+            compose.onNodeWithText(Strings.AGENT_SWITCH_DETAIL_OFF).performScrollTo().performClick()
             waitForLog(secondOn, "a tool call answered after turning on again")
 
             // Revoke: the connection ends at once and nothing is answered any more.
@@ -144,8 +148,18 @@ class AgentAccessScenarioTest {
         }
     }
 
-    private fun androidx.compose.ui.test.junit4.ComposeTestRule.waitForText(text: String) =
-        waitUntil(20_000) { onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty() }
+    private fun ComposeTestRule.waitForText(text: String) = diagnosed("「$text」") { onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty() }
+
+    /** [ComposeTestRule.waitUntil], leaving a screenshot and the semantics tree in logcat if it times out. */
+    private fun ComposeTestRule.diagnosed(what: String, timeoutMs: Long = 20_000, condition: () -> Boolean) {
+        try {
+            waitUntil(timeoutMs, condition)
+        } catch (e: ComposeTimeoutException) {
+            runCatching { onRoot(useUnmergedTree = true).printToLog("AGENT_TREE") }
+            runCatching { Evidence.screenshot("agent-timeout") }
+            throw AssertionError("timed out waiting for $what", e)
+        }
+    }
 
     private fun log(since: Long) = runBlocking { graph.store.read { agentAccessLog(500) } }.filter { it.at >= since }
 
