@@ -40,10 +40,31 @@ xcrun simctl boot "$udid" > /dev/null 2>&1 || true
 xcrun simctl bootstatus "$udid" -b > /dev/null
 echo "Simulator: $udid"
 
+# The app keeps the phone's key in the Keychain, which the simulator refuses to an unsigned app
+# (errSecMissingEntitlement, -34018; the other steps build with CODE_SIGNING_ALLOWED=NO). Sign
+# ad hoc for this check with a Keychain access group written here: CI only, nothing is committed.
+# On a device the signed app's own application identifier is its access group (no entitlement needed).
+entitlements="$PWD/$OUT/agent-simulator.entitlements"
+cat > "$entitlements" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>application-identifier</key>
+	<string>app.watchaudio</string>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>app.watchaudio</string>
+	</array>
+</dict>
+</plist>
+PLIST
+signing=(CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= "CODE_SIGN_ENTITLEMENTS=$entitlements")
+
 xcode() {
   xcodebuild -project apps/ios/WatchAudio.xcodeproj -scheme AgentAccessTests \
     -destination "platform=iOS Simulator,id=$udid" -derivedDataPath "$derived_data" \
-    CODE_SIGNING_ALLOWED=NO ${extra_settings[@]+"${extra_settings[@]}"} "$@"
+    "${signing[@]}" ${extra_settings[@]+"${extra_settings[@]}"} "$@"
 }
 
 # run_test <name> <test method> [ENV=value...]: one test method; it must pass.
@@ -54,7 +75,7 @@ run_test() {
   rm -rf "$result"
   env "$@" xcodebuild -project apps/ios/WatchAudio.xcodeproj -scheme AgentAccessTests \
     -destination "platform=iOS Simulator,id=$udid" -derivedDataPath "$derived_data" \
-    CODE_SIGNING_ALLOWED=NO ${extra_settings[@]+"${extra_settings[@]}"} \
+    "${signing[@]}" ${extra_settings[@]+"${extra_settings[@]}"} \
     -only-testing:"AgentAccessTests/AgentAccessTests/$method" -resultBundlePath "$result" \
     test-without-building > "$OUT/xcodebuild-$name.log" 2>&1
   local test_status=$?
