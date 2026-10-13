@@ -139,10 +139,10 @@ PC のエージェント（Claude Desktop / Code、ローカル LLM など）
 
 UC11（#130）の sub-issue として次の順に進める。
 
-1. 共通部分（`shared/*`）: 道具のロジック（検索・日ごとのタイムライン・前後の文脈）、範囲と量の制限、ペアリングとアクセス履歴の DB（追記のみのマイグレーション）、やり取りの形式。JVM のテストで確かめる
-2. 橋渡し CLI（`tools/agent-bridge`、TypeScript）: stdio の MCP サーバー、TLS の待ち受け、ペアリング、鍵の保管、mDNS。テスト用の偽スマホ（JVM）との E2E を CI で回す
-3. Android: エージェント連携の画面（ペアリング・ON/OFF・範囲・履歴・取り消し）、前景サービスでの接続、`tools/privacy-check` の許可リストの更新
-4. iOS: 同じ画面と、前面にある間だけの接続、ローカルネットワークの許可
+1. [#182](https://github.com/Soichiro5/watch-audio/issues/182) 共通部分（`shared/*`）: 道具のロジック（検索・日ごとのタイムライン・前後の文脈）、範囲と量の制限、ペアリングとアクセス履歴の DB（追記のみのマイグレーション）、やり取りの形式。JVM のテストで確かめる
+2. [#183](https://github.com/Soichiro5/watch-audio/issues/183) 橋渡し CLI（`tools/agent-bridge`、TypeScript）: stdio の MCP サーバー、TLS の待ち受け、ペアリング、鍵の保管、mDNS。テスト用の偽スマホ（JVM）との E2E を CI で回す
+3. [#184](https://github.com/Soichiro5/watch-audio/issues/184) Android: エージェント連携の画面（ペアリング・ON/OFF・範囲・履歴・取り消し）、前景サービスでの接続、`tools/privacy-check` の許可リストの更新
+4. [#185](https://github.com/Soichiro5/watch-audio/issues/185) iOS: 同じ画面と、前面にある間だけの接続、ローカルネットワークの許可
 
 ## 8. 参考
 
