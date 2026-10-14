@@ -51,6 +51,7 @@ AGENT_IOS = "apps/ios/App/Agent/AgentNetwork.swift"
 AGENT_IOS_TRANSPORT = "shared/ui/src/iosMain/kotlin/app/watchaudio/app/IosAgentTransport.kt"
 MODEL_DOWNLOAD_IOS = "apps/ios/App/Embedding/ModelDownload.swift"
 IOS_APP_GRAPH = "shared/ui/src/iosMain/kotlin/app/watchaudio/app/IosAppGraph.kt"
+ON_DEVICE_LLM_IOS = "apps/ios/App/Llm/OnDeviceLanguageModel.swift"
 NOTICES = "shared/ui/src/commonMain/kotlin/app/watchaudio/app/licenses/OpenSourceNotices.kt"
 LICENSE_TEXTS = "shared/ui/src/commonMain/kotlin/app/watchaudio/app/licenses/LicenseTexts.kt"
 
@@ -177,6 +178,19 @@ class FixtureRepo:
             }
             """)
         self.write(IOS_APP_GRAPH, "val model = ModelInstaller(RuriV3.FILES, root, fetcher, scope)\n")
+        self.write(ON_DEVICE_LLM_IOS, """\
+            import FoundationModels
+            // Not PrivateCloudComputeLanguageModel: a comment may name it.
+            let ready = SystemLanguageModel.default.availability
+            func model() -> SystemLanguageModel { SystemLanguageModel(useCase: .general, guardrails: .permissiveContentTransformations) }
+            let session = LanguageModelSession(model: model(), tools: [], instructions: "i")
+            """)
+        self.write("apps/ios/App/Llm/LanguageModelPlatform.swift", """\
+            import ComposeApp
+            final class LanguageModelPlatform: NSObject, IosLanguageModel {}
+            """)
+        # Tests may use the framework directly.
+        self.write("apps/ios/Tests/LanguageModelTests/LanguageModelTests.swift", "import FoundationModels\nlet m = SystemLanguageModel.default\n")
         self.write(NOTICES, 'val url = "https://github.com/k2-fsa/sherpa-onnx"\n')
         self.write(LICENSE_TEXTS, 'const val APACHE = """http://www.apache.org/licenses/"""\n')
         # Test code is not shipped: a local fake server is fine there.
@@ -241,6 +255,8 @@ class RepositoryTest(unittest.TestCase):
                           (AGENT_TLS, "Socket"), (AGENT_NSD, "NSD"), (AGENT_IOS, "Network.framework"),
                           (MODEL_DOWNLOAD_IOS, "URLSession")},
                          {(path, api) for path, _, api, _ in report.network_sites})
+        # Foundation Models (#196) only in the one reviewed file.
+        self.assertEqual({(ON_DEVICE_LLM_IOS, "FoundationModels")}, {(path, api) for path, _, api, _ in report.framework_sites})
         # The agent bridge on the PC only listens (TLS) and advertises (mDNS).
         self.assertEqual({("tools/agent-bridge/src/bridge.ts", "tls"), ("tools/agent-bridge/src/pairing.ts", "tls"),
                           ("tools/agent-bridge/src/mdns.ts", "mdns")},
@@ -434,6 +450,58 @@ class SourceTest(FixtureTestCase):
     def test_allowed_api_in_another_file_fails(self):
         self.repo.write("apps/android/src/main/kotlin/Other.kt", "import java.net.HttpURLConnection\n")
         self.assertViolation(self.repo.run(), "network", "Other.kt:1: HttpURLConnection")
+
+
+class OnDeviceModelTest(FixtureTestCase):
+    """#196: Foundation Models in one file only, and only the on-device SystemLanguageModel."""
+
+    def test_fixture_lists_the_one_file(self):
+        report = self.repo.run()
+        self.assertEqual([], [str(v) for v in report.violations])
+        self.assertEqual({(ON_DEVICE_LLM_IOS, "FoundationModels")}, {(path, api) for path, _, api, _ in report.framework_sites})
+
+    def test_foundation_models_in_another_file_fails(self):
+        self.repo.write("apps/ios/App/Llm/LanguageModelPlatform.swift", "import ComposeApp\n@preconcurrency import FoundationModels\n")
+        self.repo.write("apps/ios/App/Summary.swift", "let m = FoundationModels.SystemLanguageModel.default\n")
+        report = self.repo.run()
+        self.assertViolation(report, "on-device", "LanguageModelPlatform.swift:2: import FoundationModels")
+        self.assertViolation(report, "on-device", "Summary.swift:1: FoundationModels.")
+
+    def test_private_cloud_compute_fails_everywhere(self):
+        self.repo.replace(ON_DEVICE_LLM_IOS, "SystemLanguageModel(useCase: .general, guardrails: .permissiveContentTransformations) }",
+                          "SystemLanguageModel(useCase: .general, guardrails: .permissiveContentTransformations) }\n"
+                          "let server = PrivateCloudComputeLanguageModel()")
+        self.assertViolation(self.repo.run(), "network", "OnDeviceLanguageModel.swift:5: PrivateCloudComputeLanguageModel")
+
+    def test_feedback_attachments_fail(self):
+        self.repo.write("apps/ios/App/Feedback.swift", "let f = LanguageModelFeedbackAttachment(input: [], output: [], sentiment: .negative)\n")
+        self.assertViolation(self.repo.run(), "network", "Feedback.swift:1: LanguageModelFeedbackAttachment")
+
+    def test_another_language_model_fails(self):
+        # The LanguageModel protocol (iOS 27) is how server and third-party models plug in.
+        self.repo.replace(ON_DEVICE_LLM_IOS, "LanguageModelSession(model: model(),", "LanguageModelSession(model: other as any LanguageModel,")
+        self.repo.write("apps/ios/App/Cloud.swift", "struct Cloud: LanguageModel {}\n")
+        report = self.repo.run()
+        self.assertViolation(report, "network", "OnDeviceLanguageModel.swift:5: LanguageModel")
+        self.assertViolation(report, "network", "Cloud.swift:1: LanguageModel")
+        # SystemLanguageModel, LanguageModelSession and the app's own IosLanguageModel are not that protocol.
+        self.assertFalse(any("LanguageModelPlatform.swift" in str(v) for v in report.violations))
+
+    def test_a_third_party_model_package_fails(self):
+        self.repo.replace("apps/ios/project.yml", "packages:\n",
+                          "packages:\n  CloudModel:\n    url: https://github.com/example/cloud-language-model\n    exactVersion: 1.0.0\n")
+        self.assertViolation(self.repo.run(), "ios", "cloud-language-model")
+
+    def test_the_file_must_keep_the_on_device_model_and_its_guardrails(self):
+        self.repo.replace(ON_DEVICE_LLM_IOS, "guardrails: .permissiveContentTransformations", "guardrails: .default")
+        self.repo.replace(ON_DEVICE_LLM_IOS, "SystemLanguageModel.default.availability", "true")
+        report = self.repo.run()
+        self.assertViolation(report, "on-device", "no longer generates with the system model and the guardrails")
+        self.assertViolation(report, "on-device", "no longer uses the on-device SystemLanguageModel")
+
+    def test_unused_entry_is_stale(self):
+        self.repo.replace(ON_DEVICE_LLM_IOS, "import FoundationModels\n", "")
+        self.assertViolation(self.repo.run(), "on-device", "stale allow-list entry: FoundationModels")
 
 
 class DependencyTest(FixtureTestCase):

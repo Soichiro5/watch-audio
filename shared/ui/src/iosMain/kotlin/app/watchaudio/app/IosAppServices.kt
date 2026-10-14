@@ -7,6 +7,8 @@ import app.watchaudio.core.pipeline.ProcessingStatus
 import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.platform.IoDispatcher
 import app.watchaudio.core.search.SemanticSearch
+import app.watchaudio.core.summary.LlmProvider
+import app.watchaudio.core.summary.UnsupportedLlmProvider
 import kotlin.coroutines.resume
 import kotlin.math.abs
 import kotlin.time.Clock
@@ -69,6 +71,8 @@ class IosAppServices internal constructor(
     override val agentAccess: AgentAccess? = null,
     /** Search by meaning (#178); its model is downloaded when the search tab first asks. */
     override val semanticSearch: SemanticSearch? = null,
+    /** Hour summaries (#27) with Apple's on-device Foundation Models (#196). */
+    override val llm: LlmProvider = UnsupportedLlmProvider(),
 ) : AppServices {
     private var player: AVAudioPlayer? = null
 

@@ -128,7 +128,7 @@ sequenceDiagram
 Swift から見える Kotlin API（`ComposeApp` フレームワーク、静的）:
 
 ```swift
-IosAppGraph.shared.start(transcriber: SpeechAnalyzerTranscriber(), agent: AgentPlatform(), embedding: EmbeddingPlatform())   // App.init で 1 回（BGTask 登録を含む。agent はエージェント連携 §16、embedding は意味検索 §15）
+IosAppGraph.shared.start(transcriber: SpeechAnalyzerTranscriber(), agent: AgentPlatform(), embedding: EmbeddingPlatform(), llm: LanguageModelPlatform())   // App.init で 1 回（BGTask 登録を含む。agent はエージェント連携 §16、embedding は意味検索 §15、llm は 1 時間ごとの要約 §17）
 IosAppGraph.shared.inboxDirectoryPath()                               // 受信ファイルの退避先
 IosAppGraph.shared.ingest(manifestJson: json, filePath: path) { ackJson in … }  // ackJson: String?（nil = ACK しない）
 IosAppGraph.shared.setAppActive(active: true / false)                 // scenePhase .active / .background
@@ -265,6 +265,8 @@ iPhone アプリはマイクを使わない（録音は Watch だけ。再生は
 20. エージェント連携（#185、§16）: PC で `npx watch-audio-mcp pair` → iPhone の状態タブ「エージェント連携を開く」→「カメラで QR コードを読み取る」→ カメラの許可（初回だけ）→ ターミナルの QR（明るいテーマ・暗いテーマ）が読める → ローカルネットワークの許可（初回だけ）→ 両方に同じ 6 桁 → ペアリングできる。家の Wi-Fi とテザリングで、ON にしてから PC のエージェントが読めるまでの時間（mDNS で見つかるか、前回のアドレスでつながるか）。ON のままホーム画面に戻る・画面を消すと OFF になり、PC 側の呼び出しが答えなくなる（戻っても OFF）。ローカルネットワークを設定アプリで OFF にしてから ON → 「ローカルネットワークへのアクセスが許可されていない」の表示。カメラを拒否してから読み取り → 文字列の入力の案内。アプリを削除して入れ直したときに鍵が作り直され、ペアリングのやり直しになること。AP アイソレーションの Wi-Fi での表示。ON の 30 分間の電池消費。
 
 21. 意味検索（#178、§15）: Wi-Fi で検索タブを初めて開く → 「意味で探すためのモデルをダウンロード中 N%」→ 終わると「意味で探す準備中 N%」になり、言い回しの違うクエリ（例: 「サーバー代がいくら増えるって言ってた？」）で「意味が近い」の結果が出る。ダウンロードの所要時間、途中でアプリを裏に回して戻したときに続きから進むこと（診断ログの `model_download_start` の `bytes=` が減っている）を記録する。モバイル通信だけ・テザリング・省データモードの Wi-Fi では始まらず「Wi-Fi に接続したときにダウンロード」と出ること。初回の埋め込み（前面・電池では直近 48 時間の 50 チャンクまで、残りは充電中の BGProcessingTask）にかかる時間と電池、検索 1 回の時間（モデルの読み込みを含む初回と 2 回目）、モデルを読み込んだ間のメモリ（Xcode の Memory Report）、Release ビルドの App Store のサイズ（App Store Connect の「App のサイズ」）を記録する。
+
+22. 1 時間ごとの要約（#196、§17）: Apple Intelligence に対応した iPhone（iOS 26 以降、日本語）で、**機内モードのまま**タイムラインの「この日を要約」→ 時間帯ごとに要約と要点が出て、要点をタップするとその発話から再生される。1 日分（会話の多い日・少ない日）にかかる時間・発熱（診断ログの `summary_run` の `ms=`）・電池。実際の会話での拒否（「この時間帯は要約できませんでした」）の割合と、要点の根拠が合っているか。Apple Intelligence をオフにしたとき（「設定で Apple Intelligence をオンにすると使えます」）、言語を日本語以外にしたとき、モデルの準備中（初めてオンにした直後）の表示。Apple Intelligence に非対応の iPhone（例 iPhone 15）では「この端末では、端末内の AI による要約を使えません」と出て、ほかの機能（文字起こし・検索・再生）に影響しないこと。作成中にホーム画面に戻ると止まり、戻ってもう一度押すと続きから作ること。`rateLimited` が出るか（出たら「端末が混み合っているため…」）。iOS の更新（26.x → 27）で同じ日をもう一度要約して質を比べる。
 
 ## 12. 既知のリスク・制約
 
@@ -471,3 +473,26 @@ PC の AI エージェントが、本人が ON にしている間だけ、ペア
 - 実際の接続（CI `ios.yml` の「Agent access on the iOS simulator」、`.github/scripts/ios-agent-access.sh`）: CI のホストで本物の CLI（`tools/agent-bridge/e2e/emulator-host.ts`）を動かし、アプリをホストにした XCTest（`apps/ios/Tests/AgentAccessTests`）がアプリの `IosAgentAccess`（Keychain の鍵、Network.framework、共通の接続と道具）を画面と同じ呼び方で動かす。シミュレータはホストのネットワークを共有するので、CLI には `127.0.0.1` でつなぐ。他のステップは未署名（`CODE_SIGNING_ALLOWED=NO`）でビルドするが、シミュレータは未署名のアプリに Keychain を使わせない（`errSecMissingEntitlement`、-34018）ので、このステップだけ ad hoc 署名し、スクリプトがその場で書く Keychain のアクセスグループ（`keychain-access-groups`）を付ける（CI だけ。リポジトリに entitlements は置かない。署名した実機のアプリは自分のアプリ ID がアクセスグループになるので追加の entitlement は要らない）。(1) `testPair`: 文字起こしを入れ、CLI が出した文字列でペアリング、6 桁の確認コードが CLI と一致（スクリプトが比べる）、範囲の既定はテキストのみ。(2) `testServe`: ON → PC のエージェントの `search_transcripts` に答える → OFF で答えない → ON → **アプリが画面から外れると OFF**（戻っても OFF）→ ON → 取り消しで答えない。CLI 側は「答える / 答えない」の 6 回の切り替わりを順に確かめ、外向きの接続がないこと（no-egress のガード）も確かめる。`get_audio_clip` は音声を許可したペアリングの写しで WAV が返ることを確かめる（本物のペアリングの既定はテキストのみなので、CLI からの呼び出しは拒否される）。mDNS は CLI に告知させ、シミュレータの `NWBrowser` で見えたか（`AGENT_CHECK phase=mdns`）を記録する（合否には使わない。GitHub の macOS ランナーのシミュレータでは 10 秒で何も見えなかった（`seen=0`）ので、接続は前回のアドレス（ペアリング時の 127.0.0.1 + CLI のポート）の経路で確かめている。mDNS の経路は実機で確かめる）。
 - Kotlin 側の規則: `IosAgentTransportTest`（`shared/ui` の iosTest、CI の「Shared tests (iOS simulator)」）が、偽の Swift 側で、証明書を Keychain の鍵に 1 回だけ作ること・LAN の IP リテラル以外を Swift に渡さないこと（`8.8.8.8`・ホスト名は拒否、`[fe80::1]` は括弧を外して渡す）・ローカルネットワークの拒否を知らせること・フレームの往復を確かめる。
 - 実機でのみ確かめること（#60）: 下の「実機チェックリスト」20。
+
+## 17. 1 時間ごとの要約（#196）
+
+日別タイムラインの「この日を要約」（#27）で、Apple Intelligence に対応した iPhone の**端末内の Foundation Models**（`SystemLanguageModel`）が 1 時間ごとの要約と要点を作る。分け方・検査・保存・画面は共通のコード（[02 §6.10](../architecture/02-architecture.md#610-1-時間ごとの要約27)、[phone-ui.md §1.14](phone-ui.md#114-1-時間ごとの要約27)）で、iOS は `LlmProvider` の 1 つの実装だけを持つ。設計は [research/on-device-llm.md](../research/on-device-llm.md) §2.1・§5。
+
+| 部分 | ファイル | 内容 |
+| --- | --- | --- |
+| モデル（Swift） | `apps/ios/App/Llm/OnDeviceLanguageModel.swift` | `FoundationModels` を使う**ただ 1 つのファイル**（`tools/privacy-check` が検査）。Kotlin のフレームワークに依存しない純粋な Swift なので、`LanguageModelTests` がモデルなしで確かめられる |
+| つなぎ（Swift） | `LanguageModelPlatform.swift` | Kotlin の `IosLanguageModel` の実装（コールバック型。`UncheckedSendableBox`、`Task`）。生成は `LanguageModelTask` で取り消せる |
+| つなぎ（Kotlin） | `shared/ui/src/iosMain/.../IosLanguageModel.kt` | `IosLanguageModel`（Swift が実装する）と、それを共通の `LlmProvider` にする `IosLlmProvider`（`id = apple-fm`）。`IosAppGraph.start(…, llm:)` で受け取り `IosAppServices.llm` に渡す |
+
+- **使うのは `SystemLanguageModel` だけ**。使えるかは `SystemLanguageModel.default.availability` と `supportsLocale(ja_JP)` で確かめる。生成は `SystemLanguageModel(useCase: .general, guardrails: .permissiveContentTransformations)`（本人の会話の変換向けの guardrail。設計 §8 の 9）。Private Cloud Compute（`PrivateCloudComputeLanguageModel`）・他社のモデル（iOS 27 の `LanguageModel` プロトコル）・フィードバックの添付（`LanguageModelFeedbackAttachment`）は使わず、`tools/privacy-check` がどのファイルでも失敗にする。他社のモデルの Swift パッケージは `IOS_SWIFT_PACKAGES` の許可リストで止まる。PCC の entitlement も付けない（entitlements の許可リストは変えていない）。モデルは OS（Apple Intelligence）が入れ、アプリは URL を持たない。
+- **使えるかの対応**（`IosLlmProvider.availabilityOf`）: `available`（日本語に対応）→ 使える、`deviceNotEligible` → 「この端末では、端末内の AI による要約を使えません」、`appleIntelligenceNotEnabled` → 「設定で Apple Intelligence をオンにすると使えます」、`modelNotReady` → 「Apple Intelligence のモデルを準備しています」、日本語に非対応 → その旨、それ以外の理由 → 使えない扱い。
+- **長さ**: `contextSize`（iOS 26.4 で入ったが 26.0 まで back-deploy されている。iOS 26 は 4,096）と `tokenCount(for:)`（iOS 26.4 以降。それより前は -1 を返し、共通のコードが 1 文字 = 1 トークンで見積もる）。
+- **出力の形**: 共通のコードの `OutputSchema` を JSON（`OutputSchema.toJson()`、例は `shared/pipeline/testdata/summary/hour-summary-schema.json`）で受け取り、`DynamicGenerationSchema`（オブジェクト・最大件数つきの配列・文字列・整数）から `GenerationSchema` を作って guided generation（`respond(to:schema:includeSchemaInPrompt:options:)`、`sampling: .greedy`、`maximumResponseTokens`）。答えは `GeneratedContent.jsonString` で Kotlin に返し、共通のコードが検査する。呼び出しごとに新しい `LanguageModelSession`（前の会話を持ち越さない）。
+- **エラーの対応**（`OnDeviceLanguageModel.errorCode` → `IosLlmProvider.resultOf`）: `guardrailViolation`・`refusal` → 拒否（作り直さない）、`exceededContextWindowSize` → 文脈超過（共通のコードが部分を半分にする）、`rateLimited`・`concurrentRequests` → 混雑（その回を止める）、`assetsUnavailable` などそのほか → 失敗（エラーの種類だけを `hour_summary.last_error` と診断ログに残す。フレームワークのエラーでないものは `error_<ドメイン>_<コード>`。エラーの説明文は使わない）、取り消し → `cancelled`。
+- **いつ動くか**: 本人が「この日を要約」を押したときだけ、画面を開いている間（前面）。BGTask（充電中の自動作成）はまだ使わない（設計 §3 の案 A は評価と実機の確認のあと）。
+
+**検証**:
+
+- CI（`ios.yml` の「On-device language model on the iOS simulator」、`LanguageModelTests`。Kotlin のフレームワークなしのテスト）: 使えない理由ごとの対応、Kotlin の JSON（上の testdata。Kotlin 側は `SummarySchemaFixtureTest` が同じファイルと `SummaryPrompts.SCHEMA` を照合）から `GenerationSchema` が組み立てられること・壊れた JSON が失敗すること、エラーの対応、シミュレータでの `availability`・`contextSize`・`tokenCount` の記録（`LLM_AVAILABILITY` などをジョブサマリーに出す）。実際の生成（`testGeneratesASummaryOnTheModel`）は Apple Intelligence が要る。GitHub の macOS ランナー（仮想マシン、Xcode 26.6・iOS 26.5 のシミュレータ）では、`availability` は `available`・`supportsLocale(ja_JP)` は true・`contextSize` は 4,096 と答えるが、モデルの実体（OS のモデルカタログ）がなく、`tokenCount` も生成もモデルの外のエラー（`UnifiedAssetFramework` の 5000）で失敗した（2026-10-14 の CI）。そこでシミュレータでは、使えないとき、またはモデルの外のエラー・`assetsUnavailable` で失敗したときに、理由（コード）を記録して飛ばす。モデル自身のエラー（拒否・文脈超過など）なら失敗にする。実機でも「使える」と出てから生成で失敗しうるので、その場合はその時間帯の「要約に失敗しました」（エラーの種類は `error_<ドメイン>_<コード>`）になり、ほかの機能に影響しない。
+- Kotlin の側: `IosLlmProviderTest`（`shared/ui` の iosTest。偽の Swift 側で、使えない理由とエラーの対応、トークン数が分からないとき、スキーマの JSON、コルーチンの取り消しが Swift の取り消しに届くこと）。
+- 実機でのみ確かめること（#60）: 下の「実機チェックリスト」22。

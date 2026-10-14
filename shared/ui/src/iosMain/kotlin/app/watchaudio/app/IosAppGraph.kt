@@ -76,6 +76,8 @@ import platform.UIKit.UIDevice
  * user's export ([IosAppServices.exportDiagnostics]) and is cleared by "delete all data" (#159).
  * Semantic search (#178) keeps its downloaded model in `models/` and its vector cache in `search/`
  * there; the runs embed new transcripts after transcribing, and older ones while charging.
+ * Hour summaries (#27) use Apple's on-device Foundation Models through [IosLanguageModel] (#196),
+ * only when the user taps 「この日を要約」 on the day screen.
  *
  * Threading: [start] and [setAppActive] are called on the main thread; [ingest] from any thread.
  * Internal state is only mutated on the main dispatcher.
@@ -171,9 +173,10 @@ object IosAppGraph {
      * Opens the database and registers the background task. Call once from the app's `init`
      * (BGTaskScheduler requires registration before launch finishes). Idempotent.
      * [agent] reaches the Keychain, Network.framework and the camera for agent access (#185);
-     * [embedding] ONNX Runtime and the Wi-Fi-only model download for semantic search (#178).
+     * [embedding] ONNX Runtime and the Wi-Fi-only model download for semantic search (#178);
+     * [llm] Apple's on-device Foundation Models for hour summaries (#196).
      */
-    fun start(transcriber: IosSpeechTranscriber, agent: IosAgentPlatform, embedding: IosEmbeddingPlatform) {
+    fun start(transcriber: IosSpeechTranscriber, agent: IosAgentPlatform, embedding: IosEmbeddingPlatform, llm: IosLanguageModel) {
         if (started) return
         started = true
         this.transcriber = transcriber
@@ -271,6 +274,7 @@ object IosAppGraph {
             onPrepareEnglishModel = { scope.launch { if (syncEnglish()) requestTranscription() } },
             agentAccess = agentAccess,
             semanticSearch = semanticSearch,
+            llm = IosLlmProvider(llm),
         )
         // Agent access log retention (#184): also when the screen is never opened.
         scope.launch { runCatching { store.pruneAgentAccessLog(Clock.System.now().toEpochMilliseconds()) } }

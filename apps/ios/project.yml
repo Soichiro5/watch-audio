@@ -285,6 +285,23 @@ targets:
         CLANG_MODULES_AUTOLINK: NO
         EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
 
+  # Hour summaries on the iPhone (#196): Apple's on-device Foundation Models without the Kotlin
+  # framework. The availability codes, the schema built from Kotlin's JSON
+  # (shared/pipeline/testdata/summary) and the error codes run on any simulator; the generation
+  # itself needs Apple Intelligence, which GitHub's virtual macOS runners do not have, so it records
+  # the reason and skips (device checks: #60).
+  LanguageModelTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests/LanguageModelTests
+      - Tests/TestSupport
+      - path: App/Llm/OnDeviceLanguageModel.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).languagemodeltests
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   # The watch app is built and embedded through iosApp's target dependency; listing it
   # here as well would restrict the scheme to watchOS destinations.
@@ -328,3 +345,9 @@ schemes:
         EmbeddingTests: [test]
     test:
       targets: [EmbeddingTests]
+  LanguageModelTests:
+    build:
+      targets:
+        LanguageModelTests: [test]
+    test:
+      targets: [LanguageModelTests]

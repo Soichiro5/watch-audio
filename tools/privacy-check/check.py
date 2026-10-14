@@ -5,7 +5,8 @@ Static checks (repository files only, no build needed):
   * Android manifests: permissions against the allow-list, allowBackup="false", backup and
     data extraction rules excluding every domain, no cleartext / custom network config.
   * App sources (.kt/.java/.swift): network APIs, Wear DataClient and weak file protection only
-    in allow-listed files; URL literals only with allow-listed prefixes or in display-only files
+    in allow-listed files; Apple Foundation Models in one file only, never Private Cloud Compute,
+    another LanguageModel or feedback attachments (#196); URL literals only with allow-listed prefixes or in display-only files
     (license notices shown as text).
   * Gradle files: no analytics, crash reporting or network client dependencies.
   * iOS project.yml / committed plists: Info.plist keys, background modes, entitlements and the
@@ -59,6 +60,8 @@ class Report:
     network_sites: list[tuple[str, int, str, str]] = field(default_factory=list)
     # The same for the agent bridge CLI on the PC (tools/agent-bridge).
     bridge_sites: list[tuple[str, int, str, str]] = field(default_factory=list)
+    # Uses of policy.SINGLE_FILE_FRAMEWORKS: (path, line, api id, reason).
+    framework_sites: list[tuple[str, int, str, str]] = field(default_factory=list)
 
     def add(self, check: str, path: str, line: int, message: str) -> None:
         self.violations.append(Violation(check, path, line, message))
@@ -267,7 +270,16 @@ def check_sources(root: Path, report: Report) -> None:
         for api_id, regex, what in apis:
             for match in regex.finditer(code):
                 line = code.count("\n", 0, match.start()) + 1
-                if api_id in allowed:
+                framework = policy.SINGLE_FILE_FRAMEWORKS.get(api_id)
+                if framework is not None:
+                    if rel == framework[0]:
+                        used_apis.add((rel, api_id))
+                        report.framework_sites.append((rel, line, api_id, framework[1]))
+                    else:
+                        report.add("on-device", rel, line,
+                                   f"{match.group(0).strip()} ({what}) is only allowed in {framework[0]} "
+                                   "(policy.SINGLE_FILE_FRAMEWORKS)")
+                elif api_id in allowed:
                     used_apis.add((rel, api_id))
                     report.network_sites.append((rel, line, api_id, allowed[api_id]))
                 else:
@@ -291,6 +303,16 @@ def check_sources(root: Path, report: Report) -> None:
         for what, pattern in requirements:
             if not re.search(pattern, code, re.MULTILINE):
                 report.add("network", rel, 0, f"allowed network site no longer {what} (policy.ALLOWED_API_REQUIREMENTS)")
+    for api_id, (rel, _reason) in policy.SINGLE_FILE_FRAMEWORKS.items():
+        if (rel, api_id) not in used_apis:
+            report.add("on-device", rel, 0, f"stale allow-list entry: {api_id} is no longer used here "
+                       "(remove it from policy.SINGLE_FILE_FRAMEWORKS)")
+    for rel, requirements in policy.SINGLE_FILE_REQUIREMENTS.items():
+        path = root / rel
+        code = strip_comments(path.read_text(encoding="utf-8", errors="replace")) if path.is_file() else ""
+        for what, pattern in requirements:
+            if not re.search(pattern, code, re.MULTILINE):
+                report.add("on-device", rel, 0, f"no longer {what} (policy.SINGLE_FILE_REQUIREMENTS)")
     # Stale entries would make the list of network call sites (docs/architecture/02 §7.2) wrong.
     for rel, allowed in policy.ALLOWED_API_USES.items():
         for api_id in allowed:
@@ -672,6 +694,8 @@ def summary_markdown(report: Report) -> str:
         lines.append("No violations.")
     lines += ["", "Network call sites (policy.ALLOWED_API_USES):", ""]
     lines += [f"- `{path}:{line}` {api}: {reason}" for path, line, api, reason in report.network_sites] or ["- none"]
+    lines += ["", "On-device frameworks in one file each (policy.SINGLE_FILE_FRAMEWORKS):", ""]
+    lines += [f"- `{path}:{line}` {api}: {reason}" for path, line, api, reason in report.framework_sites] or ["- none"]
     lines += ["", "Agent bridge on the PC (policy.AGENT_BRIDGE_ALLOWED_API_USES):", ""]
     lines += [f"- `{path}:{line}` {api}: {reason}" for path, line, api, reason in report.bridge_sites] or ["- none"]
     return "\n".join(lines) + "\n"
