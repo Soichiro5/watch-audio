@@ -112,7 +112,8 @@ data class ExportProgress(val doneDays: Int, val totalDays: Int)
  *
  * Layout under the root folder [ExportPlan.baseName]:
  * - `README.md`, `export.json` ([ExportIndex])
- * - `markdown/<date>.md` ([renderDayMarkdown]) and `json/<date>.json` ([ExportDay]) per day
+ * - `markdown/<date>.md` ([renderDayMarkdown]) and `json/<date>.json` ([ExportDay]) per day, with
+ *   the day's hour summaries (#27) unless [ExportRequest.forBackup]
  * - `audio/<date>/<HHmmss>_<chunk UUID>.<ext>` when [ExportRequest.includeAudio]
  * - for [ExportRequest.forBackup], `backup/<date>.json` after each day's JSON and `backup.json`
  *   after `export.json` (`core/backup/BackupFormat.kt`)
@@ -195,6 +196,7 @@ class DataExporter(
                     marks = day.marks.size,
                     gaps = day.gaps.size,
                     audioFiles = included.size,
+                    summaries = day.summaries.size,
                 )
             }
             if (selection != null) {

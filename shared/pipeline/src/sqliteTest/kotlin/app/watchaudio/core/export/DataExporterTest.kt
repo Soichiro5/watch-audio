@@ -1,7 +1,11 @@
 package app.watchaudio.core.export
 
+import app.watchaudio.core.db.HighlightRecord
+import app.watchaudio.core.db.HourSummaryState
 import app.watchaudio.core.db.LocalStore
+import app.watchaudio.core.db.NewHourSummary
 import app.watchaudio.core.db.NewSegment
+import app.watchaudio.core.db.hourSourceHash
 import app.watchaudio.core.protocol.ChunkEndReason
 import app.watchaudio.core.timeline.dayWindow
 import app.watchaudio.testing.TempDir
@@ -180,5 +184,55 @@ class DataExporterTest {
         assertNull(exporter.plan(ExportRequest(ExportRange(oct11, oct11), true, tokyo, exportedAt)))
         assertNull(exporter.plan(ExportRequest(ExportRange(from = LocalDate(2026, 10, 13)), true, tokyo, exportedAt)))
         assertEquals(oct12, exporter.plan(ExportRequest(ExportRange(from = oct11), false, tokyo, exportedAt))?.firstDay)
+    }
+
+    /** Hour summaries (#27) are in the export (JSON and Markdown) but not in a backup. */
+    @Test
+    fun hourSummariesAreExportedButNotBackedUp() = runTest {
+        seed()
+        val hour = at(oct10, 7)
+        val segments = store.read { segmentsStartedBetween(hour, hour + 3_600_000L) }
+        store.transaction {
+            saveHourSummary(
+                NewHourSummary(
+                    hourStart = hour,
+                    timeZone = tokyo.id,
+                    state = HourSummaryState.DONE,
+                    summary = "朝の挨拶と会議の時間の確認。",
+                    provider = "fake",
+                    modelVersion = "1",
+                    promptVersion = 1,
+                    sourceHash = hourSourceHash(segments),
+                    createdAt = exportedAt,
+                    highlights = listOf(HighlightRecord("会議", "10時から", listOf(segments[1].id))),
+                ),
+            )
+        }
+        val (plan, _, files) = export(ExportRange(oct10, oct10), includeAudio = false)
+        val day = decodeExportDay(files.getValue("${plan.baseName}/json/$oct10.json").decodeToString())
+        val summary = day.summaries.single()
+        assertEquals(ExportHourSummary(
+            hourStart = hour,
+            hourEnd = hour + 3_600_000L,
+            state = ExportSummaryState.DONE,
+            summary = "朝の挨拶と会議の時間の確認。",
+            highlights = listOf(ExportHighlight("会議", "10時から", listOf(ExportCitation("b0", hour + 180_000)))),
+            provider = "fake",
+            modelVersion = "1",
+            createdAt = exportedAt,
+        ), summary)
+        assertEquals(1, decodeExportIndex(files.getValue("${plan.baseName}/export.json").decodeToString()).days.single().summaries)
+        val markdown = files.getValue("${plan.baseName}/markdown/$oct10.md").decodeToString()
+        assertTrue("## ${MarkdownText.SUMMARIES}" in markdown, markdown)
+        assertTrue("- **会議**: 10時から（07:03:00）" in markdown, markdown)
+
+        // A backup leaves them out.
+        val backupPlan = assertNotNull(exporter.plan(ExportRequest(ExportRange(oct10, oct10), false, tokyo, exportedAt, forBackup = true)))
+        val buffer = Buffer()
+        exporter.write(backupPlan, buffer)
+        val backup = readStoredZip(buffer.readByteArray())
+        val backupDay = backup.getValue("${backupPlan.baseName}/json/$oct10.json").decodeToString()
+        assertTrue("summaries" !in backupDay, backupDay)
+        assertTrue(decodeExportDay(backupDay).summaries.isEmpty())
     }
 }

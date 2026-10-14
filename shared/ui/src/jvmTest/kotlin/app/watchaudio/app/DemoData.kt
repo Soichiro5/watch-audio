@@ -65,6 +65,30 @@ internal object DemoData {
         record(start + 13 * 60 * MIN, until, ChunkEndReason.ROTATION)
     }
 
+    private val talk = listOf(
+        "明日の会議は十時からなので、資料は今日中に共有します",
+        "予算の見積もりは先週より少し増えそうだと聞きました",
+        "来週の水曜日に、もう一度みんなで集まって決めましょう",
+        "駅前のカフェはお昼の時間がとても混んでいるらしいです",
+        "週末は雨の予報なので、出かけるのは日曜日にしようか",
+    )
+
+    /**
+     * A talking hour for the hour summaries (#27): chunk `t<hour>` at [hour]:00 (Tokyo time) with
+     * [utterances] utterances 20 s apart, its audio at `t<hour>.m4a`; [marks] are offsets in it.
+     */
+    suspend fun seedTalk(store: LocalStore, day: LocalDate, timeZone: TimeZone, hour: Int, utterances: Int = 10, transcribed: Boolean = true, marks: List<Long> = emptyList()) {
+        val start = dayWindow(day, timeZone).start + hour * 60 * MIN
+        val id = "t$hour"
+        store.transaction {
+            insertChunk(manifest(id, start, CHUNK, false, ChunkEndReason.ROTATION, timeZone).copy(markOffsetsMs = marks), "$id.m4a", start + CHUNK)
+            if (transcribed) {
+                markTranscribing(id)
+                saveTranscript(id, (0 until utterances).map { i -> NewSegment(start + i * 20_000L, start + i * 20_000L + 4_000, talk[i % talk.size], "ja") }, "demo")
+            }
+        }
+    }
+
     private fun manifest(id: String, start: Long, duration: Long, silent: Boolean, reason: ChunkEndReason, timeZone: TimeZone) =
         ChunkManifest(
             chunkId = id,

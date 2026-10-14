@@ -393,4 +393,68 @@ internal val MIGRATIONS: List<List<String>> = listOf(
         """,
         "CREATE INDEX idx_agent_access_at ON agent_access(at)",
     ),
+    // 11: hour summaries (#27, docs/research/on-device-llm.md §4.3). One row per local hour
+    // (hour_start, epoch ms; the hour is [hour_start, hour_start + 1 h)) made by an on-device LLM
+    // (provider, model_version), with up to three highlights, each citing the segments it is based
+    // on. source_hash is the hash of the hour's segments (ids and texts, hourSourceHash) the summary
+    // was made from. Summaries are derived data:
+    // - any change to the hour's segments marks it stale (the triggers below), so the screen shows
+    //   「更新待ち」 and the next run makes it again; a deleted segment also drops its citations;
+    // - deleting a chunk deletes the summaries of the hours it overlaps (chunk_summary_ad), so
+    //   「この日のデータを削除」 and 「すべてのデータを削除」 take the summaries with them;
+    // - exports (#155) include them, backups do not (a restore makes them again).
+    // The indexes on the child keys keep the cascades from scanning the tables.
+    listOf(
+        """
+        CREATE TABLE hour_summary (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            hour_start     INTEGER NOT NULL,
+            time_zone      TEXT    NOT NULL,
+            state          TEXT    NOT NULL,
+            summary        TEXT,
+            provider       TEXT    NOT NULL,
+            model_version  TEXT,
+            prompt_version INTEGER NOT NULL,
+            source_hash    TEXT    NOT NULL,
+            stale          INTEGER NOT NULL DEFAULT 0,
+            attempts       INTEGER NOT NULL DEFAULT 0,
+            last_error     TEXT,
+            created_at     INTEGER NOT NULL
+        )
+        """,
+        "CREATE UNIQUE INDEX idx_hour_summary_hour ON hour_summary(hour_start)",
+        """
+        CREATE TABLE summary_highlight (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            summary_id INTEGER NOT NULL REFERENCES hour_summary(id) ON DELETE CASCADE,
+            ord        INTEGER NOT NULL,
+            title      TEXT    NOT NULL,
+            body       TEXT    NOT NULL
+        )
+        """,
+        "CREATE INDEX idx_highlight_summary ON summary_highlight(summary_id)",
+        """
+        CREATE TABLE highlight_citation (
+            highlight_id INTEGER NOT NULL REFERENCES summary_highlight(id) ON DELETE CASCADE,
+            segment_id   INTEGER NOT NULL REFERENCES transcript_segment(id) ON DELETE CASCADE,
+            PRIMARY KEY (highlight_id, segment_id)
+        )
+        """,
+        "CREATE INDEX idx_citation_segment ON highlight_citation(segment_id)",
+        """
+        CREATE TRIGGER segment_summary_ai AFTER INSERT ON transcript_segment BEGIN
+            UPDATE hour_summary SET stale = 1 WHERE hour_start > new.start_at - 3600000 AND hour_start <= new.start_at;
+        END
+        """,
+        """
+        CREATE TRIGGER segment_summary_ad AFTER DELETE ON transcript_segment BEGIN
+            UPDATE hour_summary SET stale = 1 WHERE hour_start > old.start_at - 3600000 AND hour_start <= old.start_at;
+        END
+        """,
+        """
+        CREATE TRIGGER chunk_summary_ad AFTER DELETE ON audio_chunk BEGIN
+            DELETE FROM hour_summary WHERE hour_start > old.started_at - 3600000 AND hour_start < old.ended_at;
+        END
+        """,
+    ),
 )

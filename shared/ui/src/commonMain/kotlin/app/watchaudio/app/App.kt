@@ -48,6 +48,7 @@ import app.watchaudio.app.ui.AgentCallbacks
 import app.watchaudio.app.ui.AgentScreen
 import app.watchaudio.app.ui.AppIcons
 import app.watchaudio.app.ui.DayScreen
+import app.watchaudio.app.ui.SummaryCallbacks
 import app.watchaudio.app.ui.BackupCallbacks
 import app.watchaudio.app.ui.ExportCallbacks
 import app.watchaudio.app.ui.LicensesScreen
@@ -185,6 +186,12 @@ private fun MainTabs(
                 onDeleteDay = dayViewModel::requestDeleteDay,
                 onConfirmDeleteDay = dayViewModel::confirmDeleteDay,
                 onCancelDeleteDay = dayViewModel::cancelDeleteDay,
+                summaryCallbacks = SummaryCallbacks(
+                    onSummarizeDay = dayViewModel::summarizeDay,
+                    onStop = dayViewModel::stopSummaries,
+                    onRetry = dayViewModel::retrySummary,
+                    onOpenHighlight = dayViewModel::openHighlight,
+                ),
                 modifier = modifier,
             )
             Tab.SEARCH -> {

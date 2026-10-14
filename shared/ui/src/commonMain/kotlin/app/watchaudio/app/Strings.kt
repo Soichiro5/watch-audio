@@ -44,10 +44,39 @@ object Strings {
             "そのバックアップから戻すと再生できます（文字起こしは残っています）。"
     const val DELETE_DAY = "この日のデータを削除"
     fun confirmDeleteDay(date: String, count: Int) =
-        "$date に始まった録音 ${count}件の音声と文字起こしを、この端末から削除します。元に戻せません。"
+        "$date に始まった録音 ${count}件の音声・文字起こしと、その時間の要約を、この端末から削除します。元に戻せません。"
     const val DELETE = "削除する"
     const val CANCEL = "キャンセル"
     const val DELETING = "削除中…"
+
+    // Hour summaries on the day screen (#27, docs/research/on-device-llm.md §4.6)
+    const val SUMMARIES = "1 時間ごとの要約"
+    const val SUMMARIZE_DAY = "この日を要約"
+    const val SUMMARY_STOP = "中止"
+    const val SUMMARY_RETRY = "もう一度"
+    const val SUMMARY_UNSUPPORTED = "この端末では、端末内の AI による要約を使えません"
+    const val SUMMARY_TURNED_OFF = "設定で Apple Intelligence をオンにすると使えます"
+    const val SUMMARY_LANGUAGE_NOT_SUPPORTED =
+        "端末内の AI が日本語に対応していないため、要約を使えません。Apple Intelligence の言語の設定を確かめてください"
+    /** The OS prepares its model (iOS `modelNotReady`). */
+    const val SUMMARY_PREPARING = "Apple Intelligence のモデルを準備しています。準備ができると使えます"
+    fun summaryDownloading(percent: String) = "要約のモデルをダウンロードしています… $percent"
+    fun summaryNeedsDownload(size: String) = "要約には、要約のモデル（約 $size）のダウンロードが必要です"
+    fun summaryTodo(hours: Int) = "${hours} 時間分を要約できます"
+    fun summarizing(done: Int, total: Int) = "要約しています（$done/$total 時間）"
+    const val SUMMARY_ALL_DONE = "この日の要約はできています"
+    const val SUMMARY_NOTE = "端末内の AI が作った要約です。要点をタップすると、その場面の発話に移って再生します。"
+    const val SUMMARY_NOT_YET = "まだ要約していません"
+    const val SUMMARY_GENERATING = "要約しています…"
+    const val SUMMARY_LITTLE_SPEECH = "会話が少ないため要約していません"
+    const val SUMMARY_REFUSED = "この時間帯は要約できませんでした"
+    const val SUMMARY_FAILED = "要約に失敗しました"
+    const val SUMMARY_STALE = "会話が更新されたので、要約を作り直します"
+    const val SUMMARY_WAIT_TRANSCRIPTION = "文字起こしが終わると要約できます"
+    const val SUMMARY_HOUR_NOT_OVER = "この時間が終わると要約できます"
+    const val SUMMARY_RATE_LIMITED = "端末が混み合っているため、途中で止めました。しばらくしてから、もう一度お試しください"
+    const val SUMMARY_RUN_FAILED = "要約を作れませんでした。原因は診断ログに記録されています"
+    fun summaryDensity(percent: String) = "会話の量 $percent"
 
     fun coverageDetail(covered: String, day: String) = "$covered / $day"
     fun audioAndSilent(audio: String, silent: String) = "音声 $audio ・ 無音 $silent"
@@ -208,7 +237,7 @@ object Strings {
     const val DELETE_ALL = "すべてのデータを削除"
     const val DELETE_ALL_WORD = "削除"
     const val DELETE_ALL_NOTE =
-        "すべての録音・音声・文字起こし、診断ログとエージェント連携のアクセス履歴をこの端末から削除します（設定と PC のペアリングは残ります）。" +
+        "すべての録音・音声・文字起こし・要約、診断ログとエージェント連携のアクセス履歴をこの端末から削除します（設定と PC のペアリングは残ります）。" +
             "元に戻せません。続けるには「削除」と入力してください。"
     const val DELETE_ALL_INPUT = "確認のため「削除」と入力"
     const val DELETE_ALL_CONFIRM = "すべて削除する"

@@ -115,6 +115,9 @@ erDiagram
   TRANSCRIPT_SEGMENT ||--|| SEGMENT_FTS : indexed_by
   AUDIO_CHUNK ||--o{ PASSAGE_EMBEDDING : embedded_as
   EMBEDDING_MODEL ||--o{ PASSAGE_EMBEDDING : produced
+  HOUR_SUMMARY ||--o{ SUMMARY_HIGHLIGHT : has
+  SUMMARY_HIGHLIGHT ||--o{ HIGHLIGHT_CITATION : cites
+  TRANSCRIPT_SEGMENT ||--o{ HIGHLIGHT_CITATION : cited_by
 ```
 
 チャンク・エンジンは**整数のキーで参照**する（マイグレーション 6、#94）。Watch が採番した UUID は `audio_chunk.uuid` にだけ持ち、セグメントと印は `audio_chunk.id`（INTEGER PRIMARY KEY。VACUUM で番号が変わらない）を指す。整数のキーは `shared/db` の中だけで使い、公開 API（`ChunkRecord.id`・`SegmentRecord.chunkId`・`SegmentRecord.engine`）は従来どおり UUID とエンジン名の文字列で返す。
@@ -133,19 +136,20 @@ erDiagram
 | `embedding_state` | 1 行だけ: token（この DB を表す乱数。別の DB から作ったキャッシュを使わない）, deletion_floor（捨てた削除記録の最大の seq） |
 | `agent_pairing` | id, name（PC の名前）, key_fingerprint（PC の橋渡しの公開鍵の SHA-256、base64url。TLS で固定）, address（最後につながった `host:port`）, scope_days（読める期間。既定 30）, allow_audio（音声も読めるか。既定 0）, created_at, revoked_at（取り消した時刻。行は履歴のために残す。有効な行は鍵ごとに 1 つ）（マイグレーション 10、§6.9） |
 | `agent_access` | id, at, pairing_id（`agent_pairing.id`）, tool（道具の名前）, outcome（OK / DENIED / RATE_LIMITED / REVOKED / ERROR）, item_count（返した件数）, query（検索語・日付・発話 ID）。端末から出さない（バックアップ・書き出しに入れない）。「すべてのデータを削除」で消える（マイグレーション 10、§6.9） |
+| `hour_summary` | id, hour_start（その地域の時刻の正時、エポックミリ秒。一意。時間帯は `[hour_start, hour_start + 1 時間)`）, time_zone, state（DONE / LITTLE_SPEECH / REFUSED / FAILED）, summary（2〜3 文）, provider（`LlmProvider.id`。例 `apple-fm`）, model_version, prompt_version, source_hash（作ったときのその時間帯のセグメントの ID と本文のハッシュ）, stale（セグメントが変わった。トリガが付ける）, attempts（続けて失敗した回数）, last_error（エラーの種類だけ。内容は入れない）, created_at（マイグレーション 11、#27・§6.10） |
+| `summary_highlight` | id, summary_id（`hour_summary.id`、要約と一緒に消える）, ord, title, body（要点。最大 3 件） |
+| `highlight_citation` | highlight_id, segment_id（`transcript_segment.id`。要点の根拠の発話。発話が消えると引用も消える） |
 | `backup_state` | 1 行だけ（id = 1）: epoch（今のバックアップのエポック）, deleted_epoch（最後にチャンクを削除したエポック）, saved_at・saved_diff・saved_epoch（最後に保存できたバックアップの作成時刻・差分か・含むエポック）, full_saved_at・full_epoch（その元の全体のバックアップ）, diffs_since_full（マイグレーション 8、§6.7） |
 
 時刻はすべてエポックミリ秒。
 
 ### 5.2 将来（P2）のテーブル（構想、未実装）
 
-AI 要約・チャット・意味検索・体調/場所に着手するときに、マイグレーションを追記して作る。名前とカラムは構想段階。
+チャット・記憶・体調/場所に着手するときに、マイグレーションを追記して作る。名前とカラムは構想段階。1 時間ごとの要約（`hour_review` / `highlight` の構想）は #27 で `hour_summary` / `summary_highlight` / `highlight_citation` として作った（§5.1・§6.10）。
 
 ```mermaid
 erDiagram
-  HOUR_REVIEW ||--o{ HIGHLIGHT : produces
-  HIGHLIGHT }o--o{ TRANSCRIPT_SEGMENT : cites
-  DAY ||--o{ HOUR_REVIEW : has
+  DAY ||--o{ HOUR_SUMMARY : has
   DAY ||--o| DAILY_REFLECTION : has
   MEMORY_FACT }o--o{ TRANSCRIPT_SEGMENT : sourced_from
   CHAT_THREAD ||--o{ CHAT_MESSAGE : has
@@ -155,8 +159,6 @@ erDiagram
 
 | テーブル | 主なカラム |
 | --- | --- |
-| `hour_review` | day, hour, density_score, summary, state, provider, model |
-| `highlight` | id, hour_review_id, title, body, cited_segment_ids |
 | `daily_reflection` | day, body |
 | `memory_fact` | id, kind(person/preference/plan/…), text, active, source_segment_ids |
 | `chat_thread` / `chat_message` | role, content, cited_segment_ids |
@@ -349,7 +351,7 @@ Watch は発話に関係なく約 5 分ごとにチャンクを区切るので�
 
 ### 6.5 将来（P2）: AI プロバイダ（BYOK）
 
-未実装の構想。HTTP クライアントや SDK は着手時に決める。端末内の LLM（Apple Foundation Models・Android で動かすモデル）で 1 時間ごとの要約を先に作る案は [research/on-device-llm.md](../research/on-device-llm.md)（#39、提案。下の `LlmProvider` の最小の部分を先に作る）。
+未実装の構想。HTTP クライアントや SDK は着手時に決める。端末内の LLM で 1 時間ごとの要約を先に作った（§6.10、#27。設計は [research/on-device-llm.md](../research/on-device-llm.md)）。そのための `LlmProvider` の最小の部分（使えるかの確認・文脈の大きさ・トークン数・形の決まった出力の生成）は `shared/pipeline` の `app.watchaudio.core.summary` にある。BYOK は同じインターフェースの別の実装として足す（下は BYOK のときの構想）。
 
 ```kotlin
 interface LlmProvider {
@@ -393,6 +395,7 @@ watch-audio-2026-10-04_2026-10-10/
 | `chunks[]`（`ExportChunk`） | `id`（UUID）、`sessionId`、`deviceId`、`source`（`wearos` / `watchos`）、`startedAt`、`endedAt`、`timeZone`（Watch の）、`endReason`（`rotation`・`charging` など、マニフェストと同じ値）、`transcription`（`done` / `pending` / `failed` / `none` = 無音）、`audio`（無音チャンクは省略。`codec`・`sizeBytes`・`sha256`・`purgedAt`（端末から削除した時刻。保持期間またはオフロード）・`file`（ZIP 内のパス。含めなかったときは省略）・`backedUpAt`（その音声を入れた暗号化バックアップの作成時刻、§6.8。なければ省略）） |
 | `segments[]`（`ExportSegment`） | `chunkId`、`startAt`、`endAt`、`text`、`lang`（不明なら省略）、`engine` |
 | `marks[]`（`ExportMark`） | `chunkId`、`at` |
+| `summaries[]`（`ExportHourSummary`、#27） | その日の時間帯の 1 時間ごとの要約（§6.10。ないときはキーごと省略）: `hourStart`・`hourEnd`、`state`（`done` / `little_speech` / `refused` / `failed`）、`summary`、`highlights`（`title`・`body`・`citations`（根拠の発話を `chunkId` と `startAt` で指す））、`stale`（作ったあとに文字起こしが変わった）、`provider`・`modelVersion`・`createdAt`。`export.json` の日ごとの `summaries` は件数。Markdown には「1 時間ごとの要約」の節（要約と要点、要点の根拠の時刻）を足す。**暗号化バックアップには入れない**（作り直せる派生データ） |
 | `gaps[]`（`ExportGap`） | `start`、`end`、`cause`（`stopped` + `endReason` / `missing` = 録音中のはずが届いていない / `awaiting` = 書き出し時点で転送待ち）。タイムラインと同じ規則（§9.2）で、日と書き出し時刻で切る。最初の録音より前は含めない |
 
 エラーの扱い: 書き出しの失敗（保存先の容量不足など）は決まった日本語の文言を出し、診断ログには `data_export_failed error=<型>` だけを書く（#135）。成功時は `data_exported`（日数・チャンク数・音声ファイル数だけ。本文は書かない）。途中で失敗・キャンセルしたファイルは消す（Android: 作った文書を削除、iOS: 一時ファイルを削除）。
@@ -629,6 +632,23 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 
 残り: 実機での確認（実際の Wi-Fi・テザリング・Android 17 / iOS のローカルネットワークの許可・カメラでの QR・電池）は Android #61、iOS #60。CLI の配布（npm への公開、Claude Desktop の拡張機能）は配布の作業で決める。
 
+### 6.10 1 時間ごとの要約（#27）
+
+ためた会話を、**端末内の LLM** で 1 時間ごとに要約する。各時間帯に「要約（2〜3 文）」と「要点（最大 3 件。見出し・内容・根拠の発話）」を作り、日別タイムラインに出す。要点から根拠の発話に移って再生できる。設計と調査は [research/on-device-llm.md](../research/on-device-llm.md)（#39）。
+
+- **いつ作るか**: 今は日別タイムラインの「この日を要約」を押したときだけ、画面を開いている間に 1 時間ずつ作る（オーナーの決定 2026-10-13）。画面を閉じる・アプリが裏に回る・日を変える・「中止」で止まり、作り終えた時間帯は残る。充電中の自動作成（設計 §3 の案 A）は、評価と実機の確認のあと同じ `SummaryRun` で足す（データの形は同じ）。
+- **LLM**: `LlmProvider`（`shared/pipeline` の `app.watchaudio.core.summary`）。端末ごとに違うのはこの実装だけ。iPhone は Apple Foundation Models の `SystemLanguageModel`（#196、[ios-watchos.md](../platforms/ios-watchos.md)）。Android は方式が未定で、`UnsupportedLlmProvider`（「この端末では使えません」）のまま。`AppServices.llm` の既定がこれなので、`if (platform)` の分岐はない。
+- **小さい文脈に合わせた分け方**（`PromptLines`・`HourSummarizer`）: 2 秒未満の間でつながる短いセグメントを 60 文字程度まで 1 行にまとめ、行ごとに短い番号（`[12] 発話`）を振る。**DB の ID はプロンプトに載せない**（行が指すセグメントは共通のコードが持つ）。Mark の前後 2 分の行には `★` を付け、要点で優先させる。1 回の入力の上限は `文脈 − 指示 − 出力の形 − 出力の上限（500）− 余白（64）` トークン（`countTokens` で数え、数えられないときは 1 文字 = 1 トークン）。1 時間分が入らなければ、入る大きさの部分に分けてそれぞれ別の呼び出しで要約し、部分の結果をまとめる（まとめも入らなければ、入る組に分けて何段かでまとめる）。4,096 トークンの文脈で 1 時間 20,000 文字なら、部分 7〜9 回 + まとめ 1 回。プラットフォームが入力の超過を返した部分は半分に分けて作り直す。
+- **作らない時間帯**: 文字起こし待ちのチャンクがある時間帯、今の時間帯（終わっていない）。文字数が 200 文字未満の時間帯は LLM を呼ばず「会話が少ない」（`LITTLE_SPEECH`）として保存する。
+- **出力の検査**（`parseSummaryOutput`）: 出力の形（`OutputSchema`。iOS では guided generation の型）に合わない答えは 1 回だけ作り直す。プロンプトにない行番号（時間帯の外を含む）は捨て、根拠が 1 つも残らない要点は捨てる（保存の直前にも、その時間帯の発話でない引用を捨てる）。文字数の上限を超えた部分は切る。
+- **保存**（マイグレーション 11、§5.1）: 1 時間に 1 行（`hour_summary`）と要点（`summary_highlight`）・引用（`highlight_citation`）。保存の直前に、読んだセグメントが今もそのままか（`source_hash`）を確かめ、変わっていれば保存しない。セグメントの追加・削除（再認識・境界の結合・復元）はトリガが `stale = 1` にし、画面は「会話が更新されたので、要約を作り直します」と出して次に押したときに作り直す。
+- **失敗**: 失敗はその時間帯の `FAILED`（`last_error` はエラーの種類だけ）になり、ほかの時間帯・文字起こし・検索には影響しない。本人が「もう一度」か「この日を要約」を押したときだけ作り直す。内容による拒否（`REFUSED`）は作り直さない。OS が混み合っている（`rateLimited`）ときは、その回を止めて残りを次に回す。診断ログには `summary_run`（時間帯の数・成否・時間）と `summary_failed`（時刻とエラーの種類）だけを書き、本文は書かない。
+- **情報量のスコア**（`HourDensity`）: 時間帯の発話の時間（15 分で 1）と文字数（6,500 文字で 1）の平均。LLM を使わずに共通のコードで計算し、時間帯の行に小さなバーで出す（#28 のホーム画面でも使う）。
+- **削除・書き出し・バックアップ**: チャンクを削除すると、そのチャンクが重なる時間帯の要約を消す（トリガ。「この日のデータを削除」もこれで消える）。「すべてのデータを削除」は全部消す。データの書き出し（§6.6）には入れ、暗号化バックアップ（§6.7）には入れない（作り直せる派生データ。復元のあとに押せば作られる）。
+- **送信**: しない。プロンプトに載るのは文字起こしの本文と印だけで、型の上で音声は渡せない（`LlmRequest` は文字列だけ）。iPhone は端末内のモデルだけを使い、Private Cloud Compute・他社のモデルは使わない（§7.3 で検査）。
+
+テスト: `SummaryQueriesTest`（`shared/db` の `sqliteTest`。保存・`source_hash` の確認・時間帯の外の引用・古い印・チャンクの削除と全削除・v10 からの更新）、`PromptLinesTest`・`SummaryOutputTest`・`HourSummarizerTest`・`DaySummaryPlanTest`（`commonTest`。`FakeLlmProvider` で 4,096 / 8,192 / 32K の文脈と 20,000 文字の時間帯、何段かのまとめ、拒否・混雑・失敗・壊れた出力）、`SummaryRunTest`（`sqliteTest`。保存と引用、失敗が時間帯に留まること、中止、更新で作り直し）、`DataExporterTest`（書き出しに入り、バックアップに入らない）、`SummaryViewModelTest`・`AppUiTest`（`shared/ui`。§4.6 の状態とスクリーンショット `summary-*.png`）。iPhone の Swift の部分は [ios-watchos.md](../platforms/ios-watchos.md) の節。
+
 ## 7. セキュリティ・プライバシー
 
 | 項目 | 方針 |
@@ -636,11 +656,11 @@ ZIP は前から順に読める形（各エントリーのローカルヘッダ�
 | 保存 | アプリサンドボックス内のみ（§7.1）。iOS・watchOS は `Application Support/WatchAudio`（ファイル保護クラス `CompleteUntilFirstUserAuthentication` を明示。ロック中の録音・送信・BGTask からも読める）、Android は内部ストレージ（`files/`） |
 | バックアップ | OS バックアップの対象外（データを端末外に出さないため。§7.1）。Android / Wear OS は `allowBackup=false` とバックアップ除外ルール、iOS・watchOS は保存先に `NSURLIsExcludedFromBackupKey`。代わりに、ユーザーが状態タブの「暗号化バックアップ」を押したときだけ、パスフレーズで暗号化したファイルをユーザーが選んだ保存先に書く（§6.7、#40）。パスフレーズと鍵は端末の外に出さず、保存もしない。アプリが自動でクラウドへ送ることはない |
 | API キー | 現在は扱わない。将来（P2）の BYOK では Keychain（`ThisDeviceOnly`）/ Android Keystore にだけ保存する |
-| 外部送信 | なし（ネットワーク利用はモデル（文字起こし・意味検索の埋め込み）のダウンロードと、本人がエージェント連携を ON にしている間の、ペアリングした自分の PC への LAN 内の接続（Android、iPhone はアプリを画面に出している間だけ。§6.9）だけ。§7.2、CI で検査 §7.3）。意味検索のクエリ・埋め込み・ベクトルも端末内だけで扱う（§6.4）。将来（P2）に AI プロバイダ（テキストのみ、ユーザーが設定した場合）、本人の AI エージェントへの LAN 内での受け渡し（UC11。ペアリングした PC の橋渡し CLI へ、本人が ON にした間だけスマホからつなぐ。相互 TLS 1.3、既定はテキストのみ・直近 30 日、アクセス履歴は端末内（90 日）。中継サーバーは持たない。エージェントがクラウドの LLM を使う場合、取り出した分はその提供元に届く。決定の内容は [research/agent-access.md](../research/agent-access.md) §6。Android・iOS とも実装済み（§6.9、§7.2））、OS ジオコーダを検討（追加時は §7.3 の許可リストを更新）。解析 SDK・広告 SDK・クラッシュ送信 SDK は入れない |
+| 外部送信 | なし（ネットワーク利用はモデル（文字起こし・意味検索の埋め込み）のダウンロードと、本人がエージェント連携を ON にしている間の、ペアリングした自分の PC への LAN 内の接続（Android、iPhone はアプリを画面に出している間だけ。§6.9）だけ。§7.2、CI で検査 §7.3）。意味検索のクエリ・埋め込み・ベクトルも端末内だけで扱う（§6.4）。1 時間ごとの要約も端末内の LLM だけで作る（§6.10。iPhone は Apple の端末内のモデル `SystemLanguageModel`。Private Cloud Compute・他社のモデル・フィードバックの添付は使わない）。将来（P2）に AI プロバイダ（テキストのみ、ユーザーが設定した場合）、本人の AI エージェントへの LAN 内での受け渡し（UC11。ペアリングした PC の橋渡し CLI へ、本人が ON にした間だけスマホからつなぐ。相互 TLS 1.3、既定はテキストのみ・直近 30 日、アクセス履歴は端末内（90 日）。中継サーバーは持たない。エージェントがクラウドの LLM を使う場合、取り出した分はその提供元に届く。決定の内容は [research/agent-access.md](../research/agent-access.md) §6。Android・iOS とも実装済み（§6.9、§7.2））、OS ジオコーダを検討（追加時は §7.3 の許可リストを更新）。解析 SDK・広告 SDK・クラッシュ送信 SDK は入れない |
 | 診断ログ | 処理の記録（時刻・ID・処理時間・エラーの種類、異常終了）を端末内の CSV（上限約 1 MB）に残す。文字起こしの本文・音声・例外メッセージは含めない。端末外へは、ユーザーが状態タブの「診断ログを書き出す」から共有先を選んだときだけ出る（#77、[impl/android-phone.md §4.2](../platforms/android-phone.md#42-診断ログ77)） |
 | 書き出し | ユーザーが状態タブの「データの書き出し」を押したときだけ、ユーザーが選んだ保存先にだけ書く（Android: SAF の保存ダイアログで作った文書へ直接、iOS: 一時ファイル → 共有シート。閉じたら一時ファイルを削除）。アプリは通信しない（§6.6、#155） |
 | 同意 | 初回オンボーディングで「録音対象者への告知」の注意喚起。Watch に録音中インジケータを常時表示 |
-| 削除 | 「この日のデータを削除」（その日に始まったチャンクの音声・文字起こし・マーク）と「すべてのデータを削除」（全録音・文字起こし・音声ファイルとスマホの診断ログ、エージェントのアクセス履歴（検索語を含む、§6.9）。DB は `VACUUM` で縮める。設定とエージェントのペアリングは残す。#159）。どちらもアプリ内の確認ステップ必須（全削除は「削除」と入力）。システムダイアログは使わない。AI 設定・API キーは実装時に全削除の対象に加える |
+| 削除 | 「この日のデータを削除」（その日に始まったチャンクの音声・文字起こし・マークと、それらが重なる時間帯の 1 時間ごとの要約（§6.10））と「すべてのデータを削除」（全録音・文字起こし・要約・音声ファイルとスマホの診断ログ、エージェントのアクセス履歴（検索語を含む、§6.9）。DB は `VACUUM` で縮める。設定とエージェントのペアリングは残す。#159）。どちらもアプリ内の確認ステップ必須（全削除は「削除」と入力）。システムダイアログは使わない。AI 設定・API キーは実装時に全削除の対象に加える |
 
 ### 7.1 保存場所と保護（#76）
 

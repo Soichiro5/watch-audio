@@ -1,7 +1,7 @@
 # スマホ UI（shared/ui）
 
 Compose Multiplatform で Android / iOS 共通のスマホ UI を実装している（#19, #23, #25, #32, #43 の UI 部分、#33 ストレージ管理）。
-目的は「Watch が録り続けたデータがスマホに溜まっていく様子が**見えて**、その中から**探せる**」こと。AI 要約・チャットは対象外。
+目的は「Watch が録り続けたデータがスマホに溜まっていく様子が**見えて**、その中から**探せる**」こと。端末内の LLM による 1 時間ごとの要約（#27、§1.14）がある。チャットは対象外。
 
 ## 1. 画面構成
 
@@ -9,7 +9,7 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
 
 | タブ | 内容 |
 | --- | --- |
-| **タイムライン** | 日付の前後移動（未来日へは進めない・「今日」に戻るボタン）、録音カバー率、24 時間バー、録音できていない時間の一覧、その日の文字起こし（時刻 + テキスト）。発話をタップすると、その位置から音声を再生（再生できる発話には ▶ を表示）。リスト末尾に「この日のデータを削除」（§1.4） |
+| **タイムライン** | 日付の前後移動（未来日へは進めない・「今日」に戻るボタン）、録音カバー率、24 時間バー、録音できていない時間の一覧、「1 時間ごとの要約」（§1.14）、その日の文字起こし（時刻 + テキスト）。発話をタップすると、その位置から音声を再生（再生できる発話には ▶ を表示）。リスト末尾に「この日のデータを削除」（§1.4） |
 | **検索** | 文字起こし全体を部分一致検索（FTS5 trigram。2 文字以下は LIKE）。一致箇所を太字 + 背景色で強調。意味検索のあるプラットフォーム（Android、#24）では、意味の近い会話も合わせて出す（§1.12）。結果をタップするとその日のタイムラインへ移動し、該当発話までスクロール・ハイライトして再生 |
 | **状態** | Watch からの受信状況（最終受信時刻、10 分以上途絶えたら警告）、文字起こしモデルの状態（未取得 / ダウンロード中 / 準備完了 / エラー）とダウンロード操作、通知設定（途絶アラートのオン/オフ、おやすみ時間）、保存データの統計、**ストレージ**（容量の内訳・空き容量の警告・音声の保持期間・すべてのデータを削除。§1.4）、「エージェント連携」（対応するプラットフォームだけ、§1.13）、プライバシー表記「データはこの端末内にのみ保存され、外部に送信されません」（エージェント連携のあるプラットフォームでは、ON の間にペアリングした PC へ渡る分が例外であることも書く）、「初回の説明をもう一度見る」、一番下に「ライセンス」（§1.11） |
 
@@ -204,6 +204,30 @@ Compose Multiplatform で Android / iOS 共通のスマホ UI を実装してい
 - 読み取った文字列は `PairingUri.parse` で確かめ、PC のペアリング用でなければ・期限が切れていれば、PC につなぐ前に知らせる。
 - テスト: `AgentViewModelTest`（QR の結果ごとの表示、文字列の入力と失敗の文言、確認コードで一致しないと保存しない、スイッチ（ペアリングなし・許可なし・時間の選択）、取り消しの確認と最後の 1 台で OFF、90 日より前の履歴を消す）、`AppUiTest` の `agentAccessPairTurnOnAndRevoke`（状態タブから開く → 文字列でペアリング → 確認コード → 1 時間で ON → 音声と期間 → 履歴 → 取り消し → 戻る。英語だけのテキストがないこと。`agent-empty.png`・`agent-confirm.png`・`agent-on.png`・`agent-history.png`）と `noAgentAccessEntryWithoutPlatformSupport`、iOS の表示（前面にある間だけの注意・カメラのボタン・ローカルネットワークの案内、`agent-ios.png`）の `agentAccessOnIos` と `AgentViewModelTest.iosWording`。エミュレータ（[android-phone.md §4.6](android-phone.md#46-エージェント連携184)）と iOS シミュレータ（[ios-watchos.md §16](ios-watchos.md#16-エージェント連携185)）では本物の CLI と。
 
+### 1.14 1 時間ごとの要約（#27）
+
+タイムラインの「録音できていない時間」と「文字起こし」の間に「1 時間ごとの要約」のカード（`SummaryCard`）を出す。発話も要約もない日には出さない。仕組みは [02 §6.10](../architecture/02-architecture.md#610-1-時間ごとの要約27)、設計は [research/on-device-llm.md](../research/on-device-llm.md) §4.6。
+
+| 状態 | 表示 |
+| --- | --- |
+| 端末内の LLM がない（`LlmAvailability.Unsupported`。Android と非対応の iPhone） | 「この端末では、端末内の AI による要約を使えません」の 1 行だけ。ボタン・時間帯の行は出さない。ほかはそのまま |
+| Apple Intelligence がオフ（`TurnedOff`）/ 言語が合わない（`LanguageNotSupported`） | 「設定で Apple Intelligence をオンにすると使えます」/「端末内の AI が日本語に対応していないため…」。ボタンは出さず、作ってある要約は出す |
+| モデルの準備中（`Downloading`） | 「Apple Intelligence のモデルを準備しています。準備ができると使えます」（OS が準備するとき。割合が分かるときは「要約のモデルをダウンロードしています… N%」） |
+| 要約できる時間帯がある | 「N 時間分を要約できます」と「この日を要約」。N は LLM が要る時間帯（まだない・更新された・失敗した）の数 |
+| 作成中 | 「要約しています（3/9 時間）」・進捗バー・「中止」。作っている時間帯の行は「要約しています…」。出来た時間帯から表示が変わる |
+| すべてできている | 「この日の要約はできています」 |
+| 混み合って止まった / 予期しない失敗 | 「端末が混み合っているため、途中で止めました…」/「要約を作れませんでした。原因は診断ログに記録されています」（文言は決まったもの。エラーの種類は診断ログ） |
+
+時間帯の行（発話か要約のある時間帯だけ）: 「09:00–10:00」と会話の量のバー（`HourDensity.score`。LLM を使わずに計算）の下に、
+
+- 要約あり: 要約の文と要点（▶ + 見出し + 内容）。要点をタップすると、根拠の最初の発話までスクロールして強調し、その位置から再生する（`DayViewModel.openHighlight` → `openSegment`）。発話が更新されていれば「会話が更新されたので、要約を作り直します」を上に出し、文を薄くする（根拠の発話が消えた要点は出さない）。
+- 「会話が少ないため要約していません」（200 文字未満）、「この時間帯は要約できませんでした」（拒否。作り直さない）、「要約に失敗しました」+「もう一度」（その時間帯だけ作り直す）、「まだ要約していません」、「文字起こしが終わると要約できます」（文字起こし待ちのチャンクがある）、「この時間が終わると要約できます」（今の時間帯）。
+
+- 作るのは「この日を要約」を押したときだけで、画面を開いている間だけ（`DayViewModel.summarizeDay` が `viewModelScope` で `SummaryRun` を動かす）。タブを替える・アプリが裏に回る（`ON_STOP`）・日を変える・「中止」で止め、作り終えた時間帯は残る。
+- 要約があると「端末内の AI が作った要約です。要点をタップすると、その場面の発話に移って再生します。」を出す。
+- 状態は `DayUiState.summaryRun`・`summaryNotice` と `DayContent.summaries`（`DaySummaries`: 可用性と時間帯ごとの `HourPlan`）。可用性は DB を読み直すたびに `AppServices.llm.availability()` で確かめる（例外は「使えません」として扱い、画面は壊さない）。
+- テスト: `SummaryViewModelTest`（LLM のないときも時間帯は数える、発話のない日は出さない、押す → 進み具合 → 時間帯ごとに保存 → 要点から再生、日を変えると止まり出来た時間帯は残る、失敗と混雑の表示と「もう一度」、予期しない例外、文字起こし待ち）、`AppUiTest` の `hourSummariesFromTheDayScreen`（`summary-todo.png`・`summary-generating.png`・`summary-done.png`、要点をタップして再生）・`hourSummaryStates`（§4.6 の時間帯の状態を一度に、`summary-states.png`）・`hourSummaryAvailability`（`summary-unsupported.png`・`summary-turned-off.png`・`summary-preparing.png`・`summary-language.png`）。どれも英語だけのテキストがないことを確かめる。
+
 ## 2. データの流れ
 
 ```mermaid
@@ -263,7 +287,8 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 | `jvmTest/…/ViewModelTest`（#156 の分） | オフロード: 確認を開くまで何も消さない・古さで対象が変わる・確定でバックアップ済みの文字起こし済みの音声だけが消え、バックアップしていない音声と文字起こし前の音声は残り、検索は変わらない（`offloadRemovesOnlyBackedUpAudioAfterConfirmation`）、失敗の決まった文言（`aFailedOffloadShowsAFixedText`）、外したチャンクの発話は「バックアップにあり」で再生しない（`offloadedAudioShowsInBackupInsteadOfPlayback`） |
 | `shared/pipeline` の `BackupCipherTest`（`commonTest`）、`BackupRestorerTest`・`BackupDiffTest`・`BackupFixtureTest`（`sqliteTest`）、`shared/db` の `BackupQueriesTest`、`shared/platform` の `CryptoTest` | バックアップの形式と復元（[02 §6.7](../architecture/02-architecture.md#67-暗号化バックアップ40)）。`BackupFixtureTest` は JVM・iOS シミュレータ・Android エミュレータで同じファイル（全体と差分）を書けて戻せること、#164 より前の v1 のファイルも戻せることを確かめる（OS 間の互換）。`BackupDiffTest` は全体 + 差分 2 つをどの順でも何度戻しても今の全体と同じになること、差分の大きさが変わった分に比例すること |
 | `shared/pipeline` の `sqliteTest/…/GapAlertEvaluatorTest` | 実 DB 上で途絶アラートの判定・設定の反映 |
-| `jvmTest/…/AppUiTest` | Skia でヘッドレス描画し、(1) タイムライン→再生→検索→結果を開く→状態→おやすみ時間の切り替え→ストレージ（「削除」を入力して全削除）→「診断ログを書き出す」、(2) オンボーディング（同意しないと次へ進めない→通知許可→モデルのダウンロード選択→はじめる→タブ画面→説明をもう一度）、(3) 通知を拒否したときの「設定を開く」（`onboarding-permission-denied.png`）を操作。(4) 状態タブのお知らせ（Wi-Fi 待ち・文字起こし失敗）とモデルのダウンロード失敗（英語の `reason` を渡しても表示されない）を表示し、画面上に英語だけのテキストがないことを確認（`status-waiting-for-wifi.png`、`status-notice.png`、`status-model-failed.png`、#135）。(5) DB に英語の例外メッセージを持つ失敗チャンクのあるタイムラインで、失敗の行に決まった文言だけが出て例外のメッセージが表示されず、英語だけのテキストもないことを確認（`timeline-failed.png`、#144）。(6) 「データの書き出し」で「期間を指定」と「音声ファイルを含める」を選び、押すまで保存先を聞かないこと、押すと ZIP が渡され結果が出ること（`export.png`、`export-done.png`、#155）。(7) 「暗号化バックアップ」でパスフレーズと確認を入れ（不一致の表示を経て）、押すまで保存先を聞かないこと、作成したファイルを同じ端末に戻すと「すでにこの端末にあった」件数が出ること（`backup.png`、`backup-done.png`、`restore-done.png`、#40）。全体のバックアップを保存した後は前回の日時と差分（件数と大きさ）が出て、作ると `-diff` のファイルが渡り、前回の表示が差分に変わること（`backup-diff.png`、`backup-diff-done.png`、#164）。(8) 音声入りのバックアップを作ってから「バックアップ済みの音声を端末から外す」→ 確認（バックアップの作成日が出る）→ 外すと、タイムラインの発話に「バックアップにあり」と説明が出て、タップしても再生せず、検索は同じ結果を返すこと（`offload-confirm.png`、`offload-done.png`、`timeline-offloaded.png`、`search-offloaded.png`、#156）。(9) 「英語も文字起こしする」（#81）: 英語に対応するプラットフォームではスイッチが出て、押すと設定が保存されプラットフォームに伝わり、英語モデルの Wi-Fi 待ち・ダウンロード中の表示と「モバイルデータ通信でもダウンロード」が働くこと（`status-english-downloading.png`）、対応しないプラットフォームでは出ないこと。英語のカードに SenseVoice の帰属表示が出ること（#167）。モデルを OS が入れるプラットフォーム（iOS、#170）では、大きさ・帰属表示・モバイル通信のボタンが出ず、準備中と失敗の文言と「英語モデルをもう一度準備」が働き、OS の英語の失敗理由が出ないこと（`status-english-os-managed-preparing.png`）。(10) 状態タブの「ライセンスを表示」でライセンス画面が開き、Android の一覧のすべての名前と URL・SenseVoice の作者と FunASR の要点があり、iOS だけのもの（Skia）がないこと、本文は押すまで閉じていて「本文を表示」で Apache-2.0 の全文が出ること、「戻る」で状態タブに戻ること（`licenses.png`、`licenses-text.png`、#167）。スクリーンショットを `shared/ui/build/screenshots/` に出力（CI の成果物 `ui-screenshots`） |
+| `jvmTest/…/SummaryViewModelTest` | 1 時間ごとの要約（#27、§1.14）: 可用性、「この日を要約」、止め方、失敗と混雑の表示、要点から再生 |
+| `jvmTest/…/AppUiTest` | Skia でヘッドレス描画し、(1) タイムライン→再生→検索→結果を開く→状態→おやすみ時間の切り替え→ストレージ（「削除」を入力して全削除）→「診断ログを書き出す」、(2) オンボーディング（同意しないと次へ進めない→通知許可→モデルのダウンロード選択→はじめる→タブ画面→説明をもう一度）、(3) 通知を拒否したときの「設定を開く」（`onboarding-permission-denied.png`）を操作。(4) 状態タブのお知らせ（Wi-Fi 待ち・文字起こし失敗）とモデルのダウンロード失敗（英語の `reason` を渡しても表示されない）を表示し、画面上に英語だけのテキストがないことを確認（`status-waiting-for-wifi.png`、`status-notice.png`、`status-model-failed.png`、#135）。(5) DB に英語の例外メッセージを持つ失敗チャンクのあるタイムラインで、失敗の行に決まった文言だけが出て例外のメッセージが表示されず、英語だけのテキストもないことを確認（`timeline-failed.png`、#144）。(6) 「データの書き出し」で「期間を指定」と「音声ファイルを含める」を選び、押すまで保存先を聞かないこと、押すと ZIP が渡され結果が出ること（`export.png`、`export-done.png`、#155）。(7) 「暗号化バックアップ」でパスフレーズと確認を入れ（不一致の表示を経て）、押すまで保存先を聞かないこと、作成したファイルを同じ端末に戻すと「すでにこの端末にあった」件数が出ること（`backup.png`、`backup-done.png`、`restore-done.png`、#40）。全体のバックアップを保存した後は前回の日時と差分（件数と大きさ）が出て、作ると `-diff` のファイルが渡り、前回の表示が差分に変わること（`backup-diff.png`、`backup-diff-done.png`、#164）。(8) 音声入りのバックアップを作ってから「バックアップ済みの音声を端末から外す」→ 確認（バックアップの作成日が出る）→ 外すと、タイムラインの発話に「バックアップにあり」と説明が出て、タップしても再生せず、検索は同じ結果を返すこと（`offload-confirm.png`、`offload-done.png`、`timeline-offloaded.png`、`search-offloaded.png`、#156）。(9) 「英語も文字起こしする」（#81）: 英語に対応するプラットフォームではスイッチが出て、押すと設定が保存されプラットフォームに伝わり、英語モデルの Wi-Fi 待ち・ダウンロード中の表示と「モバイルデータ通信でもダウンロード」が働くこと（`status-english-downloading.png`）、対応しないプラットフォームでは出ないこと。英語のカードに SenseVoice の帰属表示が出ること（#167）。モデルを OS が入れるプラットフォーム（iOS、#170）では、大きさ・帰属表示・モバイル通信のボタンが出ず、準備中と失敗の文言と「英語モデルをもう一度準備」が働き、OS の英語の失敗理由が出ないこと（`status-english-os-managed-preparing.png`）。(10) 状態タブの「ライセンスを表示」でライセンス画面が開き、Android の一覧のすべての名前と URL・SenseVoice の作者と FunASR の要点があり、iOS だけのもの（Skia）がないこと、本文は押すまで閉じていて「本文を表示」で Apache-2.0 の全文が出ること、「戻る」で状態タブに戻ること（`licenses.png`、`licenses-text.png`、#167）。(11) 1 時間ごとの要約（#27）: 偽の LLM で「この日を要約」→ 進み具合 → 時間帯ごとの要約 → 要点をタップして再生、時間帯の状態、端末内の LLM が使えないときの表示（`summary-*.png`、§1.14）。スクリーンショットを `shared/ui/build/screenshots/` に出力（CI の成果物 `ui-screenshots`） |
 | `apps/android/src/androidTest/…/PlaybackTest` | エミュレータ上の実アプリで、実際の AAC を MediaPlayer が指定位置から再生すること、検索 → 結果を 1 タップ → 発話の位置から再生されることを確認（CI `emulator.yml`、[android-phone.md §6.1](android-phone.md#61-実機なしlinux--ci)） |
 | `apps/android/src/androidTest/…/PermissionDeniedTest` | エミュレータでオンボーディングから通知の許可を求め、システムのダイアログで拒否 → 理由と「設定を開く」が表示され、押すとアプリの設定画面が開く（インストール直後に `phone-scenarios.sh` から実行。スクリーンショット `onboarding-permission-denied.png` ほか） |
 | `apps/android/src/androidTest/…/AgentAccessScenarioTest` | エージェント連携（#184）: エミュレータで、CI のホストで動く本物の橋渡し CLI（10.0.2.2）とペアリング（文字列の入力 → 確認コード。PC 側のコードと一致すること）し、スイッチで ON（前景サービス・通知）にすると PC のエージェントの検索に答え、OFF の間は答えず、再び ON で答え、取り消すと答えなくなること（`agent-access.sh` から実行。スクリーンショット `agent-confirm.png`・`agent-paired.png`・`agent-on.png`・`agent-notification.png`・`agent-revoked.png`） |
@@ -285,6 +310,7 @@ ViewModel の Flow は `WhileSubscribed(5s)` なので、画面が見えてい�
 - チャンク境界をまたぐ発話を次のチャンクへ続けて再生する
 - 長いギャップ一覧の折りたたみ、Mark の表示
 - 暗号化バックアップ（#40）: 圧縮。差分（#164）は削除を運べないので、削除の後は全体からやり直す
+- 1 時間ごとの要約（#27）: 充電中に自動で作る（設定でオン）、Android の LLM（方式の決定待ち）、出力の言語の設定（今は日本語だけ）
 - ストレージ: バックアップ済みの音声の自動オフロード（今は状態タブからの手動のみ、#156）、AI 設定・API キー（未実装）の全削除
 - エージェント連携（#184・#185）: QR を読めないときの短いコード（今は CLI が出す長い文字列を入れる）。iOS で画面を出していなくても答える方法（iOS の制約で今はない）
 - 意味検索（#24）: 期間での絞り込み、意味の結果の中での一致箇所の強調（passage のどの発話が近いか）への追加、音声コーデック比較による容量見積もりの更新（#33 の残り）

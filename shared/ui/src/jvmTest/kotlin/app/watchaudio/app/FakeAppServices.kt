@@ -15,6 +15,8 @@ import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.search.SemanticSearch
 import app.watchaudio.core.search.SemanticStatus
 import app.watchaudio.core.search.VectorHit
+import app.watchaudio.core.summary.LlmProvider
+import app.watchaudio.core.summary.UnsupportedLlmProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,6 +46,7 @@ class FakeAppServices(
     override val noticeApps: Set<NoticeApp> = NoticeApp.entries.toSet(),
     override val semanticSearch: SemanticSearch? = null,
     override val agentAccess: AgentAccess? = null,
+    override val llm: LlmProvider = UnsupportedLlmProvider(),
 ) : AppServices {
     val mutableStatus = MutableStateFlow(initialStatus)
     override val status: StateFlow<ProcessingStatus> = mutableStatus.asStateFlow()

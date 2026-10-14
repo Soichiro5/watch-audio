@@ -36,6 +36,12 @@ import app.watchaudio.core.agent.encodeBase64Url
 import app.watchaudio.core.db.AgentAccessEntry
 import app.watchaudio.core.db.AgentAccessOutcome
 import app.watchaudio.core.db.ChunkState
+import app.watchaudio.core.db.HighlightRecord
+import app.watchaudio.core.db.HourSummaryState
+import app.watchaudio.core.db.NewHourSummary
+import app.watchaudio.core.db.hourSourceHash
+import app.watchaudio.core.summary.LlmAvailability
+import app.watchaudio.core.summary.SummaryPrompts
 import app.watchaudio.core.db.LocalStore
 import app.watchaudio.core.db.NewSegment
 import app.watchaudio.core.search.VectorHit
@@ -55,6 +61,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -727,6 +734,112 @@ class AppUiTest {
         waitForText(Strings.PRIVACY_NOTE)
         assertTrue(onAllNodes(hasText(Strings.AGENT_OPEN)).fetchSemanticsNodes().isEmpty())
         assertTrue(onAllNodes(hasText(Strings.PRIVACY_NOTE_AGENT)).fetchSemanticsNodes().isEmpty())
+    }
+
+    /**
+     * Hour summaries (#27): 「この日を要約」 with a fake on-device LLM, the progress while it runs,
+     * the hours with their highlights, and a highlight opening its utterance and playing it.
+     */
+    @Test
+    fun hourSummariesFromTheDayScreen() = runDesktopComposeUiTest(width = 412, height = 1400) {
+        runBlocking {
+            for (hour in listOf(9, 10, 11)) DemoData.seedTalk(store, day, tokyo, hour)
+            store.updateSettings { it.copy(onboardingCompleted = true) }
+        }
+        val llm = FakeSummaryLlm().apply { gate = CompletableDeferred() }
+        val services = FakeAppServices(store, audioRoot = audioDir.path, initialStatus = ProcessingStatus(asrModel = ModelState.Ready), llm = llm)
+        showApp(services)
+        waitForText(Strings.summaryTodo(3))
+        onNodeWithText(Strings.SUMMARIES).performScrollTo()
+        screenshot("summary-todo")
+
+        onNodeWithText(Strings.SUMMARIZE_DAY).performClick()
+        waitForText(Strings.summarizing(0, 3))
+        waitForText(Strings.SUMMARY_GENERATING)
+        screenshot("summary-generating")
+
+        llm.gate?.complete(Unit)
+        waitForText(Strings.SUMMARY_ALL_DONE)
+        waitUntil(timeoutMillis = 10_000) { onAllNodes(hasText("会議は十時から")).fetchSemanticsNodes().size == 3 }
+        onNodeWithText(Strings.SUMMARIES).performScrollTo()
+        screenshot("summary-done")
+        assertNoEnglish()
+
+        // The highlight of 10:00 cites the hour's first utterance: it plays from there.
+        onAllNodes(hasText("会議は十時から"))[1].performClick()
+        waitUntil(timeoutMillis = 10_000) { services.played.isNotEmpty() }
+        assertEquals("t10.m4a" to 0L, services.played.last())
+        waitForText("10:00 から再生中")
+    }
+
+    /** Every per-hour state of §4.6 at once: done, stale, failed, refused, little speech, not yet, waiting, not over. */
+    @Test
+    fun hourSummaryStates() = runDesktopComposeUiTest(width = 412, height = 2200) {
+        val window = dayWindow(day, tokyo)
+        fun hour(h: Int) = window.start + h * 3_600_000L
+        suspend fun record(h: Int, state: HourSummaryState, summary: String? = null, highlights: List<HighlightRecord> = emptyList()) {
+            val segments = store.read { segmentsStartedBetween(hour(h), hour(h + 1)) }
+            val cited = highlights.map { it.copy(segmentIds = listOf(segments.first().id)) }
+            store.transaction {
+                saveHourSummary(
+                    NewHourSummary(hour(h), tokyo.id, state, summary, "fake", "26", SummaryPrompts.VERSION, hourSourceHash(segments), now, highlights = cited),
+                )
+            }
+        }
+        runBlocking {
+            for (h in 8..11) DemoData.seedTalk(store, day, tokyo, h)
+            DemoData.seedTalk(store, day, tokyo, 12, utterances = 2)
+            DemoData.seedTalk(store, day, tokyo, 13)
+            DemoData.seedTalk(store, day, tokyo, 14, transcribed = false)
+            DemoData.seedTalk(store, day, tokyo, 15)
+            record(
+                8, HourSummaryState.DONE, "明日の会議の時間と資料の共有、予算の見積もりについて話した。",
+                listOf(HighlightRecord("会議は十時から", "明日の会議は十時に始まる。", emptyList()), HighlightRecord("予算が増える", "見積もりが先週より増えそう。", emptyList())),
+            )
+            record(9, HourSummaryState.DONE, "来週の水曜日に集まることを決めた。", listOf(HighlightRecord("次は水曜日", "来週の水曜日にもう一度集まる。", emptyList())))
+            record(10, HourSummaryState.FAILED)
+            record(11, HourSummaryState.REFUSED)
+            // A late transcript of 9:00 makes its summary stale.
+            store.transaction { saveTranscript("t9", listOf(NewSegment(hour(9) + 1_000, hour(9) + 3_000, "言い直し".repeat(60), "ja")), "demo") }
+            store.updateSettings { it.copy(onboardingCompleted = true) }
+        }
+        showApp(FakeAppServices(store, audioRoot = audioDir.path, initialStatus = ProcessingStatus(asrModel = ModelState.Ready), llm = FakeSummaryLlm()))
+        waitForText(Strings.SUMMARY_STALE)
+        val texts = listOf(
+            Strings.SUMMARY_FAILED, Strings.SUMMARY_RETRY, Strings.SUMMARY_REFUSED, Strings.SUMMARY_LITTLE_SPEECH, Strings.SUMMARY_NOT_YET,
+            Strings.SUMMARY_WAIT_TRANSCRIPTION, Strings.SUMMARY_HOUR_NOT_OVER, "予算が増える",
+        )
+        texts.forEach { waitForText(it) }
+        waitForText(Strings.summaryTodo(3)) // 9:00 (stale), 10:00 (failed), 13:00
+        onNodeWithText(Strings.SUMMARIES).performScrollTo()
+        screenshot("summary-states")
+        assertNoEnglish()
+    }
+
+    /** What the card says when the on-device LLM cannot be used (§4.6); Android has none yet. */
+    @Test
+    fun hourSummaryAvailability() = runDesktopComposeUiTest(width = 412, height = 1100) {
+        runBlocking {
+            DemoData.seedTalk(store, day, tokyo, 9)
+            store.updateSettings { it.copy(onboardingCompleted = true) }
+        }
+        val llm = FakeSummaryLlm(availability = LlmAvailability.Unsupported("device_not_eligible"))
+        showApp(FakeAppServices(store, audioRoot = audioDir.path, initialStatus = ProcessingStatus(asrModel = ModelState.Ready), llm = llm))
+        val states = listOf(
+            Triple(LlmAvailability.Unsupported("device_not_eligible"), Strings.SUMMARY_UNSUPPORTED, "unsupported"),
+            Triple(LlmAvailability.TurnedOff, Strings.SUMMARY_TURNED_OFF, "turned-off"),
+            Triple(LlmAvailability.Downloading(null), Strings.SUMMARY_PREPARING, "preparing"),
+            Triple(LlmAvailability.LanguageNotSupported, Strings.SUMMARY_LANGUAGE_NOT_SUPPORTED, "language"),
+        )
+        for ((availability, text, name) in states) {
+            llm.availability = availability
+            runBlocking { store.transaction { } } // the screen re-reads after a write
+            waitForText(text)
+            assertTrue(onAllNodes(hasText(Strings.SUMMARIZE_DAY)).fetchSemanticsNodes().isEmpty(), "no button when $availability")
+            onNodeWithText(Strings.SUMMARIES).performScrollTo()
+            screenshot("summary-$name")
+        }
+        assertNoEnglish()
     }
 
     /** Fails on any text on screen (scrolled away or not) with an English word and no Japanese. */
