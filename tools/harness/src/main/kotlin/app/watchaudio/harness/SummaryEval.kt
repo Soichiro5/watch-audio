@@ -214,14 +214,14 @@ class SummaryEval(private val provider: LlmProvider) {
             }
         }
 
-        /** One line per conversation and input. */
+        /** One line per conversation and input; `prompt_chars` sums the prompts of its calls (≈ tokens for Japanese). */
         fun conversationsTsv(results: List<Result>): String = buildString {
-            appendLine("input\tconversation\toutcome\tchars\tprompt_lines\tcalls\tlatency_ms\tcovered\tmissed\thallucinations\tcitations_correct\tcitations_judged\tschema_valid_calls\tok_calls")
+            appendLine("input\tconversation\toutcome\tchars\tprompt_lines\tcalls\tprompt_chars\tlatency_ms\tcovered\tmissed\thallucinations\tcitations_correct\tcitations_judged\tschema_valid_calls\tok_calls")
             for (r in results) {
                 val citations = r.score.citations
                 appendLine(
                     listOf(
-                        r.input, r.conversation, r.outcome, r.chars, r.promptLines, r.calls.size, r.latencyMs,
+                        r.input, r.conversation, r.outcome, r.chars, r.promptLines, r.calls.size, r.calls.sumOf { it.promptChars }, r.latencyMs,
                         r.score.covered.joinToString(","), r.score.missed.joinToString(","), r.score.hallucinations.joinToString(","),
                         citations.count { it.correct == true }, citations.count { it.correct != null },
                         r.calls.count { it.schemaValid == true }, r.calls.count { it.result == "ok" },
