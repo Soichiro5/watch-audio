@@ -153,6 +153,8 @@ enum OnDeviceLanguageModel {
             @unknown default: return "generation_error"
             }
         }
-        return "error_\(String(describing: type(of: error)))"
+        // Anything else (e.g. the OS's model assets missing): its domain and code, never its text.
+        let error = error as NSError
+        return "error_\(error.domain)_\(error.code)"
     }
 }

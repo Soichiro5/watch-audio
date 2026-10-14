@@ -10,8 +10,9 @@ import XCTest
 ///   hour-summary-schema.json`, checked against `SummaryPrompts.SCHEMA` by the Kotlin
 ///   `SummarySchemaFixtureTest`), and the error codes the shared code maps to its states.
 /// - `testGeneratesASummaryOnTheModel` needs Apple Intelligence. GitHub's macOS runners are virtual
-///   machines, where it is not available, so the test records the reason and skips; the device
-///   checks are in #60.
+///   machines without it: there the model is reported unavailable, or (seen on the iOS 26.5
+///   simulator) available but without its assets, so the generation fails outside the model. The
+///   test records the reason and skips in both cases; the device checks are in #60.
 ///
 /// Evidence: `LLM_*` lines in `build/swift-evidence/llm-*.txt` for the job summary.
 final class LanguageModelTests: XCTestCase {
@@ -79,7 +80,7 @@ final class LanguageModelTests: XCTestCase {
             (LanguageModelSession.GenerationError.unsupportedLanguageOrLocale(context), "unsupported_language"),
             (LanguageModelSession.GenerationError.decodingFailure(context), "decoding_failure"),
             (CancellationError(), "cancelled"),
-            (CocoaError(.fileNoSuchFile), "error_CocoaError"),
+            (CocoaError(.fileNoSuchFile), "error_NSCocoaErrorDomain_4"),
         ]
         for (error, code) in cases {
             XCTAssertEqual(OnDeviceLanguageModel.errorCode(error), code, "\(error)")
@@ -121,6 +122,14 @@ final class LanguageModelTests: XCTestCase {
             XCTAssertNotNil(object["highlights"] as? [Any])
         case .failure(let failure):
             report.log(String(format: "LLM_GENERATION failed code=%@ seconds=%.1f", failure.code, seconds))
+            #if targetEnvironment(simulator)
+            // GitHub's virtual macOS runners report the model as available, but its assets are not
+            // there (the OS's model catalog has none), so the generation fails with an error that is
+            // not one of the model's own. Record it and skip; a model error still fails the test.
+            if failure.code == "assets_unavailable" || failure.code.hasPrefix("error_") {
+                throw report.skip("LLM_GENERATION skipped: the simulator reports the model as available but cannot run it (\(failure.code); no Apple Intelligence assets on this runner). Checked on a device (#60).")
+            }
+            #endif
             report.write()
             XCTFail("generation failed: \(failure.code)")
         }
