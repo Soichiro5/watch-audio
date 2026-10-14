@@ -246,28 +246,118 @@ CREATE TABLE highlight_citation (
 
 ## 7. 日本語の品質の評価
 
+評価のしくみは #197 で作った（評価セット・採点・ハーネスのコマンド・Mac で Apple のモデルに答えさせるテスト）。実際のモデルでの数字は、モデルが動く環境で §7.4 の手順を実行して Issue に貼る。
+
 ### 7.1 評価セット
 
-- 素材: 検証用音声セットの会話台本 16 本（[`tools/test-audio/corpus/`](../../tools/test-audio/corpus/)、合成の会話で個人の情報は含まない。約 1.5 万文字）と、ハーネスの `evaluate` が出す認識結果（作業ディレクトリの `segments.tsv`。clean・wrist・cafe の条件）。約 1 時間の `day` 録音は「1 時間の要約」の入力にそのまま使える（[test-audio.md](../dev/test-audio.md)）。
-- 正解: 会話ごとに「要約に入っているべき事実」を 3〜6 個、手で書く（例: 週次定例 → 「リリース日は 11 月 20 日のまま」「重要度の高いバグはログイン画面が固まる件」「サーバー費用が月 12 万円ほど増える」「来週の定例は水曜 14 時」）。事実ごとに、根拠の台本の行と、自動判定用の言い換えに強いキーワード（「11月20日」「12万」）を付ける。`tools/llm-eval/`（仮）に JSON で置く。
+- 素材: 検証用音声セットの会話台本 16 本（[`tools/test-audio/corpus/`](../../tools/test-audio/corpus/)、合成の会話で個人の情報は含まない。約 9,100 字）と、ハーネスの `evaluate` が出す認識結果（作業ディレクトリの `<録音>/segments.tsv`。clean・wrist・cafe の条件）。約 1 時間の `day` 録音も、同じく会話ごとに分けて入力にできる（[test-audio.md](../dev/test-audio.md)）。
+- 正解: [`tools/harness/testdata/summary-eval-facts.json`](../../tools/harness/testdata/summary-eval-facts.json)。会話ごとに次を持つ（16 会話・事実 84 個・作り話の候補 32 個）。
+  - `facts`: 要約に入っているべき事実を 4〜6 個。`id`、`text`（事実の文）、`lines`（根拠の台本の行。`#` の見出しと空行を除いた 1 から数えた行番号で、`semantic-eval-queries.json` と同じ数え方）、`keys`（自動判定のキーワード）。
+  - `mustNot`: 要約が言ってはいけないこと（ありそうな作り話: 違う日付・件数・場所・支払い方法など）を 2 個。`id`、`text`、`keys`。
+  - `keys` は「グループのリスト、グループは言い換えのリスト」。**すべてのグループで、どれか 1 つの言い換えが文中にある**と一致とする（例: 週次定例のサーバー費用 `[["サーバー"], ["12万"]]`）。
+- 台本に忠実なことは単体テスト（`SummaryEvalSetTest`、CI）で確かめる: 事実のキーワードがその根拠の行の文に一致すること、`mustNot` が会話のどこにも一致しないこと、16 会話すべてに 3〜6 個の事実があること。
 
 ### 7.2 採点
 
-| 指標 | 測り方 | 目安（仮。最初の評価で見直す） |
+採点は決まった手順の関数（[`SummaryScoring.kt`](../../tools/harness/src/main/kotlin/app/watchaudio/harness/SummaryScoring.kt)、LLM による採点はしない）。文はすべて CER と同じ正規化（`CerText.normalize`: NFKC・小文字・句読点と空白と記号の除去・漢数字を算用数字に）をしてから比べるので、「十二万円」「12万円」「120,000円」は同じになる。
+
+| 指標 | 測り方（自動の部分） | 目安（仮。最初の評価で見直す） |
 | --- | --- | --- |
-| 事実の再現率 | 正解の事実のうち、要約・要点に入っている割合（キーワードで自動判定し、外れたものを人が確認） | 台本の文で 70% 以上、wrist の認識結果で 50% 以上 |
-| 作り話 | 入力にない事実を書いた数（人が確認） | 要約 10 件あたり 1 件以下 |
-| 引用の正しさ | 要点の根拠の行が、その要点の事実を含む割合（自動 + 人） | 80% 以上 |
-| 形の成功率 | 作り直しなしで出力の形が正しかった割合（自動） | 95% 以上 |
-| 拒否の率 | guardrail で拒否された割合（自動） | 日常会話で 0〜数 % |
-| 日本語の自然さ | 1〜5 の 5 段階（人） | 平均 4 以上 |
-| 時間・トークン | 1 時間あたりの呼び出し回数・トークン数・時間（自動） | §4.2 の見積もりと比べる |
+| 事実の再現率 | 要約の文（`summary` と各要点の `title`・`body`）が事実の `keys` に一致した割合。外れたもの・言い換えで取りこぼしたものは `summaries.md` を見て人が確認 | 台本の文で 70% 以上、wrist の認識結果で 50% 以上 |
+| 作り話 | 要約の文が `mustNot` の `keys` に一致した数。リストにない作り話は人が確認 | 要約 10 件あたり 1 件以下 |
+| 引用の正しさ | 要点ごとに、その `title`・`body` が一致する事実を探す。あれば、要点が引用した行（プロンプトの行 → セグメント → 台本の行）のどれかが、その事実の根拠の行から **±1 行以内**なら正しい。一致する事実がない要点は「判定外」として数を出す | 80% 以上 |
+| 形の成功率 | モデルが返した答え（`Ok`）のうち、出力の形（`SummaryPrompts.SCHEMA`）にそのまま合う割合。答えの中の JSON（前後の文やコードの囲みはアプリと同じく許す）を厳密に解析し、すべての項目があり型が合い（行番号は数値）、要点が 3 件以内 | 95% 以上 |
+| 拒否の率 | モデルに送った会話のうち、`HourOutcome.Refused`（guardrail）になった割合 | 日常会話で 0〜数 % |
+| 日本語の自然さ | 1〜5 の 5 段階（人が `summaries.md` を読む） | 平均 4 以上 |
+| 時間・トークン | 会話ごとの呼び出し回数・プロンプトの文字数（日本語はほぼトークン数）・時間（呼び出しの合計）。中央値・90 パーセンタイル・最大 | §4.2 の見積もりと比べる |
+
+- 1 会話を「1 時間」として、アプリと同じ経路で要約する: セグメント → `PromptLines`（行にまとめる）→ `HourSummarizer`（入らなければ分けてまとめる）。文字数が `LITTLE_SPEECH_CHARS`（200）未満なら、アプリと同じく呼ばずに「発話が少ない」とし、事実はすべて取りこぼしとして数える。
+- 台本の文の入力は、文ごとに 1 セグメント（1 文字 約 150 ms・文の間 0.4 秒の作った時刻）にする。認識結果の入力は、`segments.tsv` のセグメントを CER の採点と同じ規則（会話の時間帯 ±1 秒と最も重なる会話）で会話に分け、正解の発話と時間が重なるセグメントをその台本の行に対応づける（引用の検査に使う）。
+- 失敗（形の作り直しでも直らない、文脈が足りない、答えがないなど）はモデルに送った会話の「失敗」の列に数え、事実はすべて取りこぼしにする。
 
 ### 7.3 どこで動かすか
 
-- **LiteRT-LM（Gemma 4 E2B）**: `litertlm-jvm` で Linux のハーネスから動かせる（モデル 約 2.6 GB。このコンテナはディスクが足りないので、空きのある環境で）。評価のコマンド（例 `./gradlew :tools:harness:run --args="summarize-eval ..."`）を作り、結果を表にする。
-- **Apple Foundation Models**: 同じ Swift のコードを macOS 26 以降・Apple Intelligence オンの Mac で動かす小さなコマンド（または macOS 27 の `fm` コマンド・Python の SDK）で評価する。CI では動かない（§6.1）ので、オーナーの Mac か実機で 1 回動かして結果を Issue に貼る。モデルの版が変わる OS の更新（例 27.x）ごとに測り直す。
-- Gemini Nano（ML Kit を選んだ場合）は対応端末の上でしか動かない。
+- **ハーネスの `summary-eval`**（[`SummaryEval.kt`](../../tools/harness/src/main/kotlin/app/watchaudio/harness/SummaryEval.kt)）が入力を作り、要約し、採点する。モデルは `--provider` で選ぶ。
+  - `fake`（既定）: モデルを使わない `ExtractiveLlmProvider`。プロンプトの最初の行を要約に、長い 3 行を要点（その行を引用）にした、形の正しい答えを返す。経路の確認用で、品質の数字ではない（台本の文を写すので、キーワードの一致だけで取れる下限の目安にはなる）。CI の単体テスト（`SummaryEvalTest`）がこれで全体を動かす。
+  - `replay=<ディレクトリ>`: 別の場所で動くモデルの答えを読む `ReplayLlmProvider`。答えのない要求を `requests.jsonl` に書き出し、`responses.jsonl` の答えを使う（形式は §7.4）。Apple Foundation Models（Mac）と Android の端末は、この 2 つのファイルでつなぐ。
+  - JVM で動くモデル（LiteRT-LM の `litertlm-jvm`）は、`LlmProvider` を実装して `SummaryEval.provider` に名前を足せば直接使える（§7.4.3）。
+- **Apple Foundation Models**: `LanguageModelTests.testAnswersSummaryEvaluationRequests`（`apps/ios/Tests/LanguageModelTests`）が `requests.jsonl` をアプリと同じ `OnDeviceLanguageModel.generate` に通し、`responses.jsonl` を書く。環境変数 `SUMMARY_EVAL_DIR` がないときは飛ばす（CI では飛ぶ）。macOS 26 以降・Apple Intelligence オンの Mac のシミュレータは、その Mac のモデルを使う見込み（CI の GitHub の仮想マシンでは使えない、§6.1）。モデルの版が変わる OS の更新（例 27.x）ごとに測り直す。
+- **Android の候補**: Gemini Nano（ML Kit）は対応端末の上でしか動かない。Gemma 4 E2B（LiteRT-LM）は JVM のハーネスでも端末でも動く。どちらも同じ `requests.jsonl` / `responses.jsonl` で採点できる（§7.4.3、§7.4.4）。
+
+### 7.4 手順
+
+#### 7.4.1 経路の確認（モデルなし、Linux）
+
+```bash
+./gradlew --max-workers=2 :tools:harness:run --args="summary-eval build/summary-eval-dry"
+#   認識結果も入力にする（evaluate の作業ディレクトリ。clean・wrist・cafe の segments.tsv があるものを使う）:
+#   --args="summary-eval build/summary-eval-dry --asr build/test-audio-eval --manifest tools/test-audio/cache/out/manifest.json"
+#   入力・会話を絞る:     --inputs script,wrist --conversations 01,05
+#   文脈の大きさ（トークン）: --context 4096（既定、Apple Foundation Models）
+```
+
+出力（`<出力ディレクトリ>/`）:
+
+| ファイル | 内容 |
+| --- | --- |
+| `results.md` / `results.tsv` | 入力（`script`・`clean`・`wrist`・`cafe`）ごとの指標の表（§7.2）。先頭にモデルの id・版・文脈・プロンプトの版・正解の版 |
+| `conversations.tsv` | 会話ごとの結果（状態、文字数、行数、呼び出し回数、プロンプトの文字数、時間、取れた・取りこぼした事実、作り話、引用、形） |
+| `summaries.md` | 会話ごとの要約・要点（引用した台本の行と判定）・事実のチェックリスト・作り話。人が確かめる用 |
+
+認識結果の `segments.tsv` は、[test-audio.md](../dev/test-audio.md) の手順で音声セットを作り、`evaluate`（`clean wrist cafe` だけでよい）を実行すると `<作業ディレクトリ>/<条件>/segments.tsv` にできる（ASR のモデルと約 300 MB の音声が要る）。
+
+#### 7.4.2 Apple Foundation Models（Mac）
+
+条件: Apple シリコンの Mac、macOS 26 以降、Apple Intelligence がオンで日本語が使える設定、Xcode 26.x、XcodeGen、JDK 21（ハーネス用）。
+
+```bash
+# 1. 要求を書き出す（答えがまだないので、全会話が「失敗 no_response」になり、requests.jsonl ができる）
+OUT=$PWD/build/summary-eval-apple
+./gradlew --max-workers=2 :tools:harness:run \
+  --args="summary-eval $OUT --provider replay=$OUT/replay --asr build/test-audio-eval --manifest tools/test-audio/cache/out/manifest.json"
+
+# 2. Mac のシミュレータで Apple のモデルに答えさせる（responses.jsonl に 1 要求 1 行で追記。中断しても続きから）
+(cd apps/ios && xcodegen generate)
+TEST_RUNNER_SUMMARY_EVAL_DIR=$OUT/replay xcodebuild test \
+  -project apps/ios/WatchAudio.xcodeproj -scheme LanguageModelTests \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  -only-testing:LanguageModelTests/LanguageModelTests/testAnswersSummaryEvaluationRequests
+#   記録: build/swift-evidence/llm-summary-eval.txt（要求の id・結果・時間だけ。文は書かない）
+
+# 3. 同じコマンドで採点する（答えのない要求が残れば、その分だけ requests.jsonl に足されるので 2 から繰り返す）
+./gradlew --max-workers=2 :tools:harness:run \
+  --args="summary-eval $OUT --provider replay=$OUT/replay --asr build/test-audio-eval --manifest tools/test-audio/cache/out/manifest.json"
+```
+
+- 要求の `id` はプロンプトの中身のハッシュなので、1 と 3 は同じコミット・同じ入力で実行する（プロンプトの版や認識結果が変わると、新しい要求として書き出される）。
+- 1 会話は約 450〜800 字で、4,096 トークンの 1 回の呼び出しに入る。分けて要約する場合は、まとめの要求が部分の答えに依存するので、2 と 3 を 2 回繰り返す。
+- 時間はシミュレータでの値（Mac の性能）。iPhone の実機での時間・発熱・拒否の率は #60 で測る。実機でこのテストを動かすには、`requests.jsonl` を端末に置く仕組みが要る（未実装。同じ版の OS なら Mac と iPhone のモデルは同じ見込みなので、品質は Mac で測る）。
+- 答えのファイルの形式: `{"id": "<要求の id>", "ok": "<答えの JSON の文字列>", "latencyMs": 1234, "model": "ios-26.4"}`、失敗は `"ok"` の代わりに `"error": "<コード>"`（`OnDeviceLanguageModel.errorCode` のコード。`guardrail_violation`・`refusal` は拒否、`exceeded_context_window` は文脈超過として、アプリと同じに扱う）。
+
+#### 7.4.3 Gemma 4 E2B（LiteRT-LM）
+
+モデル（約 2.6 GB）が要るので、空きのある環境で行う（このクラウドのコンテナはディスクが足りない）。
+
+1. JVM（Linux・Mac）: `tools/harness/build.gradle.kts` に `com.google.ai.edge.litertlm:litertlm-jvm`（版を固定）を足し、`LlmProvider` を実装する（モデルのパスから `Engine` を作り、要求ごとに新しい会話で `instructions` と `prompt` を渡す。形は `request.schema.toJson()` をプロンプトに足して JSON を求める、§4.1）。`SummaryEval.provider` に `litertlm=<モデルのパス>` を足し、`--provider litertlm=models/gemma-4-E2B-it.litertlm --context <エンジンに設定した文脈>` で実行する。CPU での時間は端末の目安にならないので、時間は 2 で測る。
+2. 端末（Android）: A1 の `LlmProvider` ができたら、§7.4.2 と同じ 2 つのファイルでつなぐ。`adb push $OUT/replay/requests.jsonl /sdcard/Android/data/<アプリの id>/files/summary-eval/` → 計測用の instrumented test（`SUMMARY_EVAL_DIR` に相当する引数で、要求ごとに `generate` して `responses.jsonl` を書く。Swift のテストと同じ形）→ `adb pull .../responses.jsonl $OUT/replay/` → §7.4.2 の 3。中位機種の時間・メモリ・発熱は #61。
+
+#### 7.4.4 Gemini Nano（ML Kit GenAI Prompt API）
+
+- 対応端末（AICore と Gemini Nano がある機種）の上でしか動かない。ML Kit は今 `tools/privacy-check` で許していない（§5.2。採るかは §8 の 3 で決める）ので、評価はリポジトリに入れない評価用のアプリ（または §8 の 3 の決定後のブランチ）で行う。
+- 手順は §7.4.3 の 2 と同じ: `requests.jsonl` を端末に置き、Prompt API に `instructions` と `prompt`（形は `schema` をプロンプトに足して JSON を求める）を渡し、答え（または失敗のコード）と時間を `responses.jsonl` に書いて取り出し、`--provider replay=<ディレクトリ> --context <Prompt API の文脈の上限>` で採点する。
+- 入力は検証用の合成の会話だけなので、ML Kit が送る利用状況のログ（内容は含まない、§2.2）があっても個人の情報は出ない。
+
+### 7.5 結果
+
+モデルなしの経路の確認（`fake`、`./gradlew --max-workers=2 :tools:harness:run --args="summary-eval build/summary-eval-dry"`、2026-10-14）。品質の数字ではなく、台本の行をそのまま写した答えでキーワードの一致だけで取れる量の目安:
+
+| 入力 | 会話 | 事実の再現率 | 作り話（mustNot） | 引用の正しさ | 形の成功率 | 拒否の率 | 失敗 | 発話が少ない | 呼び出し | 時間/会話 中央値・p90・最大 (s) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| script | 16 | 39% (33/84) | 0 | 100% (29/29)、判定外 19 | 100% (16/16) | 0% (0/16) | 0 | 0 | 16 | 0.0 / 0.0 / 0.0 |
+
+- 16 会話とも 1 回の呼び出しに入った（プロンプト 約 520〜910 字、4,096 トークンの文脈）。
+
+Apple Foundation Models・Gemma 4 E2B・Gemini Nano の表は、§7.4 の手順で実行して #197 に貼る。
 
 ## 8. 決めること
 
@@ -335,7 +425,7 @@ UC9（#118）の sub-issue にする。#27 は「共通部分」に合わせて�
 ### E1. 日本語の要約の品質の評価
 
 - **目的**: 端末内の LLM の要約が、日本語の会話を振り返るのに使える品質かを数字で確かめ、自動で作るか・Android の手段（§8）を決める材料にする。
-- **やること**: §7 の評価セット（正解の事実）、ハーネスの評価のコマンド（LiteRT-LM、JVM）、Mac で Apple のモデルを動かす手順、結果の表（台本の文と認識結果の条件ごと）
+- **やること**: §7 の評価セット（正解の事実）、ハーネスの評価のコマンド（LiteRT-LM、JVM）、Mac で Apple のモデルを動かす手順、結果の表（台本の文と認識結果の条件ごと）。評価セット・採点・`summary-eval`・Mac で答えさせるテストは #197 で作った（§7）
 - **完了条件**:
   - [ ] 16 会話の正解の事実と、採点のロジックの単体テスト — 確認: CI
   - [ ] Gemma 4 E2B（LiteRT-LM）での §7.2 の指標の表 — 確認: Issue のコメント（コマンドと結果）

@@ -59,7 +59,7 @@ tools/test-audio/.venv/bin/python tools/test-audio/generate.py
 | `cache/out/segments.csv` | 同じ正解区間の CSV 版 |
 | `<作業ディレクトリ>/results.md` | 条件別の結果表（下記 §4 の表） |
 | `<作業ディレクトリ>/<id>/report.md` | 会話ごとの正解と文字起こしの対比、会話の外で出た誤認識の一覧 |
-| `<作業ディレクトリ>/<id>/segments.tsv` | 保存されたセグメントごとの長さ・文字数・Silero の確率（平均・最大）・雑音の床からの差（dB）・会話の外かどうか（`filter-study` の入力） |
+| `<作業ディレクトリ>/<id>/segments.tsv` | 保存されたセグメントごとの長さ・文字数・Silero の確率（平均・最大）・雑音の床からの差（dB）・会話の外かどうか（`filter-study` と、要約の評価 `summary-eval` の入力。[on-device-llm §7](../research/on-device-llm.md#7-日本語の品質の評価)） |
 | `<作業ディレクトリ>/<id>/watch-audio.db`・`audio/` | 取り込み・文字起こし済みのローカル DB と音声（アプリと同じ形式） |
 
 ## 2. 音声セットの中身

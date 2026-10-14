@@ -134,4 +134,74 @@ final class LanguageModelTests: XCTestCase {
             XCTFail("generation failed: \(failure.code)")
         }
     }
+
+    /// #197: answers the hour-summary evaluation's requests on the model, for the scorer on Linux
+    /// (`summary-eval --provider replay=<dir>`, docs/research/on-device-llm.md §7.4). Reads
+    /// `<dir>/requests.jsonl` and appends one line per request not answered yet to
+    /// `<dir>/responses.jsonl`: `{"id", "ok": <answer JSON>}` or `{"id", "error": <code>}`, with
+    /// `latencyMs` and `model`. Runs only when `SUMMARY_EVAL_DIR` (xcodebuild:
+    /// `TEST_RUNNER_SUMMARY_EVAL_DIR`) names the directory: on a Mac with Apple Intelligence, the
+    /// simulator uses the Mac's model. The evidence lists ids and outcomes only, never the text.
+    func testAnswersSummaryEvaluationRequests() async throws {
+        let report = EvidenceReport(name: "llm-summary-eval")
+        guard let path = ProcessInfo.processInfo.environment["SUMMARY_EVAL_DIR"], !path.isEmpty else {
+            throw report.skip("SUMMARY_EVAL_DIR not set (the summary evaluation runs on a Mac with Apple Intelligence, #197)")
+        }
+        let code = OnDeviceLanguageModel.availabilityCode()
+        guard code == "available" else {
+            throw report.skip("LLM_SUMMARY_EVAL skipped: the on-device model is not available here (\(code))")
+        }
+        let directory = URL(fileURLWithPath: path)
+        let requests = try String(contentsOf: directory.appending(path: "requests.jsonl"), encoding: .utf8)
+        let responses = directory.appending(path: "responses.jsonl")
+        var answered = Set<String>()
+        if let existing = try? String(contentsOf: responses, encoding: .utf8) {
+            for line in existing.split(separator: "\n") {
+                if let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any], let id = object["id"] as? String {
+                    answered.insert(id)
+                }
+            }
+        }
+        report.log("LLM_SUMMARY_EVAL model_version=\(OnDeviceLanguageModel.modelVersion) context_size=\(OnDeviceLanguageModel.contextSize) already_answered=\(answered.count)")
+        var count = 0
+        for line in requests.split(separator: "\n") where !line.isEmpty {
+            let request = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+            let id = try XCTUnwrap(request["id"] as? String)
+            guard !answered.contains(id) else { continue }
+            let instructions = try XCTUnwrap(request["instructions"] as? String)
+            let prompt = try XCTUnwrap(request["prompt"] as? String)
+            let schema = try XCTUnwrap(request["schema"] as? String)
+            let maxOutputTokens = try XCTUnwrap(request["maxOutputTokens"] as? Int)
+            let started = Date()
+            let result = await OnDeviceLanguageModel.generate(
+                instructions: instructions, prompt: prompt, schemaJson: schema, maxOutputTokens: maxOutputTokens
+            )
+            let latencyMs = Int(Date().timeIntervalSince(started) * 1000)
+            var response: [String: Any] = ["id": id, "latencyMs": latencyMs, "model": OnDeviceLanguageModel.modelVersion]
+            switch result {
+            case .success(let json): response["ok"] = json
+            case .failure(let failure): response["error"] = failure.code
+            }
+            // One line at a time, so that an interrupted run keeps what it answered.
+            var data = try JSONSerialization.data(withJSONObject: response, options: [.sortedKeys])
+            data.append(contentsOf: Array("\n".utf8))
+            if let handle = try? FileHandle(forWritingTo: responses) {
+                _ = try handle.seekToEnd()
+                try handle.write(contentsOf: data)
+                try handle.close()
+            } else {
+                try data.write(to: responses)
+            }
+            answered.insert(id)
+            count += 1
+            let outcome: String
+            switch result {
+            case .success: outcome = "ok"
+            case .failure(let failure): outcome = failure.code
+            }
+            report.log("LLM_SUMMARY_EVAL id=\(id) result=\(outcome) ms=\(latencyMs)")
+        }
+        report.log("LLM_SUMMARY_EVAL answered=\(count)")
+        report.write()
+    }
 }
