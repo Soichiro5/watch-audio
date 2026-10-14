@@ -27,6 +27,7 @@ import kotlinx.io.files.Path
  *   ./gradlew :tools:harness:run --args="filter-study <manifest.json> <workDir> [recordingIds...]"
  *   ./gradlew :tools:harness:run --args="semantic-eval <workDir> [--min-tokens n] [--max-tokens n] [--max-gap-ms n] [--band x]"
  *   ./gradlew :tools:harness:run --args="semantic-bench <workDir> [sizes, e.g. 100000,500000,1100000]"
+ *   ./gradlew :tools:harness:run --args="summary-eval <outDir> [--provider fake|replay=<dir>] [--context n] [--asr <evaluate workDir>] [--manifest <manifest.json>] [--inputs script,clean,...] [--conversations 01,...]"
  *
  * `evaluate` scores a test audio set from tools/test-audio (see docs/dev/test-audio.md); `--vad`
  * overrides [app.watchaudio.core.pipeline.VadSettings] and `--filter` the app's
@@ -35,7 +36,8 @@ import kotlinx.io.files.Path
  * SenseVoice for English like the app's 「英語も文字起こしする」 (see [EvaluateArgs]).
  * `filter-study` re-scores an `evaluate --filter off` run with candidate filters ([FilterStudy]).
  * `semantic-eval` measures semantic search quality (#24, [SemanticEval]) and `semantic-bench` its
- * brute-force search time on dummy vectors ([SemanticBench]).
+ * brute-force search time on dummy vectors ([SemanticBench]). `summary-eval` scores hour summaries
+ * of the corpus conversations against their facts (#197, [SummaryEval], [SummaryEvalArgs]).
  */
 fun main(args: Array<String>) = runBlocking {
     if (args.size < 2) usage()
@@ -52,6 +54,18 @@ fun main(args: Array<String>) = runBlocking {
     if (args[0] == "semantic-bench") {
         val sizes = args.getOrNull(2)?.split(',')?.map { it.trim().toInt() } ?: listOf(100_000, 500_000, 1_100_000)
         SemanticBench(File(args[1]), models).run(sizes)
+        return@runBlocking
+    }
+    if (args[0] == "summary-eval") {
+        val parsed = try {
+            SummaryEvalArgs.parse(args.drop(1))
+        } catch (e: IllegalArgumentException) {
+            System.err.println(e.message)
+            usage()
+        }
+        println()
+        print(SummaryEval.run(File(".").absoluteFile, parsed))
+        println("\nper-conversation results: ${parsed.outDir}/conversations.tsv, summaries: ${parsed.outDir}/summaries.md")
         return@runBlocking
     }
     if (args[0] == "evaluate") {
@@ -137,6 +151,6 @@ private val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZ
 private fun time(epochMs: Long) = formatter.format(Instant.ofEpochMilli(epochMs))
 
 private fun usage(): Nothing {
-    System.err.println("usage: record <dataDir> <audio...> | search <dataDir> <query> | show <dataDir> | evaluate <manifest.json> <workDir> [--vad name=value,...] [--filter off|name=value,...] [--format name=value,...] [--english on|off|name=value,...] [ids...] | filter-study <manifest.json> <workDir> [ids...] | semantic-eval <workDir> [--min-tokens n] [--max-tokens n] [--max-gap-ms n] [--band x] | semantic-bench <workDir> [sizes]")
+    System.err.println("usage: record <dataDir> <audio...> | search <dataDir> <query> | show <dataDir> | evaluate <manifest.json> <workDir> [--vad name=value,...] [--filter off|name=value,...] [--format name=value,...] [--english on|off|name=value,...] [ids...] | filter-study <manifest.json> <workDir> [ids...] | semantic-eval <workDir> [--min-tokens n] [--max-tokens n] [--max-gap-ms n] [--band x] | semantic-bench <workDir> [sizes] | summary-eval <outDir> [--provider fake|replay=<dir>] [--context n] [--asr <workDir>] [--manifest <manifest.json>] [--inputs script,clean,...] [--conversations 01,...]")
     exitProcess(2)
 }
