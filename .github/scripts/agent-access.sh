@@ -58,7 +58,7 @@ if [ -z "$uri" ]; then
   exit 1
 fi
 log "AGENT_HOST phase=pair uri_prefix=${uri%%&t=*}"
-encoded=$(printf %s "$uri" | base64 -w0 | tr '+/' '-_' | tr -d '=')
+encoded=$(printf %s "$uri" | base64 | tr -d '\n' | tr '+/' '-_' | tr -d '=')
 instrument agent-pair -e class app.watchaudio.android.AgentAccessScenarioTest#pair -e scenario agent-pair -e pairingUri "$encoded"
 # If the phone never got as far as the code, `pair` would wait out its 5 minutes.
 for _ in $(seq 1 30); do

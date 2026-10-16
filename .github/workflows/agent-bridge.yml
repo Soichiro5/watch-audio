@@ -2,6 +2,7 @@ name: Agent bridge
 
 # Agent access (#182, #183): the bridge CLI (tools/agent-bridge) and its end-to-end test with the
 # JVM fake phone (tools/agent-fake-phone, the shared tool logic in shared/agent).
+# The checks run through tools/check/check.sh (#202), as on a developer's machine (`check.sh fast`).
 on:
   push:
     branches: [main]
@@ -14,6 +15,9 @@ on:
       - "*.gradle.kts"
       - "gradle.properties"
       - ".github/workflows/agent-bridge.yml"
+      - "tools/check/check.sh"
+      - "tools/check/lib.sh"
+      - "tools/check/steps-bridge.sh"
   pull_request:
     branches: [main]
     paths:
@@ -25,6 +29,9 @@ on:
       - "*.gradle.kts"
       - "gradle.properties"
       - ".github/workflows/agent-bridge.yml"
+      - "tools/check/check.sh"
+      - "tools/check/lib.sh"
+      - "tools/check/steps-bridge.sh"
   workflow_dispatch:
 
 permissions:
@@ -46,7 +53,8 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: tools/agent-bridge
+        # Git Bash on Windows: tools/check/check.sh is a bash script.
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -55,9 +63,12 @@ jobs:
           cache: npm
           cache-dependency-path: tools/agent-bridge/package-lock.json
       # No install scripts: every dependency is plain JavaScript.
-      - run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: npm run lint
-      - run: npm test
+      - name: npm ci
+        run: tools/check/check.sh step bridge-npm-ci
+      - name: npm run lint
+        run: tools/check/check.sh step bridge-lint
+      - name: npm test
+        run: tools/check/check.sh step bridge-test
 
   # pairing → mutual TLS → MCP tool calls from a scripted MCP client over stdio → answers from the
   # fake phone's database, plus the refusals (unpaired peer, wrong key, expired value, revoked
@@ -79,14 +90,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - name: "Shared agent logic (JVM tests) and the fake phone"
-        run: ./gradlew :shared:agent:jvmTest :shared:db:jvmTest :tools:agent-fake-phone:installDist
+        run: tools/check/check.sh step bridge-fake-phone
 
       - name: "Bridge CLI"
-        working-directory: tools/agent-bridge
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        run: tools/check/check.sh step bridge-npm-ci
 
       - name: "End to end: bridge CLI + fake phone"
-        working-directory: tools/agent-bridge
-        env:
-          FAKE_PHONE: ${{ github.workspace }}/tools/agent-fake-phone/build/install/agent-fake-phone/bin/agent-fake-phone
-        run: npm run test:e2e
+        run: tools/check/check.sh step bridge-e2e

@@ -38,6 +38,9 @@ jobs:
     runs-on: ubuntu-24.04
     # +~7 min when the sherpa-onnx JNI cache misses (a new sherpa-onnx version, #173).
     timeout-minutes: 45
+    # Every check runs through tools/check/check.sh (#202): the same steps run on a developer's
+    # machine (`tools/check/check.sh fast` / `harness`, docs/dev/04 「手元での確認」). This file only
+    # sets up the runner and uploads the artifacts; tools/check/test_parity.py keeps it that way.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -45,17 +48,13 @@ jobs:
       # same values (XcodeGen cannot read gradle.properties). Seconds, no build. This workflow runs
       # on every change outside docs, so also when only gradle.properties or project.yml changes.
       - name: "Version check (gradle.properties = apps/ios/project.yml)"
-        run: |
-          python3 -m unittest discover -s tools/check-version -v
-          python3 tools/check-version/check_version.py
+        run: tools/check/check.sh step version
 
       # #76: data stays on the device (CLAUDE.md "Local only"). Static part first: seconds, no build.
       # Permissions, backup rules, network APIs / URLs in code, declared dependencies, iOS
       # Info.plist keys and entitlements against tools/privacy-check/policy.py (docs/dev/04 §6.4).
       - name: "Local-only check (static)"
-        run: |
-          python3 -m unittest discover -s tools/privacy-check -v
-          python3 tools/privacy-check/check.py
+        run: tools/check/check.sh step privacy-static
 
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
@@ -70,17 +69,13 @@ jobs:
         uses: ./.github/actions/sherpa-onnx-jni
 
       - name: "Unit tests (shared: JVM + Android host; ONNX Runtime binding; phone and Wear OS app JVM tests)"
-        run: ./gradlew jvmTest testAndroidHostTest :shared:ort:test :apps:android:testDebugUnitTest :apps:wear:testDebugUnitTest
+        run: tools/check/check.sh step unit-tests
 
       # #23, #72: a year of generated Japanese utterances as the pipeline cuts them since #68
       # (~3.2 million segments, ~650 MB since #94); fails if any query's p95 exceeds 300 ms. The numbers land
       # in the job summary either way.
       - name: "Search benchmark (3.2M segments, target 300 ms)"
-        run: |
-          status=0
-          ./gradlew :shared:db:jvmBenchmark -Pbenchmark.segments=3200000 || status=$?
-          cat shared/db/build/reports/search-benchmark/summary.md >> "$GITHUB_STEP_SUMMARY" || true
-          exit $status
+        run: tools/check/check.sh step search-benchmark
 
       - name: Cache ASR models
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -88,32 +83,22 @@ jobs:
           path: tools/harness/models
           key: asr-models-${{ hashFiles('tools/harness/download-models.sh') }}
 
+      - name: Install ffmpeg (end-to-end test audio)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
       - name: "End-to-end without devices (chunks -> ingest -> on-device ASR -> SQLite)"
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
-          tools/harness/download-models.sh
-          ./gradlew :tools:harness:test -PrequireModels=true
+        run: tools/check/check.sh step harness
 
       - name: Lint
-        run: ./gradlew :apps:android:lintDebug :apps:wear:lintDebug
+        run: tools/check/check.sh step lint
 
       - name: Assemble phone + Wear OS
-        run: ./gradlew :apps:android:assembleDebug :apps:wear:assembleDebug
+        run: tools/check/check.sh step assemble-debug
 
       # #76: the same policy on what ships: release merged manifests (permissions added by
       # libraries) and the resolved release runtime classpath (transitive dependencies).
       - name: "Local-only check (merged manifests, resolved dependencies)"
-        run: |
-          mkdir -p build/privacy-check
-          ./gradlew :apps:android:processReleaseMainManifest :apps:wear:processReleaseMainManifest
-          for app in android wear; do
-            ./gradlew -q :apps:$app:dependencies --configuration releaseRuntimeClasspath > build/privacy-check/deps-$app.txt
-          done
-          python3 tools/privacy-check/check.py --summary "$GITHUB_STEP_SUMMARY" \
-            --merged-manifest apps/android=apps/android/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml \
-            --merged-manifest apps/wear=apps/wear/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml \
-            --resolved-deps apps/android=build/privacy-check/deps-android.txt \
-            --resolved-deps apps/wear=build/privacy-check/deps-wear.txt
+        run: tools/check/check.sh step privacy-merged
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -126,8 +111,8 @@ jobs:
       # #78: release builds with R8 of both apps. assembleRelease also runs the Wear OS guard
       # verifyReleaseDebugInput (#57: the debug audio file input must not be in a release build).
       # Signed only when the release key secrets exist (docs/dev/04 §7.1); fork PRs and a repository
-      # without the secrets build unsigned APKs, which are not uploaded. The key is written to the
-      # runner's temp dir only and removed afterwards; secret values are never echoed.
+      # without the secrets build unsigned APKs, which are not uploaded. The step writes the key to the
+      # runner's temp dir only (output signed=true), the next step removes it; secret values are never echoed.
       - name: Assemble release (R8) + debug input leak check
         id: release
         env:
@@ -135,30 +120,7 @@ jobs:
           WATCHAUDIO_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
           WATCHAUDIO_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
           WATCHAUDIO_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
-        run: |
-          if [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
-            printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            export WATCHAUDIO_RELEASE_STORE_FILE="$RUNNER_TEMP/release.jks"
-            echo "signed=true" >> "$GITHUB_OUTPUT"
-            signing="signed with the release key (secrets)"
-          else
-            signing="unsigned (release key secrets are not set)"
-          fi
-          ./gradlew :apps:android:assembleRelease :apps:wear:assembleRelease
-          {
-            echo "### Release builds (R8): $signing"
-            echo
-            echo "| APK | Size |"
-            echo "| --- | --- |"
-            for f in apps/android/build/outputs/apk/release/*.apk apps/wear/build/outputs/apk/release/*.apk; do
-              echo "| $(basename "$f") | $(du -h "$f" | cut -f1) |"
-            done
-            echo
-            echo "Wear OS debug input guard (verifyReleaseDebugInput, #57):"
-            echo '```'
-            cat apps/wear/build/reports/debug-input/release.txt
-            echo '```'
-          } | tee -a "$GITHUB_STEP_SUMMARY"
+        run: tools/check/check.sh step assemble-release
 
       - name: Remove the release key
         if: always()
@@ -168,9 +130,7 @@ jobs:
       # without TTS, linked against the packed libonnxruntime.so), an independent check of the APKs.
       # Fails on eSpeak NG / TTS / diarization markers in any ABI.
       - name: sherpa-onnx JNI without TTS (release and debug APKs)
-        run: |
-          tools/sherpa-onnx-android/check-no-tts.sh apps/android/build/outputs/apk/release/*.apk apps/android/build/outputs/apk/debug/*.apk
-          cat apps/android/build/reports/sherpa-onnx-jni/*.txt
+        run: tools/check/check.sh step check-no-tts
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.release.outputs.signed == 'true'

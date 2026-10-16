@@ -32,6 +32,11 @@ on:
       - ".github/actions/sherpa-onnx-jni/**"
       - "tools/sherpa-onnx-android/**"
       - "tools/agent-bridge/**"
+      - "tools/check/check.sh"
+      - "tools/check/lib.sh"
+      - "tools/check/steps-build.sh"
+      - "tools/check/steps-bridge.sh"
+      - "tools/check/steps-emulator.sh"
       - "!**/*.md"
       - "!docs/**"
       - "!**/src/iosMain/**"
@@ -59,6 +64,11 @@ on:
       - ".github/actions/sherpa-onnx-jni/**"
       - "tools/sherpa-onnx-android/**"
       - "tools/agent-bridge/**"
+      - "tools/check/check.sh"
+      - "tools/check/lib.sh"
+      - "tools/check/steps-build.sh"
+      - "tools/check/steps-bridge.sh"
+      - "tools/check/steps-emulator.sh"
       - "!**/*.md"
       - "!docs/**"
       - "!**/src/iosMain/**"
@@ -82,6 +92,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The steps run through tools/check/check.sh (#202), as `check.sh android-emulator` does on a
+  # developer's machine against a local emulator or device; the per-target settings (Gradle paths,
+  # instrumented tests, scenario scripts) live in tools/check/steps-emulator.sh. This file sets up
+  # the runner, the emulator and the artifacts.
   smoke:
     runs-on: ubuntu-24.04
     permissions:
@@ -94,31 +108,15 @@ jobs:
       matrix:
         include:
           - name: phone
-            module: apps/android
-            gradle-path: :apps:android
-            apk: android
             api-level: 35
             target: google_apis
             # Audio stays enabled: the playback tests need a working audio output.
             emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
-            device-test-apks: :apps:android:assembleDebugAndroidTest :shared:db:assembleAndroidDeviceTest :shared:pipeline:assembleAndroidDeviceTest
-            device-tests: :apps:android:connectedDebugAndroidTest :shared:db:connectedAndroidDeviceTest :shared:pipeline:connectedAndroidDeviceTest
-            # Each of these must report at least one test case: the test engine can end green with 0 tests (e.g. a failed APK install).
-            device-test-modules: apps/android shared/db shared/pipeline
-            # The ASR tests must not skip for lack of models (pushed by phone-scenarios.sh).
-            device-test-args: -Pandroid.testInstrumentationRunnerArguments.requireModels=true
-            # #78: ReleaseAsrTest against the R8 release APK, with the APKs of the release-test-apks job.
-            release-checks: .github/scripts/release-asr.sh
-            scenarios: .github/scripts/phone-scenarios.sh
           - name: wear
-            module: apps/wear
-            gradle-path: :apps:wear
-            apk: wear
             api-level: 34
             target: android-wear
             # Audio enabled so that recording started from the tile gets a (silent) microphone.
             emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
-            scenarios: .github/scripts/wear-surfaces.sh
     name: smoke (${{ matrix.name }})
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -175,7 +173,7 @@ jobs:
 
       - name: Download ASR models
         if: matrix.name == 'phone'
-        run: tools/harness/download-models.sh
+        run: tools/check/check.sh step models
 
       # #184: the agent access scenario pairs the phone with the real bridge CLI on this host.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -187,32 +185,19 @@ jobs:
 
       - name: Build the agent bridge CLI
         if: matrix.name == 'phone'
-        working-directory: tools/agent-bridge
-        run: npm ci --ignore-scripts --no-audit --no-fund && npm run build
+        run: tools/check/check.sh step bridge-build
 
       # #173: all phone APKs of this job pack the JNI library without TTS (the instrumented ASR tests use it too).
       - name: sherpa-onnx JNI without TTS
         if: matrix.name == 'phone'
         uses: ./.github/actions/sherpa-onnx-jni
 
-      # The release build (R8, #78) is signed with a throwaway key made here: it only has to install
-      # on the emulator, and the real release key (android.yml) never reaches this job.
+      # The release build (R8, #78) is signed with a throwaway key made in the step: it only has to
+      # install on the emulator, and the real release key (android.yml) never reaches this job.
       # The shipped release APK is set aside in release-apk/ for the launch check. The APKs of the release ASR check
       # (#78) need a second build (one test build type per build); the release-test-apks job makes them (#92).
       - name: Build release and debug APKs (and instrumented test APKs)
-        env:
-          WATCHAUDIO_RELEASE_STORE_FILE: ${{ runner.temp }}/throwaway.jks
-          WATCHAUDIO_RELEASE_STORE_PASSWORD: ci-throwaway
-          WATCHAUDIO_RELEASE_KEY_ALIAS: ci
-          WATCHAUDIO_RELEASE_KEY_PASSWORD: ci-throwaway
-        run: |
-          keytool -genkeypair -noprompt -keystore "$WATCHAUDIO_RELEASE_STORE_FILE" -storepass ci-throwaway \
-            -keypass ci-throwaway -alias ci -keyalg RSA -keysize 2048 -validity 1 -dname "CN=watch-audio CI throwaway"
-          ./gradlew ${{ matrix.gradle-path }}:assembleRelease ${{ matrix.gradle-path }}:assembleDebug ${{ matrix.device-test-apks }}
-          mkdir -p release-apk && cp ${{ matrix.module }}/build/outputs/apk/release/${{ matrix.apk }}-release.apk release-apk/
-          if [ "${{ matrix.name }}" = phone ]; then
-            tools/sherpa-onnx-android/check-no-tts.sh release-apk/android-release.apk apps/android/build/outputs/apk/debug/android-debug.apk
-          fi
+        run: tools/check/check.sh step emulator-build ${{ matrix.name }}
 
       - name: Wait for the emulator download
         run: |
@@ -237,38 +222,13 @@ jobs:
           # -no-snapshot: a cold boot either way (no snapshot is kept between jobs), and nothing is saved at the end (#92).
           # Not in the matrix values: changing them changes setup-gradle's cache key for the job.
           emulator-options: ${{ matrix.emulator-options }} -no-snapshot
-          script: |
-            bash .github/scripts/launch-smoke.sh release-apk/${{ matrix.apk }}-release.apk logcat-release.txt
-            adb uninstall app.watchaudio
-            bash .github/scripts/launch-smoke.sh ${{ matrix.module }}/build/outputs/apk/debug/${{ matrix.apk }}-debug.apk logcat.txt
-            if [ -n "${{ matrix.scenarios }}" ]; then bash ${{ matrix.scenarios }} || touch device-tests-failed; fi
-            # The test engine reinstalls both APKs itself; remove the earlier installs (smoke test, scenarios) so a signature mismatch cannot skip the tests.
-            if [ -n "${{ matrix.device-tests }}" ]; then adb uninstall app.watchaudio || true; adb uninstall app.watchaudio.test || true; fi
-            if [ -n "${{ matrix.device-tests }}" ]; then adb logcat -c; ./gradlew ${{ matrix.device-tests }} ${{ matrix.device-test-args }} || touch device-tests-failed; adb logcat -d > logcat-device-tests.txt || true; fi
-            # Last, so the launch checks, scenarios and debug tests run on the same device state as without it (#78).
-            if [ -n "${{ matrix.release-checks }}" ]; then bash ${{ matrix.release-checks }} || touch device-tests-failed; fi
-            if [ ! -d screenshots-${{ matrix.name }} ]; then adb pull /data/local/tmp/watchaudio-screenshots screenshots-${{ matrix.name }} || true; fi
-            if [ -f device-tests-failed ]; then echo "instrumented tests failed"; exit 1; fi
-            for m in ${{ matrix.device-test-modules }}; do n=$(find "$m/build/outputs/androidTest-results/connected" -name '*.xml' -exec grep -o '<testcase ' {} + 2>/dev/null | wc -l); echo "$m: $n instrumented test cases"; if [ "$n" -eq 0 ]; then echo "no instrumented tests ran for $m"; exit 1; fi; done
+          # Launch checks (release, then debug), the scenario script, the instrumented tests and the
+          # release ASR check: tools/check/steps-emulator.sh.
+          script: tools/check/check.sh step emulator-run ${{ matrix.name }}
 
       - name: Instrumented test evidence
         if: always()
-        run: |
-          if [ -n "${{ matrix.device-tests }}" ]; then
-            python3 .github/scripts/junit-summary.py "Instrumented tests on the ${{ matrix.name }} emulator (API ${{ matrix.api-level }})" \
-              'apps/android/build/outputs/androidTest-results/connected/**/*.xml' \
-              'shared/*/build/outputs/androidTest-results/connected/**/*.xml' >> "$GITHUB_STEP_SUMMARY"
-          fi
-          {
-            echo "Checks on the ${{ matrix.name }} emulator (logcat and scenario scripts):"
-            echo '```'
-            cat launch-checks.txt 2>/dev/null || true
-            grep -ho "[A-Z_]*_CHECK .*\|SCREENSHOT .*\|MODEL_INSTALL .*" logcat-device-tests.txt 2>/dev/null | awk '!seen[$0]++' || true
-            cat scenario-logs/summary.txt wear-surfaces/summary.txt 2>/dev/null || true
-            echo '```'
-            echo "Screenshots (artifact screenshots-${{ matrix.name }}):"
-            ls screenshots-${{ matrix.name }} 2>/dev/null || echo "none"
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: tools/check/check.sh step emulator-evidence ${{ matrix.name }} ${{ matrix.api-level }}
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -298,7 +258,7 @@ jobs:
   # rebuilt with the keep rules of its test (apps/android/proguard-release-test.pro), with the test APK built for the
   # release build type. That is a second Gradle build (one test build type per build; ~1-2 min of R8), so it runs
   # here, on its own runner, while the phone job boots the emulator and runs the other checks (#92).
-  # Signed with a throwaway key made here (both APKs with the same key; the phone job uninstalls its own builds first).
+  # Signed with a throwaway key made in the step (both APKs with the same key; the phone job uninstalls its own builds first).
   release-test-apks:
     runs-on: ubuntu-24.04
     # +~7 min when the sherpa-onnx JNI cache misses (a new sherpa-onnx version, #173).
@@ -322,19 +282,7 @@ jobs:
 
       # assembleRelease too: the test APK only depends on the app's R8 mapping, not on its packaged APK.
       - name: Build the release APK and the test APK for the release ASR check
-        env:
-          WATCHAUDIO_RELEASE_STORE_FILE: ${{ runner.temp }}/throwaway.jks
-          WATCHAUDIO_RELEASE_STORE_PASSWORD: ci-throwaway
-          WATCHAUDIO_RELEASE_KEY_ALIAS: ci
-          WATCHAUDIO_RELEASE_KEY_PASSWORD: ci-throwaway
-        run: |
-          keytool -genkeypair -noprompt -keystore "$WATCHAUDIO_RELEASE_STORE_FILE" -storepass ci-throwaway \
-            -keypass ci-throwaway -alias ci -keyalg RSA -keysize 2048 -validity 1 -dname "CN=watch-audio CI throwaway"
-          ./gradlew :apps:android:assembleRelease :apps:android:assembleReleaseAndroidTest -Pwatchaudio.testBuildType=release
-          mkdir -p release-test-apks
-          cp apps/android/build/outputs/apk/release/android-release.apk \
-            apps/android/build/outputs/apk/androidTest/release/android-release-androidTest.apk release-test-apks/
-          tools/sherpa-onnx-android/check-no-tts.sh release-test-apks/android-release.apk
+        run: tools/check/check.sh step release-test-apks
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

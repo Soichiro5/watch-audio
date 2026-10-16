@@ -30,7 +30,7 @@ shot() {
   sleep 3
   adb shell screencap -p "$SHOTS/$1.png"
   adb pull "$SHOTS/$1.png" "$LOCAL_SHOTS/$1.png" > /dev/null 2>&1
-  log "SCREENSHOT name=$1.png bytes=$(stat -c %s "$LOCAL_SHOTS/$1.png" 2>/dev/null || echo missing)"
+  log "SCREENSHOT name=$1.png bytes=$(wc -c < "$LOCAL_SHOTS/$1.png" 2>/dev/null | tr -d ' ' || echo missing)"
 }
 
 # Dumps the view hierarchy to $OUT/$1.xml.
