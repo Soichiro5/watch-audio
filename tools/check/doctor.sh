@@ -31,6 +31,10 @@ components() {
   local konan_est=$((9 * GB / 10)) konan_src="measured (Linux)"
   if [ "$CHECK_OS" = "macos" ]; then konan_est=$((2 * GB)); konan_src="estimate"; fi
   local repo_est=$((6 * GB))
+  case "${DOCTOR_STAGE:-}" in
+    harness) repo_est=$((3 * GB / 2)) ;;
+    android-emulator) repo_est=$((4 * GB)) ;;
+  esac
   [ "${CHECK_QUICK:-0}" = "1" ] && repo_est=$((2 * GB))
   cat <<EOF
 gradle|Gradle caches (dependencies, wrapper, build cache) of this project|$(gradle_home)|$((4 * GB))|estimate|0
@@ -119,6 +123,7 @@ component_field() { components | awk -F'|' -v id="$1" -v f="$2" '$1 == id { prin
 # needed_lines <stage>: "<mount> <KiB still needed> <id>" for each component of the stage.
 needed_lines() {
   local id path est grows present need mount
+  DOCTOR_STAGE=$1
   for id in $(stage_components "$1"); do
     path=$(component_field "$id" 3)
     est=$(component_field "$id" 4)

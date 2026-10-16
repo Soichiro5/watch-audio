@@ -417,7 +417,7 @@ list_command() {
 
 install_hook() {
   local hooks hook flags=""
-  [ "${1:-}" = "--quick" ] && flags=" --quick"
+  [ "$CHECK_QUICK" = "1" ] && flags=" --quick"
   hooks=$(git -C "$CHECK_ROOT" rev-parse --git-path hooks)
   case "$hooks" in /*) ;; *) hooks="$CHECK_ROOT/$hooks" ;; esac
   mkdir -p "$hooks"

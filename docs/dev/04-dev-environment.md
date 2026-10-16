@@ -519,7 +519,7 @@ tools/check/check.sh install-hook [--quick]  # 任意: git push の前に fast�
    - wear: Wear OS Large Round、API 34「Wear OS」x86_64
 
    Git Bash から `tools/check/avd.sh create phone` → `tools/check/avd.sh start phone` でも作れる（`ANDROID_HOME` を Windows の SDK に）。
-7. **WSL2 から確認**: Windows の platform-tools を WSL2 の PATH に足し（例 `export PATH="$PATH:/mnt/c/Users/<ユーザー名>/AppData/Local/Android/Sdk/platform-tools"`）、WSL2 の Linux 版 adb のサーバーが動いていれば `adb kill-server` で止めてから、エミュレータを起動して `tools/check/check.sh --windows-adb android-emulator`。`--windows-adb` は `adb` を `adb.exe` に向ける（WSL2 に Linux の `adb` がなく `adb.exe` があれば自動）。mirrored でなければ警告を出す。
+7. **WSL2 から確認**: Windows の platform-tools を WSL2 の PATH に足し（例 `export PATH="$PATH:/mnt/c/Users/<ユーザー名>/AppData/Local/Android/Sdk/platform-tools"`）、WSL2 の Linux 版 adb のサーバーが動いていれば `adb kill-server` で止めてから、エミュレータを起動して `tools/check/check.sh --windows-adb android-emulator`。`--windows-adb` は `adb` を `adb.exe` に向ける（WSL2 に Linux の `adb` がなく `adb.exe` があれば自動）。mirrored でなければ警告を出す。Gradle の計装テストは WSL2 の SDK の adb（Linux 版）で `localhost:5037` の Windows の adb サーバーにつなぐので、WSL2 と Windows の platform-tools は同じ版にしておく（版が違うと adb が相手のサーバーを止めて立て直してしまう。どちらも `sdkmanager "platform-tools"` で最新にすればそろう）。
    - 実機（確認用のスマホ・ウォッチ）を Windows に USB でつなぐ場合も同じ（USB デバッグを有効に。`--allow-real-device`）。システムイメージは要らない。
    - この組み合わせ（WSL2 + Windows の adb + mirrored）は CI では確かめられない。うまくいかないときの代わり: Git Bash（Git for Windows）で、Windows に入れた JDK 21・Node・Python（`python3` で起動できること）を使い、Windows 側のクローンで `tools/check/check.sh --no-jni android-emulator` を実行する（JNI は WSL2 でしか作らないので、APK は AAR のライブラリのまま。機能の確認には影響しない）。
 8. **Windows で要る容量**（目安。§10.6 も参照）:
@@ -562,7 +562,7 @@ Mac で使うのは iOS / watchOS のビルドだけ、という前提で、**`i
 | --- | --- | --- | --- |
 | Gradle のキャッシュ（依存・ラッパー・ビルドキャッシュ） | 約 4 GB（推定） | すべて | `GRADLE_USER_HOME` |
 | Kotlin/Native（`~/.konan`） | Linux 0.9 GB（実測）、macOS 約 2 GB（推定） | `fast`（クロスコンパイル）・`ios-build`・`ios` | `KONAN_DATA_DIR` |
-| リポジトリのビルド出力 | 約 6 GB（推定。`--quick` は約 2 GB） | `fast`・`harness`・`android-emulator` | （`--clean-after` で終了時に消す） |
+| リポジトリのビルド出力 | `fast` 約 6 GB、`harness` 約 1.5 GB、`android-emulator` 約 4 GB（推定。`--quick` は約 2 GB） | `fast`・`harness`・`android-emulator` | （`--clean-after` で終了時に消す） |
 | sherpa-onnx の JNI（ビルド中の NDK とビルドツリー / 結果） | 約 5 GB（終わると消える）/ 約 20 MB | `fast`・`android-emulator`（Linux・WSL2） | `WATCHAUDIO_CACHE_DIR`（結果の置き場所） |
 | ASR・埋め込みのモデル | 約 0.5 GB（推定） | `harness`・`android-emulator` | `WATCHAUDIO_MODELS_DIR`（`tools/harness/models` をそこへのリンクにする） |
 | `tools/agent-bridge/node_modules` | 約 60 MB（実測） | `fast`・`android-emulator`・`ios` | — |
