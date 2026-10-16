@@ -31,12 +31,15 @@ A smartwatch records continuously while worn → chunks go to the paired phone o
 | `tools/agent-bridge` | `watch-audio-mcp`: the PC bridge CLI (TypeScript/Node, stdio MCP server; the paired phone connects to it over mutual TLS). `tools/agent-fake-phone`: JVM phone for its E2E |
 | `tools/roadmap-view` | Builds the issue dashboard (`python3 tools/roadmap-view/build.py out.html`) |
 | `tools/check-links` | Markdown link check (CI `links.yml`) |
+| `tools/check` | `check.sh`: the one entry point for local and CI checks (stages `fast`, `harness`, `android-emulator`, `ios-build`, `ios`); workflows call its steps, `test_parity.py` keeps them in step |
 | `research` | Python benchmarks from the spikes (ASR, embeddings) |
 | `docs/` | `product` (research, roadmap), `architecture`, `platforms` (per platform), `dev` (environment, CI, test audio), `research` (spike reports) |
 
 ## Commands
 
 ```bash
+tools/check/check.sh --gradle-args --max-workers=2 fast    # what the Linux PR CI runs, same scripts (docs/dev/04 §10); --quick: tests + static only
+tools/check/check.sh step unit-tests                      # one CI step; also: list, doctor, clean, harness, android-emulator, ios-build, ios
 ./gradlew --max-workers=2 jvmTest testAndroidHostTest          # shared + UI logic tests
 ./gradlew --max-workers=2 :shared:ort:test                      # ONNX Runtime via JNA (embedding)
 ./gradlew :apps:android:assembleDebug :apps:wear:assembleDebug      # apps
@@ -76,6 +79,7 @@ iOS/watchOS apps only build on macOS (CI `ios.yml`, Xcode 26.x): `cd apps/ios &&
 - **Closing an issue**: verify every completion condition with evidence (test/CI run links, commit/PR, measurements, screenshots), post that evidence as a comment mapping each condition to its proof, then close. Prefer criteria verifiable in the dev environment (CI, unit/UI tests, the harness, emulator/simulator). Conditions that can only be verified on a real device go into the per-platform 「実機検証」 issues (label `needs-device`) instead of blocking the implementation issue; only fundamentally device-bound work (e.g. battery measurement) stays `needs-device` itself. Never close on "implemented" alone. A PR's `Closes #n` is only used when the PR itself satisfies all conditions; otherwise use `Refs #n`.
 - With every change, **update the docs** it affects (`docs/platforms/*`, `docs/architecture/02`, `docs/product/03` progress table, README) and the **GitHub issues**: progress comment, labels (`P0/P1/P2`, `in-progress`, `needs-device`), close with a summary when done, file new issues for problems found. Regenerate the dashboard afterwards.
 - **Verify before a PR**: open or update a PR only after the change has been shown to do what it is for, as far as this machine can show it. Before every push that changes code, build files, workflows or scripts, run the local checks for what it touches and fix failures first:
+  - `tools/check/check.sh fast` covers all of the following for the Linux CI (or `--only <steps>` for the touched parts); the individual commands are:
   - compile + unit tests of the touched modules (`jvmTest`, `testAndroidHostTest`, `:<app>:testDebugUnitTest`), lint for app changes, `assembleDebug` of affected apps, the iOS cross-compile when shared/iOS Kotlin changes, the harness for pipeline/ASR changes, `python3 tools/privacy-check/check.py` and `python3 tools/check-links/check_links.py`;
   - for a behaviour change, also the specific check that proves the behaviour (the new/changed test, an evaluation, a dry run).
   - Write the commands and their results in the PR's 「確認」 section, and list separately what only CI can verify. The lead rejects sub-agent PRs without it and puts the same requirement in every sub-agent prompt.

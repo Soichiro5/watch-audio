@@ -73,9 +73,10 @@ tools/test-audio/    検証用音声セットの生成（オフライン TTS の
 tools/privacy-check/ 「データは端末内のみ」の CI チェック（権限・バックアップ・通信・依存の許可リスト）
 tools/check-links/   Markdown のリンク切れ検査（CI: links.yml）
 tools/check-version/ アプリのバージョンの一致検査（gradle.properties と iOS の project.yml、CI: android.yml）
+tools/check/         手元と CI の確認の入口（check.sh。CI のワークフローも同じステップを呼ぶ）
 tools/roadmap-view/  Issue ダッシュボードの生成
 research/            技術検証のベンチマーク（ASR・埋め込み、Python）
 docs/                product（調査・ロードマップ）/ architecture / platforms / dev（開発環境）/ research（検証結果）
 ```
 
-ビルド手順は [docs/dev/04-dev-environment.md](docs/dev/04-dev-environment.md) を参照。
+ビルド手順は [docs/dev/04-dev-environment.md](docs/dev/04-dev-environment.md) を参照。CI と同じ確認を手元で実行するには `tools/check/check.sh fast`（Windows は WSL2、Mac は iOS のビルドだけなら `tools/check/check.sh ios-build`。[docs/dev/04 §10](docs/dev/04-dev-environment.md#10-手元での確認ci-と同じスクリプト202)）。
