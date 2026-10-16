@@ -1,0 +1,6 @@
+# Line endings (#202): bash scripts, Gradle's Unix wrapper and Python stay LF in every checkout,
+# also in a clone on Windows with core.autocrlf=true (WSL, Git Bash and the windows-2025 CI job run
+# them with bash, which fails on "\r"). Everything else keeps what is committed.
+*.sh    text eol=lf
+gradlew text eol=lf
+*.py    text eol=lf

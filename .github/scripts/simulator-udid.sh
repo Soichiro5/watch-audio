@@ -7,10 +7,18 @@
 # Usage: simulator-udid.sh <iOS|watchOS> <device name prefix>
 #   e.g. simulator-udid.sh iOS iPhone
 # Exits 1 (and lists the available devices on stderr) when there is no such simulator.
+# SIMULATOR_UDID_IOS / SIMULATOR_UDID_WATCHOS name the device instead (tools/check/check.sh ios makes
+# its own devices and deletes them afterwards).
 set -euo pipefail
 
 platform=$1
 device_prefix=$2
+
+override_var=SIMULATOR_UDID_$(echo "$platform" | tr '[:lower:]' '[:upper:]')
+if [ -n "${!override_var:-}" ]; then
+  echo "${!override_var}"
+  exit 0
+fi
 
 udid=$(xcrun simctl list devices available --json | jq -r --arg p "$platform" --arg d "$device_prefix" '
   [.devices | to_entries | sort_by(.key) | reverse | .[]

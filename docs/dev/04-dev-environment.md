@@ -61,6 +61,8 @@ Linux でも Kotlin の iOS 向けコード（`iosMain`）の**コンパイル�
 
 iOS / watchOS 側の構成は [docs/platforms/ios-watchos.md](../platforms/ios-watchos.md) を参照。
 
+CI と同じ確認を手元でまとめて実行するには `tools/check/check.sh <段>`（`fast`・`harness`・`android-emulator`・`ios-build`・`ios`）を使う。Windows（WSL2）・Mac・Linux での準備と、空き容量が少ないときの方法は [§10](#10-手元での確認ci-と同じスクリプト202)。
+
 Wear OS 実機への接続は「開発者向けオプション → ワイヤレスデバッグ」→ `adb pair` / `adb connect`。
 
 ## 4. 実機なしでの通し検証（Linux）
@@ -155,6 +157,8 @@ tools/harness/download-models.sh          # モデルを tools/harness/models/ �
 実機（中位機種）での値は未計測（#61）。スマホの CPU・ストレージは上の環境より遅いので、実機入手後に同じクエリで確認する。
 
 ## 6. CI での自動確認（実機なし）
+
+各ステップは `tools/check/check.sh step <名前>` を呼ぶだけで、手元でも同じものを実行できる（対応表は [§10.7](#107-ci-のステップと手元のコマンド)）。
 
 | ワークフロー | ステップ | 確認できること | 証拠の場所 |
 | --- | --- | --- | --- |
@@ -267,6 +271,7 @@ PR の CI 待ちを減らすため、変更したファイルに関係するワ�
 - `emulator.yml` と `ios.yml` は対象リスト（`paths`）に除外（`!`）を足している。除外は後ろに書いたものが優先されるので、新しい除外は対象リストより後ろに書く。
 - 新しいスクリプトを `.github/scripts/` に足すときは、片方のプラットフォーム専用なら、もう片方のワークフローの除外に追加する。
 - フォルダ構成を変えるとき（#49）は、上の表のパスもあわせて直す。
+- `tools/check/`（#202。各ワークフローのステップの中身）: `android.yml`・`deliver.yml`・`links.yml` は絞り込みなし・除外リストなので、どの変更でも動く。対象リストの `agent-bridge.yml`・`emulator.yml`・`ios.yml` には、それぞれが使うファイルだけを入れてある: 3 つとも `check.sh`・`lib.sh`・`steps-bridge.sh`、`emulator.yml` は `steps-build.sh`（JNI・モデル・`release-test-apks`）と `steps-emulator.sh`、`ios.yml` は `steps-ios.sh`。新しい `steps-*.sh` を足したら、それを呼ぶワークフローの対象リストにも足す。
 
 ### 6.4 Local-only チェック（`tools/privacy-check`、#76）
 
@@ -376,7 +381,7 @@ base64 -w0 watch-audio-release.jks > keystore.b64   # macOS: base64 -i watch-aud
 **なぜ自前でビルドするか**: JitPack の sherpa-onnx の AAR（v1.13.8）に入っている `libsherpa-onnx-jni.so` には、音声合成（TTS）用の **eSpeak NG（GPL-3.0）**・piper-phonemize と、話者分離用の hclust-cpp が静的にリンクされている（上流の Android ビルドは `SHERPA_ONNX_ENABLE_TTS=ON` が既定）。アプリが使うのはオフラインの ASR（Zipformer・SenseVoice）と Silero VAD だけなので、使わない GPL のコードを配布物に入れないように、**配布する APK では** TTS と話者分離だけを外した JNI ライブラリに差し替える。上流には TTS なしの Android 向けの公開ビルドが見つからなかった。
 
 - **フォークではない**: 上流（k2-fsa/sherpa-onnx）の **タグをそのまま**、上流のビルドスクリプト（`build-android-<abi>.sh`）でビルドする。パッチは当てず、変えるのは CMake のオプションだけ（`SHERPA_ONNX_ENABLE_TTS=OFF`・`SHERPA_ONNX_ENABLE_SPEAKER_DIARIZATION=OFF`・`SHERPA_ONNX_ENABLE_C_API=OFF`）。手で保守するものはない。
-- **公開しない・リポジトリに入れない**: ビルドは CI の中だけで行い、GitHub Actions のキャッシュに置く。GitHub Release・Git へのコミット・ほかの公開先は使わない。キャッシュが消えても（7 日使われないと消える）次の CI が作り直す。
+- **公開しない・リポジトリに入れない**: ビルドは CI と手元の `tools/check/check.sh`（§10）だけで行い、CI では GitHub Actions のキャッシュ、手元では `WATCHAUDIO_CACHE_DIR`（既定 `~/.cache/watch-audio`）に置く。GitHub Release・Git へのコミット・ほかの公開先は使わない。キャッシュが消えても（7 日使われないと消える）次の CI が作り直す。
 - **差し替えるのは `libsherpa-onnx-jni.so` だけ**（ABI はアプリの `abiFilters`: `arm64-v8a`・`x86_64`）。Kotlin の API（`OfflineRecognizer`・`Vad` など）と `libonnxruntime.so` は AAR のものを使う。
 - **動作は変わらない**: オプションで変わるのは TTS・話者分離のソースがビルドに入るかどうかだけで、ASR・VAD とその JNI のソースはこれらのオプションを参照しない（ビルドのログに、オプションを参照するソースの一覧を出す。v1.13.8 では C API の `c-api.cc` と Python の `sherpa-onnx.cc` だけで、どちらも JNI ライブラリには入らない）。JNI の関数は Kotlin から呼ばれたときに名前で解決されるので、使わないクラス（`OfflineTts` など）の関数がなくても読み込みは失敗しない。`emulator.yml` の release ビルドの文字起こし（`ReleaseAsrTest`）と計装テストを、差し替えた APK で動かして確かめ続ける。
 - **サイズ**: `libsherpa-onnx-jni.so` は arm64-v8a が 4,771,760 → 3,436,448 バイト、x86_64 が 5,201,192 → 3,717,024 バイト。APK では `.so` を圧縮せずに格納するので、両 ABI 入りの APK は約 2.8 MB 小さくなる（v1.13.8）。同じ入力からは、どのジョブでビルドしてもバイト単位で同じファイルになる（NDK を同じ場所に置くため。ランナーにある NDK を使うと、同じ版でも SHA-256 が変わった）。
@@ -400,7 +405,7 @@ base64 -w0 watch-audio-release.jks > keystore.b64   # macOS: base64 -i watch-aud
 
 - **CI での使い方**: `deliver.yml`・`android.yml`・`emulator.yml`（phone ジョブと `release-test-apks` ジョブ）が setup-gradle の後にこのアクションを使い、その後の Gradle のビルドがすべて差し替えた `.so` を入れる。さらに、できた APK を `check-no-tts.sh` で検査する（`deliver.yml` は配る phone の APK、`android.yml` は release と debug、`emulator.yml` は release・debug・`ReleaseAsrTest` 用の release）。`deliver.yml` は main 以外のブランチで手動実行すると、同じビルドと検査だけを行い成果物を残さない（変更を main に入れる前に、配布の経路を試せる）。
 - **キャッシュが外れたとき**: 版を上げた直後などは、使う各ジョブがそれぞれビルドする（約 7 分。ジョブの制限時間はその分を見込んである）。保存はどれか 1 つが成功すればよい。ブランチで作ったキャッシュはそのブランチ（と PR）でだけ使われ、main で作ったものは全ブランチから使われる。
-- **手元で配布と同じ APK を作るとき**: Linux で `tools/sherpa-onnx-android/aar-info.sh <work>` の後に `tools/sherpa-onnx-android/build-jni.sh <work> <dir>`（git・cmake・make・wget・unzip・curl が要る）を実行し、`./gradlew :apps:android:assembleRelease -Pwatchaudio.sherpaOnnxJniDir=<dir>` でビルドする。
+- **手元で配布と同じ APK を作るとき**: `tools/check/check.sh fast`（または `tools/check/check.sh step sherpa-onnx-jni` の後に同じシェルで Gradle）が、CI と同じ 3 つの手順で作ってキャッシュし、以後のビルドに入れる（Linux・WSL2。macOS は AAR と同じ版の NDK を入れたときだけ）。手で行うなら、Linux で `tools/sherpa-onnx-android/aar-info.sh <work>` の後に `tools/sherpa-onnx-android/build-jni.sh <work> <dir>`（git・cmake・make・wget・unzip・curl が要る）を実行し、`./gradlew :apps:android:assembleRelease -Pwatchaudio.sherpaOnnxJniDir=<dir>` でビルドする。
 
 **sherpa-onnx の版を上げるとき**: `gradle/libs.versions.toml` の `sherpa-onnx = "<tag>"` の 1 行を変えるだけ。ビルドするタグ・NDK・ABI はそこと AAR から決まり、キャッシュのキーが変わるので CI が新しいタグからビルドし直す。PR では次を確かめる。
 
@@ -417,3 +422,219 @@ base64 -w0 watch-audio-release.jks > keystore.b64   # macOS: base64 -i watch-aud
 
 - 録音検証では、**参加者全員に録音・文字起こしの目的を説明し同意を得る**。
 - 実際の会話音声はリポジトリにコミットしない（個人情報）。評価用の正解テキストと集計結果のみ共有する。
+
+## 10. 手元での確認（CI と同じスクリプト、#202）
+
+リポジトリを非公開に戻して CI を絞ったあと（#85）も、今の CI と同じ確認を手元の PC でできるようにしてある。CI のワークフローの確認のステップは、すべて `tools/check/check.sh step <名前>` を呼ぶだけになっている。手元では同じステップを「段」（stage）にまとめて `tools/check/check.sh <段>` で実行する。CI と手元で同じスクリプトを呼ぶので、確認の内容はずれない。
+
+- ずれないことは `tools/check/test_parity.py` が確かめる（`links.yml` と `fast` で実行）。ワークフローの `run:` に `tools/check/check.sh step` を通らない確認があると失敗する。ワークフローに残してよいのは、ランナーの準備・後片付けと成果物のアップロードだけ。それも理由つきで許可リスト（`ALLOWED_SETUP`）に書く。さらに、ワークフローが呼ぶステップが手元のどれかの段に入っていること、下の §10.7 の表に載っていることも確かめる。
+- 確認を増やすとき: `tools/check/steps-*.sh` に `step_<名前>` 関数を足す → ワークフローから `tools/check/check.sh step <名前>` で呼ぶ → `check.sh` の段に入れる → §10.7 の表に 1 行足す。
+
+### 10.1 段
+
+| 段 | 中身 | 対応する CI | 動く OS | 目安の時間 |
+| --- | --- | --- | --- | --- |
+| `fast` | 単体テスト、検索ベンチマーク、lint、debug / release（R8）のビルド、Local-only チェック（静的・マージ後マニフェスト・解決した依存）、音声合成なしの sherpa-onnx JNI と APK の検査、`ReleaseAsrTest` 用 APK のビルド、iOS のクロスコンパイル、バージョン・リンク・CI との対応の検査、橋渡し CLI の lint・テスト・E2E | `android.yml`（ハーネス以外）・`deliver.yml`・`agent-bridge.yml`・`links.yml`・`emulator.yml` の `release-test-apks` | Linux、WSL2、macOS | 2 回目以降 約 15〜25 分（Gradle のキャッシュあり。ベンチマークが約 5 分）。初回は依存のダウンロードと JNI のビルド（Linux のみ、約 10 分）でさらに 20〜30 分。`--quick` は約 3〜5 分 |
+| `harness` | 実際の日本語 ASR での通し検証（モデルのダウンロードを含む） | `android.yml` の「End-to-end without devices」 | Linux、WSL2、macOS（ffmpeg が必要） | 約 3〜5 分（初回はモデル約 0.5 GB のダウンロード） |
+| `android-emulator` | エミュレータ（または接続した実機）で、release → debug の起動確認、シナリオ（権限拒否・強制終了からの再開・診断ログ・エージェント連携）、計装テスト、release での文字起こし（`ReleaseAsrTest`）、Wear OS の Tile とコンプリケーション | `emulator.yml`（phone・wear・`release-test-apks`） | Linux（KVM）、macOS（Apple シリコン）、Windows（エミュレータは Windows で動かし、確認は WSL2 から。§10.3） | phone 約 10〜15 分、wear 約 5 分（エミュレータの起動を除く） |
+| `ios-build` | Xcode のプロジェクト生成と、署名なしのビルドだけ: Debug（シミュレータ向けの iOS・watchOS。iOS のビルドが Kotlin のフレームワークも作る）と Release（実機向けの iOS・watchOS）、Release のビルドの検査（`RELEASE_BUILD_CHECK` など）。シミュレータは起動しない。終わったら `build/DerivedData` を消す | `ios.yml` のビルドのステップと `release` ジョブ | macOS（Xcode 26） | 約 10〜20 分 |
+| `ios` | `ios.yml` の全部: Kotlin のテストを iOS シミュレータで、Swift のテスト、シミュレータでの起動確認・コンプリケーション・音声認識・再生・意味検索・エージェント連携、Release のビルド。シミュレータの端末はこの段が作り、終わったら消す | `ios.yml`（`build`・`release`） | macOS（Xcode 26、シミュレータのランタイム） | 約 30〜45 分 |
+| `all` | `fast` → `harness` → `android-emulator` → （macOS なら）`ios` | — | — | — |
+
+- 実行できない段・ステップは理由を出して飛ばす（例: Linux での `ios`、エミュレータも実機もないときの `android-emulator`、ディスクが足りないときの JNI のビルド）。最後に、ステップごとの結果（passed / failed / skipped / warning）と所要時間の表を出す。1 つでも失敗すれば終了コードは 1。
+- CI では飛ばすことはない（CI で飛ばしたら失敗にする）。
+- 結果の表は `build/check/results.md`（PR の「確認」にそのまま貼れる）、CI のジョブサマリーに出していた証拠は `build/check/summary.md`、ステップごとのログは `build/check/logs/` に残る。
+
+### 10.2 使い方
+
+```bash
+tools/check/check.sh doctor                  # 道具・空き容量・各段に要る容量の見積もり
+tools/check/check.sh fast                    # push の前に（Linux / WSL2）
+tools/check/check.sh --quick fast            # 速いものだけ（単体テスト・静的検査・橋渡し CLI。約 3〜5 分）
+tools/check/check.sh harness
+tools/check/check.sh android-emulator        # エミュレータか実機をつないでから
+tools/check/check.sh ios-build               # Mac: ビルドだけ（容量が少ない Mac 向け）
+tools/check/check.sh ios                     # Mac: ios.yml の全部
+tools/check/check.sh step unit-tests         # 1 つのステップだけ（CI のステップと同じ）
+tools/check/check.sh --only 'bridge-*' fast  # 一部だけ（--skip で除外）
+tools/check/check.sh list                    # 段とステップの一覧
+tools/check/check.sh clean                   # 確認が作ったものを消す（--all でキャッシュも）
+tools/check/check.sh install-hook [--quick]  # 任意: git push の前に fast（--quick なら速いものだけ）を実行
+```
+
+主なオプション（全部は `tools/check/check.sh --help`）:
+
+| オプション | 意味 |
+| --- | --- |
+| `--gradle-args "--max-workers=2"` | Gradle に渡す引数（環境変数 `CHECK_GRADLE_ARGS` でも可）。メモリが少ない PC や、ほかのビルドと並行するとき |
+| `--fail-fast` | 最初の失敗で止める（既定は最後まで実行してまとめて報告） |
+| `--no-jni` | 音声合成なしの JNI ライブラリを作らない（APK の検査 `check-no-tts` は飛ばす） |
+| `--ignore-disk` | 容量の見積もりが足りなくても実行する（既定は見積もりが空きを超えると始めない。終了コード 3） |
+| `--clean-after` | 段が終わったらリポジトリのビルド出力を消す |
+| `--targets phone` / `--phone-serial <s>` / `--wear-serial <s>` | `android-emulator` の対象と端末 |
+| `--allow-real-device` | 実機でも実行する（下の注意） |
+| `--windows-adb` | WSL2 から Windows の `adb.exe` を使う（§10.3） |
+| `--no-watch` | `ios-build` / `ios` で watchOS だけのビルドと Apple Watch シミュレータの確認を飛ばす |
+| `--keep-simulators` / `--existing-simulators` | `ios` が作ったシミュレータを残す / 作らずに既存の最新の iPhone・Apple Watch を使う |
+| `--keep-derived-data` | `ios-build` / `ios` の後に `build/DerivedData` を残す |
+
+**実機で `android-emulator` を実行するときの注意**: 確認は `app.watchaudio` をアンインストール・再インストールする（実機のアプリの録音・文字起こしは消える）、権限を取り消す、Wear OS では文字盤を切り替える。そのため実機では `--allow-real-device` を付けたときだけ実行する。普段使いの端末ではなく、確認用の端末で行う。エージェント連携の確認は、実機では `adb reverse`（ポート 47823）でこの PC の CLI につなぐ（エミュレータの 10.0.2.2 の代わり。実機での動作は未確認）。
+
+**pre-push フック**（任意。既定では入れない）: `tools/check/check.sh install-hook --quick` で、`git push` の前に `fast --quick` が動く（`--quick` なしなら `fast` 全部）。1 回だけ飛ばすときは `git push --no-verify`、外すときは `tools/check/check.sh uninstall-hook`。
+
+### 10.3 Windows（主に使う PC）
+
+**おすすめの形**: `fast` と `harness` は **WSL2（Ubuntu 24.04）** で実行する。スクリプトは bash で、ハーネスは Linux の sherpa-onnx を使い、iOS のクロスコンパイルも WSL2 なら Linux と同じに動くため。`android-emulator` は、エミュレータを **Windows で**（Android Studio、Windows ハイパーバイザー プラットフォーム）動かし、確認は WSL2 から Windows の `adb.exe` を通して行う（`--windows-adb`）。WSL2 のネットワークを **mirrored** にすると、WSL2 と Windows で `localhost` を共有するので、Gradle の計装テスト（adb サーバーにつなぐ）とエージェント連携の確認（エミュレータ → PC の CLI）がそのまま動く。
+
+手順:
+
+1. **WSL2 と Ubuntu**（Windows 11 22H2 以降。PowerShell を管理者で）: `wsl --install -d Ubuntu-24.04` → 再起動 → Ubuntu のユーザーを作る。
+2. **mirrored ネットワーク**: `%UserProfile%\.wslconfig` に次を書き、PowerShell で `wsl --shutdown`（次に開くと有効）。WSL2 で `wslinfo --networking-mode` が `mirrored` と出れば良い。
+
+   ```ini
+   [wsl2]
+   networkingMode=mirrored
+   ```
+
+3. **WSL2 の中に道具を入れる**（Ubuntu のターミナルで）:
+
+   ```bash
+   sudo apt update
+   sudo apt install -y openjdk-21-jdk-headless python3 ffmpeg git unzip curl wget cmake make
+   # Node 22（20 以上）: nvm で入れる
+   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && . ~/.nvm/nvm.sh && nvm install 22
+   # Android SDK（コマンドラインツールだけ。エミュレータは Windows 側）
+   mkdir -p ~/android-sdk/cmdline-tools && cd ~/android-sdk/cmdline-tools
+   curl -fLO https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip   # 最新版は developer.android.com/studio#command-tools
+   unzip -q commandlinetools-linux-*_latest.zip && mv cmdline-tools latest && rm commandlinetools-linux-*_latest.zip
+   echo 'export ANDROID_HOME=$HOME/android-sdk' >> ~/.bashrc && . ~/.bashrc
+   yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+   $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-37"   # build-tools などは Gradle が自動で取る
+   ```
+
+4. **クローンは WSL2 の中に**（`/mnt/c` の下は遅い）: `git clone https://github.com/Soichiro5/watch-audio ~/src/watch-audio`。Windows の Git でクローンしたものを使う場合も、`.gitattributes` で `*.sh`・`gradlew`・`*.py` は LF のまま取り出される。
+5. **確認**: `cd ~/src/watch-audio && tools/check/check.sh doctor` → `tools/check/check.sh fast` → `tools/check/check.sh harness`。JNI のビルド（初回だけ。NDK を Google から取得）は WSL2 の中で動く。
+6. **エミュレータ**（Windows 側）: Android Studio を入れ、「Windows の機能」で「Windows ハイパーバイザー プラットフォーム」を有効にする。Device Manager で次の 2 台を作る（CI と同じ）。
+   - phone: Pixel 6、API 35「Google APIs」x86_64、内部ストレージ 3 GB 以上（モデルを置くため）
+   - wear: Wear OS Large Round、API 34「Wear OS」x86_64
+
+   Git Bash から `tools/check/avd.sh create phone` → `tools/check/avd.sh start phone` でも作れる（`ANDROID_HOME` を Windows の SDK に）。
+7. **WSL2 から確認**: Windows の platform-tools を WSL2 の PATH に足し（例 `export PATH="$PATH:/mnt/c/Users/<ユーザー名>/AppData/Local/Android/Sdk/platform-tools"`）、WSL2 の Linux 版 adb のサーバーが動いていれば `adb kill-server` で止めてから、エミュレータを起動して `tools/check/check.sh --windows-adb android-emulator`。`--windows-adb` は `adb` を `adb.exe` に向ける（WSL2 に Linux の `adb` がなく `adb.exe` があれば自動）。mirrored でなければ警告を出す。Gradle の計装テストは WSL2 の SDK の adb（Linux 版）で `localhost:5037` の Windows の adb サーバーにつなぐので、WSL2 と Windows の platform-tools は同じ版にしておく（版が違うと adb が相手のサーバーを止めて立て直してしまう。どちらも `sdkmanager "platform-tools"` で最新にすればそろう）。
+   - 実機（確認用のスマホ・ウォッチ）を Windows に USB でつなぐ場合も同じ（USB デバッグを有効に。`--allow-real-device`）。システムイメージは要らない。
+   - この組み合わせ（WSL2 + Windows の adb + mirrored）は CI では確かめられない。うまくいかないときの代わり: Git Bash（Git for Windows）で、Windows に入れた JDK 21・Node・Python（`python3` で起動できること）を使い、Windows 側のクローンで `tools/check/check.sh --no-jni android-emulator` を実行する（JNI は WSL2 でしか作らないので、APK は AAR のライブラリのまま。機能の確認には影響しない）。
+8. **Windows で要る容量**（目安。§10.6 も参照）:
+
+| もの | 容量 |
+| --- | --- |
+| WSL2 の Ubuntu と apt の道具（JDK 21、ffmpeg、cmake ほか） | 約 2.5 GB |
+| Node 22（nvm） | 約 0.2 GB |
+| Android SDK（WSL2 の中。platform-tools、platforms、build-tools） | 約 1 GB |
+| Gradle のキャッシュ（`~/.gradle`）と Kotlin/Native（`~/.konan`、クロスコンパイル用） | 約 4 GB + 約 0.9 GB |
+| リポジトリのビルド出力（`fast`。ベンチマークの DB 約 0.7 GB を含む） | 約 6 GB |
+| JNI のビルド中だけ使う NDK とビルドツリー（終わると消える） | 約 5 GB |
+| ASR のモデル（`harness`・`android-emulator`） | 約 0.5 GB |
+| Android Studio（Windows） | 約 3 GB |
+| Windows 側の SDK、エミュレータ、システムイメージ（phone・wear）、AVD 2 台 | 約 1 + 1 + 5 + 5.5 GB |
+
+WSL2 の仮想ディスク（`ext4.vhdx`）は、中でファイルを消しても自動では縮まない。`tools/check/check.sh clean` の後に PowerShell で `wsl --manage Ubuntu-24.04 --set-sparse true`（一度だけ。以後は自動で縮む）を実行しておく。
+
+### 10.4 Mac（iOS のビルド）
+
+Mac で使うのは iOS / watchOS のビルドだけ、という前提で、**`ios-build` 段をおすすめにする**。シミュレータを起動しないのでシミュレータの端末を作らず、終わったら `build/DerivedData` を消す（残すときは `--keep-derived-data`）。
+
+1. **Xcode 26**: App Store か developer.apple.com から入れ、`sudo xcode-select -s /Applications/Xcode.app` → `sudo xcodebuild -runFirstLaunch`。
+2. **JDK 21・XcodeGen**: `brew install --cask temurin@21` と `brew install xcodegen`（Homebrew がなければ brew.sh の手順で）。Python 3 は Xcode のコマンドラインツールに入っている。
+3. **ビルド**: `tools/check/check.sh doctor ios-build` で容量を確かめてから `tools/check/check.sh ios-build`。
+   - iOS アプリは watchOS アプリを同梱するので、watchOS の SDK も要る。シミュレータのランタイム（起動に使うもの）はビルドには要らない見込み。ただし Xcode の版によっては、ビルドだけでもプラットフォームのダウンロードを求める（ログに `... is not installed`）。そのときは Xcode → Settings → Components で入れるか、`xcodebuild -downloadPlatform watchOS`（`iOS`）を実行する（ステップがこの案内を出す）。これは Mac 実機で確かめていない。
+   - watchOS のビルドを省くときは `--no-watch`（watchOS だけのビルドを飛ばす。iOS アプリのビルドは watchOS アプリも作る）。
+4. **全部の確認（任意）**: `tools/check/check.sh ios` は `ios.yml` の全部を実行する。iOS のシミュレータのランタイム（約 8.5 GB、推定）が要り、watchOS のランタイム（約 4.5 GB、推定）がなければ Apple Watch の確認は理由つきで飛ばす。端末は `watch-audio-check iOS` / `watch-audio-check watchOS` という名前で作り、終わったら消す（`--keep-simulators` で残す、`--existing-simulators` で既存の端末を使う）。エージェント連携の確認には Node 20 以上（`brew install node@22`）、音声認識の確認には日本語の音声（システム設定 → アクセシビリティ → 読み上げコンテンツ → Kyoko など。なければテストが理由つきでスキップ）。
+5. `fast`・`harness` も Mac で動く（Apple シリコン）。JNI のビルドは、NDK（`sdkmanager "ndk;<AAR の NDK の版>"`、約 2.5 GB）を入れたときだけ行い、なければ理由を出して飛ばす。
+
+### 10.5 Linux
+
+`fast`・`harness` はそのまま動く（JDK 21、Python 3、Node 20 以上、Android SDK、`harness` には ffmpeg、JNI のビルドには git・cmake・make・unzip・curl）。`android-emulator` は KVM が要る（`ls -l /dev/kvm`）。`tools/check/avd.sh create phone` / `wear` で CI と同じ AVD を作り、`tools/check/avd.sh start phone` で起動してから実行する。このリポジトリのクラウドの開発環境（KVM なし・Xcode なし）では `fast` と `harness` だけを実行する（`--gradle-args --max-workers=2`）。
+
+### 10.6 空き容量が少ないとき（Mac・Windows）
+
+`tools/check/check.sh doctor [段]` が、今の空き容量・すでにあるもの（測った大きさ）・各段が初回に足すものの見積もりを、ディスクごとに出す。段を始める前にも同じ見積もりをして、足りなければ始めない（`--ignore-disk` で続行）。見積もりの多くは推定値（`doctor` の表で `estimate`）で、Linux で測ったものだけ `measured` と出る。
+
+| もの | 大きさ（初回） | 要る段 | 置き場所を変える環境変数 |
+| --- | --- | --- | --- |
+| Gradle のキャッシュ（依存・ラッパー・ビルドキャッシュ） | 約 4 GB（推定） | すべて | `GRADLE_USER_HOME` |
+| Kotlin/Native（`~/.konan`） | Linux 0.9 GB（実測）、macOS 約 2 GB（推定） | `fast`（クロスコンパイル）・`ios-build`・`ios` | `KONAN_DATA_DIR` |
+| リポジトリのビルド出力 | `fast` 約 6 GB、`harness` 約 1.5 GB、`android-emulator` 約 4 GB（推定。`--quick` は約 2 GB） | `fast`・`harness`・`android-emulator` | （`--clean-after` で終了時に消す） |
+| sherpa-onnx の JNI（ビルド中の NDK とビルドツリー / 結果） | 約 5 GB（終わると消える）/ 約 20 MB | `fast`・`android-emulator`（Linux・WSL2） | `WATCHAUDIO_CACHE_DIR`（結果の置き場所） |
+| ASR・埋め込みのモデル | 約 0.5 GB（推定） | `harness`・`android-emulator` | `WATCHAUDIO_MODELS_DIR`（`tools/harness/models` をそこへのリンクにする） |
+| `tools/agent-bridge/node_modules` | 約 60 MB（実測） | `fast`・`android-emulator`・`ios` | — |
+| Android SDK（platforms・build-tools・platform-tools） | 約 1 GB（実測） | `fast`・`harness`・`android-emulator` | `ANDROID_HOME` |
+| エミュレータ本体とシステムイメージ（phone・wear） | 約 1 GB + 3 GB + 2 GB（推定） | `android-emulator`（エミュレータを使うとき） | `ANDROID_HOME` |
+| AVD（phone・wear） | 約 3.5 GB + 2 GB（推定） | 同上 | `ANDROID_AVD_HOME` |
+| Xcode 26（追加のプラットフォームなし） | 約 12 GB（推定） | `ios-build`・`ios` | — |
+| iOS / watchOS のシミュレータのランタイム | 約 8.5 GB / 約 4.5 GB（推定） | `ios`（`ios-build` は要らない見込み） | — |
+| シミュレータの端末（`ios` が作り、終わると消す） | 約 3 GB（推定） | `ios` | — |
+| DerivedData（`ios-build`・`ios` の後に消す） | 約 6 GB（推定） | `ios-build`・`ios` | `DERIVED_DATA`（`-derivedDataPath`） |
+| Kotlin/Native のビルド出力（フレームワーク・テスト） | 約 3 GB（推定） | `ios-build`・`ios` | （`--clean-after`） |
+| Swift パッケージのキャッシュ（ONNX Runtime） | 約 0.5 GB（推定） | `ios-build`・`ios` | — |
+
+**少ない容量で回す例**:
+
+- **Mac は `ios-build` だけ**: Xcode（約 12 GB）+ Gradle（約 4 GB）+ Kotlin/Native（約 2 GB）+ 実行中だけの DerivedData とビルド出力（約 9 GB）。シミュレータのランタイムは入れない。`tools/check/check.sh --clean-after ios-build` なら終わった後に残るのはキャッシュだけ。
+- **Mac で `ios` を watchOS なしで**: `tools/check/check.sh --no-watch ios`（watchOS のランタイム約 4.5 GB を入れない）。
+- **Android の確認を実機で**: エミュレータ・システムイメージ・AVD（合わせて約 11 GB）の代わりに確認用の端末をつなぐ（`--allow-real-device`）。
+- **重いキャッシュを外付けドライブに**: 例 `export GRADLE_USER_HOME=/Volumes/Ext/gradle KONAN_DATA_DIR=/Volumes/Ext/konan DERIVED_DATA=/Volumes/Ext/DerivedData WATCHAUDIO_MODELS_DIR=/Volumes/Ext/models ANDROID_AVD_HOME=/Volumes/Ext/avd WATCHAUDIO_CACHE_DIR=/Volumes/Ext/watch-audio-cache`（シェルの設定ファイルに書く）。`DERIVED_DATA` を指定したときは、終わった後に自動では消さない。
+
+**片付け**:
+
+- `tools/check/check.sh clean`: 確認が作ったものを、大きさつきで一覧にしてから消す（`--yes` で確認なし）。リポジトリの `build/`・`.gradle/`・`.kotlin/`、エミュレータや iOS の確認の出力、`tools/harness/models`（と `WATCHAUDIO_MODELS_DIR`）、`node_modules`、生成した Xcode プロジェクト、`DERIVED_DATA`、JNI の置き場所、`avd.sh` が作った AVD、`ios` が作ったシミュレータの端末（`watch-audio-check ...`）。
+- `tools/check/check.sh clean --all`: さらに、ほかのプロジェクトとも共有するキャッシュ（Gradle の `caches` と `wrapper/dists`、`~/.konan`、npm のキャッシュ、Swift パッケージのキャッシュ）と、`avd.sh` が入れたシステムイメージも消す。次に使うときに再ダウンロードされる。
+- Xcode・シミュレータのランタイム・Android SDK・JDK・Node は消さない。ランタイムは `xcrun simctl runtime list` → `xcrun simctl runtime delete <ID>`、使えなくなった端末は `xcrun simctl delete unavailable` で消せる。
+
+### 10.7 CI のステップと手元のコマンド
+
+ワークフローの確認のステップと、それが呼ぶ `tools/check/check.sh step <名前>`、それを含む段。ステップの中身は `tools/check/steps-*.sh` にあり、CI と手元で同じものが動く（CI だけの部分、`GITHUB_OUTPUT`・`GITHUB_ENV`・`RUNNER_TEMP`・`simctl shutdown all` などは CI のときだけ）。
+
+| ワークフロー（ジョブ） | CI のステップ | ステップ（`check.sh step ...`） | 段 |
+| --- | --- | --- | --- |
+| `android.yml` | Version check | `version` | `fast` |
+| `android.yml` | Local-only check (static) | `privacy-static` | `fast` |
+| `android.yml`・`deliver.yml`・`emulator.yml` | sherpa-onnx JNI without TTS（複合アクション） | `sherpa-onnx-jni-info`・`sherpa-onnx-jni-build`（キャッシュが外れたとき）・`sherpa-onnx-jni-verify` | 手元では `sherpa-onnx-jni`（同じ 3 つを、キャッシュを `WATCHAUDIO_CACHE_DIR` に置いて実行）: `fast`・`android-emulator` |
+| `android.yml` | Unit tests | `unit-tests` | `fast` |
+| `android.yml` | Search benchmark | `search-benchmark`（手元で件数を減らすなら `BENCHMARK_SEGMENTS`。表に注記が出る） | `fast` |
+| `android.yml` | End-to-end without devices | `harness`（ffmpeg は CI ではその前のステップで入れる） | `harness` |
+| `android.yml` | Lint | `lint` | `fast` |
+| `android.yml`・`deliver.yml` | Assemble phone + Wear OS / Build phone and Wear OS apps | `assemble-debug` | `fast` |
+| `android.yml` | Local-only check (merged manifests, resolved dependencies) | `privacy-merged` | `fast` |
+| `android.yml` | Assemble release (R8) + debug input leak check | `assemble-release`（CI の secret があれば署名。手元は `WATCHAUDIO_RELEASE_*` があれば署名、なければ署名なし） | `fast` |
+| `android.yml`・`deliver.yml` | sherpa-onnx JNI without TTS（APK の検査） | `check-no-tts`（`deliver.yml` は配る APK を引数に） | `fast` |
+| `agent-bridge.yml`（cli: Linux・macOS・Windows） | npm ci / npm run lint / npm test | `bridge-npm-ci`・`bridge-lint`・`bridge-test` | `fast` |
+| `agent-bridge.yml`（e2e） | Shared agent logic (JVM tests) and the fake phone / Bridge CLI / End to end | `bridge-fake-phone`・`bridge-npm-ci`・`bridge-e2e` | `fast` |
+| `links.yml` | Markdown link check | `links` | `fast` |
+| `links.yml` | CI and local checks in step | `parity` | `fast` |
+| `emulator.yml`（phone） | Download ASR models | `models` | `android-emulator` |
+| `emulator.yml`（phone）・`ios.yml` | Build the agent bridge CLI | `bridge-build` | `android-emulator`・`ios` |
+| `emulator.yml`（phone・wear） | Build release and debug APKs (and instrumented test APKs) | `emulator-build`（引数 `phone` / `wear`） | `android-emulator` |
+| `emulator.yml`（`release-test-apks`） | Build the release APK and the test APK for the release ASR check | `release-test-apks` | `fast`・`android-emulator` |
+| `emulator.yml`（phone・wear） | Install, launch and check for crashes（emulator-runner の `script`） | `emulator-run`（引数 `phone` / `wear`） | `android-emulator` |
+| `emulator.yml`（phone・wear） | Instrumented test evidence | `emulator-evidence`（引数 `phone` / `wear` と API レベル） | `android-emulator` |
+| `ios.yml` | Shared tests (iOS simulator) / Shared test evidence | `ios-kotlin-tests`・`ios-kotlin-evidence` | `ios` |
+| `ios.yml`（`build`・`release`） | Generate Xcode project | `ios-xcodegen` | `ios-build`・`ios` |
+| `ios.yml` | Build iOS app / Build watchOS app | `ios-build-app`・`ios-build-watch` | `ios-build`・`ios` |
+| `ios.yml` | watchOS Release build has no debug audio input | `ios-watch-release-check` | `ios` |
+| `ios.yml` | watchOS complication tap / Launch watchOS app | `ios-complication`・`ios-watch-launch` | `ios` |
+| `ios.yml` | Swift unit tests / On-device language model | `ios-swift-unit`・`ios-llm` | `ios` |
+| `ios.yml` | Launch iOS app on an iPhone simulator | `ios-launch` | `ios` |
+| `ios.yml` | Japanese test speech / Japanese/English test speech（失敗しても続行） | `ios-ja-speech`・`ios-mixed-speech` | `ios`（失敗は warning） |
+| `ios.yml` | Speech transcription / Playback in the iOS app | `ios-speech-tests`・`ios-playback` | `ios` |
+| `ios.yml` | Embedding model / Semantic search | `ios-embedding-model`・`ios-semantic-search` | `ios` |
+| `ios.yml` | Agent access on the iOS simulator | `ios-agent-access` | `ios` |
+| `ios.yml` | Shut down simulators | `ios-shutdown`（手元では、この段が作った端末を止めて消す） | `ios` |
+| `ios.yml`（`release`） | Build iOS app / watchOS app, Release, device / Release build evidence | `ios-release-build-app`・`ios-release-build-watch`・`ios-release-evidence` | `ios-build`・`ios` |
+| （CI にはない） | iOS 向け Kotlin のクロスコンパイル（CLAUDE.md の push 前の確認） | `ios-cross-compile` | `fast` |
+
+ワークフローに残る準備のステップ（手元では実行しない。`test_parity.py` の `ALLOWED_SETUP`）: ランナーの空き容量の確保・エミュレータの事前ダウンロードと待ち合わせ・KVM の有効化（`emulator.yml`）、ffmpeg のインストールと release 鍵の削除（`android.yml`）、成果物の収集（`deliver.yml` の Collect builds）、Xcode の版の表示・仮想オーディオ・XcodeGen のインストール（`ios.yml`）。手元では、ffmpeg・XcodeGen は前提の道具として各ステップが有無を確かめ、エミュレータは `avd.sh` か Android Studio で用意する。
+
+**CI のときだけ・手元のときだけの違い**（`tools/check/lib.sh`）:
+
+- CI（`GITHUB_ACTIONS=true` か `--ci`）: 証拠は `$GITHUB_STEP_SUMMARY`、後のステップへの受け渡しは `$GITHUB_ENV` / `$GITHUB_OUTPUT`、一時ファイルは `$RUNNER_TEMP`。ステップを飛ばすことはない（飛ばす条件になったら失敗）。
+- 手元: 証拠は `build/check/summary.md`、受け渡しは `build/check/env`、一時ファイルは `build/check/`。リポジトリの外は、JNI の置き場所（`WATCHAUDIO_CACHE_DIR`、既定 `~/.cache/watch-audio`）と、`ios` が作るシミュレータの端末と、`avd.sh` の AVD 以外に書かない。`simctl shutdown all` のように手元のほかのものに触る操作はしない。
+- `release-asr.sh` は CI では同じ実行の成果物 `release-test-apks` を待って取得し、手元では直前の `release-test-apks` ステップが作った `release-test-apks/` を使う。

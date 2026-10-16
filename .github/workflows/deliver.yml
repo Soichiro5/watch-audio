@@ -4,6 +4,7 @@ name: Deliver (main)
 # Store distribution (TestFlight / Play internal testing) is added once signing
 # credentials are configured as repository secrets.
 # A manual run on another branch is a dry run: the same build and checks, no artifact (#173).
+# The build and the check run through tools/check/check.sh (#202), as in `check.sh fast`.
 on:
   push:
     branches: [main]
@@ -47,7 +48,7 @@ jobs:
 
       # assembleDebug also runs verifyDebugSherpaOnnxJni (the packed library is the one built without TTS).
       - name: Build phone and Wear OS apps
-        run: ./gradlew :apps:android:assembleDebug :apps:wear:assembleDebug
+        run: tools/check/check.sh step assemble-debug
 
       - name: Collect builds
         run: |
@@ -66,9 +67,7 @@ jobs:
 
       # #173: nothing is delivered if the phone APK contains eSpeak NG / TTS / diarization code.
       - name: sherpa-onnx JNI without TTS (delivered phone APK)
-        run: |
-          tools/sherpa-onnx-android/check-no-tts.sh dist/watch-audio-phone-*.apk
-          cat apps/android/build/reports/sherpa-onnx-jni/debug.txt
+        run: tools/check/check.sh step check-no-tts dist/watch-audio-phone-*.apk
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: github.ref == 'refs/heads/main'
