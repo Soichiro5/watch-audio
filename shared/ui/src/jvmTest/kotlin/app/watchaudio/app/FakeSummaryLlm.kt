@@ -25,6 +25,22 @@ class FakeSummaryLlm(
 
     override suspend fun availability(): LlmAvailability = availability
 
+    /** What [prepare] leaves behind (e.g. the model downloaded); null: [prepare] changes nothing. */
+    var afterPrepare: LlmAvailability? = null
+
+    /** While set, [prepare] waits for it after reporting half of the download. */
+    var prepareGate: CompletableDeferred<Unit>? = null
+    var prepareCalls = 0
+
+    override suspend fun prepare(onProgress: (Float?) -> Unit): LlmAvailability {
+        prepareCalls++
+        val after = afterPrepare ?: return availability
+        onProgress(0.5f)
+        prepareGate?.await()
+        availability = after
+        return availability
+    }
+
     override suspend fun contextTokens(): Int = 4_096
 
     override suspend fun countTokens(text: String): Int? = text.length

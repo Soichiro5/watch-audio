@@ -58,10 +58,15 @@ object Strings {
     const val SUMMARY_TURNED_OFF = "設定で Apple Intelligence をオンにすると使えます"
     const val SUMMARY_LANGUAGE_NOT_SUPPORTED =
         "端末内の AI が日本語に対応していないため、要約を使えません。Apple Intelligence の言語の設定を確かめてください"
-    /** The OS prepares its model (iOS `modelNotReady`). */
-    const val SUMMARY_PREPARING = "Apple Intelligence のモデルを準備しています。準備ができると使えます"
+    /** The OS prepares its model (iOS `modelNotReady`, Android AICore downloading Gemini Nano). */
+    const val SUMMARY_PREPARING = "端末内の AI のモデルを準備しています。準備ができると使えます"
     fun summaryDownloading(percent: String) = "要約のモデルをダウンロードしています… $percent"
     fun summaryNeedsDownload(size: String) = "要約には、要約のモデル（約 $size）のダウンロードが必要です"
+    /** The OS can download its model (Android AICore), once the user asks for a summary (#205). */
+    const val SUMMARY_NEEDS_MODEL = "要約には端末内の AI のモデルが必要です。「この日を要約」を押すと、OS がモデルをダウンロードしてから要約します"
+    /** After 「この日を要約」, while the OS gets its model ready (progress unknown). */
+    const val SUMMARY_GETTING_MODEL = "端末内の AI のモデルを用意しています…"
+    const val SUMMARY_MODEL_FAILED = "端末内の AI のモデルを用意できませんでした。インターネットにつながる場所で、もう一度お試しください"
     fun summaryTodo(hours: Int) = "${hours} 時間分を要約できます"
     fun summarizing(done: Int, total: Int) = "要約しています（$done/$total 時間）"
     const val SUMMARY_ALL_DONE = "この日の要約はできています"

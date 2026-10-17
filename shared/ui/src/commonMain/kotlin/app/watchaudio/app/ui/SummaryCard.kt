@@ -66,7 +66,32 @@ internal fun SummaryCard(state: DayUiState, summaries: DaySummaries, timeZone: T
             val available = availability is LlmAvailability.Available
             val run = state.summaryRun
             when {
-                !available -> Note(availabilityText(availability))
+                run != null && run.preparing -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            run.downloaded?.let { Strings.summaryDownloading(formatPercent(it)) } ?: Strings.SUMMARY_GETTING_MODEL,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = callbacks.onStop) { Text(Strings.SUMMARY_STOP) }
+                    }
+                    val downloaded = run.downloaded
+                    if (downloaded != null) {
+                        LinearProgressIndicator(progress = { downloaded }, modifier = Modifier.fillMaxWidth())
+                    } else {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                    }
+                }
+                // The OS downloads its model only after the user's tap (Android AICore, #205).
+                availability is LlmAvailability.NeedsDownload && run == null && summaries.toSummarize > 0 -> {
+                    Note(availabilityText(availability))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(Strings.summaryTodo(summaries.toSummarize), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        Button(onClick = callbacks.onSummarizeDay) { Text(Strings.SUMMARIZE_DAY) }
+                    }
+                }
+                // A run that has just got the model goes on while the day is re-read.
+                !available && run == null -> Note(availabilityText(availability))
                 run != null -> {
                     val progress = run.progress
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -92,6 +117,7 @@ internal fun SummaryCard(state: DayUiState, summaries: DaySummaries, timeZone: T
             when (state.summaryNotice) {
                 SummaryNotice.RATE_LIMITED -> Note(Strings.SUMMARY_RATE_LIMITED, error = true)
                 SummaryNotice.FAILED -> Note(Strings.SUMMARY_RUN_FAILED, error = true)
+                SummaryNotice.MODEL_FAILED -> Note(Strings.SUMMARY_MODEL_FAILED, error = true)
                 null -> Unit
             }
             if (summaries.hours.any { it.summary?.state == HourSummaryState.DONE }) Note(Strings.SUMMARY_NOTE)
@@ -108,7 +134,8 @@ private fun availabilityText(availability: LlmAvailability): String = when (avai
     LlmAvailability.LanguageNotSupported -> Strings.SUMMARY_LANGUAGE_NOT_SUPPORTED
     is LlmAvailability.Downloading ->
         availability.fraction?.let { Strings.summaryDownloading(formatPercent(it)) } ?: Strings.SUMMARY_PREPARING
-    is LlmAvailability.NeedsDownload -> Strings.summaryNeedsDownload("${availability.bytes / 100_000_000 / 10.0} GB")
+    is LlmAvailability.NeedsDownload ->
+        availability.bytes?.let { Strings.summaryNeedsDownload("${it / 100_000_000 / 10.0} GB") } ?: Strings.SUMMARY_NEEDS_MODEL
     is LlmAvailability.Unsupported -> Strings.SUMMARY_UNSUPPORTED
     is LlmAvailability.Available -> ""
 }

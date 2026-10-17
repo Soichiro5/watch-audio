@@ -816,7 +816,10 @@ class AppUiTest {
         assertNoEnglish()
     }
 
-    /** What the card says when the on-device LLM cannot be used (§4.6); Android has none yet. */
+    /**
+     * What the card says when the on-device LLM cannot be used (§4.6): a phone without Gemini Nano
+     * or Apple Intelligence, and the states before the model is ready.
+     */
     @Test
     fun hourSummaryAvailability() = runDesktopComposeUiTest(width = 412, height = 1100) {
         runBlocking {
@@ -839,6 +842,13 @@ class AppUiTest {
             onNodeWithText(Strings.SUMMARIES).performScrollTo()
             screenshot("summary-$name")
         }
+        // Android's AICore (#205): the OS downloads Gemini Nano only after the user's tap, so the button stays.
+        llm.availability = LlmAvailability.NeedsDownload(null)
+        runBlocking { store.transaction { } }
+        waitForText(Strings.SUMMARY_NEEDS_MODEL)
+        onNodeWithText(Strings.SUMMARIZE_DAY).assertExists()
+        onNodeWithText(Strings.SUMMARIES).performScrollTo()
+        screenshot("summary-needs-model")
         assertNoEnglish()
     }
 
