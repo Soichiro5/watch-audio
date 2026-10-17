@@ -64,6 +64,10 @@ dependencies {
     implementation(libs.zxing.core)
     // The phone's time zone for the agent tools' dates and the notification's auto-off time.
     implementation(libs.kotlinx.datetime)
+    // Hour summaries (#205): Gemini Nano through ML Kit GenAI's Prompt API, used only in
+    // llm/MlKitGeminiNano.kt. Inference runs in AICore on the device; ML Kit sends content-free usage
+    // logs to Google (owner-approved 2026-10-17, tools/privacy-check, docs/platforms/android-phone.md).
+    implementation(libs.mlkit.genai.prompt)
 
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.junit)

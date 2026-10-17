@@ -35,6 +35,8 @@ import app.watchaudio.core.pipeline.StatusNotice
 import app.watchaudio.core.pipeline.StorageManager
 import app.watchaudio.core.search.SemanticSearch
 import app.watchaudio.core.settings.loadSettings
+import app.watchaudio.core.summary.LlmProvider
+import app.watchaudio.core.summary.UnsupportedLlmProvider
 import java.io.File
 import java.io.FileNotFoundException
 import java.text.SimpleDateFormat
@@ -80,6 +82,8 @@ class AndroidAppServices(
     embeddingRunning: StateFlow<Boolean> = MutableStateFlow(false),
     /** Agent access (#184). */
     override val agentAccess: AndroidAgentAccess? = null,
+    /** Hour summaries (#205): Gemini Nano where the phone has it, else 「使えません」. */
+    override val llm: LlmProvider = UnsupportedLlmProvider(),
 ) : AppServices {
     override val audioRoot: String = audioRootDir.absolutePath
 
