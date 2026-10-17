@@ -2,12 +2,12 @@
 
 > **下書きです。運営者と法律の専門家のレビュー前で、申請フォームの項目名・要件は申請時点の App Store Connect / Play Console の表示で確認し直す必要があります。**
 > プライバシーポリシー（[日本語](privacy-policy.ja.md) / [英語](privacy-policy.en.md)）と同じ内容になるように書いています。ポリシーと申告は必ず同時に更新してください（#36 の完了条件「ポリシー・ストアのデータ申告が『データは端末内のみ』と一致している」）。
-> 内容は 2026-10-12 時点の `main`（5681119）の実装に基づきます（プライバシーマニフェスト・iPhone のマイク・全削除の範囲・Google Play の確認は #159、iPhone の意味検索（モデルのダウンロード・ONNX Runtime の Swift パッケージ）は #178 で更新）。根拠のコード箇所は末尾の「[レビュー用メモ: 主張と根拠](#5-レビュー用メモ-主張と根拠)」にまとめています。
+> 内容は 2026-10-12 時点の `main`（5681119）の実装に基づきます（プライバシーマニフェスト・iPhone のマイク・全削除の範囲・Google Play の確認は #159、iPhone の意味検索（モデルのダウンロード・ONNX Runtime の Swift パッケージ）は #178、Android の要約（Google の ML Kit GenAI と、その利用状況の記録）は #205 で更新）。根拠のコード箇所は末尾の「[レビュー用メモ: 主張と根拠](#5-レビュー用メモ-主張と根拠)」にまとめています。
 
 ## 1. 申告の前提
 
-- アプリは録音・文字起こし・その他のユーザーデータを**端末の外へ送らない**。運営者のサーバーはない。解析・広告・クラッシュ送信の SDK はない。アカウントもない。
-- 端末外への通信は、Android スマホの文字起こしモデルのダウンロード（Hugging Face・GitHub の公開ファイル）、両スマホの意味検索のモデルのダウンロード（Hugging Face の公開ファイル、検索タブを初めて開いたときに Wi-Fi だけ。iPhone は #178）と、iOS が行う音声認識モデルのダウンロード（OS 管理）だけ。ユーザーデータは送らない。例外はエージェント連携（Android #184、iPhone #185）: ユーザーが ON にしている間だけ（iPhone はアプリを画面に出している間だけ）、ユーザーがペアリングした自分の PC へ、同じネットワーク内で直接（相互 TLS）つなぎ、その PC のエージェントが読んだ分を渡す。開発者のサーバー・中継はない。
+- アプリは録音・文字起こし・その他のユーザーデータを**端末の外へ送らない**。運営者のサーバーはない。広告・クラッシュ送信の SDK はない。アカウントもない。**例外は Android の要約（#205）に使う Google の ML Kit GenAI**: 推論は端末内（AICore の Gemini Nano）だが、ML Kit が**内容を含まない利用状況の記録**（端末の情報・アプリの名前と版・処理時間・API の設定・入出力の大きさ・エラー・利用者や端末などの識別子・設定された言語）を Google に送る（オーナーが 2026-10-17 に承認。iPhone には入らない）。
+- 端末外への通信は、Android スマホの ML Kit の利用状況の記録（上記）、Gemini Nano のモデルのダウンロード（AICore = OS が行う。要約のボタンを押したときだけ）、Android スマホの文字起こしモデルのダウンロード（Hugging Face・GitHub の公開ファイル）、両スマホの意味検索のモデルのダウンロード（Hugging Face の公開ファイル、検索タブを初めて開いたときに Wi-Fi だけ。iPhone は #178）と、iOS が行う音声認識モデルのダウンロード（OS 管理）だけ。ユーザーデータは送らない。例外はエージェント連携（Android #184、iPhone #185）: ユーザーが ON にしている間だけ（iPhone はアプリを画面に出している間だけ）、ユーザーがペアリングした自分の PC へ、同じネットワーク内で直接（相互 TLS）つなぎ、その PC のエージェントが読んだ分を渡す。開発者のサーバー・中継はない。
 - Watch → スマホの転送は、ユーザー自身の端末間の直接通信（Wear OS: 近くで直接つながったノードだけ、Apple: WatchConnectivity）。開発者には届かない。
 - ユーザーが自分で端末外に出せるのは、診断ログの書き出し（OS の共有シートで送り先をユーザーが選ぶ）、データの書き出し（#155。文字起こし・マーク・ギャップと任意で音声を ZIP にして、Android は SAF の保存ダイアログ、iOS は共有シートでユーザーが選んだ保存先にだけ書く）と、暗号化バックアップ（#40。同じ保存先の選び方で、ユーザーのパスフレーズで暗号化したファイルを書く。復元はユーザーが選んだファイルを読むだけ）だけ。パスフレーズと鍵は端末の外に出さない。課金（#34）・AI 機能（P2）は未公開。公開時にこの文書とポリシーを更新する。
 
@@ -117,9 +117,17 @@ iPhone アプリの `NSMicrophoneUsageDescription` は削除した（#159）。i
 
 | 質問 | 回答案 | 理由 |
 | --- | --- | --- |
-| 必須のユーザーデータの種類について、アプリでデータを収集または共有していますか | **いいえ** | Google の定義の「収集」は、アプリから端末の外へデータを送ること。録音・文字起こし・診断ログは端末内にだけ保存する。Wear OS → スマホは同じユーザーの端末間で、`Node.isNearby` の直接接続だけを使い、開発者や第三者には届かない |
-| （収集・共有がない場合、転送時の暗号化・削除リクエストの質問は表示されない） | — | — |
+| 必須のユーザーデータの種類について、アプリでデータを収集または共有していますか | **はい（Android の要約に使う Google の ML Kit だけ、#205）**。**文言と回答はオーナーの確認待ち** | Google の定義の「収集」は、アプリから端末の外へデータを送ること。アプリに組み込んだ SDK が送るものも含む。録音・文字起こし・要約・診断ログは端末内にだけ保存する。Wear OS → スマホは同じユーザーの端末間で、`Node.isNearby` の直接接続だけを使い、開発者や第三者には届かない。ML Kit GenAI は内容を含まない利用状況の記録を Google に送る（下の表） |
+| 転送時に暗号化していますか | はい | ML Kit のデータ開示: 「HTTPS で暗号化して送る」 |
+| ユーザーがデータの削除を依頼できますか | いいえ（案。**要確認**） | 記録は Google の ML Kit が受け取り、運営者は受け取らず消せない。アプリの中の本人のデータ（録音・文字起こし・要約）はアプリ内で削除できる |
 | 独立したセキュリティ審査（任意） | 受けない | — |
+
+データの種類（ML Kit GenAI が送るもの。出典は [ML Kit のデータ開示](https://developers.google.com/ml-kit/android-data-disclosure)、2026-07-15 更新、2026-10-17 に閲覧）。**回答案。オーナーの確認が要る**:
+
+| データの種類（Play の分類） | ML Kit が送るもの | 収集 | 共有 | 必須 / 任意 | 目的 |
+| --- | --- | --- | --- | --- | --- |
+| アプリの情報とパフォーマンス > 診断情報 | 処理時間などの性能、API の設定、入出力の大きさ、エラーの種類、端末の情報（メーカー・機種・OS の版）、アプリの名前と版、設定された言語 | はい | いいえ（案: Google は第三者に渡さないと開示。SDK の提供元が自身の診断に使う扱いが「共有」に当たるかは**要確認**） | 必須（案: 日別の画面で要約が使えるかを確かめるときにも送られうるため、要約を押さない人も対象になる） | 分析（Google による ML Kit の診断と利用状況の分析） |
+| 端末または他の ID | 利用者・端末などの識別子（インストールごとの識別子を含む） | はい | いいえ（案、同上） | 必須（案、同上） | 分析（同上） |
 
 要確認:
 
@@ -127,6 +135,7 @@ iPhone アプリの `NSMicrophoneUsageDescription` は削除した（#159）。i
 - **診断ログの書き出し**: ユーザーが共有シートで選んだ送り先に渡すもので、Google の定義の「ユーザーが開始した操作で、ユーザーが合理的に予期する転送」に当たり、「共有」の対象外と整理している。
 - **データの書き出し（#155）**: ユーザーが SAF の保存ダイアログで作った文書にだけ書く（アプリは通信しない）。診断ログと同じく「ユーザーが開始した操作で、ユーザーが合理的に予期する転送」で、「共有」の対象外と整理している。
 - **エージェント連携（#184）**: ユーザーが自分でペアリングし ON にした、ユーザー自身の PC への LAN 内の直接の転送で、開発者には届かない。ユーザーが開始し、ユーザーが合理的に予期する転送として「収集・共有なし」と整理している。PC のエージェントがクラウドの LLM を使う場合にその提供元へ渡るのは、ユーザーが選んだ PC のソフトウェアの動作（アプリの送信ではない）と整理しているが、審査で問われたら説明できるよう、プライバシーポリシーの第 7 条に明記した。**要レビュー**。
+- **ML Kit GenAI（#205）**: 推論は AICore の中の Gemini Nano で、文字起こし・要約は送らない（[ML Kit GenAI の概要](https://developers.google.com/ml-kit/genai): 入力・推論・出力は端末内で処理）。送るのは上の表の利用状況の記録だけ。ML Kit GenAI の追加規約は「Google による指標データの処理を利用者に知らせること」を求めるので、プライバシーポリシーの第 5 条に書いた。「必須 / 任意」「共有」の回答と、Play の「目立つ開示」（§3.4）が要るかは**オーナーの確認待ち**。Gemini Nano のモデルのダウンロードは AICore（OS）が行うもので、アプリのプロセスの通信ではない。
 - **Android vitals**: ユーザーが Google と使用状況・診断情報の共有を許可している場合に Play Console に届くクラッシュ統計は、Google（OS）が集めるもので、アプリの申告対象ではないと理解している。
 
 ### 3.2 前景サービスの申告（Play Console の「前景サービスの権限」）
@@ -202,7 +211,7 @@ Play Console で権限の用途を聞かれたとき（アプリのコンテン�
 
 ### 3.4 Google Play のユーザーデータポリシー（目立つ開示）
 
-端末外に送るデータがないため「目立つ開示と同意」の要件には当たらないと考えているが、初回のオンボーディング（「録音する前に」）で周りの人も録音されることを説明し、チェックで同意を得ている。
+端末外に送るユーザーデータは、Android の要約に使う ML Kit の内容を含まない利用状況の記録（§3.1）だけ。これは SDK の診断・分析の記録で、要約の機能を使うときに利用者が合理的に予期する範囲と考え、「目立つ開示と同意」の要件には当たらないと考えている（**オーナーの確認待ち**、#205）。また、初回のオンボーディング（「録音する前に」）で周りの人も録音されることを説明し、チェックで同意を得ている。
 
 ## 4. 審査用のスクリーンショット・動画
 
@@ -223,8 +232,9 @@ Play Console で権限の用途を聞かれたとき（アプリのコンテン�
 
 | 主張 | 根拠 |
 | --- | --- |
-| 解析・広告・クラッシュ送信 SDK、HTTP クライアントのライブラリがない | `tools/privacy-check/policy.py` の `DENIED_DEPENDENCIES` と `ALLOWED_RESOLVED_DEPENDENCIES`（リリースの実行時クラスパスを CI で照合）。`gradle/libs.versions.toml`。iOS の Swift パッケージは `apps/ios/project.yml` の ONNX Runtime（`exactVersion: 1.24.2`）だけで、`policy.IOS_SWIFT_PACKAGES` が許可リストと版の固定を検査する（#178） |
+| 解析・広告・クラッシュ送信 SDK、HTTP クライアントのライブラリがない（例外: Android の要約の ML Kit GenAI とその送信部、#205） | `tools/privacy-check/policy.py` の `DENIED_DEPENDENCIES` と `ALLOWED_RESOLVED_DEPENDENCIES`（リリースの実行時クラスパスを CI で照合。ML Kit は `com.google.mlkit:genai-*`・`common`、`com.google.android.datatransport:transport-*`、`firebase-encoders*`・`firebase-components`、それが連れてくる Guava と注釈のライブラリを理由つきで許可）。`gradle/libs.versions.toml`。iOS の Swift パッケージは `apps/ios/project.yml` の ONNX Runtime（`exactVersion: 1.24.2`）だけで、`policy.IOS_SWIFT_PACKAGES` が許可リストと版の固定を検査する（#178） |
 | 通信はモデルのダウンロードだけ | `policy.py` の `ALLOWED_API_USES`（通信 API は `apps/android/src/main/kotlin/app/watchaudio/android/asr/ModelDownloader.kt` だけ）と `ALLOWED_URL_PREFIXES`（`https://huggingface.co/csukuangfj/reazonspeech-k2-v2`、`https://github.com/k2-fsa/sherpa-onnx/releases/download/`、英語用の `https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17`）。URL は `ModelManifest.kt`。[docs/architecture/02 §7.2](../architecture/02-architecture.md#72-通信箇所の一覧) |
+| Android の要約は端末内の Gemini Nano で作り、ML Kit を使うのは 1 つのファイルだけ。プレビューのモデル・試験運用の機能は使わない（#205） | `apps/android/src/main/kotlin/app/watchaudio/android/llm/MlKitGeminiNano.kt`（`Generation.getClient`、`ModelReleaseStage.STABLE`）。`policy.py` の `SINGLE_FILE_FRAMEWORKS`・`SINGLE_FILE_REQUIREMENTS`（ほかのファイルで `com.google.mlkit.genai` を使う、ほかの ML Kit の API、`ModelReleaseStage.PREVIEW`、プレフィックスキャッシュ・構造化出力を使うと失敗）。マージ後のマニフェストで増える権限は `com.google.android.apps.aicore.service.BIND_SERVICE` だけ（`library_permissions`） |
 | iOS の音声認識モデルは OS がダウンロード、サーバー型の音声認識は使わない | `apps/ios/App/SpeechTranscription.swift`（`AssetInventory`、`SpeechAnalyzer`）。`policy.py` が `SF…RecognitionRequest` を禁止 |
 | iPhone の通信は意味検索のモデルのダウンロード（Wi-Fi のみ、固定のコミット、SHA-256 の確認）だけ（エージェント連携の LAN 内の接続を除く） | `apps/ios/App/Embedding/ModelDownload.swift`（`URLSession`、`allowsCellularAccess` / `allowsExpensiveNetworkAccess` / `allowsConstrainedNetworkAccess = false`、ephemeral、HTTPS のみ）、URL とハッシュは `RuriV3.FILES`（`shared/pipeline`）、検証は `ModelInstaller`。`policy.py` の `ALLOWED_API_USES` / `ALLOWED_API_REQUIREMENTS` が CI で検査（#178） |
 | Wear OS アプリはインターネットを使わない | `apps/wear/src/main/AndroidManifest.xml` に `INTERNET` なし。`policy.py` の Wear OS の権限の許可リスト |
@@ -281,6 +291,7 @@ Play Console で権限の用途を聞かれたとき（アプリのコンテン�
 - [ ] 暗号化の輸出コンプライアンスの回答を運営者が決め、`ITSAppUsesNonExemptEncryption` を設定する（§2.1。エージェント連携の相互 TLS（#185）を含めて判断する）
 - [ ] エージェント連携（#185）の App Privacy の整理（§2.1「データの収集なし」のまま）を運営者・レビューで確認する
 - [ ] 課金（#34）を公開するときに、ポリシーとこの申告を更新する
+- [ ] Android の要約（#205）の Play のデータセーフティ（§3.1 の ML Kit の表: 「共有」・「必須 / 任意」・削除の依頼）、目立つ開示（§3.4）と、ポリシー第 5 条の ML Kit の文言を運営者が確認する
 
 ## 8. 使っているライブラリとモデルのライセンス（#167）
 
@@ -294,6 +305,11 @@ Play Console で権限の用途を聞かれたとき（アプリのコンテン�
 | ONNX Runtime for iOS（`onnxruntime-swift-package-manager`。iPhone で意味検索のモデルを動かす Swift パッケージ、#178） | MIT | iOS |
 | JNA（Java Native Access。意味検索のモデルを動かすために ONNX Runtime の C API を呼ぶ、#24） | Apache-2.0（LGPL-2.1 とのデュアル。Apache-2.0 を選ぶ） | Android |
 | ZXing（エージェント連携のペアリングの QR コードを写真から読む、#184） | Apache-2.0 | Android |
+| ML Kit GenAI Prompt API（`com.google.mlkit:genai-prompt`・`genai-common`・`genai-schema`）と ML Kit の共通ライブラリ（`com.google.mlkit:common`。Android の要約で端末内の Gemini Nano を使う、#205） | ML Kit Terms of Service と ML Kit GenAI 追加規約 | Android |
+| Google Data Transport（`com.google.android.datatransport`）・Firebase Encoders / Components（ML Kit が利用状況の記録を送るのに使う、#205） | Apache-2.0 | Android |
+| Guava・Error Prone / J2ObjC / JSR 305 の注釈・javax.inject（ML Kit GenAI の Kotlin API が連れてくる、#205） | Apache-2.0 | Android |
+| Checker Framework の注釈（同上） | MIT | Android |
+| Reactive Streams（同上） | CC0 1.0 | Android |
 | SenseVoice Small（英語の文字起こしモデル、「英語も文字起こしする」をオンにしたときだけダウンロード） | FunASR Model Open Source License Agreement v1.1（出典と作者の表示、モデル名の保持が条件。英語のカードにも帰属表示を出す） | Android |
 | sherpa-onnx と、そのネイティブライブラリに含まれる ONNX Runtime・JSON for Modern C++（MIT）・kaldi-native-fbank・kaldi-decoder・kaldifst・OpenFst・simple-sentencepiece（Apache-2.0） | Apache-2.0 ほか | Android |
 | AndroidX・Kotlin・kotlinx（coroutines・serialization・io・datetime・atomicfu）・Compose Multiplatform・Guava ListenableFuture・JSpecify・JetBrains Java Annotations | Apache-2.0 | Android・Wear OS・iOS（それぞれ使う分） |

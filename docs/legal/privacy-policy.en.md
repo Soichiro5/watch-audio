@@ -1,7 +1,7 @@
 # Privacy Policy (draft)
 
 > **Draft. It must be reviewed by the operator and a legal expert before publication.**
-> Items in `[ ]` are to be filled in by the operator. The text follows the app as implemented on `main` (2026-10-13, semantic search on iPhone, #178, and hour summaries, #27 and #196). Whenever a feature is added or changed, update this policy and the store declarations ([store-data-declarations.md](store-data-declarations.md), Japanese) together. The Japanese version ([privacy-policy.ja.md](privacy-policy.ja.md)) is the primary text; this is its translation.
+> Items in `[ ]` are to be filled in by the operator. The text follows the app as implemented on `main` (2026-10-13, semantic search on iPhone, #178, and hour summaries, #27, #196 and #205). The wording on the usage logs sent by Google's ML Kit for summaries on Android (section 5) needs the operator's review. Whenever a feature is added or changed, update this policy and the store declarations ([store-data-declarations.md](store-data-declarations.md), Japanese) together. The Japanese version ([privacy-policy.ja.md](privacy-policy.ja.md)) is the primary text; this is its translation.
 
 ---
 
@@ -18,7 +18,7 @@ The App records conversations while you wear your smartwatch, transcribes them o
 
 - Recorded audio, transcripts, marks and any other data the App creates are **stored only on your devices (your smartwatch and your smartphone)**.
 - We do not operate any servers, and **we never receive this data**. We cannot view, retrieve or restore your data.
-- The App contains no third-party tools (SDKs) for analytics, advertising or crash reporting.
+- The App contains no third-party tools (SDKs) for advertising or crash reporting. Google's ML Kit, used for summaries on Android, does send **usage logs without any content** (device model, app version, processing time and the like) to Google (section 5). Recordings, transcripts and summaries are not sent.
 - The App requires no account and does not ask for your name, e-mail address, location, contacts or similar information.
 
 ## 2. Data the App handles on your devices
@@ -52,19 +52,21 @@ The App records conversations while you wear your smartwatch, transcribes them o
 - Transcription runs on your smartphone. **Audio is never sent to an external transcription service.**
 - On Android, the App runs an open-source speech recognition engine (sherpa-onnx) and speech recognition models on the device.
 - On iPhone, the App uses the on-device speech recognition built into iOS (SpeechAnalyzer). Server-based speech recognition is not used.
-- Summaries (the day's conversations summarized hour by hour) are also made on the device. On iPhone, the App uses Apple Intelligence's on-device model (Apple's Foundation Models); it does not use Apple's server-based processing (Private Cloud Compute) or any other company's model. Transcripts and summaries are never sent anywhere. Android does not offer summaries for now.
+- Summaries (the day's conversations summarized hour by hour) are also made on the device. On iPhone, the App uses Apple Intelligence's on-device model (Apple's Foundation Models); it does not use Apple's server-based processing (Private Cloud Compute) or any other company's model. Transcripts and summaries are never sent anywhere. On Android phones that support Gemini Nano, the App uses the on-device model built into Android (Google's Gemini Nano, which runs inside Android's AICore) through Google's ML Kit. Your conversations are processed on the device and are not sent to Google (for the usage logs ML Kit sends, see section 5). On other Android phones, summaries are not available.
 - Semantic search (finding conversations by meaning even when the wording differs) is also computed on the device, on Android and iPhone alike (with the open-source ONNX Runtime and the downloaded semantic search model). Your search words and transcripts are never sent anywhere.
 
 ## 5. Network use
 
-The App uses the internet **only to download the models for transcription and semantic search**. No audio, transcripts or other data of yours are sent in this communication. Apart from this, on a phone (Android or iPhone), only while you have "agent access" (エージェント連携) turned on (on an iPhone, also only while the App is on screen), the App connects directly to your own PC on the same network (not over the internet; see section 7).
+The App uses the internet **only to download the models for transcription and semantic search** and, **when you use summaries on Android, for the usage logs that Google's ML Kit sends** (without any content; see below). No audio, transcripts or summaries are sent in this communication. Apart from this, on a phone (Android or iPhone), only while you have "agent access" (エージェント連携) turned on (on an iPhone, also only while the App is on screen), the App connects directly to your own PC on the same network (not over the internet; see section 7).
 
 - Android: during setup (and when a model needs to be fetched again), the App downloads a Japanese speech recognition model and a speech detection model (several hundred MB) from files published on Hugging Face (huggingface.co) and GitHub (github.com). You can restrict the download to Wi-Fi. Only if you turn on "Also transcribe English" (英語も文字起こしする), the App also downloads an English-capable speech recognition model (about 240 MB) from Hugging Face over Wi-Fi (or over mobile data if you choose to); turning the setting off deletes it. The first time you open the search screen, the App downloads the model for semantic search (about 44 MB) from Hugging Face over Wi-Fi. Your search words and transcripts are never sent (semantic search is computed on the device too).
+- Android summaries: the Gemini Nano model used for summaries is managed by Android (AICore); the App does not download it. On a supported phone that does not have the model yet, Android downloads it from Google when you tap "Summarize this day" (この日を要約).
+- **Usage logs sent by Google's ML Kit (when you use summaries on Android)**: summaries on Android use the on-device Gemini Nano through Google's ML Kit (its GenAI Prompt API). When the App checks whether summaries are available, prepares the model or makes a summary, ML Kit sends **usage logs that contain none of your conversations** to Google. According to Google ([ML Kit data disclosure](https://developers.google.com/ml-kit/android-data-disclosure)), they consist of device information (manufacturer, model, OS version and the like), app information (package name and version), performance metrics such as latency, API configuration, input and output sizes, error codes, user, device or other identifiers (including per-installation identifiers) and the configured languages; Google uses them for ML Kit's diagnostics and usage analytics, encrypts them in transit (HTTPS) and does not transfer them to third parties. **Recorded audio, transcripts, summaries and any other content of your conversations are not sent.** These logs are handled under [Google's Privacy Policy](https://policies.google.com/privacy); we do not receive them. On phones that do not support Gemini Nano, logs may still be sent when the App checks whether summaries are available.
 - iPhone: if the iOS Japanese speech recognition model is not on the device, iOS downloads it from Apple. The Apple Intelligence model used for summaries is managed by iOS; the App does not download it. The first time you open the search screen, the App downloads the model for semantic search (about 44 MB, the same as on Android) from Hugging Face, over Wi-Fi only (not over mobile data, a personal hotspot or in Low Data Mode). Your search words and transcripts are never sent.
 - As with any internet communication, the download servers receive information needed for the connection, such as your device's IP address. That information is handled under each provider's privacy policy. We do not receive it.
 - The Wear OS watch app does not use the internet.
 
-The speech recognition models and libraries the App uses are programs and data that run on your device; their providers do not receive your data.
+The speech recognition models and libraries the App uses are programs and data that run on your device; their providers do not receive your data (the usage logs Google's ML Kit sends are described above and contain none of your conversations).
 
 ## 6. Retention and deletion
 
@@ -99,7 +101,8 @@ The App never sends data off your device without your action. Data goes to a des
 | Body sensors (optional) | Wear OS watch (some OS versions) | Detecting that the watch has been taken off, to pause recording. Used only to tell whether the watch is worn; heart rate and other values are neither read nor stored |
 | Vibration | Wear OS watch | Feedback when recording starts or stops and when you add a mark |
 | Run at startup | Wear OS watch | After the watch restarts, resuming the processing of data waiting to be sent and prompting you to resume recording |
-| Internet, foreground service (data sync) | Android phone | Downloading transcription models, and, while agent access is on, the connection to your PC on the same network. Because the model files are large, the download runs with a visible notification |
+| Internet, foreground service (data sync) | Android phone | Downloading transcription models, and, while agent access is on, the connection to your PC on the same network. Because the model files are large, the download runs with a visible notification. Google's ML Kit, used for summaries, also uses the internet to send its usage logs (section 5) |
+| Use of AICore (granted automatically) | Android phone | Using the on-device Gemini Nano (Android's AICore) for summaries |
 | Foreground service (connected device), Wi-Fi multicast, local network (Android 17 and later) | Android phone | While agent access is on, staying connected to the paired PC with the screen off (with a visible notification), and finding that PC on the same network |
 | Local network | iPhone | While agent access is on, finding and connecting to the paired PC on the same network |
 | Camera | iPhone | Reading the QR code on the PC's screen when pairing a PC for agent access (asked only when scanning; the camera image is neither stored nor sent) |
