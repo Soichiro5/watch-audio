@@ -9,6 +9,8 @@ import app.watchaudio.android.agent.AndroidAgentAccess
 import app.watchaudio.android.alert.GapAlertMonitor
 import app.watchaudio.android.asr.AndroidSherpaTranscriber
 import app.watchaudio.android.asr.ModelManager
+import app.watchaudio.android.llm.GeminiNanoLlmProvider
+import app.watchaudio.android.llm.MlKitGeminiNano
 import app.watchaudio.android.search.AndroidEmbedding
 import app.watchaudio.android.search.AndroidSemanticSearch
 import app.watchaudio.android.transfer.ChunkReceiver
@@ -185,6 +187,7 @@ class AppGraph private constructor(context: Context) {
         semanticSearch = semanticSearch,
         embeddingRunning = embeddingRunning,
         agentAccess = agentAccess,
+        llm = GeminiNanoLlmProvider(MlKitGeminiNano(), diagnostics),
     )
 
     /**

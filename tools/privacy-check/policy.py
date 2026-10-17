@@ -13,7 +13,8 @@ ANDROID_APPS = {
         # <uses-permission> in the module's own manifests (src/*/AndroidManifest.xml).
         "permissions": {
             "android.permission.INTERNET": "model downloads (asr/ModelManager.kt) and, only while the user has agent access on, "
-                                           "the LAN connection to their own paired PC (agent/TlsAgentTransport.kt, #184)",
+                                           "the LAN connection to their own paired PC (agent/TlsAgentTransport.kt, #184); "
+                                           "ML Kit's datatransport also needs it for its content-free usage logs (#205)",
             "android.permission.ACCESS_NETWORK_STATE": "WorkManager network constraint for the model download",
             "android.permission.FOREGROUND_SERVICE": "model download runs as a foreground worker",
             "android.permission.FOREGROUND_SERVICE_DATA_SYNC": "foreground service type of the model download",
@@ -31,6 +32,8 @@ ANDROID_APPS = {
             "android.permission.WAKE_LOCK": "WorkManager",
             "android.permission.RECEIVE_BOOT_COMPLETED": "WorkManager reschedules work after reboot",
             "app.watchaudio.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION": "androidx.core (signature, app-internal)",
+            "com.google.android.apps.aicore.service.BIND_SERVICE":
+                "ML Kit GenAI binds to AICore, the OS service that runs Gemini Nano on the device (hour summaries, #205)",
         },
         # <data-extraction-rules> sections that must exclude every domain. Device-to-device
         # transfer (cable / local Wi-Fi) stays allowed on the phone so history can move.
@@ -101,6 +104,17 @@ GUARDED_APIS = (
     ("LanguageModelFeedback", r"\bLanguageModelFeedback\w*", "feedback attachments for Apple (they carry the prompt and the answer)"),
     ("OtherLanguageModel", r"(?<!\w)LanguageModel\b",
      "a model other than the on-device SystemLanguageModel (the LanguageModel protocol of iOS 27: server or third-party models)"),
+    # ML Kit GenAI (#205, docs/research/on-device-llm.md §8): Gemini Nano runs in AICore on the device,
+    # but ML Kit sends content-free usage logs to Google (owner-approved 2026-10-17). Its Prompt API is
+    # used in one file (SINGLE_FILE_FRAMEWORKS); no other ML Kit API (e.g. the code scanner, #184),
+    # no preview model and no experimental or alpha part (the GenAI terms keep "Preview" and
+    # "Experimental" services out of production).
+    ("MLKitGenAI", r"\bcom\.google\.mlkit\.genai\.",
+     "ML Kit GenAI (only in the file of policy.SINGLE_FILE_FRAMEWORKS)"),
+    ("MLKit", r"\bcom\.google\.mlkit\.(?!genai\.)", "other ML Kit APIs (each would add Google usage logs of its own)"),
+    ("GenAiPreview", r"\bModelReleaseStage\.PREVIEW\b", "ML Kit GenAI preview models (not for production under the GenAI terms)"),
+    ("GenAiExperimental", r"\b(?:PromptPrefix|CachedContext|CreateCachedContextRequest|GenerateTypedContentRequest|"
+     r"generateTypedContentRequest)\b", "ML Kit GenAI experimental / alpha parts (prefix caching, structured output)"),
 )
 
 # Frameworks that run on the device but whose module also offers APIs that would send data off it
@@ -113,6 +127,11 @@ SINGLE_FILE_FRAMEWORKS = {
         "hour summaries on the iPhone (#196): Apple's on-device SystemLanguageModel only; no Private Cloud Compute, "
         "no other company's model, no feedback attachments",
     ),
+    "MLKitGenAI": (
+        "apps/android/src/main/kotlin/app/watchaudio/android/llm/MlKitGeminiNano.kt",
+        "hour summaries on Android (#205): Gemini Nano through the Prompt API, inference in AICore on the device; "
+        "ML Kit sends content-free usage logs to Google, owner-approved 2026-10-17",
+    ),
 }
 
 # file -> ((what, regex), ...): code (comments removed) must match each regex.
@@ -121,6 +140,10 @@ SINGLE_FILE_REQUIREMENTS = {
         ("uses the on-device SystemLanguageModel", r"\bSystemLanguageModel\.default\b"),
         ("generates with the system model and the guardrails for the user's own text",
          r"SystemLanguageModel\(\s*useCase:\s*\.general,\s*guardrails:\s*\.permissiveContentTransformations\s*\)"),
+    ),
+    "apps/android/src/main/kotlin/app/watchaudio/android/llm/MlKitGeminiNano.kt": (
+        ("uses the Prompt API's client (Gemini Nano in AICore)", r"\bGeneration\.getClient\s*\("),
+        ("asks for the stable model release", r"\breleaseStage\s*=\s*ModelReleaseStage\.STABLE\b"),
     ),
 }
 
@@ -212,6 +235,8 @@ DISPLAY_ONLY_URL_FILES = {
         "licenses screen (#167): URLs inside the license texts",
 }
 
+ML_KIT_REASON = "content-free usage logs, owner-approved 2026-10-17 (#205)"
+
 # Declared dependencies (gradle/libs.versions.toml, *.gradle.kts) must not match these.
 DENIED_DEPENDENCIES = (
     ("analytics / ads", r"firebase|crashlytics|google-services|analytics|telemetry|"
@@ -239,6 +264,24 @@ ALLOWED_RESOLVED_DEPENDENCIES = (
     (r"com\.github\.k2-fsa\.sherpa-onnx:[\w.-]+", "on-device ASR"),
     (r"net\.java\.dev\.jna:jna", "calls ONNX Runtime's C API for the on-device embedding model (shared/ort, #24); no network"),
     (r"com\.google\.zxing:core", "decodes the agent access pairing QR code from a photo on the device (#184); no network"),
+    # ML Kit GenAI (#205): the Prompt API for Gemini Nano (inference in AICore on the device), and what
+    # it brings to send its usage logs to Google. Transcripts and summaries are never sent.
+    (r"com\.google\.mlkit:genai-(?:prompt|common|schema)",
+     "ML Kit GenAI Prompt API for hour summaries with Gemini Nano on the device; " + ML_KIT_REASON),
+    (r"com\.google\.mlkit:common", "ML Kit's runtime, which logs ML Kit's usage; " + ML_KIT_REASON),
+    (r"com\.google\.android\.datatransport:transport-(?:api|backend-cct|runtime)",
+     "sends ML Kit's usage logs to Google; " + ML_KIT_REASON),
+    (r"com\.google\.firebase:firebase-encoders(?:-json|-proto)?", "encodes ML Kit's usage logs; " + ML_KIT_REASON),
+    (r"com\.google\.firebase:firebase-(?:components|annotations)",
+     "ML Kit's component registry (dependency injection inside the app, no network); part of ML Kit GenAI, " + ML_KIT_REASON),
+    # What ML Kit GenAI's Kotlin API brings along (kotlinx-coroutines-guava / -reactive): libraries and
+    # annotations without network use of their own.
+    (r"com\.google\.guava:(?:guava|failureaccess)", "Guava, for ML Kit GenAI's futures (kotlinx-coroutines-guava, #205); no network"),
+    (r"com\.google\.code\.findbugs:jsr305|com\.google\.errorprone:error_prone_annotations|"
+     r"com\.google\.j2objc:j2objc-annotations|org\.checkerframework:checker-qual",
+     "Guava's annotations (#205); no code that runs"),
+    (r"javax\.inject:javax\.inject", "annotations of firebase-components (ML Kit, #205); no code that runs"),
+    (r"org\.reactivestreams:reactive-streams", "interfaces of kotlinx-coroutines-reactive (ML Kit GenAI, #205); no network"),
 )
 
 IOS_PROJECT = "apps/ios/project.yml"

@@ -52,6 +52,8 @@ AGENT_IOS_TRANSPORT = "shared/ui/src/iosMain/kotlin/app/watchaudio/app/IosAgentT
 MODEL_DOWNLOAD_IOS = "apps/ios/App/Embedding/ModelDownload.swift"
 IOS_APP_GRAPH = "shared/ui/src/iosMain/kotlin/app/watchaudio/app/IosAppGraph.kt"
 ON_DEVICE_LLM_IOS = "apps/ios/App/Llm/OnDeviceLanguageModel.swift"
+ON_DEVICE_LLM_ANDROID = "apps/android/src/main/kotlin/app/watchaudio/android/llm/MlKitGeminiNano.kt"
+LLM_PROVIDER_ANDROID = "apps/android/src/main/kotlin/app/watchaudio/android/llm/GeminiNanoLlmProvider.kt"
 NOTICES = "shared/ui/src/commonMain/kotlin/app/watchaudio/app/licenses/OpenSourceNotices.kt"
 LICENSE_TEXTS = "shared/ui/src/commonMain/kotlin/app/watchaudio/app/licenses/LicenseTexts.kt"
 
@@ -191,6 +193,14 @@ class FixtureRepo:
             """)
         # Tests may use the framework directly.
         self.write("apps/ios/Tests/LanguageModelTests/LanguageModelTests.swift", "import FoundationModels\nlet m = SystemLanguageModel.default\n")
+        self.write(ON_DEVICE_LLM_ANDROID, """\
+            import com.google.mlkit.genai.prompt.Generation
+            import com.google.mlkit.genai.prompt.ModelReleaseStage
+            // Never ModelReleaseStage.PREVIEW: a comment may name it.
+            val client = Generation.getClient(generationConfig { modelConfig = modelConfig { releaseStage = ModelReleaseStage.STABLE } })
+            """)
+        self.write(LLM_PROVIDER_ANDROID, "class GeminiNanoLlmProvider(private val model: GeminiNano) : LlmProvider\n")
+        self.write("apps/android/src/test/kotlin/llm/GeminiNanoTest.kt", "import com.google.mlkit.genai.common.GenAiException\n")
         self.write(NOTICES, 'val url = "https://github.com/k2-fsa/sherpa-onnx"\n')
         self.write(LICENSE_TEXTS, 'const val APACHE = """http://www.apache.org/licenses/"""\n')
         # Test code is not shipped: a local fake server is fine there.
@@ -255,8 +265,9 @@ class RepositoryTest(unittest.TestCase):
                           (AGENT_TLS, "Socket"), (AGENT_NSD, "NSD"), (AGENT_IOS, "Network.framework"),
                           (MODEL_DOWNLOAD_IOS, "URLSession")},
                          {(path, api) for path, _, api, _ in report.network_sites})
-        # Foundation Models (#196) only in the one reviewed file.
-        self.assertEqual({(ON_DEVICE_LLM_IOS, "FoundationModels")}, {(path, api) for path, _, api, _ in report.framework_sites})
+        # Foundation Models (#196) and ML Kit GenAI (#205) each only in its one reviewed file.
+        self.assertEqual({(ON_DEVICE_LLM_IOS, "FoundationModels"), (ON_DEVICE_LLM_ANDROID, "MLKitGenAI")},
+                         {(path, api) for path, _, api, _ in report.framework_sites})
         # The agent bridge on the PC only listens (TLS) and advertises (mDNS).
         self.assertEqual({("tools/agent-bridge/src/bridge.ts", "tls"), ("tools/agent-bridge/src/pairing.ts", "tls"),
                           ("tools/agent-bridge/src/mdns.ts", "mdns")},
@@ -458,7 +469,8 @@ class OnDeviceModelTest(FixtureTestCase):
     def test_fixture_lists_the_one_file(self):
         report = self.repo.run()
         self.assertEqual([], [str(v) for v in report.violations])
-        self.assertEqual({(ON_DEVICE_LLM_IOS, "FoundationModels")}, {(path, api) for path, _, api, _ in report.framework_sites})
+        self.assertEqual({(ON_DEVICE_LLM_IOS, "FoundationModels"), (ON_DEVICE_LLM_ANDROID, "MLKitGenAI")},
+                         {(path, api) for path, _, api, _ in report.framework_sites})
 
     def test_foundation_models_in_another_file_fails(self):
         self.repo.write("apps/ios/App/Llm/LanguageModelPlatform.swift", "import ComposeApp\n@preconcurrency import FoundationModels\n")
@@ -502,6 +514,86 @@ class OnDeviceModelTest(FixtureTestCase):
     def test_unused_entry_is_stale(self):
         self.repo.replace(ON_DEVICE_LLM_IOS, "import FoundationModels\n", "")
         self.assertViolation(self.repo.run(), "on-device", "stale allow-list entry: FoundationModels")
+
+
+class MlKitGenAiTest(FixtureTestCase):
+    """#205: ML Kit GenAI (Gemini Nano) in one file only, with its usage-log dependencies allowed by name."""
+
+    def test_ml_kit_in_another_file_fails(self):
+        self.repo.write(LLM_PROVIDER_ANDROID, "import com.google.mlkit.genai.prompt.TextPart\nclass P\n")
+        self.repo.write("shared/ui/src/androidMain/kotlin/Summary.kt", "val m = com.google.mlkit.genai.prompt.Generation.getClient()\n")
+        report = self.repo.run()
+        self.assertViolation(report, "on-device", "GeminiNanoLlmProvider.kt:1: com.google.mlkit.genai.")
+        self.assertViolation(report, "on-device", "Summary.kt:1: com.google.mlkit.genai.")
+        self.assertIn("MlKitGeminiNano.kt", next(str(v) for v in report.violations if "Summary.kt" in str(v)))
+
+    def test_other_ml_kit_apis_fail_even_in_the_allowed_file(self):
+        self.repo.replace(ON_DEVICE_LLM_ANDROID, "import com.google.mlkit.genai.prompt.Generation\n",
+                          "import com.google.mlkit.genai.prompt.Generation\nimport com.google.mlkit.vision.codescanner.GmsBarcodeScanning\n")
+        self.repo.write("apps/android/src/main/kotlin/Qr.kt", "import com.google.mlkit.vision.barcode.BarcodeScanning\n")
+        report = self.repo.run()
+        self.assertViolation(report, "network", "MlKitGeminiNano.kt:2: com.google.mlkit.")
+        self.assertViolation(report, "network", "Qr.kt:1: com.google.mlkit.")
+
+    def test_preview_models_and_experimental_parts_fail(self):
+        self.repo.replace(ON_DEVICE_LLM_ANDROID, "releaseStage = ModelReleaseStage.STABLE", "releaseStage = ModelReleaseStage.PREVIEW")
+        self.repo.write("apps/android/src/main/kotlin/Cache.kt", "val p = PromptPrefix(\"instructions\")\n")
+        self.repo.write("apps/android/src/main/kotlin/Typed.kt", "val r = generateTypedContentRequest(request, Summary::class)\n")
+        report = self.repo.run()
+        self.assertViolation(report, "network", "MlKitGeminiNano.kt:4: ModelReleaseStage.PREVIEW")
+        self.assertViolation(report, "on-device", "no longer asks for the stable model release")
+        self.assertViolation(report, "network", "Cache.kt:1: PromptPrefix")
+        self.assertViolation(report, "network", "Typed.kt:1: generateTypedContentRequest")
+
+    def test_the_file_must_keep_using_the_prompt_api(self):
+        self.repo.replace(ON_DEVICE_LLM_ANDROID, "Generation.getClient(", "Other.create(")
+        self.assertViolation(self.repo.run(), "on-device", "no longer uses the Prompt API's client")
+
+    def test_unused_entry_is_stale(self):
+        self.repo.write(ON_DEVICE_LLM_ANDROID, "val client = Generation.getClient(config { releaseStage = ModelReleaseStage.STABLE })\n")
+        self.assertViolation(self.repo.run(), "on-device", "stale allow-list entry: MLKitGenAI")
+
+    def test_resolved_dependencies_allow_ml_kit_genai_and_its_log_sender_only(self):
+        report_file = self.repo.write("deps.txt", """\
+            releaseRuntimeClasspath - Runtime classpath of '/release'.
+            +--- com.google.mlkit:genai-prompt:1.0.0-beta4
+            |    +--- com.google.mlkit:genai-common:1.0.0-beta4
+            |    +--- com.google.mlkit:genai-schema:1.0.0-alpha1
+            |    +--- com.google.mlkit:common:18.11.0
+            |    +--- com.google.android.datatransport:transport-api:2.2.1
+            |    +--- com.google.android.datatransport:transport-backend-cct:2.3.3
+            |    +--- com.google.android.datatransport:transport-runtime:2.2.6
+            |    +--- com.google.firebase:firebase-encoders:16.1.0
+            |    \\--- com.google.firebase:firebase-encoders-json:17.1.0
+            \\--- androidx.core:core-ktx:1.19.1
+            """)
+        self.assertEqual([], self.repo.run(resolved={"apps/android": report_file}).violations)
+        self.repo.replace("deps.txt", "com.google.mlkit:genai-schema:1.0.0-alpha1", "com.google.mlkit:barcode-scanning:17.3.0")
+        self.repo.replace("deps.txt", "com.google.firebase:firebase-encoders-json:17.1.0", "com.google.firebase:firebase-analytics:22.0.0")
+        report = self.repo.run(resolved={"apps/android": report_file})
+        self.assertViolation(report, "dependencies", "com.google.mlkit:barcode-scanning")
+        self.assertViolation(report, "dependencies", "com.google.firebase:firebase-analytics")
+
+    def test_declared_ml_kit_genai_passes_but_firebase_does_not(self):
+        self.repo.replace("gradle/libs.versions.toml", "[libraries]",
+                          '[libraries]\nmlkit-genai-prompt = { module = "com.google.mlkit:genai-prompt", version = "1.0.0-beta4" }')
+        self.assertEqual([], self.repo.run().violations)
+        self.repo.replace("apps/android/build.gradle.kts", "implementation(libs.kotlinx.coroutines.core)",
+                          'implementation("com.google.firebase:firebase-encoders:16.1.0")')
+        self.assertViolation(self.repo.run(), "dependencies", "analytics / ads")
+
+    def test_aicore_binding_is_a_phone_library_permission_only(self):
+        merged = self.repo.write("merged.xml", """\
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+                <uses-permission android:name="android.permission.INTERNET" />
+                <uses-permission android:name="com.google.android.apps.aicore.service.BIND_SERVICE" />
+                <application android:allowBackup="false" android:dataExtractionRules="@xml/rules" />
+            </manifest>
+            """)
+        self.assertEqual([], self.repo.run(merged={"apps/android": merged}).violations)
+        self.repo.replace("merged.xml", "android.permission.INTERNET", "android.permission.RECORD_AUDIO")
+        report = self.repo.run(merged={"apps/wear": merged})
+        self.assertViolation(report, "permissions", "merged manifest of apps/wear requests com.google.android.apps.aicore.service.BIND_SERVICE")
 
 
 class DependencyTest(FixtureTestCase):

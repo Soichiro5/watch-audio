@@ -23,6 +23,8 @@ enum class License(val title: String, val url: String, val text: String? = null)
     PUBLIC_DOMAIN("Public domain", "https://www.sqlite.org/copyright.html"),
     FUNASR_MODEL_1_1("FunASR Model Open Source License Agreement v1.1", "https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE"),
     ANDROID_SDK("Android Software Development Kit License", "https://developer.android.com/studio/terms"),
+    MLKIT_TERMS("ML Kit Terms of Service", "https://developers.google.com/ml-kit/terms"),
+    CC0_1_0("CC0 1.0 Universal (public domain dedication)", "https://creativecommons.org/publicdomain/zero/1.0/"),
     UNICODE_3("Unicode License v3", "https://github.com/unicode-org/icu/blob/main/LICENSE"),
     HARFBUZZ_OLD_MIT("Old MIT License (HarfBuzz)", "https://github.com/harfbuzz/harfbuzz/blob/main/COPYING"),
     LIBPNG_2("PNG Reference Library License version 2", "https://github.com/pnggroup/libpng/blob/libpng16/LICENSE"),
@@ -154,6 +156,23 @@ object OpenSourceNotices {
         ),
         // Reads the agent access pairing QR code from a photo (#184).
         library("ZXing", "ZXing authors", License.APACHE_2_0, "https://github.com/zxing/zxing", ANDROID),
+        // Hour summaries with Gemini Nano (#205); ML Kit sends content-free usage logs through Data Transport.
+        library("ML Kit GenAI Prompt API and ML Kit common", "Google", License.MLKIT_TERMS, "https://developers.google.com/ml-kit/genai", ANDROID),
+        library(
+            "Google Data Transport, Firebase Encoders and Components", "Google", License.APACHE_2_0,
+            "https://github.com/firebase/firebase-android-sdk", ANDROID,
+        ),
+        // What ML Kit GenAI's Kotlin API brings along (kotlinx-coroutines-guava / -reactive).
+        library("Guava", "Google", License.APACHE_2_0, "https://github.com/google/guava", ANDROID),
+        library("Error Prone annotations", "Google", License.APACHE_2_0, "https://github.com/google/error-prone", ANDROID),
+        library("J2ObjC annotations", "Google", License.APACHE_2_0, "https://github.com/google/j2objc", ANDROID),
+        library("JSR 305 annotations", "FindBugs", License.APACHE_2_0, "https://github.com/findbugsproject/findbugs", ANDROID),
+        library("javax.inject", "The JSR-330 Expert Group", License.APACHE_2_0, "https://github.com/javax-inject/javax-inject", ANDROID),
+        library(
+            "Checker Framework qualifiers", "Checker Framework developers", License.MIT, "https://github.com/typetools/checker-framework",
+            ANDROID, copyright = "Copyright 2004-present by the Checker Framework developers",
+        ),
+        library("Reactive Streams", "Reactive Streams SIG", License.CC0_1_0, "https://github.com/reactive-streams/reactive-streams-jvm", ANDROID),
         library("kaldi-native-fbank", "k2-fsa", License.APACHE_2_0, "https://github.com/csukuangfj/kaldi-native-fbank", ANDROID, includedIn = SHERPA_ONNX),
         library("kaldi-decoder", "k2-fsa", License.APACHE_2_0, "https://github.com/k2-fsa/kaldi-decoder", ANDROID, includedIn = SHERPA_ONNX),
         library("kaldifst", "k2-fsa", License.APACHE_2_0, "https://github.com/csukuangfj/kaldifst", ANDROID, includedIn = SHERPA_ONNX),

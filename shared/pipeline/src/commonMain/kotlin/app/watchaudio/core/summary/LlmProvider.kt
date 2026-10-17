@@ -2,7 +2,8 @@ package app.watchaudio.core.summary
 
 /**
  * A language model the app may use (#27, docs/research/on-device-llm.md §4.1); for now only
- * on-device ones: Apple's Foundation Models on the iPhone (#196). A request carries text only
+ * on-device ones: Apple's Foundation Models on the iPhone (#196) and Gemini Nano through ML Kit on
+ * Android phones that have it (#205). A request carries text only
  * (instructions, transcript lines, times and marks): audio cannot be handed over by type, and an
  * on-device provider must not send anything off the device.
  *
@@ -20,18 +21,33 @@ interface LlmProvider {
     /** Token count of [text], or null where the platform cannot count (then 1 character = 1 token). */
     suspend fun countTokens(text: String): Int?
 
-    /** One stateless generation; [LlmRequest.schema] asks for JSON of that shape. Never throws for model errors. */
+    /**
+     * One stateless generation; [LlmRequest.schema] asks for JSON of that shape. Never throws for
+     * model errors; a [kotlin.coroutines.cancellation.CancellationException] means the run must stop
+     * as if the screen had closed (e.g. Android refuses generation once the app left the foreground).
+     */
     suspend fun generate(request: LlmRequest): LlmResult
+
+    /**
+     * Gets the model ready when [availability] is [LlmAvailability.NeedsDownload]: called only after
+     * the user asked for a summary (「この日を要約」), never on its own. [onProgress] gets the
+     * fraction done when the platform tells. Returns the availability afterwards. The default (a
+     * provider without a download of its own) changes nothing.
+     */
+    suspend fun prepare(onProgress: (Float?) -> Unit = {}): LlmAvailability = availability()
 }
 
 /** Whether an [LlmProvider] can generate now, and if not, what the user can do about it. */
 sealed interface LlmAvailability {
     data class Available(val modelVersion: String?) : LlmAvailability
 
-    /** The model must be downloaded first ([bytes] large). */
-    data class NeedsDownload(val bytes: Long) : LlmAvailability
+    /**
+     * The model must be downloaded first ([bytes] large, null when the platform does not say before
+     * it starts); [LlmProvider.prepare] does it once the user asks for a summary.
+     */
+    data class NeedsDownload(val bytes: Long?) : LlmAvailability
 
-    /** The model is being downloaded or prepared (iOS `modelNotReady`); [fraction] if known. */
+    /** The model is being downloaded or prepared (iOS `modelNotReady`, Android AICore `DOWNLOADING`); [fraction] if known. */
     data class Downloading(val fraction: Float?) : LlmAvailability
 
     /** The user turned the platform's AI off (Apple Intelligence). */
@@ -74,9 +90,9 @@ sealed interface LlmResult {
 }
 
 /**
- * The provider of a platform without an on-device LLM (Android until #39 §8 is decided, test
- * fakes): always [LlmAvailability.Unsupported], so the UI hides the summarize button behind the
- * same state as an iPhone without Apple Intelligence.
+ * The provider of a platform without an on-device LLM (the default of `AppServices`, test fakes):
+ * always [LlmAvailability.Unsupported], so the UI hides the summarize button behind the same state
+ * as an iPhone without Apple Intelligence or an Android phone without Gemini Nano.
  */
 class UnsupportedLlmProvider(private val reason: String = "no_on_device_llm") : LlmProvider {
     override val id: String = "none"

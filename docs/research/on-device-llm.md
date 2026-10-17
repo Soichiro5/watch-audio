@@ -1,6 +1,6 @@
 # 端末内の LLM で要約する（#39）
 
-> 状態: **提案**（2026-10-13）。オーナーが 2026-10-13 に UC9 の AI 機能の着手を決めたのを受けて、端末の中だけで動く LLM（iPhone は Apple の Foundation Models、Android は Gemini Nano など）で要約を作る方式を調べた。§8 の表のうち「オーナー」の行を決めてもらい、§9 の作業 Issue に分けて進める。
+> 状態: **提案**（2026-10-13）。オーナーが 2026-10-13 に UC9 の AI 機能の着手を決めたのを受けて、端末の中だけで動く LLM（iPhone は Apple の Foundation Models、Android は Gemini Nano など）で要約を作る方式を調べた。§8 の表のうち「オーナー」の行を決めてもらい、§9 の作業 Issue に分けて進める。2026-10-17: §8 の 3・4 を (A) ML Kit GenAI（Gemini Nano）に決定（#205、§2.4）。
 > ユースケース: [UC9 #118](https://github.com/Soichiro5/watch-audio/issues/118)、関連: [#26](https://github.com/Soichiro5/watch-audio/issues/26)（LLM の共通部分と BYOK）・[#27](https://github.com/Soichiro5/watch-audio/issues/27)（1 時間ごとの要約）・[#28](https://github.com/Soichiro5/watch-audio/issues/28)（ホーム画面）・[#29](https://github.com/Soichiro5/watch-audio/issues/29)（1 日の振り返り）・[#30](https://github.com/Soichiro5/watch-audio/issues/30)（記憶）・[#31](https://github.com/Soichiro5/watch-audio/issues/31)（チャット）
 
 ## 1. 目的と UC9 での位置づけ
@@ -56,6 +56,25 @@
 | iOS 27 の `LanguageModel` プロトコル + MLX（Apple が公開した実装） | モデルしだい | モデルしだい | Apple Intelligence 非対応の iPhone（iPhone 15 以前・RAM 6 GB 以下）では大きいモデルが載らない。iOS の非対応端末向けは当面作らない（§8） |
 
 - **Android で Gemini Nano を使える端末は限られ（上位機種中心）、さらに送信の問題で ML Kit を使えない**ので、Android は「自分でモデルを持つ」方式（LiteRT-LM + Gemma 4 E2B）を本命の候補にする。この方式は自分のプロセスの計算なので、**バックグラウンド（充電中の WorkManager）でも動く**。代わりに、約 2.6 GB のダウンロード（Wi-Fi のみ、本人が選んだときだけ）と、メモリ（RAM 8 GB 以上を目安。実機で決める）が要る。
+
+### 2.4 Android の実装で使ったもの（#205、一次情報を 2026-10-17 に再確認）
+
+§8 の 3 を (A) に決めたあと、実装の前に読み直した結果。
+
+| 項目 | 結果 | 出典（2026-10-17 に閲覧） |
+| --- | --- | --- |
+| 使う API と版 | **Prompt API**（`com.google.mlkit:genai-prompt:1.0.0-beta4`、版を固定）。Google Maven の最新は beta4（`genai-common` も beta4、`genai-summarization` は beta1） | [Prompt API の始め方](https://developers.google.com/ml-kit/genai/prompt/android/get-started)（2026-09-08 更新）、Google Maven の `maven-metadata.xml` |
+| 要約 API を使わない理由 | 要約 API は日本語に対応（英語・日本語・韓国語）するが、出力は**箇条書き 1〜3 個だけ**で、どの発話にもとづくか（行番号）を返せない。共通の設計（§4.1・§4.5）は要点ごとに根拠の行を引くので、形を指定できる Prompt API を使う | [要約 API](https://developers.google.com/ml-kit/genai/summarization/android)（2026-10-15 更新） |
+| 日本語 | Prompt API の文書に対応言語の記載は**ない**（概要のページも「言語は端末の設定とダウンロード済みのモデルしだい」）。そのまま使い、日本語の質は実機（#61）と評価（#197）で確かめる | [ML Kit GenAI](https://developers.google.com/ml-kit/genai)（2026-10-15 更新）、[Prompt API](https://developers.google.com/ml-kit/genai/prompt/android)（2026-07-15 更新） |
+| 形の決まった出力 | 構造化出力は**アルファ**で、KSP で `@Generable` のクラスから作る方式だけ（実行時のスキーマは渡せない）。使わず、共通の `OutputSchema` から作った例と項目の説明をプロンプトに書き（`LlmRequest.toSingleText()`）、共通のパーサで検査する（形が違えば 1 回だけ作り直す） | [構造化出力](https://developers.google.com/ml-kit/genai/prompt/android/structured-output)（2026-07-21 更新、「alpha」） |
+| システム指示 | ベータで、Gemini Nano v3 以上が要る。使わず、指示も 1 つの文にまとめる（どの版でも同じ） | [システム指示](https://developers.google.com/ml-kit/genai/prompt/android/system-instructions)（2026-07-15 更新） |
+| 文脈とトークン | 「入力は 4,000 トークン未満」。`getTokenLimit()` と `countTokens()` がある（AAR の公開 API で確認）。文脈は `getTokenLimit()`（取れなければ 4,000）、数えるのは `countTokens()` | Prompt API の始め方、AAR（`GenerativeModel`） |
+| モデルの版 | `ModelConfig` の既定は「安定版（`STABLE`）・`FULL`」。プレビュー（`ModelReleaseStage.PREVIEW`）は使わない（追加規約が「Preview」の本番利用を禁じる） | [ModelConfig](https://developers.google.com/android/reference/com/google/mlkit/genai/prompt/ModelConfig) |
+| エラー | `GenAiException.ErrorCode`: `BUSY`(9)・`PER_APP_BATTERY_USE_QUOTA_EXCEEDED`(27)・`BACKGROUND_USE_BLOCKED`(30)・`REQUEST_TOO_LARGE`(12)・方針の検査で止まった `REQUEST_PROCESSING_ERROR`(4)・`RESPONSE_GENERATION_ERROR`(15)・`RESPONSE_PROCESSING_ERROR`(11)・`AICORE_INCOMPATIBLE`(-101)・`NEEDS_SYSTEM_UPDATE`(604) など | [ErrorCode](https://developers.google.com/android/reference/com/google/mlkit/genai/common/GenAiException.ErrorCode) |
+| 利用規約 | 追加規約（2025-05-14 改訂）は「API クライアントを本番で使ってよい（Google はレート制限をかけうる）」としたうえで、「Preview」「Experimental Access」**などの名前の付いたサービス**の本番利用を禁じる。Prompt API はサイト上で「Beta」（規約の本文に「beta」の語はない）、構造化出力は「Alpha」、プレフィックスキャッシュは「Experimental」。**ベータが「などの名前」に当たるかは規約の文面からは決まらない**ので、配布の判断はオーナーに残す。実装は Experimental・Alpha の部分とプレビューのモデルを使わない（`tools/privacy-check` で検査）。ほかに: 利用者に Google の指標データの処理を知らせる（ポリシー第 5 条）、安全の仕組みを迂回しない、医療用途の禁止 | [ML Kit GenAI 追加規約](https://developers.google.com/ml-kit/genai-terms)（ページの更新 2025-10-29） |
+| 送るもの | ML Kit のデータ開示（2026-07-15 更新）: 端末の情報・アプリの名前と版・処理時間・API の設定・入出力の大きさ・エラー、GenAI では利用者・端末などの識別子と設定した言語。「診断と利用状況の分析」に使い、HTTPS で送り、第三者には渡さない | [ML Kit のデータ開示](https://developers.google.com/ml-kit/android-data-disclosure) |
+
+実装の中身（状態の対応、エラーの対応、前面だけの制約）は [android-phone.md §4.7](../platforms/android-phone.md#47-1-時間ごとの要約gemini-nano205)。
 
 ## 3. 最初に作るもの
 
@@ -193,7 +212,7 @@ CREATE TABLE highlight_citation (
 | --- | --- |
 | 非対応の端末 | 「この端末では、端末内の AI による要約を使えません」（ボタンは出さない。他の機能はそのまま） |
 | Apple Intelligence がオフ・言語が合わない | 「設定で Apple Intelligence をオンにすると使えます」（言語が合わないときはその旨） |
-| モデルの準備中 | iOS: 「Apple Intelligence のモデルを準備しています」。Android: 「要約のモデル（約 2.6 GB）をダウンロード」（Wi-Fi のみ、進み具合） |
+| モデルの準備中 | 「端末内の AI のモデルを準備しています」（iOS の `modelNotReady`、Android の AICore の `DOWNLOADING`）。Android でモデルをダウンロードできる状態（`DOWNLOADABLE`）では「「この日を要約」を押すと、OS がモデルをダウンロードしてから要約します」とボタンを出し、押したら進み具合を出してから要約に進む（#205）。(B) を足すなら「要約のモデル（約 2.6 GB）をダウンロード」（Wi-Fi のみ） |
 | 要約待ち | 「N 時間分を要約できます」 |
 | 作成中 | 「要約しています（3/9 時間）」。時間帯ごとに出来たものから表示 |
 | 発話が少ない | 「会話が少ないため要約していません」 |
@@ -208,12 +227,12 @@ CREATE TABLE highlight_citation (
 
 - **iOS**: `SystemLanguageModel`（端末内のモデル）だけを使う。`PrivateCloudComputeLanguageModel`・他社のモデルの `LanguageModel` 実装・`LanguageModelFeedbackAttachment`（Apple へのフィードバック用の添付）は使わない。PCC に要る entitlement も付けない。モデルのダウンロードは OS（Apple Intelligence）が行い、アプリは URL を持たない（音声認識のモデルと同じ扱い）。
 - **Android（LiteRT-LM）**: 推論は自分のプロセスの計算だけ。通信はモデルのダウンロード（既存の `ModelDownloader`、URL はコミット固定、SHA-256 で検証、Wi-Fi のみ）だけで、既存の「通信はモデルのダウンロードだけ」に収まる。
-- **Android（ML Kit を選んだ場合）**: 推論は AICore の中で端末内に閉じ、文字起こし・要約は送られない。**アプリのプロセスから Google へ利用状況のログ（端末情報・アプリの版・処理時間・API の設定・識別子・言語。内容は含まない）が送られる**（§2.2）。上の基準では内容を含まないので採れる。採るなら、privacy-check の許可リスト、プライバシーポリシー、ストアの申告（Google の SDK による「アプリの情報とパフォーマンス」「端末などの ID」の収集）を更新する。
+- **Android（ML Kit。2026-10-17 に採用、#205）**: 推論は AICore の中で端末内に閉じ、文字起こし・要約は送られない。**アプリのプロセスから Google へ利用状況のログ（端末情報・アプリの版・処理時間・API の設定・識別子・言語。内容は含まない）が送られる**（§2.2）。上の基準では内容を含まないので採れる。採用にあたり、privacy-check の許可リスト、プライバシーポリシー、ストアの申告（Google の SDK による「アプリの情報とパフォーマンス」「端末などの ID」の収集）を更新した（#205）。
 
 ### 5.2 `tools/privacy-check` の扱い
 
 - **iOS**: 出荷されるソースで `FoundationModels` を `import` してよいのは 1 つのファイル（例 `apps/ios/App/Llm/OnDeviceLanguageModel.swift`）だけにし、`PrivateCloudComputeLanguageModel`・`LanguageModelFeedbackAttachment` を `GUARDED_APIS` に加えて、どのファイルでも不可にする。entitlements の許可リストは変えない（PCC の entitlement が足されると失敗する）。Swift パッケージ（他社のモデルのパッケージ）は今の `IOS_SWIFT_PACKAGES` の許可リストで止まる。
-- **Android**: ML Kit を採るなら、`ALLOWED_RESOLVED_DEPENDENCIES` に `com.google.mlkit:genai-*`・`com.google.mlkit:common`・`com.google.android.datatransport`・`firebase-encoders` を「内容を含まない利用状況のログだけを送る」と理由を書いて加え、マージ後のマニフェストに増える権限（INTERNET など）を `library_permissions` に書く。ML Kit を採らない場合は、これらを `DENIED_DEPENDENCIES` に加える。LiteRT-LM を採るなら `ALLOWED_RESOLVED_DEPENDENCIES` に `com.google.ai.edge.litertlm:litertlm-android`（端末内の LLM、通信なし）と `com.google.code.gson:gson` を加え、モデルの URL（コミット固定）を `ALLOWED_URL_PREFIXES` に加える。マージ後のマニフェストに INTERNET 以外の権限が増えないことは今の検査で確かめられる。
+- **Android**: ML Kit を採った（#205）。`com.google.mlkit.genai` は `apps/android/.../llm/MlKitGeminiNano.kt` だけ（`SINGLE_FILE_FRAMEWORKS`。`Generation.getClient` と `ModelReleaseStage.STABLE` を要求）、ほかの ML Kit の API・`ModelReleaseStage.PREVIEW`・プレフィックスキャッシュと構造化出力はどこでも不可、依存は `com.google.mlkit:genai-*`・`common`、`datatransport:transport-*`、`firebase-encoders*`・`firebase-components` を理由つきで許可、マージ後のマニフェストで増える権限は AICore への接続だけ（`library_permissions`）。以下は採用前の案: ML Kit を採るなら、`ALLOWED_RESOLVED_DEPENDENCIES` に `com.google.mlkit:genai-*`・`com.google.mlkit:common`・`com.google.android.datatransport`・`firebase-encoders` を「内容を含まない利用状況のログだけを送る」と理由を書いて加え、マージ後のマニフェストに増える権限（INTERNET など）を `library_permissions` に書く。ML Kit を採らない場合は、これらを `DENIED_DEPENDENCIES` に加える。LiteRT-LM を採るなら `ALLOWED_RESOLVED_DEPENDENCIES` に `com.google.ai.edge.litertlm:litertlm-android`（端末内の LLM、通信なし）と `com.google.code.gson:gson` を加え、モデルの URL（コミット固定）を `ALLOWED_URL_PREFIXES` に加える。マージ後のマニフェストに INTERNET 以外の権限が増えないことは今の検査で確かめられる。
 
 ### 5.3 プライバシーポリシーの文言（案）
 
@@ -242,7 +261,8 @@ CREATE TABLE highlight_citation (
 ### 6.2 実機でしか確かめられないこと（#60・#61 に追加する）
 
 - **#60（iPhone）**: Apple Intelligence 対応の iPhone で、機内モードのまま「この日を要約」で要約ができる。非対応の iPhone では「使えません」と出て他の機能に影響しない。Apple Intelligence をオフにしたとき・モデルの準備中の表示。（自動を入れたら）充電中・ロック中の `BGProcessingTask` で要約が進むか、`rateLimited` の頻度。1 日分にかかる時間・発熱。実際の会話での拒否（guardrail）の率。
-- **#61（Android）**: モデルのダウンロード（約 2.6 GB、Wi-Fi のみ、途中から再開）、中位機種での 1 時間あたりの時間・メモリ・発熱、RAM が足りない端末の判定、機内モードでの生成。
+- **#61（Android、Gemini Nano、#205）**: 対応端末で機内モードのまま「この日を要約」で要約ができる。日本語の要約の質（Prompt API の日本語は文書に記載がない）。1 時間あたりの時間・電池・発熱。要約中にアプリを裏に回すと止まり、作り終えた時間帯は残る（`BACKGROUND_USE_BLOCKED` で失敗の時間帯が残らない）。モデルが未ダウンロードの対応端末で、押したときだけダウンロードが始まり進み具合が出る。非対応端末で「この端末では使えません」と出てほかの機能に影響しない。`BUSY`・1 日の上限に当たる頻度。
+- （(B) を足すとき）モデルのダウンロード（約 2.6 GB、Wi-Fi のみ、途中から再開）、中位機種での 1 時間あたりの時間・メモリ・発熱、RAM が足りない端末の判定、機内モードでの生成。
 
 ## 7. 日本語の品質の評価
 
@@ -343,7 +363,7 @@ TEST_RUNNER_SUMMARY_EVAL_DIR=$OUT/replay xcodebuild test \
 
 #### 7.4.4 Gemini Nano（ML Kit GenAI Prompt API）
 
-- 対応端末（AICore と Gemini Nano がある機種）の上でしか動かない。ML Kit は今 `tools/privacy-check` で許していない（§5.2。採るかは §8 の 3 で決める）ので、評価はリポジトリに入れない評価用のアプリ（または §8 の 3 の決定後のブランチ）で行う。
+- 対応端末（AICore と Gemini Nano がある機種）の上でしか動かない。§8 の 3 の決定（2026-10-17）で、アプリの `GeminiNanoLlmProvider`（#205）を使える。計測用の instrumented test でこれを呼ぶ（ML Kit を使うのは `MlKitGeminiNano.kt` だけ、§5.2）。
 - 手順は §7.4.3 の 2 と同じ: `requests.jsonl` を端末に置き、Prompt API に `instructions` と `prompt`（形は `schema` をプロンプトに足して JSON を求める）を渡し、答え（または失敗のコード）と時間を `responses.jsonl` に書いて取り出し、`--provider replay=<ディレクトリ> --context <Prompt API の文脈の上限>` で採点する。
 - 入力は検証用の合成の会話だけなので、ML Kit が送る利用状況のログ（内容は含まない、§2.2）があっても個人の情報は出ない。
 
@@ -367,8 +387,8 @@ Apple Foundation Models・Gemma 4 E2B・Gemini Nano の表は、§7.4 の手順�
 | --- | --- | --- | --- | --- |
 | 1 | 最初に作るもの | (a) 1 時間ごとの要約（#27）を「この日を要約」ボタンで作る / (b) 充電中に自動で作る / (c) 1 日の振り返り（#29）から | **(a)**。データの形は (b) と同じにして、評価のあとで (b) を足す | オーナー（2026-10-13 に (a) で決定） |
 | 2 | 自動で作るか | (a) 押したときだけ / (b) 設定「充電中に自動で要約する」（既定オフ）/ (c) 既定オン | 最初は **(a)**、評価と実機の確認のあと **(b)** を足す。既定オンにするかはその後 | オーナー（2026-10-13 に (a) で決定） |
-| 3 | Android の手段 | (A) ML Kit GenAI（Gemini Nano）: ダウンロード不要、内容を含まない利用状況のログを Google に送る、前面でだけ動く、対応端末は上位機種中心、Prompt API はベータで日本語は未記載 / (B) LiteRT-LM + Gemma 4 E2B を本人が選んだらダウンロード（約 2.6 GB、Wi-Fi）: 送信なし、充電中のバックグラウンドで動く、RAM 8 GB 程度の端末なら機種を問わない / (C) Android は当面なし（iOS だけ先に） | §5 の基準（内容を出さない）では (A) も採れる。最初の機能は押したときだけ・画面を開いている間に作るので、前面だけの制約は効かない。**対応端末では (A)、非対応端末の (B) は評価のあとで検討**を推奨。iOS を先に作り、Android に着手するときにオーナーと最終確認する | オーナー（確認待ち） |
-| 4 | 内容を含まない利用状況のログを送る依存（ML Kit）を受け入れるか | 受け入れる（許可リスト・ポリシー・ストアの申告を変える）/ 受け入れない | **受け入れてよい**（2026-10-13 にオーナーが基準を確認: 出さないのは音声・文字起こしなどの個人的な内容） | オーナー（決定） |
+| 3 | Android の手段 | (A) ML Kit GenAI（Gemini Nano）: ダウンロード不要、内容を含まない利用状況のログを Google に送る、前面でだけ動く、対応端末は上位機種中心、Prompt API はベータで日本語は未記載 / (B) LiteRT-LM + Gemma 4 E2B を本人が選んだらダウンロード（約 2.6 GB、Wi-Fi）: 送信なし、充電中のバックグラウンドで動く、RAM 8 GB 程度の端末なら機種を問わない / (C) Android は当面なし（iOS だけ先に） | §5 の基準（内容を出さない）では (A) も採れる。最初の機能は押したときだけ・画面を開いている間に作るので、前面だけの制約は効かない。**対応端末では (A)、非対応端末の (B) は評価のあとで検討**を推奨。iOS を先に作り、Android に着手するときにオーナーと最終確認する | オーナー（**2026-10-17 に (A) で決定**、#205。非対応端末は iPhone と同じ「この端末では使えません」。(B) の Gemma は評価（#197）のあとで検討） |
+| 4 | 内容を含まない利用状況のログを送る依存（ML Kit）を受け入れるか | 受け入れる（許可リスト・ポリシー・ストアの申告を変える）/ 受け入れない | **受け入れてよい**（2026-10-13 にオーナーが基準を確認: 出さないのは音声・文字起こしなどの個人的な内容） | オーナー（**2026-10-17 に受け入れると決定**、#205。CLAUDE.md の「オーナーが承認した SDK の診断ログ」に当たる。許可リスト・ポリシー・ストアの申告を更新した） |
 | 5 | Apple の Private Cloud Compute | 使わない / 本人が選んだら使う | **使わない**（Apple のサーバーに文字起こしが届く。端末内だけという約束と合わない。BYOK と同じ扱いで将来検討するなら別の Issue） | オーナー |
 | 6 | iPhone の非対応端末での代わり | 出さない（「使えません」と表示）/ 自分でモデルを持つ | **出さない**（非対応の iPhone は RAM が少なく、大きいモデルが載らない。BYOK（#26）が来たらそちらで補う） | オーナー |
 | 7 | 要約の保存先 | バックアップに入れる / 入れない、書き出しに入れる / 入れない | バックアップには**入れない**（作り直せる）、書き出し（#155）には**入れる** | Claude |
@@ -410,6 +430,8 @@ UC9（#118）の sub-issue にする。#27 は「共通部分」に合わせて�
   - [ ] 実機での確認（機内モードでの生成、非対応端末の表示、時間・発熱、拒否の率）を #60 に追加した — 確認: #60 の本文
 
 ### A1. Android: 端末内の LLM での要約（§8 の 3 の決定に従う。以下は (B) の場合）
+
+> 2026-10-17: §8 の 3 は (A) に決まり、[#205](https://github.com/Soichiro5/watch-audio/issues/205) で ML Kit GenAI（Gemini Nano）を実装した（[android-phone.md §4.7](../platforms/android-phone.md#47-1-時間ごとの要約gemini-nano205)）。以下の (B) の案は、評価（#197）のあとで非対応端末向けに検討するときのために残す。
 
 - **目的**: Android でも、データを外に出さずに 1 時間ごとの要約を作れるようにする。
 - **やること**:

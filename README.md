@@ -45,7 +45,7 @@
 - オンデバイス ASR: SpeechAnalyzer (iOS) / sherpa-onnx + Zipformer ReazonSpeech (Android)
 - ローカル DB: bundled SQLite + FTS5（日本語部分一致検索）
 - 意味検索: ruri-v3-30m（int8 ONNX）を端末内の ONNX Runtime で実行（Android は sherpa-onnx の ONNX Runtime、iOS は Swift パッケージ）。モデルは検索タブを初めて開いたときに Wi-Fi でダウンロード
-- AI 要約・チャット: 後回し（将来はクラウド LLM も可）
+- 1 時間ごとの要約: 端末内の LLM で「この日を要約」を押したときだけ作る。iPhone は Apple Foundation Models、Android は Gemini Nano（ML Kit GenAI。対応機種だけ。ML Kit は内容を含まない利用状況の記録を Google に送る）。チャット・クラウド LLM は後回し
 
 ## ライセンス
 
@@ -55,6 +55,7 @@
 - MIT: Silero VAD、ONNX Runtime ほか
 - FunASR Model Open Source License Agreement v1.1: SenseVoice Small（英語モデル。「英語も文字起こしする」をオンにしたときだけダウンロード）
 - パブリックドメイン: SQLite
+- ML Kit Terms of Service: ML Kit GenAI（Android の要約）
 - そのほか（BSD・Unicode・Google Play services の SDK ライセンスなど）と、確認中の点は [docs/legal/store-data-declarations.md §8](docs/legal/store-data-declarations.md#8-使っているライブラリとモデルのライセンス167)
 
 ## リポジトリ構成

@@ -168,10 +168,11 @@ interface AppServices {
     val supportsAgentAccess: Boolean get() = agentAccess != null
 
     /**
-     * The on-device LLM for hour summaries (#27): Apple's Foundation Models on the iPhone (#196).
-     * Platforms without one keep [UnsupportedLlmProvider] (Android until its method is decided,
-     * #39 §8), which the day screen shows as 「使えません」 like an iPhone without Apple Intelligence.
-     * Nothing it is given may leave the device.
+     * The on-device LLM for hour summaries (#27): Apple's Foundation Models on the iPhone (#196),
+     * Gemini Nano through ML Kit on Android (#205; a phone without it reports
+     * [app.watchaudio.core.summary.LlmAvailability.Unsupported]). The default is
+     * [UnsupportedLlmProvider], which the day screen shows as 「使えません」. Nothing it is given may
+     * leave the device.
      */
     val llm: LlmProvider get() = NO_LLM
 }

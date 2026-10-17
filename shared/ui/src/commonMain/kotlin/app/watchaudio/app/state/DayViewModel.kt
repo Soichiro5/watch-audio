@@ -83,8 +83,17 @@ data class DaySummaries(
     val toSummarize: Int get() = hours.count { it.action == HourAction.SUMMARIZE }
 }
 
-/** A run of hour summaries on [date]: [progress] counts the hours that need the LLM. */
-data class SummaryRunState(val date: LocalDate, val progress: SummaryProgress)
+/**
+ * A run of hour summaries on [date]: [progress] counts the hours that need the LLM. While
+ * [preparing], the platform first gets its model ready (`LlmProvider.prepare`, [downloaded] the
+ * fraction when known).
+ */
+data class SummaryRunState(
+    val date: LocalDate,
+    val progress: SummaryProgress,
+    val preparing: Boolean = false,
+    val downloaded: Float? = null,
+)
 
 /** What the last summary run could not do (the hours keep their own states). */
 enum class SummaryNotice {
@@ -93,6 +102,9 @@ enum class SummaryNotice {
 
     /** Something unexpected stopped the run (the error type is in the diagnostics log). */
     FAILED,
+
+    /** The platform could not get its model ready (`LlmProvider.prepare`); nothing was summarized. */
+    MODEL_FAILED,
 }
 
 enum class DayDeletion {
@@ -264,6 +276,19 @@ class DayViewModel(
         summaryJob = viewModelScope.launch {
             val self = coroutineContext.job
             try {
+                if (llmAvailability() is LlmAvailability.NeedsDownload) {
+                    // Only now, after the user's tap: the platform downloads its model (#205).
+                    summaryRun.value = SummaryRunState(date, SummaryProgress(0, 0, null), preparing = true)
+                    val ready = services.llm.prepare { fraction ->
+                        summaryRun.value = SummaryRunState(date, SummaryProgress(0, 0, null), preparing = true, downloaded = fraction)
+                    }
+                    if (ready !is LlmAvailability.Available) {
+                        services.diagnostics.log(DiagnosticEvents.SUMMARY_FAILED, "type=prepare availability=${ready.code()}")
+                        summaryNotice.value = SummaryNotice.MODEL_FAILED
+                        return@launch
+                    }
+                    summaryRun.value = SummaryRunState(date, SummaryProgress(0, 0, null))
+                }
                 val run = SummaryRun(services.store, services.llm, timeZone, clock::now, services.diagnostics)
                 val result = run.run(window, onlyHours) { progress -> summaryRun.value = SummaryRunState(date, progress) }
                 if (result is SummaryRunResult.RateLimited) summaryNotice.value = SummaryNotice.RATE_LIMITED
@@ -322,4 +347,14 @@ class DayViewModel(
     }
 
     private fun today(): LocalDate = localDateOf(clock.now(), timeZone)
+}
+
+/** A short code of an availability for the diagnostics log (no user data). */
+private fun LlmAvailability.code(): String = when (this) {
+    is LlmAvailability.Available -> "available"
+    is LlmAvailability.NeedsDownload -> "needs_download"
+    is LlmAvailability.Downloading -> "downloading"
+    LlmAvailability.TurnedOff -> "turned_off"
+    LlmAvailability.LanguageNotSupported -> "language_not_supported"
+    is LlmAvailability.Unsupported -> "unsupported_$reason"
 }

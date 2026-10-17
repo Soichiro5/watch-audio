@@ -21,6 +21,7 @@ import app.watchaudio.core.summary.SummaryProgress
 import app.watchaudio.core.summary.UnsupportedLlmProvider
 import app.watchaudio.core.timeline.dayWindow
 import java.io.File
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -133,6 +134,66 @@ class SummaryViewModelTest {
         runCurrent()
         assertEquals("b.m4a" to 0L, services.played.last())
         assertEquals(highlight.segmentIds.first(), state().focusSegmentId)
+    }
+
+    /** Android's AICore (#205): the model is downloaded only after 「この日を要約」, then the run goes on. */
+    @Test
+    fun aModelToDownloadIsPreparedOnlyAfterTheTap() = runTest(dispatcher) {
+        talk("a", at(9))
+        val llm = FakeSummaryLlm(availability = LlmAvailability.NeedsDownload(null)).apply {
+            afterPrepare = LlmAvailability.Available("nano")
+            prepareGate = CompletableDeferred()
+        }
+        val (vm, state) = viewModel(services(llm))
+        assertEquals(LlmAvailability.NeedsDownload(null), state().content?.summaries?.availability)
+        assertEquals(0, llm.prepareCalls)
+
+        vm.summarizeDay()
+        runCurrent()
+        val preparing = assertNotNull(state().summaryRun)
+        assertTrue(preparing.preparing)
+        assertEquals(0.5f, preparing.downloaded)
+        assertTrue(llm.requests.isEmpty())
+
+        llm.prepareGate!!.complete(Unit)
+        runCurrent()
+        assertNull(state().summaryRun)
+        assertNull(state().summaryNotice)
+        assertEquals(1, llm.prepareCalls)
+        val hour = state().content!!.summaries!!.hours.single()
+        assertEquals(HourSummaryState.DONE, hour.summary?.state)
+        assertEquals(LlmAvailability.Available("nano"), state().content!!.summaries!!.availability)
+    }
+
+    @Test
+    fun aModelThatCannotBePreparedIsANoticeAndNothingElse() = runTest(dispatcher) {
+        talk("a", at(9))
+        val llm = FakeSummaryLlm(availability = LlmAvailability.NeedsDownload(null))
+        val (vm, state) = viewModel(services(llm))
+        vm.summarizeDay()
+        runCurrent()
+        assertEquals(1, llm.prepareCalls)
+        assertEquals(SummaryNotice.MODEL_FAILED, state().summaryNotice)
+        assertNull(state().summaryRun)
+        assertTrue(llm.requests.isEmpty())
+        assertNull(state().content!!.summaries!!.hours.single().summary)
+    }
+
+    /** A provider that stops the run (Android refuses generation in the background) leaves no failed hour. */
+    @Test
+    fun aCancellingProviderStopsTheRunWithoutANotice() = runTest(dispatcher) {
+        talk("a", at(9))
+        talk("b", at(11))
+        val llm = FakeSummaryLlm()
+        llm.answer = { throw CancellationException("background") }
+        val (vm, state) = viewModel(services(llm))
+        vm.summarizeDay()
+        runCurrent()
+        assertNull(state().summaryRun)
+        assertNull(state().summaryNotice)
+        assertEquals(1, llm.requests.size)
+        assertTrue(state().content!!.summaries!!.hours.all { it.summary == null })
+        assertEquals(2, state().content!!.summaries!!.toSummarize)
     }
 
     @Test

@@ -33,6 +33,9 @@ jna = "5.19.1"
 play-services-wearable = "20.0.1"
 # ZXing core: decodes the agent bridge's pairing QR code from a photo (#184); pure Java, no network
 zxing = "3.5.3"
+# ML Kit GenAI Prompt API: Gemini Nano in AICore for hour summaries on Android (#205); sends
+# content-free usage logs to Google (owner-approved 2026-10-17). Pinned: a beta API
+mlkit-genai-prompt = "1.0.0-beta4"
 wear-compose = "1.7.1"
 wear-ongoing = "1.1.0"
 wear-tooling-preview = "1.0.0"
@@ -89,6 +92,7 @@ androidx-work-runtime = { module = "androidx.work:work-runtime", version.ref = "
 androidx-work-testing = { module = "androidx.work:work-testing", version.ref = "androidx-work" }
 androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "androidx-test-uiautomator" }
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+mlkit-genai-prompt = { module = "com.google.mlkit:genai-prompt", version.ref = "mlkit-genai-prompt" }
 # Wear OS
 play-services-wearable = { module = "com.google.android.gms:play-services-wearable", version.ref = "play-services-wearable" }
 wear-compose-material3 = { module = "androidx.wear.compose:compose-material3", version.ref = "wear-compose" }

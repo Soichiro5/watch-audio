@@ -20,6 +20,7 @@
 | `GapAlertMonitor` / `GapAlertWorker` | `alert/` | 録音の途絶アラート（#43）。判定は共通の `GapAlertEvaluator`、ここでは WorkManager でのチェックと通知の表示のみ（§4.1） |
 | `AndroidEmbedding` / `AndroidSemanticSearch` | `search/` | 意味検索（#24、§3.4・§4.5）。埋め込みモデル（ruri-v3-30m int8）を共通の `OnnxEmbedder` で組み立て（推論は `shared/ort` の ONNX Runtime C API を JNA で、sherpa-onnx 同梱の `libonnxruntime.so` 上で呼ぶ）、`AppGraph` の `SemanticIndex`（`files/search/` のベクトルのキャッシュ）と共通の `EmbeddingStep`（`TranscriptionRun` の中の埋め込みの段）に渡す。`AndroidSemanticSearch` は検索画面が状態を尋ねたときにモデルのダウンロード（Wi-Fi のみ）を予約する |
 | `AndroidAgentAccess` / `AgentAccessService` / `TlsAgentTransport` / `NsdBridgeDiscovery` / `AgentIdentity` / `QrDecoder` / `AacClipSource` | `agent/` | エージェント連携（#184、§4.6）。共通 UI の `AgentAccess` の実装（ペアリング・ON/OFF・QR の写真の読み取り・ローカルネットワークの許可）、接続を保つ前景サービス、相互 TLS 1.3 の接続（Keystore の鍵・PC の鍵の固定）、mDNS の探索、Keystore の鍵と証明書、QR のデコード（ZXing）、`get_audio_clip` の音声の切り出し |
+| `GeminiNanoLlmProvider` / `MlKitGeminiNano` | `llm/` | 1 時間ごとの要約（#205、§4.7）。共通の `LlmProvider` を ML Kit GenAI の Prompt API（Gemini Nano、AICore の中で端末内）で実装。ML Kit を使うのは `MlKitGeminiNano.kt` だけ |
 | `MainActivity` | `MainActivity.kt` | `App(services)` をホスト。オンボーディングの権限要求用に Activity Result の launcher を `AndroidAppServices` に渡す（エージェント連携のカメラのアプリとローカルネットワークの許可の launcher は `AndroidAgentAccess` に） |
 
 共通コードの追加:
@@ -280,6 +281,39 @@ PC の AI エージェントが、本人が ON にしている間だけ、ペア
 - **音声（`AacClipSource`）**: 音声を許可したペアリングの `get_audio_clip` だけ。チャンクの音声を `AudioDecoder` で 16 kHz に戻して切り出す（最長 30 秒、`shared/agent` が WAV にする）。
 - **アクセス履歴の保持**: 90 日より前を消す（起動時の `AppGraph.startup` と画面を開いたとき）。「すべてのデータを削除」で全部消え、ペアリングは残る。
 - **端末名**: ペアリングのとき PC に `Build.MODEL`（例: Pixel 8）を名乗る。利用者が付けた端末名（本人の名前を含みうる）は送らない。
+
+### 4.7 1 時間ごとの要約（Gemini Nano、#205）
+
+日別タイムラインの「この日を要約」（共通の仕組みは [02 §6.10](../architecture/02-architecture.md#610-1-時間ごとの要約27)、設計は [research/on-device-llm.md](../research/on-device-llm.md)）を、Android では **ML Kit GenAI の Prompt API で Gemini Nano** を使って作る（オーナーの決定 2026-10-17、§8 の 3 の (A)）。Gemini Nano は Android の AICore（OS の機能）の中で動き、**文字起こし・要約は端末の外に出ない**。Gemma（LiteRT-LM）を足すかは評価（#197）のあとで決める。
+
+- **構成**: `llm/GeminiNanoLlmProvider.kt`（共通の `LlmProvider` の実装。状態・エラーの対応、プロンプトの組み立て、キャッシュ）と、`llm/MlKitGeminiNano.kt`（ML Kit を呼ぶ唯一のファイル。`tools/privacy-check` の `SINGLE_FILE_FRAMEWORKS`）。間は `GeminiNano` インターフェースで、単体テスト（`GeminiNanoLlmProviderTest`）は偽の実装で状態・エラー・形を確かめる。`AppGraph` が `AndroidAppServices.llm` に渡す。依存は `com.google.mlkit:genai-prompt:1.0.0-beta4`（版を固定）。
+- **使える状態**（`checkStatus` → 共通の状態、画面は [phone-ui](phone-ui.md) の要約のカード）:
+
+  | AICore の状態・エラー | 共通の状態 | 画面 |
+  | --- | --- | --- |
+  | `AVAILABLE` | `Available`（版は `getBaseModelName()`、例 `nano-v3`） | 「N 時間分を要約できます」と「この日を要約」 |
+  | `DOWNLOADABLE` | `NeedsDownload(null)` | 「要約には端末内の AI のモデルが必要です。「この日を要約」を押すと、OS がモデルをダウンロードしてから要約します」とボタン。**押したときだけ** `download()` を頼み（AICore = OS の通信）、進み具合（`DownloadProgress` / `DownloadStarted` の大きさ）を出してから要約に進む。失敗したら「端末内の AI のモデルを用意できませんでした」 |
+  | `DOWNLOADING` | `Downloading` | 「端末内の AI のモデルを準備しています。準備ができると使えます」（ボタンなし） |
+  | `UNAVAILABLE`、`AICORE_INCOMPATIBLE`・`NEEDS_SYSTEM_UPDATE` などの例外、AICore への接続の失敗、10 秒で返らない | `Unsupported(理由)` | 「この端末では、端末内の AI による要約を使えません」（iPhone の非対応機と同じ。ほかの機能はそのまま） |
+
+  日別の画面は 20 秒ごとと DB の変化のたびに読み直すので、状態は 1 分（準備中は 10 秒）覚えておき、非対応はプロセスの間覚えておく（AICore への問い合わせと ML Kit の記録を減らす）。
+- **生成**: 構造化出力（アルファ、KSP のクラスだけ）とシステム指示（Gemini Nano v3 以上）は使わず、指示・出力の形（共通の `OutputSchema` から作った JSON の例と項目の説明）・発話の行を 1 つの文にして渡す（共通の `LlmRequest.toSingleText()`）。`temperature = 0`・`topK = 1`・候補 1 つ・`maxOutputTokens` は共通のコードの値（500）。答えは共通のパーサが検査し、形が違えば 1 回だけ作り直す。モデルは安定版（`ModelReleaseStage.STABLE`、`ModelPreference.FULL`）。
+- **文脈とトークン**: 文脈は `getTokenLimit()`（取れなければ文書の「4,000 トークン未満」から 4,000）。共通の予算は文脈から出力の上限も引くので、この値が入力だけの上限でも安全側。数えるのは `countTokens()`（失敗したら 1 文字 = 1 トークンの見積もり）。
+- **日本語**: Prompt API の文書に対応言語の記載がない（2026-10-17）。そのまま使い、質は実機（#61）と評価（#197）で確かめる。
+- **エラーの対応**（`GenAiException.ErrorCode` → 共通の結果）:
+
+  | ML Kit | 共通の結果 | 動き |
+  | --- | --- | --- |
+  | `BUSY`、`PER_APP_BATTERY_USE_QUOTA_EXCEEDED` | `RateLimited`（`retryDelay` があれば） | その回を止め、残りは次に押したときに（「端末が混み合っているため、途中で止めました」） |
+  | `REQUEST_TOO_LARGE` | `ContextExceeded` | 共通のコードがその部分を半分に分けて作り直す |
+  | `REQUEST_PROCESSING_ERROR`・`RESPONSE_GENERATION_ERROR`・`RESPONSE_PROCESSING_ERROR`（方針の検査で止まった） | `Refused` | その時間帯は「要約できませんでした」（作り直さない） |
+  | `BACKGROUND_USE_BLOCKED` | 例外 `LeftForegroundException`（`CancellationException`） | 画面を閉じたときと同じに止まり、失敗の時間帯を残さない |
+  | そのほか | `Failed("mlkit_<種類>")`（種類のないものは `mlkit_<番号>`） | その時間帯だけ失敗（「もう一度」） |
+
+- **前面でだけ動く**: ML Kit GenAI は、アプリが一番前にあるときしか推論しない（前景サービスからも不可）。共通の日別の画面は `ON_STOP`（アプリが裏に回った）と画面を離れたときに `SummaryRun` を止める（`DayScreen` の `LifecycleEventEffect`）。その間に `BACKGROUND_USE_BLOCKED` が返っても、上のとおり止まるだけ。充電中の自動作成（設計 §3 の A）は Gemini Nano ではできない。
+- **送信**: ML Kit は、使えるかの確認・ダウンロード・生成のときに、**内容を含まない利用状況の記録**（端末の情報・アプリの名前と版・処理時間・API の設定・入出力の大きさ・エラー・識別子・言語）を `datatransport` で Google に送る（オーナーが 2026-10-17 に承認、CLAUDE.md の「承認した SDK の診断ログ」）。依存の許可リスト・マージ後のマニフェストの権限（AICore への接続 `com.google.android.apps.aicore.service.BIND_SERVICE`）は `tools/privacy-check`、利用者への説明はプライバシーポリシー第 5 条とストアの申告（[legal/store-data-declarations.md §3.1](../legal/store-data-declarations.md#31-データセーフティ)）。#184 で Google のコードスキャナを採らなかったのは、このときはオーナーの承認がなかったため（ML Kit はほかの API を使わない。`tools/privacy-check` が `com.google.mlkit` の `genai` 以外を禁止する）。
+- **利用規約**: ML Kit GenAI 追加規約は「Preview」「Experimental Access」などのサービスの本番利用を禁じる。Prompt API は「Beta」。実装はプレビューのモデル・試験運用（プレフィックスキャッシュ）・アルファ（構造化出力）を使わない。ベータを配布に使ってよいかの判断はオーナー（[research/on-device-llm.md §2.4](../research/on-device-llm.md#24-android-の実装で使ったもの205一次情報を-2026-10-17-に再確認)）。
+- **確かめ方**: 単体テスト（`GeminiNanoLlmProviderTest`、`SummaryViewModelTest`、`AppUiTest.hourSummaryAvailability` のスクリーンショット `summary-needs-model`）。エミュレータには Gemini Nano がないので、`SummaryAvailabilityTest`（instrumented、emulator.yml）が実物の ML Kit で `Unsupported` になること・日別の画面に「この端末では使えません」と出てボタンがないことを確かめ、スクリーンショット `summary-unsupported` を残す。対応端末での生成・日本語の質・時間と電池・裏に回したときの停止・ダウンロードの流れは #61。
 
 ## 6. 検証方法
 
